@@ -12,14 +12,13 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
-        // Fetch user data from Realtime Database
         const userRef = ref(db, `users/${firebaseUser.uid}`);
         onValue(userRef, (snapshot) => {
           const data = snapshot.val();
           if (data) {
             setUser({ ...data, uid: firebaseUser.uid });
           } else {
-            // Create user if not exists
+            // New user – create profile and auto‑follow Malik
             const newUser = {
               username: firebaseUser.displayName || firebaseUser.email.split('@')[0],
               avatar: firebaseUser.displayName ? firebaseUser.displayName[0].toUpperCase() : firebaseUser.email[0].toUpperCase(),
@@ -32,6 +31,9 @@ export const AuthProvider = ({ children }) => {
               uid: firebaseUser.uid
             };
             set(ref(db, `users/${firebaseUser.uid}`), newUser);
+            // Auto‑follow Malik
+            const MALIK_ID = 'dyvblcReUPZzRc99KDdjImpvs4I2'; // Malik's UID
+            set(ref(db, `following/${firebaseUser.uid}/${MALIK_ID}`), true);
             setUser({ ...newUser, uid: firebaseUser.uid });
           }
         });
