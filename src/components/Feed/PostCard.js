@@ -56,7 +56,7 @@ const PostCard = ({ post, onEcho }) => {
       {post.video && <video src={post.video} controls style={{ width:'100%', borderRadius:'14px', margin:'8px 0', maxHeight:'420px', background:'#000' }} />}
       <div style={{ display:'flex', gap:'20px', padding:'8px 0 4px', borderTop:'1px solid rgba(255,255,255,0.06)', marginTop:'10px', flexWrap:'wrap' }}>
         <button onClick={() => onEcho(post.id)} style={{ background:'none', border:'none', color:'#888', fontSize:'15px', cursor:'pointer', display:'flex', alignItems:'center', gap:'6px', padding:'6px 12px', borderRadius:'8px', transition:'all 0.3s ease' }}>
-          <i className="fas fa-heart"></i> <span>{post.echoes || 0}</span>
+          <i className="fas fa-heart"></i> <span>{typeof post.echoes === 'object' ? post.echoes.value || 0 : post.echoes || 0}</span>
         </button>
         <button onClick={() => setShowComments(!showComments)} style={{ background:'none', border:'none', color:'#888', fontSize:'15px', cursor:'pointer', display:'flex', alignItems:'center', gap:'6px', padding:'6px 12px', borderRadius:'8px', transition:'all 0.3s ease' }}>
           <i className="fas fa-comment"></i> {post.comments || 0}

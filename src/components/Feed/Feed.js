@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebase';
-import { ref, onValue, push, update, remove } from 'firebase/database';
+import { ref, onValue, push, update, remove, runTransaction } from 'firebase/database';
 import { useAuth } from '../../hooks/useAuth';
 import StoryBar from './StoryBar';
 import PostCard from './PostCard';
@@ -38,8 +38,12 @@ const Feed = () => {
 
   const handleEcho = (postId) => {
     if (!user) return;
-    const echoRef = ref(db, `posts/${postId}/echoes`);
-    update(echoRef, { value: (posts.find(p => p.id === postId)?.echoes || 0) + 1 });
+    const postRef = ref(db, `posts/${postId}`);
+    runTransaction(postRef, (currentData) => {
+      if (currentData === null) return currentData;
+      currentData.echoes = (currentData.echoes || 0) + 1;
+      return currentData;
+    });
   };
 
   const filteredPosts = posts.filter(post => {
