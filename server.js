@@ -12,7 +12,19 @@ const io = new Server(server, {
 app.use(cors());
 app.use(express.json());
 
-// Optionally add a simple health endpoint
+// Add this route for the root path
+app.get('/', (req, res) => {
+    res.json({
+        status: 'online',
+        message: 'ECHO backend server is running',
+        endpoints: {
+            health: '/api/health',
+            websocket: 'wss://echo-backend-o091.onrender.com/socket.io'
+        }
+    });
+});
+
+// Health endpoint
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok' });
 });
