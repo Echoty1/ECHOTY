@@ -10,7 +10,9 @@ export const SocketProvider = ({ children }) => {
 
   useEffect(() => {
     if (!user) return;
-    const SOCKET_URL = 'http://localhost:3000';  // or use env variable
+
+    // Use environment variable for socket URL, fallback to localhost for development
+    const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:3000';
     const newSocket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
@@ -18,13 +20,18 @@ export const SocketProvider = ({ children }) => {
     setSocket(newSocket);
 
     newSocket.on('connect', () => {
-      console.log('🟢 Socket connected');
+      console.log('🟢 Socket connected to', SOCKET_URL);
       newSocket.emit('join', user.uid, user.username);
     });
 
-    return () => {
-      newSocket.disconnect();
-    };
+    newSocket.on('online-users', (userIds) => {
+      // Store online users globally
+      window._onlineUsers = userIds;
+      // Dispatch event for components to update
+      window.dispatchEvent(new CustomEvent('online-users-update', { detail: userIds }));
+    });
+
+    return () => newSocket.disconnect();
   }, [user]);
 
   return (
