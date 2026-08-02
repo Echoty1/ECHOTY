@@ -1,29 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { db } from '../../services/firebase';
-import { ref, onValue, push, update, remove, runTransaction } from 'firebase/database';
+import { ref, onValue, push, runTransaction } from 'firebase/database';
 import { useAuth } from '../../hooks/useAuth';
-import StoryBar from './StoryBar';
+import { useSocket } from '../../contexts/SocketContext';
 import PostCard from './PostCard';
+import { Link } from 'react-router-dom';
 
 const Feed = () => {
   const { user } = useAuth();
+  const socket = useSocket();
   const [posts, setPosts] = useState([]);
-  const [tab, setTab] = useState('global');
-  const [following, setFollowing] = useState([]);
-  const [showCreate, setShowCreate] = useState(false);
-  const [newPostContent, setNewPostContent] = useState('');
-  const [newPostImage, setNewPostImage] = useState(null);
-
-  // Load following list
-  useEffect(() => {
-    if (user) {
-      const followRef = ref(db, `following/${user.uid}`);
-      onValue(followRef, (snap) => {
-        const data = snap.val();
-        setFollowing(data ? Object.keys(data) : []);
-      });
-    }
-  }, [user]);
+  const [storyUsers, setStoryUsers] = useState([]);
+  const [onlineUsers, setOnlineUsers] = useState([]);
 
   // Load posts
   useEffect(() => {
@@ -40,6 +28,34 @@ const Feed = () => {
     });
   }, []);
 
+  // Load users who have posted (story circles)
+  useEffect(() => {
+    const usersRef = ref(db, 'users');
+    onValue(usersRef, (snapshot) => {
+      const data = snapshot.val();
+      if (data) {
+        const userList = Object.keys(data).map(key => ({ ...data[key], id: key }));
+        // Filter: only users who have at least one post
+        const usersWithPosts = userList.filter(u =>
+          posts.some(p => p.userId === u.id)
+        );
+        setStoryUsers(usersWithPosts);
+      }
+    });
+  }, [posts]);
+
+  // Listen for online users
+  useEffect(() => {
+    if (socket) {
+      socket.on('online-users', (ids) => {
+        setOnlineUsers(ids);
+      });
+    }
+    return () => {
+      if (socket) socket.off('online-users');
+    };
+  }, [socket]);
+
   const handleEcho = (postId) => {
     if (!user) return;
     const postRef = ref(db, `posts/${postId}`);
@@ -50,164 +66,156 @@ const Feed = () => {
     });
   };
 
-  const handleCreatePost = () => {
-    if (!newPostContent.trim() && !newPostImage) return;
-    const newPost = {
-      author: user.username,
-      avatar: user.avatar || user.username[0].toUpperCase(),
-      content: newPostContent,
-      community: 'General',
-      echoes: 0,
-      comments: 0,
-      reposts: 0,
-      timestamp: Date.now(),
-      userId: user.uid,
-      commentList: []
-    };
-    if (newPostImage) {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        newPost.image = e.target.result;
-        push(ref(db, 'posts'), newPost);
-      };
-      reader.readAsDataURL(newPostImage);
-    } else {
-      push(ref(db, 'posts'), newPost);
-    }
-    setNewPostContent('');
-    setNewPostImage(null);
-    setShowCreate(false);
-  };
-
-  const filteredPosts = posts.filter(post => {
-    if (tab === 'following') {
-      return following.includes(post.userId) || post.userId === user?.uid;
-    }
-    if (tab === 'trending') {
-      return (post.echoes || 0) > 5;
-    }
-    return true;
-  });
-
   return (
-    <div>
-      <StoryBar />
-      <div style={{ display:'flex', borderBottom:'1px solid rgba(255,255,255,0.06)', background:'#12121A', padding:'0 4px' }}>
-        {['global','following','trending'].map(t => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            style={{
-              flex:1,
-              padding:'12px',
-              textAlign:'center',
-              fontSize:'14px',
-              fontWeight:600,
-              background:'transparent',
-              border:'none',
-              borderBottom: tab === t ? '3px solid #6C3CE1' : '3px solid transparent',
-              cursor:'pointer',
-              color: tab === t ? '#8B5CF6' : '#888',
-              transition:'all 0.3s ease'
+    <div style={{ paddingBottom: '80px' }}>
+      {/* Story Circles - Horizontal Scroll */}
+      <div style={{
+        display: 'flex',
+        gap: '20px',
+        padding: '20px 16px',
+        overflowX: 'auto',
+        scrollbarWidth: 'none',
+        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        background: '#12121A',
+        alignItems: 'center',
+      }}>
+        {/* Your own story circle */}
+        {user && (
+          <Link to="/profile" style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', flexShrink: 0 }}>
+            <div style={{
+              width: '80px',
+              height: '80px',
+              borderRadius: '50%',
+              padding: '4px',
+              background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              position: 'relative',
+              cursor: 'pointer',
+              boxShadow: '0 4px 20px rgba(108,60,225,0.3)',
+              transition: 'transform 0.2s ease',
             }}
-          >
-            {t.charAt(0).toUpperCase() + t.slice(1)}
-          </button>
-        ))}
+            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+            >
+              <div style={{
+                width: '100%',
+                height: '100%',
+                borderRadius: '50%',
+                background: '#12121A',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '28px',
+                fontWeight: 700,
+                color: 'white',
+                textTransform: 'uppercase',
+              }}>
+                {user.avatar || user.username?.[0] || 'U'}
+              </div>
+              <div style={{
+                position: 'absolute',
+                bottom: '2px',
+                right: '2px',
+                width: '24px',
+                height: '24px',
+                borderRadius: '50%',
+                background: '#6C3CE1',
+                color: 'white',
+                fontSize: '14px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2px solid #12121A',
+              }}>+</div>
+            </div>
+            <span style={{ fontSize: '11px', color: '#888', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
+              Your Story
+            </span>
+          </Link>
+        )}
+
+        {/* Other users' story circles */}
+        {storyUsers
+          .filter(u => u.id !== user?.uid)
+          .slice(0, 10) // limit to 10 to avoid clutter
+          .map(u => {
+            const isOnline = onlineUsers.includes(u.id);
+            return (
+              <Link
+                key={u.id}
+                to={`/profile/${u.id}`}
+                style={{ textDecoration: 'none', color: 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px', flexShrink: 0 }}
+              >
+                <div style={{
+                  width: '80px',
+                  height: '80px',
+                  borderRadius: '50%',
+                  padding: '4px',
+                  background: isOnline
+                    ? 'linear-gradient(135deg, #10B981, #34D399)'
+                    : 'linear-gradient(135deg, #6C3CE1, #EC4899)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  position: 'relative',
+                  cursor: 'pointer',
+                  boxShadow: isOnline ? '0 0 30px rgba(16,185,129,0.2)' : '0 4px 20px rgba(108,60,225,0.2)',
+                  transition: 'transform 0.2s ease',
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
+                onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+                >
+                  <div style={{
+                    width: '100%',
+                    height: '100%',
+                    borderRadius: '50%',
+                    background: '#12121A',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '32px',
+                    fontWeight: 700,
+                    color: 'white',
+                    textTransform: 'uppercase',
+                  }}>
+                    {u.avatar || u.username?.[0] || 'U'}
+                  </div>
+                  {isOnline && (
+                    <div style={{
+                      position: 'absolute',
+                      bottom: '4px',
+                      right: '4px',
+                      width: '16px',
+                      height: '16px',
+                      borderRadius: '50%',
+                      background: '#10B981',
+                      border: '2px solid #12121A',
+                    }} />
+                  )}
+                </div>
+                <span style={{ fontSize: '11px', color: '#888', maxWidth: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', textAlign: 'center' }}>
+                  {u.username}
+                </span>
+              </Link>
+            );
+          })}
       </div>
+
+      {/* Posts Feed */}
       <div>
-        {filteredPosts.length === 0 ? (
-          <div style={{ textAlign:'center', padding:'40px 20px', color:'#888' }}>No posts yet</div>
+        {posts.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '60px 20px', color: '#888' }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>📝</div>
+            <p>No posts yet. Be the first to share!</p>
+          </div>
         ) : (
-          filteredPosts.map(post => (
+          posts.map(post => (
             <PostCard key={post.id} post={post} onEcho={handleEcho} />
           ))
         )}
       </div>
-
-      {/* Floating Action Button */}
-      {user && (
-        <button
-          onClick={() => setShowCreate(true)}
-          style={{
-            position: 'fixed',
-            bottom: '80px',
-            right: '20px',
-            width: '56px',
-            height: '56px',
-            borderRadius: '50%',
-            background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
-            color: 'white',
-            border: 'none',
-            fontSize: '28px',
-            boxShadow: '0 4px 20px rgba(108,60,225,0.4)',
-            cursor: 'pointer',
-            zIndex: 100,
-            transition: 'all 0.3s ease'
-          }}
-          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.05)'}
-          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
-        >
-          <i className="fas fa-plus"></i>
-        </button>
-      )}
-
-      {/* Create Post Modal */}
-      {showCreate && (
-        <div style={{
-          position: 'fixed',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          background: 'rgba(0,0,0,0.8)',
-          backdropFilter: 'blur(8px)',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 200,
-          padding: '20px'
-        }}>
-          <div style={{
-            background: '#12121A',
-            borderRadius: '20px',
-            padding: '24px',
-            maxWidth: '500px',
-            width: '100%',
-            border: '1px solid rgba(255,255,255,0.06)'
-          }}>
-            <h3 style={{ marginBottom: '12px', fontSize: '20px' }}>Create Post</h3>
-            <textarea
-              placeholder="What's on your mind?"
-              value={newPostContent}
-              onChange={(e) => setNewPostContent(e.target.value)}
-              style={{
-                width: '100%',
-                minHeight: '120px',
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.06)',
-                borderRadius: '12px',
-                padding: '12px',
-                color: 'white',
-                fontSize: '16px',
-                fontFamily: 'inherit',
-                outline: 'none',
-                resize: 'vertical'
-              }}
-            />
-            <input
-              type="file"
-              accept="image/*"
-              onChange={(e) => setNewPostImage(e.target.files[0])}
-              style={{ marginTop: '12px', width: '100%', color: '#888' }}
-            />
-            <div style={{ display: 'flex', gap: '12px', marginTop: '16px' }}>
-              <button onClick={handleCreatePost} className="btn-primary" style={{ flex: 1 }}>Post</button>
-              <button onClick={() => setShowCreate(false)} className="btn-outline" style={{ flex: 1 }}>Cancel</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

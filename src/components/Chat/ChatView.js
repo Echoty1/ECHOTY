@@ -3,20 +3,31 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../contexts/SocketContext';
 import { db } from '../../services/firebase';
-import { ref, onValue, push, set, off } from 'firebase/database';
+import { ref, onValue, set, off } from 'firebase/database';
 
 const ChatView = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const socket = useSocket();
+  const { socket, onlineUsers } = useSocket();
   const [partner, setPartner] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [online, setOnline] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const mediaRecorder = useRef(null);
+  const audioChunks = useRef([]);
   const messagesEndRef = useRef(null);
   const chatId = [user?.uid, userId].sort().join('_');
 
+  // Update online status from context
+  useEffect(() => {
+    if (userId) {
+      setOnline(onlineUsers.includes(userId));
+    }
+  }, [onlineUsers, userId]);
+
+  // Load partner data
   useEffect(() => {
     if (!userId) return;
     const userRef = ref(db, `users/${userId}`);
@@ -26,44 +37,32 @@ const ChatView = () => {
     });
   }, [userId]);
 
+  // Load messages
   useEffect(() => {
     if (!chatId) return;
     const chatRef = ref(db, `chats/${chatId}`);
     onValue(chatRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const msgs = Object.values(data).sort((a,b) => a.timestamp - b.timestamp);
+        const msgs = Object.values(data).sort((a, b) => a.timestamp - b.timestamp);
         setMessages(msgs);
-      } else {
-        setMessages([]);
-      }
+      } else setMessages([]);
     });
     return () => off(chatRef);
   }, [chatId]);
 
-  useEffect(() => {
-    if (socket) {
-      socket.on('online-users', (ids) => {
-        setOnline(ids.includes(userId));
-      });
-    }
-    return () => {
-      if (socket) socket.off('online-users');
-    };
-  }, [socket, userId]);
-
+  // Auto-scroll to bottom
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const sendMessage = () => {
-    if (!newMessage.trim()) return;
+  const sendMessage = (message) => {
     const msgData = {
       userId: user.uid,
       username: user.username,
-      message: newMessage,
+      message: message || newMessage,
       timestamp: Date.now(),
-      id: Date.now() + '_' + Math.random().toString().replace('.', '_')
+      id: Date.now() + '_' + Math.random().toString().replace('.', '_'),
     };
     const chatRef = ref(db, `chats/${chatId}/${msgData.id}`);
     set(chatRef, msgData);
@@ -71,68 +70,193 @@ const ChatView = () => {
     setNewMessage('');
   };
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder.current = new MediaRecorder(stream);
+      audioChunks.current = [];
+      mediaRecorder.current.ondataavailable = (e) => audioChunks.current.push(e.data);
+      mediaRecorder.current.onstop = () => {
+        const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64Audio = reader.result;
+          const msgData = {
+            userId: user.uid,
+            username: user.username,
+            voice: base64Audio,
+            timestamp: Date.now(),
+            id: Date.now() + '_' + Math.random().toString().replace('.', '_'),
+          };
+          const chatRef = ref(db, `chats/${chatId}/${msgData.id}`);
+          set(chatRef, msgData);
+          if (socket) socket.emit('chat-message', { ...msgData, chatId });
+        };
+        reader.readAsDataURL(audioBlob);
+      };
+      mediaRecorder.current.start();
+      setRecording(true);
+    } catch (err) {
+      alert('Microphone access denied');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder.current) {
+      mediaRecorder.current.stop();
+      setRecording(false);
+    }
+  };
+
   return (
-    <div style={{ height: '100vh', paddingTop:0, background:'#0A0A0F' }}>
-      <div style={{
-        display:'flex', alignItems:'center', gap:'14px',
-        padding:'14px 18px', borderBottom:'1px solid rgba(255,255,255,0.06)',
-        background:'#12121A'
-      }}>
-        <button onClick={() => navigate('/chat')} style={{ background:'none', border:'none', color:'#888', fontSize:'22px', cursor:'pointer' }}>
+    <div
+      style={{
+        height: '100vh',
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#0A0A0F',
+        paddingTop: '56px',
+      }}
+    >
+      {/* Header */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '16px',
+          padding: '14px 20px',
+          borderBottom: '1px solid rgba(255,255,255,0.06)',
+          background: 'rgba(18,18,26,0.9)',
+          backdropFilter: 'blur(12px)',
+          flexShrink: 0,
+        }}
+      >
+        <button
+          onClick={() => navigate('/')}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#888',
+            fontSize: '22px',
+            cursor: 'pointer',
+            padding: '4px',
+          }}
+        >
           <i className="fas fa-arrow-left"></i>
         </button>
-        <div style={{
-          width:'44px', height:'44px', borderRadius:'50%',
-          background:'linear-gradient(135deg, #6C3CE1, #EC4899)',
-          display:'flex', alignItems:'center', justifyContent:'center',
-          fontWeight:700, fontSize:'18px', color:'white'
-        }}>
+        <div
+          style={{
+            width: '44px',
+            height: '44px',
+            borderRadius: '50%',
+            background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 700,
+            fontSize: '20px',
+            color: 'white',
+            flexShrink: 0,
+          }}
+        >
           {partner?.avatar || partner?.username?.[0]?.toUpperCase() || 'U'}
         </div>
-        <div style={{ flex:1 }}>
-          <div style={{ fontSize:'17px', fontWeight:600 }}>{partner?.username || 'User'}</div>
-          <div style={{ fontSize:'12px', color: online ? '#10B981' : '#888' }}>
-            {online ? '🟢 Online' : 'Offline'}
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '18px', fontWeight: 600 }}>
+            {partner?.username || 'User'}
+          </div>
+          <div
+            style={{
+              fontSize: '13px',
+              color: online ? '#10B981' : '#EF4444',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <span
+              style={{
+                display: 'inline-block',
+                width: '8px',
+                height: '8px',
+                borderRadius: '50%',
+                background: online ? '#10B981' : '#EF4444',
+              }}
+            />
+            {online ? 'Online' : 'Offline'}
           </div>
         </div>
       </div>
 
-      <div style={{
-        height: 'calc(100vh - 140px)',
-        overflowY: 'auto',
-        padding: '18px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '6px'
-      }}>
+      {/* Messages */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '20px 24px',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '8px',
+          background: '#0A0A0F',
+        }}
+      >
         {messages.length === 0 ? (
-          <div style={{ textAlign:'center', color:'#888', padding:'20px' }}>No messages yet</div>
+          <div
+            style={{
+              textAlign: 'center',
+              color: '#888',
+              padding: '40px 0',
+              fontSize: '16px',
+            }}
+          >
+            No messages yet — say hello!
+          </div>
         ) : (
           messages.map((msg, i) => {
             const isSent = msg.userId === user?.uid;
             return (
-              <div key={i} style={{
-                maxWidth: '80%',
-                alignSelf: isSent ? 'flex-end' : 'flex-start',
-                animation: 'messageIn 0.3s ease'
-              }}>
-                <div style={{
-                  padding: '10px 16px',
-                  borderRadius: '18px',
-                  fontSize: '14px',
-                  wordWrap: 'break-word',
-                  background: isSent ? 'linear-gradient(135deg, #6C3CE1, #EC4899)' : 'rgba(255,255,255,0.06)',
-                  color: isSent ? 'white' : 'white',
-                  borderBottomRightRadius: isSent ? '4px' : '18px',
-                  borderBottomLeftRadius: isSent ? '18px' : '4px'
-                }}>
-                  {msg.message}
+              <div
+                key={i}
+                style={{
+                  maxWidth: '75%',
+                  alignSelf: isSent ? 'flex-end' : 'flex-start',
+                  animation: 'fadeIn 0.2s ease',
+                }}
+              >
+                <div
+                  style={{
+                    padding: '12px 18px',
+                    borderRadius: '20px',
+                    fontSize: '15px',
+                    lineHeight: '1.5',
+                    background: isSent
+                      ? 'linear-gradient(135deg, #6C3CE1, #EC4899)'
+                      : 'rgba(255,255,255,0.08)',
+                    color: 'white',
+                    borderBottomRightRadius: isSent ? '6px' : '20px',
+                    borderBottomLeftRadius: isSent ? '20px' : '6px',
+                    boxShadow: isSent ? '0 2px 12px rgba(108,60,225,0.2)' : 'none',
+                  }}
+                >
+                  {msg.voice ? (
+                    <audio controls src={msg.voice} style={{ maxWidth: '200px', height: '36px' }} />
+                  ) : (
+                    msg.message
+                  )}
                 </div>
-                <div style={{
-                  fontSize:'10px', color:'#555', marginTop:'2px',
-                  textAlign: isSent ? 'right' : 'left'
-                }}>
-                  {msg.timestamp ? new Date(msg.timestamp).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : ''}
+                <div
+                  style={{
+                    fontSize: '11px',
+                    color: '#555',
+                    marginTop: '4px',
+                    padding: '0 4px',
+                    textAlign: isSent ? 'right' : 'left',
+                  }}
+                >
+                  {new Date(msg.timestamp).toLocaleTimeString([], {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
                 </div>
               </div>
             );
@@ -141,11 +265,38 @@ const ChatView = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      <div style={{
-        display:'flex', alignItems:'center', gap:'12px',
-        padding:'12px 18px', borderTop:'1px solid rgba(255,255,255,0.06)',
-        background:'#12121A'
-      }}>
+      {/* Input */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          padding: '12px 20px 16px',
+          borderTop: '1px solid rgba(255,255,255,0.06)',
+          background: 'rgba(18,18,26,0.95)',
+          backdropFilter: 'blur(12px)',
+          flexShrink: 0,
+        }}
+      >
+        <button
+          onClick={recording ? stopRecording : startRecording}
+          style={{
+            background: recording ? '#EF4444' : 'rgba(255,255,255,0.06)',
+            border: 'none',
+            borderRadius: '50%',
+            width: '44px',
+            height: '44px',
+            color: recording ? 'white' : '#888',
+            fontSize: '18px',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <i className={recording ? 'fas fa-stop' : 'fas fa-microphone'} />
+        </button>
         <input
           type="text"
           placeholder="Type a message..."
@@ -153,30 +304,41 @@ const ChatView = () => {
           onChange={(e) => setNewMessage(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
           style={{
-            flex:1,
-            background:'rgba(255,255,255,0.04)',
-            border:'1px solid rgba(255,255,255,0.06)',
-            borderRadius:'50px',
-            padding:'12px 18px',
-            color:'white',
-            outline:'none',
-            fontSize:'15px',
-            fontFamily:'inherit'
+            flex: 1,
+            background: 'rgba(255,255,255,0.06)',
+            border: '1px solid rgba(255,255,255,0.08)',
+            borderRadius: '30px',
+            padding: '12px 18px',
+            color: 'white',
+            outline: 'none',
+            fontSize: '15px',
+            fontFamily: 'inherit',
+            transition: 'border 0.2s ease',
           }}
+          onFocus={(e) => (e.target.style.borderColor = '#6C3CE1')}
+          onBlur={(e) => (e.target.style.borderColor = 'rgba(255,255,255,0.08)')}
         />
-        <button onClick={sendMessage} style={{
-          background:'linear-gradient(135deg, #6C3CE1, #EC4899)',
-          border:'none',
-          color:'white',
-          width:'44px',
-          height:'44px',
-          borderRadius:'50%',
-          cursor:'pointer',
-          fontSize:'18px',
-          transition:'all 0.3s ease',
-          boxShadow:'0 4px 15px rgba(108,60,225,0.2)'
-        }}>
-          <i className="fas fa-paper-plane"></i>
+        <button
+          onClick={() => sendMessage()}
+          style={{
+            background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
+            border: 'none',
+            color: 'white',
+            width: '48px',
+            height: '48px',
+            borderRadius: '50%',
+            cursor: 'pointer',
+            fontSize: '18px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 16px rgba(108,60,225,0.3)',
+            transition: 'transform 0.15s ease',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.05)')}
+          onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+        >
+          <i className="fas fa-paper-plane" />
         </button>
       </div>
     </div>

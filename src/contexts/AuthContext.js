@@ -1,7 +1,7 @@
 import React, { createContext, useState, useEffect } from 'react';
 import { auth, db } from '../services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
-import { ref, onValue, set, update } from 'firebase/database';
+import { ref, onValue, set } from 'firebase/database';
 
 export const AuthContext = createContext();
 
@@ -18,12 +18,10 @@ export const AuthProvider = ({ children }) => {
           if (data) {
             setUser({ ...data, uid: firebaseUser.uid });
           } else {
-            // New user – create profile and auto‑follow Malik
             const newUser = {
               username: firebaseUser.displayName || firebaseUser.email.split('@')[0],
               avatar: firebaseUser.displayName ? firebaseUser.displayName[0].toUpperCase() : firebaseUser.email[0].toUpperCase(),
               email: firebaseUser.email,
-              photoURL: firebaseUser.photoURL || null,
               bio: 'New to ECHO! 🌍',
               location: 'Unknown',
               joined: new Date().toISOString().split('T')[0],
@@ -31,8 +29,8 @@ export const AuthProvider = ({ children }) => {
               uid: firebaseUser.uid
             };
             set(ref(db, `users/${firebaseUser.uid}`), newUser);
-            // Auto‑follow Malik
-            const MALIK_ID = 'dyvblcReUPZzRc99KDdjImpvs4I2'; // Malik's UID
+            // Auto-follow Malik
+            const MALIK_ID = 'dyvblcReUPZzRc99KDdjImpvs4I2';
             set(ref(db, `following/${firebaseUser.uid}/${MALIK_ID}`), true);
             setUser({ ...newUser, uid: firebaseUser.uid });
           }
@@ -47,6 +45,5 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const value = { user, loading };
-
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

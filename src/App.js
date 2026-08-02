@@ -1,27 +1,73 @@
 import React from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
-import Navbar from './components/Layout/Navbar';
-import BottomNav from './components/Layout/BottomNav';
 import Login from './components/Auth/Login';
-import Feed from './components/Feed/Feed';
-import Chat from './components/Chat/ChatList';
+import ChatList from './components/Chat/ChatList';
 import ChatView from './components/Chat/ChatView';
 import Profile from './components/Profile/Profile';
-import Events from './components/Events/Events';
-import Groups from './components/Groups/Groups';
-import Marketplace from './components/Marketplace/Marketplace';
-import Donations from './components/Donations/Donations';
-import Search from './components/Search/Search';
-import Notifications from './components/Notifications/Notifications';
+import Navbar from './components/Layout/Navbar';
+import BottomNav from './components/Layout/BottomNav';
 
 function App() {
   const { user, loading } = useAuth();
 
   if (loading) {
     return (
-      <div style={{ display:'flex', justifyContent:'center', alignItems:'center', height:'100vh', background:'var(--dark)' }}>
-        <div className="loader">Loading...</div>
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: '#0A0A0F',
+        backgroundImage: 'radial-gradient(ellipse at center, #12121A, #0A0A0F)',
+        margin: 0,
+        padding: 0,
+      }}>
+        <div style={{
+          width: '80px',
+          height: '80px',
+          marginBottom: '20px',
+          animation: 'float 2s ease-in-out infinite',
+        }}>
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+            <rect width="512" height="512" rx="96" fill="#182830" />
+            <path d="M 120 120 H 280 V 176 H 180 V 228 H 260 V 284 H 180 V 336 H 280 V 392 H 120 Z" fill="#6C3CE1" />
+            <path d="M 320 160 A 140 140 0 0 1 320 352" stroke="#6C3CE1" strokeWidth="36" fill="none" strokeLinecap="round" />
+            <path d="M 370 200 A 90 90 0 0 1 370 312" stroke="#EC4899" strokeWidth="32" strokeOpacity="0.6" fill="none" strokeLinecap="round" />
+          </svg>
+        </div>
+        <div style={{
+          fontSize: '32px',
+          fontWeight: 900,
+          background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
+          WebkitBackgroundClip: 'text',
+          WebkitTextFillColor: 'transparent',
+          letterSpacing: '4px',
+        }}>ECHO</div>
+        <div style={{
+          color: 'rgba(255,255,255,0.25)',
+          fontSize: '12px',
+          letterSpacing: '6px',
+          textTransform: 'uppercase',
+          marginTop: '4px',
+        }}>Premium Chat</div>
+        <div style={{
+          width: '200px',
+          height: '3px',
+          background: 'rgba(255,255,255,0.04)',
+          borderRadius: '4px',
+          marginTop: '30px',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            height: '100%',
+            width: '30%',
+            background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
+            borderRadius: '4px',
+            animation: 'shimmer 1.5s ease-in-out infinite',
+          }} />
+        </div>
       </div>
     );
   }
@@ -34,18 +80,9 @@ function App() {
     <>
       <Navbar />
       <Routes>
-        <Route path="/" element={<Feed />} />
-        <Route path="/feed" element={<Feed />} />
-        <Route path="/search" element={<Search />} />
-        <Route path="/chat" element={<Chat />} />
+        <Route path="/" element={<ChatList />} />
         <Route path="/chat/:userId" element={<ChatView />} />
         <Route path="/profile" element={<Profile />} />
-        <Route path="/profile/:userId" element={<Profile />} />
-        <Route path="/events" element={<Events />} />
-        <Route path="/groups" element={<Groups />} />
-        <Route path="/marketplace" element={<Marketplace />} />
-        <Route path="/donations" element={<Donations />} />
-        <Route path="/notifications" element={<Notifications />} />
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
       <BottomNav />

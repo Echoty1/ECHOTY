@@ -15,6 +15,3 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getDatabase(app);
-
-// Export Malik's UID for use elsewhere
-export const MALIK_ID = 'dyvblcReUPZzRc99KDdjImpvs4I2';

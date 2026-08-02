@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from '../hooks/useAuth';
 
@@ -6,36 +6,62 @@ const SocketContext = createContext();
 
 export const SocketProvider = ({ children }) => {
   const { user } = useAuth();
-  const [socket, setSocket] = useState(null);
+  const [onlineUsers, setOnlineUsers] = useState([]);
+  const socketRef = useRef(null);
+  const reconnectAttempts = useRef(0);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user) {
+      if (socketRef.current) {
+        socketRef.current.disconnect();
+        socketRef.current = null;
+      }
+      setOnlineUsers([]);
+      return;
+    }
 
-    // Use environment variable for socket URL, fallback to localhost for development
     const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:3000';
-    const newSocket = io(SOCKET_URL, {
+    const socket = io(SOCKET_URL, {
       transports: ['websocket', 'polling'],
       reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
     });
-    setSocket(newSocket);
+    socketRef.current = socket;
 
-    newSocket.on('connect', () => {
+    socket.on('connect', () => {
       console.log('🟢 Socket connected to', SOCKET_URL);
-      newSocket.emit('join', user.uid, user.username);
+      socket.emit('join', user.uid, user.username);
+      reconnectAttempts.current = 0;
     });
 
-    newSocket.on('online-users', (userIds) => {
-      // Store online users globally
-      window._onlineUsers = userIds;
-      // Dispatch event for components to update
-      window.dispatchEvent(new CustomEvent('online-users-update', { detail: userIds }));
+    socket.on('online-users', (ids) => {
+      console.log('🔥 Online users from server:', ids);
+      setOnlineUsers(ids);
     });
 
-    return () => newSocket.disconnect();
+    socket.on('disconnect', (reason) => {
+      console.log('🔴 Socket disconnected:', reason);
+      if (reason === 'io server disconnect') {
+        // server disconnected us – reconnect manually
+        socket.connect();
+      }
+    });
+
+    socket.on('connect_error', (error) => {
+      console.log('❌ Socket connection error:', error);
+    });
+
+    return () => {
+      socket.disconnect();
+    };
   }, [user]);
 
+  const value = { socket: socketRef.current, onlineUsers };
+
   return (
-    <SocketContext.Provider value={socket}>
+    <SocketContext.Provider value={value}>
       {children}
     </SocketContext.Provider>
   );
