@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { db } from '../../services/firebase';
 import { ref, onValue, update } from 'firebase/database';
+import { cache } from '../../services/cache';
 
 const Profile = () => {
   const { user } = useAuth();
@@ -22,6 +23,10 @@ const Profile = () => {
         setLocation(data.location || '');
         setAvatar(data.avatar || '');
         setDisplayName(data.username || user.username || '');
+        // Update cache for this user
+        const allUsers = cache.getUsers() || {};
+        allUsers[user.uid] = { ...data, id: user.uid };
+        cache.setUsers(allUsers);
       }
     });
   }, [user]);
@@ -99,7 +104,7 @@ const Profile = () => {
             }}
             onClick={() => fileInputRef.current.click()}
           >
-            {avatar ? (
+            {avatar && avatar.length > 0 ? (
               <img src={avatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <span style={{ fontSize: '38px', fontWeight: 700, color: 'white' }}>{getInitials(displayName)}</span>
@@ -109,7 +114,6 @@ const Profile = () => {
           <div style={{ fontSize: '12px', color: '#888', marginTop: '6px', opacity: 0.7 }}>Tap avatar to change</div>
         </div>
 
-        {/* Name and email */}
         <h2 style={{ fontSize: '24px', fontWeight: 700, textAlign: 'center', color: 'white', marginBottom: '2px' }}>
           {displayName}
         </h2>
@@ -117,7 +121,6 @@ const Profile = () => {
           {user?.email}
         </p>
 
-        {/* Bio & Location grid */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
           <div
             style={{
@@ -145,7 +148,6 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Edit / Save button */}
         <button
           onClick={() => setEditMode(!editMode)}
           style={{
@@ -165,7 +167,6 @@ const Profile = () => {
           {editMode ? 'Cancel' : 'Edit Profile'}
         </button>
 
-        {/* Edit form (appears below button when editMode is true) */}
         {editMode && (
           <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
             <input

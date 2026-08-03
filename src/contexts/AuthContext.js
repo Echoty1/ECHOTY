@@ -2,10 +2,10 @@ import React, { createContext, useState, useEffect } from 'react';
 import { auth, db } from '../services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ref, onValue, set } from 'firebase/database';
+import { cache } from '../services/cache';
 
 export const AuthContext = createContext();
 
-// Helper to fetch location from IP address (no user permission needed)
 const fetchLocationFromIP = async () => {
   try {
     const res = await fetch('https://ipapi.co/json/');
@@ -14,8 +14,7 @@ const fetchLocationFromIP = async () => {
       return `${data.city}, ${data.region}, ${data.country_name}`;
     }
     return 'Unknown';
-  } catch (error) {
-    console.error('Failed to fetch location:', error);
+  } catch {
     return 'Unknown';
   }
 };
@@ -32,24 +31,18 @@ export const AuthProvider = ({ children }) => {
         onValue(userRef, async (snapshot) => {
           const data = snapshot.val();
           if (data) {
-            // Check if banned
             if (data.banned === true) {
               setUser(null);
               setBannedUser({ ...data, uid: firebaseUser.uid });
               setLoading(false);
               return;
             }
-            // If location is "Unknown", try to fetch and update (for existing users)
-            if (data.location === 'Unknown' || !data.location) {
-              const location = await fetchLocationFromIP();
-              if (location !== 'Unknown') {
-                set(ref(db, `users/${firebaseUser.uid}/location`), location);
-                data.location = location;
-              }
-            }
+            // Update cache with user data
+            const cachedUsers = cache.getUsers() || {};
+            cachedUsers[firebaseUser.uid] = { ...data, uid: firebaseUser.uid };
+            cache.setUsers(cachedUsers);
             setUser({ ...data, uid: firebaseUser.uid });
           } else {
-            // New user – create profile with location
             const location = await fetchLocationFromIP();
             const newUser = {
               username: firebaseUser.displayName || firebaseUser.email.split('@')[0],
@@ -63,9 +56,12 @@ export const AuthProvider = ({ children }) => {
               banned: false,
             };
             set(ref(db, `users/${firebaseUser.uid}`), newUser);
-            // Auto-follow Malik
             const MALIK_ID = 'dyvblcReUPZzRc99KDdjImpvs4I2';
             set(ref(db, `following/${firebaseUser.uid}/${MALIK_ID}`), true);
+            // Cache new user
+            const cachedUsers = cache.getUsers() || {};
+            cachedUsers[firebaseUser.uid] = { ...newUser, uid: firebaseUser.uid };
+            cache.setUsers(cachedUsers);
             setUser({ ...newUser, uid: firebaseUser.uid });
           }
           setLoading(false);
@@ -82,9 +78,5 @@ export const AuthProvider = ({ children }) => {
 
   const value = { user, bannedUser, loading };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };

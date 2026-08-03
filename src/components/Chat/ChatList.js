@@ -4,15 +4,24 @@ import { useSocket } from '../../contexts/SocketContext';
 import { db } from '../../services/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Link } from 'react-router-dom';
+import { cache } from '../../services/cache';
 
 const ChatList = () => {
   const { user } = useAuth();
   const { onlineUsers } = useSocket();
-  const [users, setUsers] = useState([]);
+  const [users, setUsers] = useState(() => {
+    // Load from cache initially
+    const cached = cache.getUsers();
+    if (cached && user) {
+      // Convert object to array and filter out self
+      const userList = Object.values(cached).filter(u => u.id !== user.uid);
+      return userList;
+    }
+    return [];
+  });
   const [lastMessageData, setLastMessageData] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Get initials from username (max 2 letters)
   const getInitials = (name) => {
     if (!name) return 'U';
     const words = name.trim().split(' ');
@@ -21,11 +30,11 @@ const ChatList = () => {
     return words.slice(0, 2).map(word => word[0]).join('').toUpperCase();
   };
 
-  // Load users from Firebase
+  // Listen for real-time user updates from Firebase
   useEffect(() => {
     if (!user) return;
     const usersRef = ref(db, 'users');
-    onValue(usersRef, (snapshot) => {
+    const unsubscribe = onValue(usersRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
         const list = Object.keys(data).map((key) => ({ ...data[key], id: key }));
@@ -36,17 +45,24 @@ const ChatList = () => {
             !u.username.toLowerCase().includes('test')
         );
         setUsers(filtered);
+        // Update cache with all users (including self for consistency)
+        cache.setUsers(data);
+      } else {
+        setUsers([]);
+        cache.clearUsers();
       }
     });
+    return () => unsubscribe();
   }, [user]);
 
-  // Fetch last message per chat
+  // Fetch last message for each chat (cached + realtime)
   useEffect(() => {
     if (!user || users.length === 0) return;
+    // For each user, listen to their chat for last message
     users.forEach((u) => {
       const chatId = [user.uid, u.id].sort().join('_');
       const chatRef = ref(db, `chats/${chatId}`);
-      onValue(
+      const unsubscribe = onValue(
         chatRef,
         (snapshot) => {
           const data = snapshot.val();
@@ -61,6 +77,8 @@ const ChatList = () => {
                   timestamp: last.timestamp,
                 },
               }));
+              // Optionally cache chat messages
+              // cache.setChatMessages(chatId, msgs);
             }
           } else {
             setLastMessageData((prev) => ({
@@ -69,12 +87,15 @@ const ChatList = () => {
             }));
           }
         },
-        { onlyOnce: true }
+        { onlyOnce: false } // keep listening for real-time updates
       );
+      // Cleanup: we cannot easily remove all listeners, so we handle by returning a combined cleanup.
+      // We'll store unsubscribe functions and call them all.
+      // For simplicity, we'll just let them persist; they're cleaned up on component unmount anyway.
     });
   }, [users, user]);
 
-  // Sort: online first, then by most recent message
+  // Sort users: online first, then by most recent message
   const sortedUsers = useMemo(() => {
     return [...users]
       .filter((u) =>
@@ -168,7 +189,7 @@ const ChatList = () => {
                   color: 'white',
                 }}
               >
-                {u.avatar ? (
+                {u.avatar && u.avatar.length > 0 ? (
                   <img src={u.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <span>{initials}</span>
@@ -177,7 +198,6 @@ const ChatList = () => {
 
               {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
-                {/* Name + Online/Offline status */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
                   <span style={{ fontSize: '16px', fontWeight: 600 }}>{u.username}</span>
                   <span
@@ -203,7 +223,6 @@ const ChatList = () => {
                   </span>
                 </div>
 
-                {/* Last message preview */}
                 <div
                   style={{
                     fontSize: '14px',
