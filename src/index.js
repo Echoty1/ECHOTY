@@ -22,4 +22,4 @@ root.render(
 // In src/index.js or App.js, during development
 try {
   localStorage.removeItem('echo_users');
-} catch {}
+} catch {} 
