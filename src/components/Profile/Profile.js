@@ -104,7 +104,7 @@ const Profile = () => {
             }}
             onClick={() => fileInputRef.current.click()}
           >
-            {avatar && avatar.length > 0 ? (
+            {avatar && avatar.startsWith('data:') ? (
               <img src={avatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
               <span style={{ fontSize: '38px', fontWeight: 700, color: 'white' }}>{getInitials(displayName)}</span>

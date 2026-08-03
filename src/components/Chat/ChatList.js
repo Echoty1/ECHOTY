@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../contexts/SocketContext';
 import { db } from '../../services/firebase';
@@ -10,17 +10,15 @@ const ChatList = () => {
   const { user } = useAuth();
   const { onlineUsers } = useSocket();
   const [users, setUsers] = useState(() => {
-    // Load from cache initially
     const cached = cache.getUsers();
     if (cached && user) {
-      // Convert object to array and filter out self
-      const userList = Object.values(cached).filter(u => u.id !== user.uid);
-      return userList;
+      return Object.values(cached).filter(u => u.id !== user.uid);
     }
     return [];
   });
   const [lastMessageData, setLastMessageData] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
+  const unsubscribeRefs = useRef([]);
 
   const getInitials = (name) => {
     if (!name) return 'U';
@@ -30,7 +28,7 @@ const ChatList = () => {
     return words.slice(0, 2).map(word => word[0]).join('').toUpperCase();
   };
 
-  // Listen for real-time user updates from Firebase
+  // Listen for real-time user updates
   useEffect(() => {
     if (!user) return;
     const usersRef = ref(db, 'users');
@@ -45,7 +43,6 @@ const ChatList = () => {
             !u.username.toLowerCase().includes('test')
         );
         setUsers(filtered);
-        // Update cache with all users (including self for consistency)
         cache.setUsers(data);
       } else {
         setUsers([]);
@@ -55,47 +52,49 @@ const ChatList = () => {
     return () => unsubscribe();
   }, [user]);
 
-  // Fetch last message for each chat (cached + realtime)
+  // Listen for last messages and clean up properly
   useEffect(() => {
+    // Clear previous listeners
+    unsubscribeRefs.current.forEach(unsub => unsub());
+    unsubscribeRefs.current = [];
+
     if (!user || users.length === 0) return;
-    // For each user, listen to their chat for last message
-    users.forEach((u) => {
+
+    const newUnsubscribes = users.map((u) => {
       const chatId = [user.uid, u.id].sort().join('_');
       const chatRef = ref(db, `chats/${chatId}`);
-      const unsubscribe = onValue(
-        chatRef,
-        (snapshot) => {
-          const data = snapshot.val();
-          if (data) {
-            const msgs = Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
-            const last = msgs[0];
-            if (last) {
-              setLastMessageData((prev) => ({
-                ...prev,
-                [u.id]: {
-                  message: last.message || (last.voice ? '🎵 Voice note' : ''),
-                  timestamp: last.timestamp,
-                },
-              }));
-              // Optionally cache chat messages
-              // cache.setChatMessages(chatId, msgs);
-            }
-          } else {
+      return onValue(chatRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          const msgs = Object.values(data).sort((a, b) => b.timestamp - a.timestamp);
+          const last = msgs[0];
+          if (last) {
             setLastMessageData((prev) => ({
               ...prev,
-              [u.id]: { message: '', timestamp: 0 },
+              [u.id]: {
+                message: last.message || (last.voice ? '🎵 Voice note' : ''),
+                timestamp: last.timestamp,
+              },
             }));
           }
-        },
-        { onlyOnce: false } // keep listening for real-time updates
-      );
-      // Cleanup: we cannot easily remove all listeners, so we handle by returning a combined cleanup.
-      // We'll store unsubscribe functions and call them all.
-      // For simplicity, we'll just let them persist; they're cleaned up on component unmount anyway.
+        } else {
+          setLastMessageData((prev) => ({
+            ...prev,
+            [u.id]: { message: '', timestamp: 0 },
+          }));
+        }
+      });
     });
+
+    unsubscribeRefs.current = newUnsubscribes;
+
+    return () => {
+      unsubscribeRefs.current.forEach(unsub => unsub());
+      unsubscribeRefs.current = [];
+    };
   }, [users, user]);
 
-  // Sort users: online first, then by most recent message
+  // Sort users
   const sortedUsers = useMemo(() => {
     return [...users]
       .filter((u) =>
@@ -123,7 +122,6 @@ const ChatList = () => {
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0A0A0F' }}>
-      {/* Search Bar */}
       <div style={{ padding: '16px 16px 8px', flexShrink: 0 }}>
         <input
           type="text"
@@ -147,7 +145,6 @@ const ChatList = () => {
         />
       </div>
 
-      {/* Chat List */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0 16px' }}>
         {sortedUsers.map((u) => {
           const isOnline = onlineUsers.includes(u.id);
@@ -172,7 +169,6 @@ const ChatList = () => {
               onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
               onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
             >
-              {/* Avatar */}
               <div
                 style={{
                   width: '52px',
@@ -189,14 +185,13 @@ const ChatList = () => {
                   color: 'white',
                 }}
               >
-                {u.avatar && u.avatar.length > 0 ? (
+                {u.avatar && u.avatar.startsWith('data:') ? (
                   <img src={u.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                 ) : (
                   <span>{initials}</span>
                 )}
               </div>
 
-              {/* Info */}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
                   <span style={{ fontSize: '16px', fontWeight: 600 }}>{u.username}</span>

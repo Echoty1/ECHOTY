@@ -48,7 +48,6 @@ const ChatView = () => {
     onValue(chatRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        // Convert to array with keys
         const msgs = Object.entries(data).map(([key, value]) => ({ ...value, id: key }));
         msgs.sort((a, b) => a.timestamp - b.timestamp);
         setMessages(msgs);
@@ -94,6 +93,39 @@ const ChatView = () => {
     }
     setNewMessage('');
     setEditingMsgId(null);
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const data = reader.result;
+      const msgData = {
+        userId: user.uid,
+        username: user.username,
+        message: file.type.startsWith('image/') ? '📷 Image' : '📎 File',
+        timestamp: serverTimestamp(),
+        image: file.type.startsWith('image/') ? data : null,
+        file: file.type.startsWith('image/') ? null : data,
+        fileName: file.name,
+      };
+      if (replyToMsg) {
+        msgData.replyTo = {
+          id: replyToMsg.id,
+          message: replyToMsg.message,
+          username: replyToMsg.username,
+        };
+        setReplyToMsg(null);
+      }
+      const chatRef = ref(db, `chats/${chatId}`);
+      push(chatRef, msgData);
+      if (socket) {
+        socket.emit('chat-message', { ...msgData, chatId });
+      }
+      e.target.value = '';
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleReply = (msg) => {
@@ -251,7 +283,11 @@ const ChatView = () => {
             flexShrink: 0,
           }}
         >
-          {partner?.avatar || partner?.username?.[0]?.toUpperCase() || 'U'}
+          {partner?.avatar && partner.avatar.startsWith('data:') ? (
+            <img src={partner.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+          ) : (
+            partner?.username?.[0]?.toUpperCase() || 'U'
+          )}
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ fontSize: '18px', fontWeight: 600 }}>
@@ -336,7 +372,7 @@ const ChatView = () => {
               : '';
             return (
               <div
-                key={msg.id} // ✅ unique key from Firebase
+                key={msg.id}
                 style={{
                   maxWidth: '75%',
                   alignSelf: isSent ? 'flex-end' : 'flex-start',
@@ -424,7 +460,14 @@ const ChatView = () => {
                       wordBreak: 'break-word',
                     }}
                   >
-                    {msg.voice ? (
+                    {msg.image && msg.image.startsWith('data:image/') ? (
+                      <img
+                        src={msg.image}
+                        alt="Shared image"
+                        style={{ maxWidth: '100%', maxHeight: '300px', borderRadius: '12px', marginTop: '4px' }}
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    ) : msg.voice ? (
                       <audio controls src={msg.voice} style={{ maxWidth: '200px', height: '36px' }} />
                     ) : (
                       msg.message
@@ -462,6 +505,32 @@ const ChatView = () => {
           flexShrink: 0,
         }}
       >
+        <label
+          htmlFor="file-input"
+          style={{
+            background: 'rgba(255,255,255,0.06)',
+            border: 'none',
+            borderRadius: '50%',
+            width: '44px',
+            height: '44px',
+            color: '#888',
+            fontSize: '18px',
+            cursor: 'pointer',
+            transition: 'all 0.2s ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <i className="fas fa-paperclip" />
+        </label>
+        <input
+          id="file-input"
+          type="file"
+          accept="image/*"
+          style={{ display: 'none' }}
+          onChange={handleFileUpload}
+        />
         <button
           onClick={recording ? stopRecording : startRecording}
           style={{

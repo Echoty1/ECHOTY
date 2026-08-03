@@ -31,22 +31,37 @@ export const AuthProvider = ({ children }) => {
         onValue(userRef, async (snapshot) => {
           const data = snapshot.val();
           if (data) {
+            // Fix existing avatar if it's a single letter (e.g., "F")
+            if (data.avatar && data.avatar.length === 1 && !data.avatar.startsWith('data:')) {
+              set(ref(db, `users/${firebaseUser.uid}/avatar`), '');
+              data.avatar = '';
+            }
+            // Check ban
             if (data.banned === true) {
               setUser(null);
               setBannedUser({ ...data, uid: firebaseUser.uid });
               setLoading(false);
               return;
             }
-            // Update cache with user data
-            const cachedUsers = cache.getUsers() || {};
-            cachedUsers[firebaseUser.uid] = { ...data, uid: firebaseUser.uid };
-            cache.setUsers(cachedUsers);
+            // Update location if Unknown
+            if (data.location === 'Unknown' || !data.location) {
+              const location = await fetchLocationFromIP();
+              if (location !== 'Unknown') {
+                set(ref(db, `users/${firebaseUser.uid}/location`), location);
+                data.location = location;
+              }
+            }
             setUser({ ...data, uid: firebaseUser.uid });
+            // Update cache
+            const allUsers = cache.getUsers() || {};
+            allUsers[firebaseUser.uid] = { ...data, uid: firebaseUser.uid };
+            cache.setUsers(allUsers);
           } else {
+            // New user – create with avatar = '' (no image)
             const location = await fetchLocationFromIP();
             const newUser = {
               username: firebaseUser.displayName || firebaseUser.email.split('@')[0],
-              avatar: firebaseUser.displayName ? firebaseUser.displayName[0].toUpperCase() : firebaseUser.email[0].toUpperCase(),
+              avatar: '', // <--- empty, not a single letter
               email: firebaseUser.email,
               bio: 'New to ECHO! 🌍',
               location: location,
@@ -56,13 +71,14 @@ export const AuthProvider = ({ children }) => {
               banned: false,
             };
             set(ref(db, `users/${firebaseUser.uid}`), newUser);
+            // Auto-follow Malik
             const MALIK_ID = 'dyvblcReUPZzRc99KDdjImpvs4I2';
             set(ref(db, `following/${firebaseUser.uid}/${MALIK_ID}`), true);
-            // Cache new user
-            const cachedUsers = cache.getUsers() || {};
-            cachedUsers[firebaseUser.uid] = { ...newUser, uid: firebaseUser.uid };
-            cache.setUsers(cachedUsers);
             setUser({ ...newUser, uid: firebaseUser.uid });
+            // Cache new user
+            const allUsers = cache.getUsers() || {};
+            allUsers[firebaseUser.uid] = { ...newUser, uid: firebaseUser.uid };
+            cache.setUsers(allUsers);
           }
           setLoading(false);
         });
@@ -77,6 +93,5 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const value = { user, bannedUser, loading };
-
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
