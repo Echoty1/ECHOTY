@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { useSocket } from '../../contexts/SocketContext';
+import { usePresence } from '../../contexts/PresenceContext';
 import { db } from '../../services/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Link } from 'react-router-dom';
@@ -8,7 +8,7 @@ import { cache } from '../../services/cache';
 
 const ChatList = () => {
   const { user } = useAuth();
-  const { onlineUsers } = useSocket();
+  const { presenceMap, subscribeToUser } = usePresence();
   const [users, setUsers] = useState(() => {
     const cached = cache.getUsers();
     if (cached && user) {
@@ -52,9 +52,19 @@ const ChatList = () => {
     return () => unsubscribe();
   }, [user]);
 
-  // Listen for last messages and clean up properly
+  // Subscribe to presence for all users
   useEffect(() => {
-    // Clear previous listeners
+    if (users.length > 0) {
+      users.forEach((u) => {
+        if (u.id !== user?.uid) {
+          subscribeToUser(u.id);
+        }
+      });
+    }
+  }, [users, subscribeToUser, user]);
+
+  // Listen for last messages
+  useEffect(() => {
     unsubscribeRefs.current.forEach(unsub => unsub());
     unsubscribeRefs.current = [];
 
@@ -101,15 +111,15 @@ const ChatList = () => {
         u.username.toLowerCase().includes(searchQuery.toLowerCase())
       )
       .sort((a, b) => {
-        const aOnline = onlineUsers.includes(a.id);
-        const bOnline = onlineUsers.includes(b.id);
+        const aOnline = presenceMap[a.id]?.online || false;
+        const bOnline = presenceMap[b.id]?.online || false;
         if (aOnline && !bOnline) return -1;
         if (!aOnline && bOnline) return 1;
         const aTime = lastMessageData[a.id]?.timestamp || 0;
         const bTime = lastMessageData[b.id]?.timestamp || 0;
         return bTime - aTime;
       });
-  }, [users, onlineUsers, lastMessageData, searchQuery]);
+  }, [users, presenceMap, lastMessageData, searchQuery]);
 
   if (sortedUsers.length === 0) {
     return (
@@ -147,7 +157,7 @@ const ChatList = () => {
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0 16px' }}>
         {sortedUsers.map((u) => {
-          const isOnline = onlineUsers.includes(u.id);
+          const isOnline = presenceMap[u.id]?.online || false;
           const last = lastMessageData[u.id] || { message: '' };
           const lastMsg = last.message || 'Start chatting...';
           const initials = getInitials(u.username);

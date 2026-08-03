@@ -1,10 +1,19 @@
 import React from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { signOut } from 'firebase/auth';
-import { auth } from '../../services/firebase';
+import { auth, db } from '../../services/firebase';
+import { ref, update } from 'firebase/database';
 
 const Navbar = () => {
   const { user } = useAuth();
+
+  const handleSignOut = async () => {
+    if (user) {
+      // Set offline before signing out
+      await update(ref(db, `users/${user.uid}`), { online: false, status: 'offline' });
+    }
+    signOut(auth);
+  };
 
   return (
     <nav style={{
@@ -26,7 +35,7 @@ const Navbar = () => {
       <div style={{ display:'flex', alignItems:'center', gap:'8px' }}>
         <span style={{ fontSize:'13px', color:'#888' }}>{user?.username}</span>
         <button
-          onClick={() => signOut(auth)}
+          onClick={handleSignOut}
           style={{ background:'none', border:'none', color:'#888', fontSize:'18px', cursor:'pointer' }}
         >
           <i className="fas fa-sign-out-alt"></i>

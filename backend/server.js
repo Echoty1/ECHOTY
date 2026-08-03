@@ -21,18 +21,15 @@ app.get('/api/health', (req, res) => {
 });
 
 // ------------------------------------------------
-// Redis adapter – only if REDIS_URL is set
+// Redis adapter – optional (only if REDIS_URL set)
 // ------------------------------------------------
 const REDIS_URL = process.env.REDIS_URL;
-
 if (REDIS_URL) {
     try {
         const { createClient } = require('redis');
         const { createAdapter } = require('@socket.io/redis-adapter');
-
         const pubClient = createClient({ url: REDIS_URL });
         const subClient = pubClient.duplicate();
-
         (async () => {
             try {
                 await pubClient.connect();
@@ -54,44 +51,28 @@ if (REDIS_URL) {
 }
 
 // ------------------------------------------------
-// Socket.io state (in‑memory)
+// Socket.io – only real‑time messaging/typing events
 // ------------------------------------------------
-const authenticatedUsers = new Map();
-
 io.on('connection', (socket) => {
     console.log('🟢 Socket connected:', socket.id);
-    socket.emit('online-users', Array.from(authenticatedUsers.keys()));
 
-    socket.on('join', (userId, username) => {
-        if (!userId) return;
-        authenticatedUsers.set(userId, { username, socketId: socket.id });
-        console.log(`👤 User ${username} (${userId}) is online`);
-        io.emit('online-users', Array.from(authenticatedUsers.keys()));
+    // Typing event (placeholder)
+    socket.on('typing', ({ chatId, userId, username }) => {
+        socket.broadcast.emit('typing', { chatId, userId, username });
     });
 
+    // Chat message (optional – you already use Firebase for history)
     socket.on('chat-message', (data) => {
         io.emit('chat-message', data);
     });
 
     socket.on('disconnect', () => {
-        let removed = false;
-        for (let [userId, info] of authenticatedUsers) {
-            if (info.socketId === socket.id) {
-                authenticatedUsers.delete(userId);
-                console.log(`👤 User ${userId} went offline`);
-                io.emit('online-users', Array.from(authenticatedUsers.keys()));
-                removed = true;
-                break;
-            }
-        }
-        if (!removed) {
-            console.log('🔴 Socket disconnected (no user found):', socket.id);
-        }
+        console.log('🔴 Socket disconnected:', socket.id);
     });
 });
 
 // ------------------------------------------------
-// Start server (no clustering)
+// Start server
 // ------------------------------------------------
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

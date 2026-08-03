@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
+import React, { createContext, useContext, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import { useAuth } from '../hooks/useAuth';
 
@@ -6,9 +6,7 @@ const SocketContext = createContext();
 
 export const SocketProvider = ({ children }) => {
   const { user } = useAuth();
-  const [onlineUsers, setOnlineUsers] = useState([]);
   const socketRef = useRef(null);
-  const reconnectAttempts = useRef(0);
 
   useEffect(() => {
     if (!user) {
@@ -16,7 +14,6 @@ export const SocketProvider = ({ children }) => {
         socketRef.current.disconnect();
         socketRef.current = null;
       }
-      setOnlineUsers([]);
       return;
     }
 
@@ -31,31 +28,15 @@ export const SocketProvider = ({ children }) => {
     socketRef.current = socket;
 
     socket.on('connect', () => {
-      console.log('🟢 Socket connected to', SOCKET_URL);
-      socket.emit('join', user.uid, user.username);
-      reconnectAttempts.current = 0;
-    });
-
-    socket.on('online-users', (ids) => {
-      console.log('🔥 Online users from server:', ids);
-      setOnlineUsers(ids);
+      console.log('🟢 Socket connected (typing only) to', SOCKET_URL);
     });
 
     socket.on('disconnect', (reason) => {
       console.log('🔴 Socket disconnected:', reason);
-      if (reason === 'io server disconnect') {
-        // server disconnected us – reconnect manually
-        socket.connect();
-      }
     });
 
     socket.on('connect_error', (error) => {
       console.log('❌ Socket connection error:', error);
-    });
-
-    socket.on('online-users', (ids) => {
-      console.log('🔥 Online users from server:', ids);
-      setOnlineUsers(ids);
     });
 
     return () => {
@@ -63,7 +44,7 @@ export const SocketProvider = ({ children }) => {
     };
   }, [user]);
 
-  const value = { socket: socketRef.current, onlineUsers };
+  const value = { socket: socketRef.current };
 
   return (
     <SocketContext.Provider value={value}>

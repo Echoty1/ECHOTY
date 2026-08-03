@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }) => {
             const allUsers = cache.getUsers() || {};
             allUsers[firebaseUser.uid] = { ...data, uid: firebaseUser.uid };
             cache.setUsers(allUsers);
-            setLoading(false); // ✅ LOADING ENDS HERE
+            setLoading(false);
 
             // Update location in the background (don't await)
             if (data.location === 'Unknown' || !data.location) {
@@ -61,15 +61,16 @@ export const AuthProvider = ({ children }) => {
               }).catch(() => {});
             }
           } else {
-            // ✅ NEW USER – create immediately, don't await location
+            // ✅ NEW USER – default offline
             const newUser = {
               username: firebaseUser.displayName || firebaseUser.email.split('@')[0],
               avatar: '',
               email: firebaseUser.email,
               bio: 'New to ECHO! 🌍',
-              location: 'Unknown', // ⬅️ start with Unknown
+              location: 'Unknown',
               joined: new Date().toISOString().split('T')[0],
-              online: true,
+              online: false,   // ⬅️ start offline
+              status: 'offline', // ⬅️ add status field
               uid: firebaseUser.uid,
               banned: false,
             };
@@ -82,7 +83,7 @@ export const AuthProvider = ({ children }) => {
             const allUsers = cache.getUsers() || {};
             allUsers[firebaseUser.uid] = { ...newUser, uid: firebaseUser.uid };
             cache.setUsers(allUsers);
-            setLoading(false); // ✅ LOADING ENDS HERE (no await)
+            setLoading(false);
 
             // 🔄 Update location in the background
             fetchLocationFromIP().then(location => {
@@ -92,7 +93,6 @@ export const AuthProvider = ({ children }) => {
               }
             }).catch(() => {});
           }
-          // ❌ Remove the duplicate setLoading(false) here – it's already called above.
         });
       } else {
         setUser(null);

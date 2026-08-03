@@ -1,17 +1,26 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
+import { usePresence } from '../../contexts/PresenceContext';
 import { db } from '../../services/firebase';
 import { ref, onValue, update } from 'firebase/database';
 import { cache } from '../../services/cache';
 
 const Profile = () => {
   const { user } = useAuth();
+  const { presenceMap, subscribeToUser } = usePresence();
   const [bio, setBio] = useState('');
   const [location, setLocation] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [avatar, setAvatar] = useState('');
   const [displayName, setDisplayName] = useState('');
   const fileInputRef = useRef(null);
+
+  // Subscribe to own presence
+  useEffect(() => {
+    if (user) {
+      subscribeToUser(user.uid);
+    }
+  }, [user, subscribeToUser]);
 
   useEffect(() => {
     if (!user) return;
@@ -60,6 +69,12 @@ const Profile = () => {
     if (words.length === 1) return words[0][0].toUpperCase();
     return words.slice(0, 2).map(word => word[0]).join('').toUpperCase();
   };
+
+  // Get presence info
+  const myPresence = presenceMap[user?.uid];
+  const isOnline = myPresence?.online || false;
+  const lastSeen = myPresence?.lastSeen;
+  const lastSeenFormatted = lastSeen ? new Date(lastSeen).toLocaleString() : 'Never';
 
   return (
     <div
@@ -117,9 +132,14 @@ const Profile = () => {
         <h2 style={{ fontSize: '24px', fontWeight: 700, textAlign: 'center', color: 'white', marginBottom: '2px' }}>
           {displayName}
         </h2>
-        <p style={{ fontSize: '14px', color: '#888', textAlign: 'center', marginBottom: '20px' }}>
+        <p style={{ fontSize: '14px', color: '#888', textAlign: 'center', marginBottom: '4px' }}>
           {user?.email}
         </p>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '12px', marginBottom: '20px' }}>
+          <span style={{ fontSize: '13px', color: isOnline ? '#10B981' : '#EF4444' }}>
+            {isOnline ? '🟢 Online' : `⚪ Last seen: ${lastSeenFormatted}`}
+          </span>
+        </div>
 
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
           <div

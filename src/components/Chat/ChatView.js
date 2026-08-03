@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../contexts/SocketContext';
+import { usePresence } from '../../contexts/PresenceContext';
 import { db } from '../../services/firebase';
 import { ref, onValue, push, off, update, remove, serverTimestamp } from 'firebase/database';
 
@@ -9,11 +10,11 @@ const ChatView = () => {
   const { userId } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { socket, onlineUsers } = useSocket();
+  const { socket } = useSocket();
+  const { presenceMap, subscribeToUser } = usePresence();
   const [partner, setPartner] = useState(null);
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
-  const [online, setOnline] = useState(false);
   const [recording, setRecording] = useState(false);
   const mediaRecorder = useRef(null);
   const audioChunks = useRef([]);
@@ -27,19 +28,23 @@ const ChatView = () => {
   const [editContent, setEditContent] = useState('');
   const [replyToMsg, setReplyToMsg] = useState(null);
 
+  // Subscribe to partner's presence
   useEffect(() => {
     if (userId) {
-      setOnline(onlineUsers.includes(userId));
+      subscribeToUser(userId);
     }
-  }, [onlineUsers, userId]);
+  }, [userId, subscribeToUser]);
+
+  const isPartnerOnline = presenceMap[userId]?.online || false;
 
   useEffect(() => {
-    if (!userId) return;
-    const userRef = ref(db, `users/${userId}`);
-    onValue(userRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) setPartner({ ...data, id: userId });
-    });
+    if (userId) {
+      const userRef = ref(db, `users/${userId}`);
+      onValue(userRef, (snapshot) => {
+        const data = snapshot.val();
+        if (data) setPartner({ ...data, id: userId });
+      });
+    }
   }, [userId]);
 
   useEffect(() => {
@@ -296,7 +301,7 @@ const ChatView = () => {
           <div
             style={{
               fontSize: '13px',
-              color: online ? '#10B981' : '#EF4444',
+              color: isPartnerOnline ? '#10B981' : '#EF4444',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
@@ -308,10 +313,10 @@ const ChatView = () => {
                 width: '8px',
                 height: '8px',
                 borderRadius: '50%',
-                background: online ? '#10B981' : '#EF4444',
+                background: isPartnerOnline ? '#10B981' : '#EF4444',
               }}
             />
-            {online ? 'Online' : 'Offline'}
+            {isPartnerOnline ? 'Online' : 'Offline'}
           </div>
         </div>
       </div>
