@@ -8,6 +8,10 @@ import Profile from './components/Profile/Profile';
 import Navbar from './components/Layout/Navbar';
 import BottomNav from './components/Layout/BottomNav';
 import BanScreen from './components/Ban/BanScreen';
+import Search from './components/Search/Search';
+
+// Inside Routes:
+<Route path="/search" element={<Search />} />
 
 function App() {
   const { user, bannedUser, loading } = useAuth();

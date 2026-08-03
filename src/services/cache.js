@@ -1,21 +1,12 @@
-// src/services/cache.js
-
 const CACHE_KEYS = {
   USERS: 'echo_users',
 };
 
-// Maximum size check (approximate)
-const MAX_CACHE_SIZE = 4.5 * 1024 * 1024; // ~4.5MB (5MB limit, leave room)
+// Estimate size of a string (2 bytes per char)
+const getSize = (str) => str.length * 2;
 
-const getStorageSize = () => {
-  let total = 0;
-  for (let key in localStorage) {
-    if (localStorage.hasOwnProperty(key)) {
-      total += localStorage[key].length * 2; // UTF-16
-    }
-  }
-  return total;
-};
+// Maximum safe size for localStorage (5MB)
+const MAX_CACHE_SIZE = 4.5 * 1024 * 1024; // 4.5MB
 
 export const cache = {
   getUsers: () => {
@@ -27,48 +18,67 @@ export const cache = {
     }
   },
 
-  setUsers: (users) => {
+  setUsers: (usersData) => {
+    // usersData is an object keyed by userId
+    // We'll store only essential fields to reduce size
+    const stripped = {};
+    let totalSize = 0;
+
+    // Limit to 100 most recently active users (you can adjust)
+    const entries = Object.entries(usersData);
+    // Sort by last message or online status? We don't have that, so just take first 100.
+    // For better sorting, we could use online status but we don't store that in cache.
+    const limited = entries.slice(0, 100);
+
+    for (const [id, user] of limited) {
+      // Strip large avatar data to avoid quota issues
+      let avatar = user.avatar || '';
+      if (avatar && avatar.startsWith('data:') && avatar.length > 1000) {
+        avatar = ''; // don't cache large images
+      }
+      const entry = {
+        id: user.id || id,
+        username: user.username || 'Unknown',
+        avatar: avatar,
+        online: user.online || false,
+        bio: user.bio || '',
+        location: user.location || '',
+      };
+      const entryStr = JSON.stringify(entry);
+      totalSize += getSize(entryStr);
+      stripped[id] = entry;
+    }
+
+    // If total size is too large, strip avatars entirely
+    if (totalSize > MAX_CACHE_SIZE) {
+      for (const id in stripped) {
+        stripped[id].avatar = '';
+      }
+      // Recalculate size
+      const newStr = JSON.stringify(stripped);
+      if (getSize(newStr) > MAX_CACHE_SIZE) {
+        // Still too large – only store essential fields
+        for (const id in stripped) {
+          const { id: uid, username, online } = stripped[id];
+          stripped[id] = { id: uid, username, online };
+        }
+      }
+    }
+
     try {
-      // Avoid storing large base64 images – we can strip avatar if too large
-      const cleanUsers = {};
-      for (let key in users) {
-        const user = users[key];
-        // If avatar is base64 and too large, remove it from cache
-        if (user.avatar && user.avatar.startsWith('data:') && user.avatar.length > 50000) {
-          cleanUsers[key] = { ...user, avatar: '' };
-        } else {
-          cleanUsers[key] = user;
+      localStorage.setItem(CACHE_KEYS.USERS, JSON.stringify(stripped));
+    } catch (e) {
+      // If quota exceeded, clear cache and try again
+      localStorage.removeItem(CACHE_KEYS.USERS);
+      try {
+        // Retry with minimal data
+        const minimal = {};
+        for (const id in stripped) {
+          minimal[id] = { id, username: stripped[id].username, online: stripped[id].online };
         }
-      }
-      const serialized = JSON.stringify(cleanUsers);
-      // Check if size is within limit
-      if (serialized.length * 2 > MAX_CACHE_SIZE) {
-        console.warn('Cache size exceeds limit, not storing');
-        return;
-      }
-      localStorage.setItem(CACHE_KEYS.USERS, serialized);
-    } catch (error) {
-      if (error.name === 'QuotaExceededError' || error.code === 22) {
-        console.warn('Cache quota exceeded, clearing old cache');
-        cache.clearUsers();
-        // Try again with smaller data (just usernames and IDs)
-        try {
-          const minimal = {};
-          for (let key in users) {
-            const user = users[key];
-            minimal[key] = {
-              id: user.id,
-              username: user.username,
-              avatar: '', // no avatars
-              online: user.online,
-            };
-          }
-          localStorage.setItem(CACHE_KEYS.USERS, JSON.stringify(minimal));
-        } catch (e) {
-          console.warn('Could not cache even minimal data');
-        }
-      } else {
-        console.warn('Cache write error:', error);
+        localStorage.setItem(CACHE_KEYS.USERS, JSON.stringify(minimal));
+      } catch (_) {
+        // ignore
       }
     }
   },

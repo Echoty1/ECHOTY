@@ -53,6 +53,11 @@ export const SocketProvider = ({ children }) => {
       console.log('❌ Socket connection error:', error);
     });
 
+    socket.on('online-users', (ids) => {
+      console.log('🔥 Online users from server:', ids);
+      setOnlineUsers(ids);
+    });
+
     return () => {
       socket.disconnect();
     };

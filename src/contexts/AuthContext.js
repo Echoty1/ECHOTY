@@ -31,7 +31,7 @@ export const AuthProvider = ({ children }) => {
         onValue(userRef, async (snapshot) => {
           const data = snapshot.val();
           if (data) {
-            // Fix existing avatar if it's a single letter (e.g., "F")
+            // Fix existing avatar...
             if (data.avatar && data.avatar.length === 1 && !data.avatar.startsWith('data:')) {
               set(ref(db, `users/${firebaseUser.uid}/avatar`), '');
               data.avatar = '';
@@ -43,28 +43,31 @@ export const AuthProvider = ({ children }) => {
               setLoading(false);
               return;
             }
-            // Update location if Unknown
-            if (data.location === 'Unknown' || !data.location) {
-              const location = await fetchLocationFromIP();
-              if (location !== 'Unknown') {
-                set(ref(db, `users/${firebaseUser.uid}/location`), location);
-                data.location = location;
-              }
-            }
+            // Set user immediately
             setUser({ ...data, uid: firebaseUser.uid });
             // Update cache
             const allUsers = cache.getUsers() || {};
             allUsers[firebaseUser.uid] = { ...data, uid: firebaseUser.uid };
             cache.setUsers(allUsers);
+            setLoading(false); // ✅ LOADING ENDS HERE
+
+            // Update location in the background (don't await)
+            if (data.location === 'Unknown' || !data.location) {
+              fetchLocationFromIP().then(location => {
+                if (location && location !== 'Unknown') {
+                  set(ref(db, `users/${firebaseUser.uid}/location`), location);
+                  setUser(prev => prev ? { ...prev, location } : prev);
+                }
+              }).catch(() => {});
+            }
           } else {
-            // New user – create with avatar = '' (no image)
-            const location = await fetchLocationFromIP();
+            // ✅ NEW USER – create immediately, don't await location
             const newUser = {
               username: firebaseUser.displayName || firebaseUser.email.split('@')[0],
-              avatar: '', // <--- empty, not a single letter
+              avatar: '',
               email: firebaseUser.email,
               bio: 'New to ECHO! 🌍',
-              location: location,
+              location: 'Unknown', // ⬅️ start with Unknown
               joined: new Date().toISOString().split('T')[0],
               online: true,
               uid: firebaseUser.uid,
@@ -79,8 +82,17 @@ export const AuthProvider = ({ children }) => {
             const allUsers = cache.getUsers() || {};
             allUsers[firebaseUser.uid] = { ...newUser, uid: firebaseUser.uid };
             cache.setUsers(allUsers);
+            setLoading(false); // ✅ LOADING ENDS HERE (no await)
+
+            // 🔄 Update location in the background
+            fetchLocationFromIP().then(location => {
+              if (location && location !== 'Unknown') {
+                set(ref(db, `users/${firebaseUser.uid}/location`), location);
+                setUser(prev => prev ? { ...prev, location } : prev);
+              }
+            }).catch(() => {});
           }
-          setLoading(false);
+          // ❌ Remove the duplicate setLoading(false) here – it's already called above.
         });
       } else {
         setUser(null);

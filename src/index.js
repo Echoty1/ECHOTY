@@ -18,3 +18,8 @@ root.render(
     </BrowserRouter>
   </React.StrictMode>
 );
+
+// In src/index.js or App.js, during development
+try {
+  localStorage.removeItem('echo_users');
+} catch {}
