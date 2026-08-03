@@ -7,6 +7,7 @@ export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
+  const [bannedUser, setBannedUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,8 +17,16 @@ export const AuthProvider = ({ children }) => {
         onValue(userRef, (snapshot) => {
           const data = snapshot.val();
           if (data) {
+            // 🔥 CHECK IF USER IS BANNED
+            if (data.banned === true) {
+              setUser(null);
+              setBannedUser({ ...data, uid: firebaseUser.uid });
+              setLoading(false);
+              return;
+            }
             setUser({ ...data, uid: firebaseUser.uid });
           } else {
+            // New user – create profile
             const newUser = {
               username: firebaseUser.displayName || firebaseUser.email.split('@')[0],
               avatar: firebaseUser.displayName ? firebaseUser.displayName[0].toUpperCase() : firebaseUser.email[0].toUpperCase(),
@@ -26,7 +35,8 @@ export const AuthProvider = ({ children }) => {
               location: 'Unknown',
               joined: new Date().toISOString().split('T')[0],
               online: true,
-              uid: firebaseUser.uid
+              uid: firebaseUser.uid,
+              banned: false, // not banned
             };
             set(ref(db, `users/${firebaseUser.uid}`), newUser);
             // Auto-follow Malik
@@ -34,16 +44,23 @@ export const AuthProvider = ({ children }) => {
             set(ref(db, `following/${firebaseUser.uid}/${MALIK_ID}`), true);
             setUser({ ...newUser, uid: firebaseUser.uid });
           }
+          setLoading(false);
         });
       } else {
         setUser(null);
+        setBannedUser(null);
+        setLoading(false);
       }
-      setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
 
-  const value = { user, loading };
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+  const value = { user, bannedUser, loading };
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
 };
