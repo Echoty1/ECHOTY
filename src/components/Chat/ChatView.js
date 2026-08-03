@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useSocket } from '../../contexts/SocketContext';
 import { db } from '../../services/firebase';
-import { ref, onValue, set, off, update, remove } from 'firebase/database';
+import { ref, onValue, push, off, update, remove, serverTimestamp } from 'firebase/database';
 
 const ChatView = () => {
   const { userId } = useParams();
@@ -48,9 +48,13 @@ const ChatView = () => {
     onValue(chatRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const msgs = Object.values(data).sort((a, b) => a.timestamp - b.timestamp);
+        // Convert to array with keys
+        const msgs = Object.entries(data).map(([key, value]) => ({ ...value, id: key }));
+        msgs.sort((a, b) => a.timestamp - b.timestamp);
         setMessages(msgs);
-      } else setMessages([]);
+      } else {
+        setMessages([]);
+      }
     });
     return () => off(chatRef);
   }, [chatId]);
@@ -73,8 +77,7 @@ const ChatView = () => {
       userId: user.uid,
       username: user.username,
       message: message || newMessage,
-      timestamp: Date.now(),
-      id: Date.now() + '_' + Math.random().toString().replace('.', '_'),
+      timestamp: serverTimestamp(),
     };
     if (replyToMsg) {
       msgData.replyTo = {
@@ -84,9 +87,11 @@ const ChatView = () => {
       };
       setReplyToMsg(null);
     }
-    const chatRef = ref(db, `chats/${chatId}/${msgData.id}`);
-    set(chatRef, msgData);
-    if (socket) socket.emit('chat-message', { ...msgData, chatId });
+    const chatRef = ref(db, `chats/${chatId}`);
+    push(chatRef, msgData);
+    if (socket) {
+      socket.emit('chat-message', { ...msgData, chatId });
+    }
     setNewMessage('');
     setEditingMsgId(null);
   };
@@ -164,8 +169,7 @@ const ChatView = () => {
             userId: user.uid,
             username: user.username,
             voice: base64Audio,
-            timestamp: Date.now(),
-            id: Date.now() + '_' + Math.random().toString().replace('.', '_'),
+            timestamp: serverTimestamp(),
           };
           if (replyToMsg) {
             msgData.replyTo = {
@@ -175,8 +179,8 @@ const ChatView = () => {
             };
             setReplyToMsg(null);
           }
-          const chatRef = ref(db, `chats/${chatId}/${msgData.id}`);
-          set(chatRef, msgData);
+          const chatRef = ref(db, `chats/${chatId}`);
+          push(chatRef, msgData);
           if (socket) socket.emit('chat-message', { ...msgData, chatId });
         };
         reader.readAsDataURL(audioBlob);
@@ -327,9 +331,12 @@ const ChatView = () => {
           messages.map((msg) => {
             const isSent = msg.userId === user?.uid;
             const isEditing = editingMsgId === msg.id;
+            const msgTimestamp = msg.timestamp
+              ? new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+              : '';
             return (
               <div
-                key={msg.id}
+                key={msg.id} // ✅ unique key from Firebase
                 style={{
                   maxWidth: '75%',
                   alignSelf: isSent ? 'flex-end' : 'flex-start',
@@ -433,10 +440,7 @@ const ChatView = () => {
                     textAlign: isSent ? 'right' : 'left',
                   }}
                 >
-                  {new Date(msg.timestamp).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
+                  {msgTimestamp}
                 </div>
               </div>
             );

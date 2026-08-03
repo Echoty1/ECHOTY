@@ -9,6 +9,7 @@ const Profile = () => {
   const [location, setLocation] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [avatar, setAvatar] = useState('');
+  const [displayName, setDisplayName] = useState('');
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -20,13 +21,18 @@ const Profile = () => {
         setBio(data.bio || '');
         setLocation(data.location || '');
         setAvatar(data.avatar || '');
+        setDisplayName(data.username || user.username || '');
       }
     });
   }, [user]);
 
   const saveProfile = () => {
     if (!user) return;
-    update(ref(db, `users/${user.uid}`), { bio, location });
+    const updates = {};
+    if (bio) updates.bio = bio;
+    if (location) updates.location = location;
+    if (displayName) updates.username = displayName;
+    update(ref(db, `users/${user.uid}`), updates);
     setEditMode(false);
   };
 
@@ -42,119 +48,212 @@ const Profile = () => {
     reader.readAsDataURL(file);
   };
 
+  const getInitials = (name) => {
+    if (!name) return 'U';
+    const words = name.trim().split(' ');
+    if (words.length === 0) return 'U';
+    if (words.length === 1) return words[0][0].toUpperCase();
+    return words.slice(0, 2).map(word => word[0]).join('').toUpperCase();
+  };
+
   return (
-    <div style={{ padding: '20px', maxWidth: '600px', margin: '0 auto', paddingBottom: '80px' }}>
-      <div style={{
-        background: 'rgba(18,18,26,0.8)',
-        backdropFilter: 'blur(12px)',
-        borderRadius: '24px',
-        padding: '24px',
-        border: '1px solid rgba(255,255,255,0.04)',
-        marginBottom: '20px',
+    <div
+      style={{
+        maxWidth: '480px',
+        margin: '0 auto',
+        padding: '24px 16px 80px',
+        height: '100%',
+        overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
-        textAlign: 'center',
-      }}>
-        <div
-          style={{
-            width: '100px',
-            height: '100px',
-            borderRadius: '50%',
-            background: avatar ? `url(${avatar}) center/cover` : 'linear-gradient(135deg, #6C3CE1, #EC4899)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            fontSize: '40px',
-            fontWeight: 700,
-            color: 'white',
-            cursor: 'pointer',
-            border: '3px solid rgba(108,60,225,0.3)',
-            boxShadow: '0 8px 32px rgba(108,60,225,0.2)',
-            marginBottom: '12px',
-          }}
-          onClick={() => fileInputRef.current.click()}
-        >
-          {!avatar && (user?.avatar || user?.username?.[0]?.toUpperCase() || 'U')}
+        gap: '20px',
+      }}
+    >
+      {/* Profile Card */}
+      <div
+        style={{
+          background: 'rgba(18, 18, 26, 0.8)',
+          backdropFilter: 'blur(8px)',
+          borderRadius: '20px',
+          padding: '24px',
+          border: '1px solid rgba(255,255,255,0.06)',
+          boxShadow: '0 8px 32px rgba(0,0,0,0.3)',
+        }}
+      >
+        {/* Avatar section */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '16px' }}>
+          <div
+            style={{
+              width: '96px',
+              height: '96px',
+              borderRadius: '50%',
+              border: '2px solid #8B5CF6',
+              boxShadow: '0 0 30px rgba(139,92,246,0.15)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: !avatar ? 'linear-gradient(135deg, #6C3CE1, #EC4899)' : 'transparent',
+              cursor: 'pointer',
+              overflow: 'hidden',
+              position: 'relative',
+            }}
+            onClick={() => fileInputRef.current.click()}
+          >
+            {avatar ? (
+              <img src={avatar} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+            ) : (
+              <span style={{ fontSize: '38px', fontWeight: 700, color: 'white' }}>{getInitials(displayName)}</span>
+            )}
+          </div>
+          <input type="file" ref={fileInputRef} onChange={handleAvatarUpload} accept="image/*" style={{ display: 'none' }} />
+          <div style={{ fontSize: '12px', color: '#888', marginTop: '6px', opacity: 0.7 }}>Tap avatar to change</div>
         </div>
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleAvatarUpload}
-          accept="image/*"
-          style={{ display: 'none' }}
-        />
-        <div style={{ fontSize: '12px', color: '#888', marginBottom: '8px' }}>Tap avatar to change</div>
-        <h2 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '2px' }}>{user?.username}</h2>
-        <p style={{ color: '#888', fontSize: '14px' }}>{user?.email}</p>
-      </div>
 
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '16px',
-        marginBottom: '20px',
-      }}>
-        <div style={{
-          background: 'rgba(18,18,26,0.6)',
-          borderRadius: '16px',
-          padding: '16px',
-          border: '1px solid rgba(255,255,255,0.04)',
-        }}>
-          <div style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>Bio</div>
-          {editMode ? (
+        {/* Name and email */}
+        <h2 style={{ fontSize: '24px', fontWeight: 700, textAlign: 'center', color: 'white', marginBottom: '2px' }}>
+          {displayName}
+        </h2>
+        <p style={{ fontSize: '14px', color: '#888', textAlign: 'center', marginBottom: '20px' }}>
+          {user?.email}
+        </p>
+
+        {/* Bio & Location grid */}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '20px' }}>
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              borderRadius: '12px',
+              padding: '14px 12px',
+              textAlign: 'center',
+              border: '1px solid rgba(255,255,255,0.04)',
+            }}
+          >
+            <div style={{ fontSize: '11px', color: '#888', marginBottom: '2px' }}>Bio</div>
+            <div style={{ fontSize: '15px', color: 'rgba(255,255,255,0.85)' }}>{bio || '—'}</div>
+          </div>
+          <div
+            style={{
+              background: 'rgba(255,255,255,0.04)',
+              borderRadius: '12px',
+              padding: '14px 12px',
+              textAlign: 'center',
+              border: '1px solid rgba(255,255,255,0.04)',
+            }}
+          >
+            <div style={{ fontSize: '11px', color: '#888', marginBottom: '2px' }}>Location</div>
+            <div style={{ fontSize: '15px', color: 'rgba(255,255,255,0.85)' }}>{location || '—'}</div>
+          </div>
+        </div>
+
+        {/* Edit / Save button */}
+        <button
+          onClick={() => setEditMode(!editMode)}
+          style={{
+            width: '100%',
+            padding: '12px',
+            borderRadius: '50px',
+            background: editMode ? 'linear-gradient(135deg, #6C3CE1, #EC4899)' : 'rgba(255,255,255,0.06)',
+            border: editMode ? 'none' : '1px solid rgba(255,255,255,0.12)',
+            color: 'white',
+            fontWeight: 600,
+            fontSize: '15px',
+            cursor: 'pointer',
+            fontFamily: 'inherit',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          {editMode ? 'Cancel' : 'Edit Profile'}
+        </button>
+
+        {/* Edit form (appears below button when editMode is true) */}
+        {editMode && (
+          <div style={{ marginTop: '16px', paddingTop: '16px', borderTop: '1px solid rgba(255,255,255,0.06)' }}>
             <input
               type="text"
+              placeholder="Display Name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: '12px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                color: 'white',
+                fontSize: '14px',
+                outline: 'none',
+                marginBottom: '10px',
+                fontFamily: 'inherit',
+              }}
+            />
+            <input
+              type="text"
+              placeholder="Bio"
               value={bio}
               onChange={(e) => setBio(e.target.value)}
-              style={{ width: '100%', padding: '8px 12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', color: 'white', fontSize: '14px' }}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: '12px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                color: 'white',
+                fontSize: '14px',
+                outline: 'none',
+                marginBottom: '10px',
+                fontFamily: 'inherit',
+              }}
             />
-          ) : (
-            <div style={{ fontSize: '15px', color: 'rgba(255,255,255,0.85)' }}>{bio || 'Not set'}</div>
-          )}
-        </div>
-        <div style={{
-          background: 'rgba(18,18,26,0.6)',
-          borderRadius: '16px',
-          padding: '16px',
-          border: '1px solid rgba(255,255,255,0.04)',
-        }}>
-          <div style={{ fontSize: '12px', color: '#888', marginBottom: '4px' }}>Location</div>
-          {editMode ? (
             <input
               type="text"
+              placeholder="Location"
               value={location}
               onChange={(e) => setLocation(e.target.value)}
-              style={{ width: '100%', padding: '8px 12px', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.06)', borderRadius: '8px', color: 'white', fontSize: '14px' }}
+              style={{
+                width: '100%',
+                padding: '10px 14px',
+                borderRadius: '12px',
+                background: 'rgba(255,255,255,0.04)',
+                border: '1px solid rgba(255,255,255,0.06)',
+                color: 'white',
+                fontSize: '14px',
+                outline: 'none',
+                marginBottom: '12px',
+                fontFamily: 'inherit',
+              }}
             />
-          ) : (
-            <div style={{ fontSize: '15px', color: 'rgba(255,255,255,0.85)' }}>{location || 'Not set'}</div>
-          )}
-        </div>
-      </div>
-
-      <div style={{ marginBottom: '20px' }}>
-        {editMode ? (
-          <div style={{ display: 'flex', gap: '12px' }}>
-            <button onClick={saveProfile} className="btn-primary" style={{ flex: 1 }}>Save Changes</button>
-            <button onClick={() => setEditMode(false)} className="btn-outline" style={{ flex: 1 }}>Cancel</button>
+            <button
+              onClick={saveProfile}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: '50px',
+                background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
+                border: 'none',
+                color: 'white',
+                fontWeight: 600,
+                fontSize: '15px',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+              }}
+            >
+              Save Changes
+            </button>
           </div>
-        ) : (
-          <button onClick={() => setEditMode(true)} className="btn-outline" style={{ width: '100%' }}>
-            <i className="fas fa-edit"></i> Edit Profile
-          </button>
         )}
       </div>
 
-      <div style={{
-        background: 'rgba(18,18,26,0.6)',
-        borderRadius: '16px',
-        padding: '16px',
-        border: '1px solid rgba(255,255,255,0.04)',
-      }}>
-        <h3 style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: '#fff' }}>📜 Community Policy</h3>
-        <p style={{ fontSize: '13px', color: '#888', lineHeight: '1.6' }}>
-          By using ECHO, you agree to: treat others with respect; no harassment, hate speech, or bullying; no illegal content; no spam or impersonation. Violations may result in permanent ban.
+      {/* Policy Section */}
+      <div
+        style={{
+          background: 'rgba(18, 18, 26, 0.6)',
+          borderRadius: '16px',
+          padding: '16px 18px',
+          border: '1px solid rgba(255,255,255,0.04)',
+        }}
+      >
+        <p style={{ fontSize: '12px', color: '#888', lineHeight: '1.6', margin: 0 }}>
+          📜 By using ECHO, you agree to treat others with respect; no harassment, hate speech, bullying, illegal content, spam, or impersonation. Violations may result in a permanent ban.
         </p>
       </div>
     </div>
