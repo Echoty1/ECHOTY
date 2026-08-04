@@ -104,7 +104,7 @@ const ChatList = () => {
     };
   }, [users, user]);
 
-  // Sort users
+  // Sort users: online first, then by last message
   const sortedUsers = useMemo(() => {
     return [...users]
       .filter((u) =>
@@ -121,17 +121,17 @@ const ChatList = () => {
       });
   }, [users, presenceMap, lastMessageData, searchQuery]);
 
-  if (sortedUsers.length === 0) {
-    return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', color: '#888', padding: '20px' }}>
-        <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
-        <div>{searchQuery ? 'No users match your search' : 'No users yet — invite friends!'}</div>
-      </div>
-    );
-  }
+  const hasResults = sortedUsers.length > 0;
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column', background: '#0A0A0F' }}>
+    <div style={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column', 
+      background: '#0A0A0F',
+      paddingTop: '56px', // fixes navbar overlap
+    }}>
+      {/* 🔍 Search bar - always visible */}
       <div style={{ padding: '16px 16px 8px', flexShrink: 0 }}>
         <input
           type="text"
@@ -155,94 +155,111 @@ const ChatList = () => {
         />
       </div>
 
+      {/* Content area - list or empty state */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0 16px' }}>
-        {sortedUsers.map((u) => {
-          const isOnline = presenceMap[u.id]?.online || false;
-          const last = lastMessageData[u.id] || { message: '' };
-          const lastMsg = last.message || 'Start chatting...';
-          const initials = getInitials(u.username);
+        {!hasResults ? (
+          <div style={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            alignItems: 'center', 
+            justifyContent: 'center', 
+            height: '100%', 
+            color: '#888', 
+            padding: '20px',
+            textAlign: 'center',
+          }}>
+            <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
+            <div>{searchQuery ? 'No users match your search' : 'No users yet — invite friends!'}</div>
+          </div>
+        ) : (
+          sortedUsers.map((u) => {
+            const isOnline = presenceMap[u.id]?.online || false;
+            const last = lastMessageData[u.id] || { message: '' };
+            const lastMsg = last.message || 'Start chatting...';
+            const initials = getInitials(u.username);
 
-          return (
-            <Link
-              key={u.id}
-              to={`/chat/${u.id}`}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px',
-                padding: '12px 16px',
-                textDecoration: 'none',
-                color: 'inherit',
-                transition: 'background 0.15s ease',
-                borderBottom: '1px solid rgba(255,255,255,0.03)',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
-              onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
-            >
-              <div
+            return (
+              <Link
+                key={u.id}
+                to={`/chat/${u.id}`}
                 style={{
-                  width: '52px',
-                  height: '52px',
-                  borderRadius: '50%',
-                  overflow: 'hidden',
-                  background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  fontSize: '22px',
-                  fontWeight: 700,
-                  color: 'white',
+                  gap: '14px',
+                  padding: '12px 16px',
+                  textDecoration: 'none',
+                  color: 'inherit',
+                  transition: 'background 0.15s ease',
+                  borderBottom: '1px solid rgba(255,255,255,0.03)',
                 }}
+                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
+                onMouseLeave={(e) => (e.currentTarget.style.background = 'transparent')}
               >
-                {u.avatar && u.avatar.startsWith('data:') ? (
-                  <img src={u.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
-                  <span>{initials}</span>
-                )}
-              </div>
-
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
-                  <span style={{ fontSize: '16px', fontWeight: 600 }}>{u.username}</span>
-                  <span
-                    style={{
-                      fontSize: '11px',
-                      color: isOnline ? '#10B981' : '#EF4444',
-                      fontWeight: 500,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '4px',
-                    }}
-                  >
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        width: '6px',
-                        height: '6px',
-                        borderRadius: '50%',
-                        background: isOnline ? '#10B981' : '#EF4444',
-                      }}
-                    />
-                    {isOnline ? 'Online' : 'Offline'}
-                  </span>
-                </div>
-
                 <div
                   style={{
-                    fontSize: '14px',
-                    color: '#888',
-                    whiteSpace: 'nowrap',
+                    width: '52px',
+                    height: '52px',
+                    borderRadius: '50%',
                     overflow: 'hidden',
-                    textOverflow: 'ellipsis',
+                    background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                    fontSize: '22px',
+                    fontWeight: 700,
+                    color: 'white',
                   }}
                 >
-                  {lastMsg}
+                  {u.avatar && u.avatar.startsWith('data:') ? (
+                    <img src={u.avatar} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    <span>{initials}</span>
+                  )}
                 </div>
-              </div>
-            </Link>
-          );
-        })}
+
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '2px' }}>
+                    <span style={{ fontSize: '16px', fontWeight: 600 }}>{u.username}</span>
+                    <span
+                      style={{
+                        fontSize: '11px',
+                        color: isOnline ? '#10B981' : '#EF4444',
+                        fontWeight: 500,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                      }}
+                    >
+                      <span
+                        style={{
+                          display: 'inline-block',
+                          width: '6px',
+                          height: '6px',
+                          borderRadius: '50%',
+                          background: isOnline ? '#10B981' : '#EF4444',
+                        }}
+                      />
+                      {isOnline ? 'Online' : 'Offline'}
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      fontSize: '14px',
+                      color: '#888',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {lastMsg}
+                  </div>
+                </div>
+              </Link>
+            );
+          })
+        )}
       </div>
     </div>
   );

@@ -81,12 +81,13 @@ const Profile = () => {
       style={{
         maxWidth: '480px',
         margin: '0 auto',
-        padding: '24px 16px 80px',
-        height: '100%',
+        padding: '80px 16px 80px', // 🔥 top padding to clear fixed navbar (56px + extra)
+        minHeight: '100vh',
         overflowY: 'auto',
         display: 'flex',
         flexDirection: 'column',
         gap: '20px',
+        background: '#0A0A0F',
       }}
     >
       {/* Profile Card */}
