@@ -7,6 +7,23 @@ import { AuthProvider } from './contexts/AuthContext';
 import { PresenceProvider } from './contexts/PresenceContext';
 import { SocketProvider } from './contexts/SocketContext';
 import { startOfflineSync, syncUsers } from './services/offlineService';
+import UpdateChecker from './components/UpdateChecker';
+
+root.render(
+  <React.StrictMode>
+    <BrowserRouter>
+      <AuthProvider>
+        <PresenceProvider>
+          <SocketProvider>
+            <UpdateChecker>
+              <App />
+            </UpdateChecker>
+          </SocketProvider>
+        </PresenceProvider>
+      </AuthProvider>
+    </BrowserRouter>
+  </React.StrictMode>
+);
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
