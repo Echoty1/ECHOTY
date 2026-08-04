@@ -5,6 +5,7 @@ import { useSocket } from '../../contexts/SocketContext';
 import { usePresence } from '../../contexts/PresenceContext';
 import { db } from '../../services/firebase';
 import { ref, onValue, push, off, update, remove, serverTimestamp } from 'firebase/database';
+import { localDB, getCachedMessages, queueMessage } from '../../services/offlineService';
 
 const ChatView = () => {
   const { userId } = useParams();
@@ -27,6 +28,7 @@ const ChatView = () => {
   const [editingMsgId, setEditingMsgId] = useState(null);
   const [editContent, setEditContent] = useState('');
   const [replyToMsg, setReplyToMsg] = useState(null);
+  const [isOnline, setIsOnline] = useState(false);
 
   // Subscribe to partner's presence
   useEffect(() => {
@@ -35,8 +37,13 @@ const ChatView = () => {
     }
   }, [userId, subscribeToUser]);
 
-  const isPartnerOnline = presenceMap[userId]?.online || false;
+  useEffect(() => {
+    if (userId) {
+      setIsOnline(presenceMap[userId]?.online || false);
+    }
+  }, [presenceMap, userId]);
 
+  // Load partner info
   useEffect(() => {
     if (userId) {
       const userRef = ref(db, `users/${userId}`);
@@ -47,19 +54,32 @@ const ChatView = () => {
     }
   }, [userId]);
 
+  // Load messages from IndexedDB and Firebase
   useEffect(() => {
     if (!chatId) return;
+
+    const loadCached = async () => {
+      const cached = await getCachedMessages(chatId);
+      if (cached.length) {
+        cached.sort((a, b) => a.timestamp - b.timestamp);
+        setMessages(cached);
+      }
+    };
+    loadCached();
+
     const chatRef = ref(db, `chats/${chatId}`);
-    onValue(chatRef, (snapshot) => {
+    const unsub = onValue(chatRef, async (snapshot) => {
       const data = snapshot.val();
       if (data) {
         const msgs = Object.entries(data).map(([key, value]) => ({ ...value, id: key }));
         msgs.sort((a, b) => a.timestamp - b.timestamp);
         setMessages(msgs);
+        await localDB.messages.bulkPut(msgs.map(m => ({ ...m, chatId })));
       } else {
         setMessages([]);
       }
     });
+
     return () => off(chatRef);
   }, [chatId]);
 
@@ -75,13 +95,13 @@ const ChatView = () => {
     }
   }, [contextMenuVisible]);
 
-  const sendMessage = (message) => {
+  const sendMessage = async (message) => {
     if (!message && !newMessage) return;
     const msgData = {
       userId: user.uid,
       username: user.username,
       message: message || newMessage,
-      timestamp: serverTimestamp(),
+      timestamp: Date.now(),
     };
     if (replyToMsg) {
       msgData.replyTo = {
@@ -91,26 +111,32 @@ const ChatView = () => {
       };
       setReplyToMsg(null);
     }
-    const chatRef = ref(db, `chats/${chatId}`);
-    push(chatRef, msgData);
-    if (socket) {
-      socket.emit('chat-message', { ...msgData, chatId });
+
+    try {
+      const chatRef = ref(db, `chats/${chatId}`);
+      await push(chatRef, msgData);
+      if (socket) {
+        socket.emit('chat-message', { ...msgData, chatId });
+      }
+    } catch (err) {
+      await queueMessage({ chatId, ...msgData });
     }
+
     setNewMessage('');
     setEditingMsgId(null);
   };
 
-  const handleFileUpload = (e) => {
+  const handleFileUpload = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const data = reader.result;
       const msgData = {
         userId: user.uid,
         username: user.username,
         message: file.type.startsWith('image/') ? '📷 Image' : '📎 File',
-        timestamp: serverTimestamp(),
+        timestamp: Date.now(),
         image: file.type.startsWith('image/') ? data : null,
         file: file.type.startsWith('image/') ? null : data,
         fileName: file.name,
@@ -123,10 +149,13 @@ const ChatView = () => {
         };
         setReplyToMsg(null);
       }
-      const chatRef = ref(db, `chats/${chatId}`);
-      push(chatRef, msgData);
-      if (socket) {
-        socket.emit('chat-message', { ...msgData, chatId });
+
+      try {
+        const chatRef = ref(db, `chats/${chatId}`);
+        await push(chatRef, msgData);
+        if (socket) socket.emit('chat-message', { ...msgData, chatId });
+      } catch (err) {
+        await queueMessage({ chatId, ...msgData });
       }
       e.target.value = '';
     };
@@ -197,16 +226,16 @@ const ChatView = () => {
       mediaRecorder.current = new MediaRecorder(stream);
       audioChunks.current = [];
       mediaRecorder.current.ondataavailable = (e) => audioChunks.current.push(e.data);
-      mediaRecorder.current.onstop = () => {
+      mediaRecorder.current.onstop = async () => {
         const audioBlob = new Blob(audioChunks.current, { type: 'audio/webm' });
         const reader = new FileReader();
-        reader.onload = () => {
+        reader.onload = async () => {
           const base64Audio = reader.result;
           const msgData = {
             userId: user.uid,
             username: user.username,
             voice: base64Audio,
-            timestamp: serverTimestamp(),
+            timestamp: Date.now(),
           };
           if (replyToMsg) {
             msgData.replyTo = {
@@ -216,9 +245,13 @@ const ChatView = () => {
             };
             setReplyToMsg(null);
           }
-          const chatRef = ref(db, `chats/${chatId}`);
-          push(chatRef, msgData);
-          if (socket) socket.emit('chat-message', { ...msgData, chatId });
+          try {
+            const chatRef = ref(db, `chats/${chatId}`);
+            await push(chatRef, msgData);
+            if (socket) socket.emit('chat-message', { ...msgData, chatId });
+          } catch (err) {
+            await queueMessage({ chatId, ...msgData });
+          }
         };
         reader.readAsDataURL(audioBlob);
       };
@@ -301,7 +334,7 @@ const ChatView = () => {
           <div
             style={{
               fontSize: '13px',
-              color: isPartnerOnline ? '#10B981' : '#EF4444',
+              color: isOnline ? '#10B981' : '#EF4444',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
@@ -313,10 +346,10 @@ const ChatView = () => {
                 width: '8px',
                 height: '8px',
                 borderRadius: '50%',
-                background: isPartnerOnline ? '#10B981' : '#EF4444',
+                background: isOnline ? '#10B981' : '#EF4444',
               }}
             />
-            {isPartnerOnline ? 'Online' : 'Offline'}
+            {isOnline ? 'Online' : 'Offline'}
           </div>
         </div>
       </div>

@@ -3,6 +3,7 @@ import { auth, db } from '../services/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { ref, onValue, set } from 'firebase/database';
 import { cache } from '../services/cache';
+import { startOfflineSync } from '../services/offlineService'; // 👈 new import
 
 export const AuthContext = createContext();
 
@@ -51,7 +52,10 @@ export const AuthProvider = ({ children }) => {
             cache.setUsers(allUsers);
             setLoading(false);
 
-            // Update location in the background (don't await)
+            // 👇 Start offline sync
+            startOfflineSync(firebaseUser.uid);
+
+            // Update location in the background
             if (data.location === 'Unknown' || !data.location) {
               fetchLocationFromIP().then(location => {
                 if (location && location !== 'Unknown') {
@@ -61,7 +65,7 @@ export const AuthProvider = ({ children }) => {
               }).catch(() => {});
             }
           } else {
-            // ✅ NEW USER – default offline
+            // New user – default offline
             const newUser = {
               username: firebaseUser.displayName || firebaseUser.email.split('@')[0],
               avatar: '',
@@ -69,8 +73,8 @@ export const AuthProvider = ({ children }) => {
               bio: 'New to ECHO! 🌍',
               location: 'Unknown',
               joined: new Date().toISOString().split('T')[0],
-              online: false,   // ⬅️ start offline
-              status: 'offline', // ⬅️ add status field
+              online: false,
+              status: 'offline',
               uid: firebaseUser.uid,
               banned: false,
             };
@@ -85,7 +89,10 @@ export const AuthProvider = ({ children }) => {
             cache.setUsers(allUsers);
             setLoading(false);
 
-            // 🔄 Update location in the background
+            // 👇 Start offline sync for new user
+            startOfflineSync(firebaseUser.uid);
+
+            // Update location in background
             fetchLocationFromIP().then(location => {
               if (location && location !== 'Unknown') {
                 set(ref(db, `users/${firebaseUser.uid}/location`), location);

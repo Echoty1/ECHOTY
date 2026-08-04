@@ -6,6 +6,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
 import { PresenceProvider } from './contexts/PresenceContext';
 import { SocketProvider } from './contexts/SocketContext';
+import { startOfflineSync, syncUsers } from './services/offlineService';
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

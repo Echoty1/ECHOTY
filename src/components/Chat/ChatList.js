@@ -4,18 +4,12 @@ import { usePresence } from '../../contexts/PresenceContext';
 import { db } from '../../services/firebase';
 import { ref, onValue } from 'firebase/database';
 import { Link } from 'react-router-dom';
-import { cache } from '../../services/cache';
+import { localDB, getCachedUsers } from '../../services/offlineService';
 
 const ChatList = () => {
   const { user } = useAuth();
   const { presenceMap, subscribeToUser } = usePresence();
-  const [users, setUsers] = useState(() => {
-    const cached = cache.getUsers();
-    if (cached && user) {
-      return Object.values(cached).filter(u => u.id !== user.uid);
-    }
-    return [];
-  });
+  const [users, setUsers] = useState([]);
   const [lastMessageData, setLastMessageData] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const unsubscribeRefs = useRef([]);
@@ -28,7 +22,18 @@ const ChatList = () => {
     return words.slice(0, 2).map(word => word[0]).join('').toUpperCase();
   };
 
-  // Listen for real-time user updates
+  // 1. Load from IndexedDB immediately (offline-first)
+  useEffect(() => {
+    if (!user) return;
+    const loadCached = async () => {
+      const cached = await getCachedUsers();
+      const filtered = cached.filter(u => u.id !== user.uid && u.username && !u.username.toLowerCase().includes('test'));
+      if (filtered.length) setUsers(filtered);
+    };
+    loadCached();
+  }, [user]);
+
+  // 2. Listen to Firebase for real-time updates (syncs to IndexedDB via offlineService)
   useEffect(() => {
     if (!user) return;
     const usersRef = ref(db, 'users');
@@ -43,10 +48,9 @@ const ChatList = () => {
             !u.username.toLowerCase().includes('test')
         );
         setUsers(filtered);
-        cache.setUsers(data);
+        // IndexedDB is already updated by syncUsers in offlineService
       } else {
         setUsers([]);
-        cache.clearUsers();
       }
     });
     return () => unsubscribe();
@@ -63,7 +67,7 @@ const ChatList = () => {
     }
   }, [users, subscribeToUser, user]);
 
-  // Listen for last messages
+  // Listen for last messages (unchanged)
   useEffect(() => {
     unsubscribeRefs.current.forEach(unsub => unsub());
     unsubscribeRefs.current = [];
@@ -104,7 +108,7 @@ const ChatList = () => {
     };
   }, [users, user]);
 
-  // Sort users: online first, then by last message
+  // Sort users
   const sortedUsers = useMemo(() => {
     return [...users]
       .filter((u) =>
@@ -129,9 +133,9 @@ const ChatList = () => {
       display: 'flex', 
       flexDirection: 'column', 
       background: '#0A0A0F',
-      paddingTop: '56px', // fixes navbar overlap
+      paddingTop: '56px',
     }}>
-      {/* 🔍 Search bar - always visible */}
+      {/* Search bar */}
       <div style={{ padding: '16px 16px 8px', flexShrink: 0 }}>
         <input
           type="text"
@@ -155,7 +159,6 @@ const ChatList = () => {
         />
       </div>
 
-      {/* Content area - list or empty state */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0 16px' }}>
         {!hasResults ? (
           <div style={{ 
