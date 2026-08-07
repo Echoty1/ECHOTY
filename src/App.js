@@ -103,7 +103,7 @@ function AppContent() {
         id="main-content"
         style={{
           paddingBottom: '72px',
-          paddingTop: '56px',
+          paddingTop: '64px',
           height: '100vh',
           overflowY: 'auto',
           overflowX: 'hidden',
