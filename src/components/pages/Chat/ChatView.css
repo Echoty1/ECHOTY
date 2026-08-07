@@ -224,3 +224,87 @@
   justify-content: center;
   gap: 8px;
 }
+
+/* src/components/pages/Chat/ChatView.css */
+
+/* ─── Base (unchanged) ─── */
+.chat-view {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background: #0A0A0F;
+  width: 100%;
+  max-width: 100%;
+  margin: 0;
+  padding-top: 64px;
+  overflow: hidden;
+}
+
+/* ... your existing styles ... */
+
+/* ─── RESPONSIVE FIXES ─────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .chat-view {
+    padding: 0; /* remove any extra padding */
+    padding-top: 64px; /* keep navbar space */
+  }
+
+  .chat-header {
+    padding: 10px 12px; /* smaller padding */
+  }
+
+  .chat-messages {
+    padding: 10px 8px; /* reduced side padding to prevent cut-off */
+  }
+
+  .chat-input-form {
+    padding: 8px 10px;
+  }
+
+  .chat-avatar-placeholder,
+  .chat-avatar-img {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+
+  .chat-partner-name {
+    font-size: 14px;
+  }
+
+  .chat-partner-status {
+    font-size: 10px;
+  }
+
+  .chat-text {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+
+  .chat-echomoji {
+    display: none; /* hide EchoMoji on very small screens */
+  }
+
+  .chat-message {
+    max-width: 90%; /* allow more width */
+  }
+}
+
+@media (max-width: 380px) {
+  .chat-messages {
+    padding: 8px 4px;
+  }
+
+  .chat-header {
+    padding: 6px 8px;
+  }
+
+  .chat-partner-name {
+    font-size: 12px;
+  }
+
+  .chat-text {
+    font-size: 12px;
+    padding: 6px 10px;
+  }
+}
