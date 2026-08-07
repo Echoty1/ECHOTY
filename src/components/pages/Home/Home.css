@@ -1,0 +1,40 @@
+.home-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #0A0A0F;
+  padding: 20px;
+}
+
+.home-content {
+  text-align: center;
+}
+
+.home-icon {
+  font-size: 64px;
+  margin-bottom: 16px;
+  display: block;
+}
+
+.home-content h1 {
+  font-size: 28px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0 0 8px;
+}
+
+.home-content p {
+  color: #666;
+  font-size: 16px;
+  margin: 4px 0;
+}
+
+.home-sub {
+  font-size: 13px !important;
+  color: #444 !important;
+  margin-top: 8px !important;
+}

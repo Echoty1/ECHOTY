@@ -1,0 +1,82 @@
+/* src/components/pages/Other/Other.css */
+.other-page {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 20px 16px 80px;
+  min-height: 100%;
+  background: #0A0A0F;
+}
+
+.other-title {
+  font-size: 24px;
+  font-weight: 700;
+  margin-bottom: 4px;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.other-subtitle {
+  font-size: 14px;
+  color: #888;
+  margin-bottom: 24px;
+}
+
+.other-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.other-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 18px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+}
+
+.other-menu-item:hover {
+  background: rgba(108,60,225,0.08);
+  border-color: rgba(108,60,225,0.25);
+  transform: translateX(4px);
+}
+
+.other-icon-wrapper {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(108,60,225,0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: #8B5CF6;
+  flex-shrink: 0;
+}
+
+.other-item-content {
+  flex: 1;
+}
+
+.other-item-label {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.other-item-desc {
+  font-size: 13px;
+  color: #666;
+  margin-top: 2px;
+}
+
+.other-item-arrow {
+  color: #444;
+  font-size: 14px;
+}

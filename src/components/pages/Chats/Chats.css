@@ -1,0 +1,453 @@
+/* src/components/pages/Chats/Chats.css */
+.chats-page {
+  min-height: 100vh;
+  background: #0A0A0F;
+  padding: 16px 16px 100px;
+  width: 100%;
+  max-width: 100%;
+  margin: 0 auto;
+  overflow-x: hidden;
+}
+
+/* ─── Search ─────────────────────────────────────────────── */
+.search-container {
+  position: relative;
+  margin-bottom: 20px;
+  padding-top: 8px;
+}
+
+.search-input-wrapper {
+  display: flex;
+  align-items: center;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 16px;
+  padding: 0 16px;
+  transition: all 0.25s ease;
+}
+
+.search-input-wrapper:focus-within {
+  border-color: rgba(108, 60, 225, 0.3);
+  background: rgba(255,255,255,0.07);
+}
+
+.search-icon {
+  color: #555;
+  font-size: 16px;
+  margin-right: 12px;
+}
+
+.search-input {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 14px 0;
+  color: #fff;
+  font-size: 15px;
+  outline: none;
+  font-family: inherit;
+}
+
+.search-input::placeholder {
+  color: #444;
+}
+
+.search-clear {
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: color 0.2s;
+}
+
+.search-clear:hover {
+  color: #fff;
+}
+
+/* ─── Results ────────────────────────────────────────────── */
+.search-results {
+  animation: fadeIn 0.3s ease;
+}
+
+.results-header {
+  font-size: 12px;
+  color: #555;
+  padding: 8px 4px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  margin-bottom: 12px;
+}
+
+.result-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.04);
+  border-radius: 14px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  opacity: 0;
+  animation: slideUp 0.3s ease forwards;
+}
+
+.result-item:hover {
+  background: rgba(255,255,255,0.06);
+  border-color: rgba(108, 60, 225, 0.15);
+  transform: translateX(4px);
+}
+
+.result-item.top-result {
+  border-color: rgba(108, 60, 225, 0.2);
+  background: rgba(108, 60, 225, 0.05);
+}
+
+/* ─── Avatar ──────────────────────────────────────────────── */
+.result-avatar {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+}
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.avatar-text {
+  font-weight: 700;
+  font-size: 16px;
+  color: #fff;
+}
+
+.presence-dot {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid #0A0A0F;
+}
+
+.presence-dot.online {
+  background: #10B981;
+}
+
+.presence-dot.offline {
+  background: #EF4444;
+}
+
+/* ─── Info ────────────────────────────────────────────────── */
+.result-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.result-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.result-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: #fff;
+}
+
+.result-badge {
+  font-size: 10px;
+  background: rgba(108, 60, 225, 0.2);
+  color: #8B5CF6;
+  padding: 2px 10px;
+  border-radius: 50px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.result-meta {
+  font-size: 12px;
+  color: #555;
+  margin-top: 1px;
+}
+
+.result-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.result-tag {
+  font-size: 10px;
+  color: #6C3CE1;
+  background: rgba(108, 60, 225, 0.08);
+  padding: 2px 10px;
+  border-radius: 50px;
+  font-weight: 500;
+}
+
+.result-tag.skill {
+  color: #EC4899;
+  background: rgba(236, 72, 153, 0.08);
+}
+
+.result-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.result-reason {
+  font-size: 10px;
+  color: #666;
+  background: rgba(255,255,255,0.04);
+  padding: 2px 10px;
+  border-radius: 50px;
+}
+
+/* ─── EchoMoji ────────────────────────────────────────────── */
+.result-echomoji {
+  flex-shrink: 0;
+  margin-right: 4px;
+}
+
+/* ─── Action ───────────────────────────────────────────────── */
+.result-action {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.04);
+  transition: all 0.25s ease;
+  flex-shrink: 0;
+}
+
+.result-item:hover .result-action {
+  background: rgba(108, 60, 225, 0.12);
+}
+
+.result-connect {
+  font-size: 14px;
+  color: #555;
+  transition: all 0.25s ease;
+}
+
+.result-item:hover .result-connect {
+  color: #6C3CE1;
+  transform: translateX(2px);
+}
+
+/* ─── Loading ────────────────────────────────────────────── */
+.search-loading {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  padding: 30px 0;
+}
+
+.loading-dot {
+  font-size: 20px;
+  color: #6C3CE1;
+  animation: dotPulse 0.8s ease-in-out infinite;
+}
+
+.loading-dot:nth-child(1) { animation-delay: 0s; }
+.loading-dot:nth-child(2) { animation-delay: 0.2s; }
+.loading-dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dotPulse {
+  0%, 100% { opacity: 0.2; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1.2); }
+}
+
+/* ─── No Results ──────────────────────────────────────────── */
+.no-results {
+  text-align: center;
+  padding: 40px 0;
+}
+
+.no-results span {
+  font-size: 36px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.no-results p {
+  color: #666;
+  font-size: 16px;
+  margin: 0;
+}
+
+.no-results-sub {
+  font-size: 13px !important;
+  color: #444 !important;
+  margin-top: 4px;
+}
+
+/* ─── Recent Chats ────────────────────────────────────────── */
+.recent-chats {
+  margin-top: 4px;
+}
+
+.section-header {
+  font-size: 13px;
+  color: #555;
+  padding: 8px 4px 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  margin-bottom: 12px;
+}
+
+.chat-item {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  margin-bottom: 2px;
+}
+
+.chat-item:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+.chat-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 16px;
+  color: #fff;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.chat-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-name {
+  font-weight: 600;
+  font-size: 15px;
+  color: #fff;
+}
+
+.chat-last {
+  font-size: 13px;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chat-time {
+  font-size: 11px;
+  color: #444;
+  flex-shrink: 0;
+}
+
+.no-chats {
+  text-align: center;
+  padding: 40px 0;
+}
+
+.no-chats p {
+  color: #666;
+  font-size: 16px;
+  margin: 0;
+}
+
+.no-chats span {
+  font-size: 13px;
+  color: #444;
+}
+
+/* ─── Animations ──────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.unread-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  background: #6C3CE1;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  min-width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+  border: 2px solid #0A0A0F;
+}
+
+/* Archived chat badge */
+.archived-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  font-size: 14px;
+  background: rgba(255, 200, 0, 0.15);
+  border-radius: 50%;
+  padding: 0 2px;
+  border: 2px solid #0A0A0F;
+}
+
+.archived-label {
+  font-size: 12px;
+  color: #f5d742;
+  font-weight: 400;
+}
+
+.chat-presence-dot-small {
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.chat-presence-dot-small .presence-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid #0A0A0F;
+}
+
+.chat-presence-dot-small .presence-dot.online {
+  background: #10B981;
+}
+
+.chat-presence-dot-small .presence-dot.offline {
+  background: #EF4444;
+}

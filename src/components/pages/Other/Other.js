@@ -1,0 +1,75 @@
+// src/components/pages/Other/Other.js
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+import './Other.css';
+
+const Other = () => {
+  const navigate = useNavigate();
+
+  const menuItems = [
+    {
+      id: 'settings',
+      label: 'Settings',
+      icon: 'fa-gear',
+      path: '/settings',
+      description: 'Manage your account and preferences',
+    },
+    {
+      id: 'about',
+      label: 'About Us',
+      icon: 'fa-info-circle',
+      path: '/about',
+      description: 'Learn more about ECHO and our mission',
+    },
+    {
+      id: 'terms',
+      label: 'Terms of Service',
+      icon: 'fa-file-contract',
+      path: '/terms',
+      description: 'Read our terms and conditions',
+    },
+    {
+      id: 'privacy',
+      label: 'Privacy Policy',
+      icon: 'fa-shield-alt',
+      path: '/privacy',
+      description: 'How we handle your data',
+    },
+    {
+      id: 'report',
+      label: 'Report a User',
+      icon: 'fa-flag',
+      path: '/report',
+      description: 'Report inappropriate behavior',
+    },
+  ];
+
+  return (
+    <div className="other-page">
+      <h2 className="other-title">⚙️ Settings & Legal</h2>
+      <p className="other-subtitle">Explore additional features and policies</p>
+      <div className="other-menu">
+        {menuItems.map((item) => (
+          <div
+            key={item.id}
+            className="other-menu-item"
+            onClick={() => navigate(item.path)}
+          >
+            <div className="other-icon-wrapper">
+              <i className={`fas ${item.icon}`} />
+            </div>
+            <div className="other-item-content">
+              <div className="other-item-label">{item.label}</div>
+              <div className="other-item-desc">{item.description}</div>
+            </div>
+            <div className="other-item-arrow">
+              <i className="fas fa-chevron-right" />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default Other;
