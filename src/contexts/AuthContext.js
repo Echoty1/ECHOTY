@@ -31,25 +31,61 @@ export const AuthProvider = ({ children }) => {
                 const profileData = snapshot.val();
                 console.log('📂 Existing profile loaded:', profileData);
 
-                // ─── Ensure searchName exists (migration) ──
-                const name = profileData.name || profileData.displayName || profileData.username || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
-                const searchName = name.toLowerCase();
+                // ─── Determine current name ──────────────────
+                const suggestedName =
+                  firebaseUser.displayName ||
+                  firebaseUser.email?.split('@')[0] ||
+                  'User';
+
+                let currentName = profileData.name ||
+                  profileData.displayName ||
+                  profileData.username ||
+                  suggestedName;
+
+                let needsUpdate = false;
+                const updatedData = {};
+
+                // ─── Fix name if it's still the default fallback ──
+                const isDefaultName = !profileData.name ||
+                  profileData.name === 'User' ||
+                  profileData.name === uid;
+
+                if (isDefaultName && suggestedName !== profileData.name) {
+                  updatedData.name = suggestedName;
+                  updatedData.searchName = suggestedName.toLowerCase();
+                  needsUpdate = true;
+                  currentName = suggestedName;
+                }
+
+                // ─── Ensure searchName is correct ────────────
+                const searchName = (currentName || 'User').toLowerCase();
                 if (!profileData.searchName || profileData.searchName !== searchName) {
-                  update(profileRef, { searchName })
-                    .then(() => console.log('✅ Updated searchName for existing user'))
-                    .catch(err => console.warn('Could not update searchName:', err));
-                  profileData.searchName = searchName;
+                  updatedData.searchName = searchName;
+                  needsUpdate = true;
+                }
+
+                if (needsUpdate) {
+                  update(profileRef, updatedData)
+                    .then(() => console.log('✅ Updated profile:', updatedData))
+                    .catch((err) =>
+                      console.warn('Could not update profile:', err)
+                    );
+                  // Merge changes into profileData for the user object
+                  Object.assign(profileData, updatedData);
                 }
 
                 setUser({ ...firebaseUser, ...profileData });
                 setLoading(false);
               } else {
-                // ─── New user: create profile with searchName ──
-                const name = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
+                // ─── New user: create profile ──────────────
+                const name =
+                  firebaseUser.displayName ||
+                  firebaseUser.email?.split('@')[0] ||
+                  'User';
                 console.log('👤 Creating new profile for:', name);
                 const newProfile = {
                   name,
-                  searchName: name.toLowerCase(), // ✅ for search
+                  searchName: name.toLowerCase(),
                   avatar: '',
                   mood: 'neutral',
                   activeSkin: null,
@@ -67,7 +103,7 @@ export const AuthProvider = ({ children }) => {
                     setUser({ ...firebaseUser, ...newProfile });
                     setLoading(false);
                   })
-                  .catch(err => {
+                  .catch((err) => {
                     console.error('Error creating profile:', err);
                     setLoading(false);
                   });
@@ -83,7 +119,9 @@ export const AuthProvider = ({ children }) => {
                     coins: 350,
                     purchases: {},
                   }),
-                ]).catch(err => console.warn('Error creating auxiliary nodes:', err));
+                ]).catch((err) =>
+                  console.warn('Error creating auxiliary nodes:', err)
+                );
               }
             },
             (error) => {

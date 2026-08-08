@@ -76,6 +76,7 @@ const ChatView = () => {
         return;
       }
 
+      // Partner profile missing → check if already kept
       try {
         const chatEntryRef = ref(db, `userChats/${user.uid}/${userId}`);
         const chatSnap = await get(chatEntryRef);
@@ -99,11 +100,17 @@ const ChatView = () => {
     return () => unsubscribe();
   }, [userId, user]);
 
-  // ─── Reset unread count (only if not read‑only) ────────────
+  // ─── Reset unread count (only if node exists) ──────────────
   useEffect(() => {
     if (!user || !userId || isReadOnly) return;
     const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-    update(myChatRef, { unreadCount: 0 }).catch(() => {});
+
+    // ✅ Only reset if the node already exists (prevents auto-creation)
+    get(myChatRef).then((snap) => {
+      if (snap.exists()) {
+        update(myChatRef, { unreadCount: 0 }).catch(() => {});
+      }
+    }).catch(() => {});
   }, [user, userId, isReadOnly]);
 
   // ─── Load messages ──────────────────────────────────────────
@@ -117,8 +124,6 @@ const ChatView = () => {
       const data = snapshot.val();
       setMessages((prev) => [...prev, { id: snapshot.key, ...data }]);
 
-      // Always update receiver's userChats with the latest message,
-      // but only increment unread if the receiver is not active.
       if (!isReadOnly && data.senderId !== user.uid && data.text) {
         try {
           const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
@@ -189,7 +194,7 @@ const ChatView = () => {
     try {
       await push(messagesRef, messageData);
 
-      // Always update sender's userChats
+      // Always update sender's userChats (creates if needed)
       const partnerName = partnerProfile?.name || userId;
       const partnerAvatar = partnerProfile?.avatar || '';
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);

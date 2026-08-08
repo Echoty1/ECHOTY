@@ -44,6 +44,9 @@ export const ProfileProvider = ({ children }) => {
     let timeoutId = null;
     let didReceiveData = false;
 
+    // Helper to determine if this is the current user's own profile
+    const isOwnProfile = user && user.uid && uid === user.uid;
+
     const unsubscribe = onValue(
       profileRef,
       (snapshot) => {
@@ -53,14 +56,17 @@ export const ProfileProvider = ({ children }) => {
         if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
 
         let finalData = data || {};
-        // ✅ Only fix name if user is authenticated
-        if (!finalData.name && user && user.uid) {
-          console.warn(`⚠️ ProfileProvider: Missing name for ${uid}, fixing...`);
+
+        // ✅ Only fix name if this is the current user's own profile
+        if (!finalData.name && isOwnProfile) {
+          console.warn(`⚠️ ProfileProvider: Missing name for own profile (${uid}), fixing...`);
           const fallbackName = 'User';
           finalData.name = fallbackName;
           update(profileRef, { name: fallbackName }).catch(err => console.error('Update failed:', err));
         } else if (!finalData.name) {
-          console.warn(`⚠️ ProfileProvider: Missing name for ${uid}, but user not logged in. Skipping fix.`);
+          // For other profiles, use a local fallback without writing to Firebase
+          console.log(`ℹ️ ProfileProvider: Missing name for ${uid} – using local fallback only`);
+          finalData.name = 'User';
         }
 
         setProfiles((prev) => ({
@@ -86,21 +92,29 @@ export const ProfileProvider = ({ children }) => {
       try {
         const snapshot = await get(profileRef);
         let data = snapshot.val();
+        const isOwn = user && user.uid && uid === user.uid;
+
         if (!data) {
-          data = { name: uid, avatar: '', mood: 'neutral', activeSkin: null };
-          if (user && user.uid) {
+          // Only create a new profile in Firebase if it's the current user's own
+          if (isOwn) {
+            data = { name: uid, avatar: '', mood: 'neutral', activeSkin: null };
             await set(profileRef, data);
+          } else {
+            // For other users, create a local fallback object (don't write)
+            data = { name: 'User', avatar: '', mood: 'neutral', activeSkin: null };
           }
         } else if (!data.name) {
-          data.name = uid;
-          if (user && user.uid) {
+          if (isOwn) {
+            data.name = uid;
             await update(profileRef, { name: uid });
+          } else {
+            data.name = 'User'; // local fallback only
           }
         }
         setProfiles((prev) => ({ ...prev, [uid]: data }));
       } catch (err) {
         console.error(`❌ ProfileProvider: Fallback error for ${uid}:`, err);
-        setProfiles((prev) => ({ ...prev, [uid]: { name: uid, avatar: '', mood: 'neutral', activeSkin: null } }));
+        setProfiles((prev) => ({ ...prev, [uid]: { name: 'User', avatar: '', mood: 'neutral', activeSkin: null } }));
       }
       // ✅ Always set loading to false
       setLoading(false);
