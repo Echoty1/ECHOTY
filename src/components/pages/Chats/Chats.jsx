@@ -17,7 +17,9 @@ import {
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import './Chats.css';
-import Spinner from '../../common/Spinner';
+import Skeleton from '../../common/Skeleton';
+import { getCache, setCache } from '../../../services/cacheService';
+import { searchProfiles } from '../../../services/searchService';
 
 const timeAgo = (timestamp) => {
   if (!timestamp) return '';
@@ -33,29 +35,52 @@ const timeAgo = (timestamp) => {
   return 'Just now';
 };
 
+// Helper: timeout a promise (8 seconds)
+const withTimeout = (promise, ms = 8000) => {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms)),
+  ]);
+};
+
 const Chats = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
-  const [recentChats, setRecentChats] = useState([]);
-  const [loadingChats, setLoadingChats] = useState(true);
   const [onlineUsers, setOnlineUsers] = useState({});
   const inputRef = useRef(null);
   const searchTimeout = useRef(null);
   const presenceUnsubRef = useRef(null);
+  const userChatsUnsubRef = useRef(null);
+
+  const cacheKey = `chats_${user?.uid}`;
+
+  // ─── State ─────────────────────────────────────────────────────
+  const [recentChats, setRecentChats] = useState(() => {
+    const cached = getCache(cacheKey);
+    return cached || [];
+  });
+
+  const [loadingChats, setLoadingChats] = useState(() => !getCache(cacheKey));
+  const [syncing, setSyncing] = useState(false);
+  const hasSavedCache = useRef(!!getCache(cacheKey));
 
   useDeletedAccountCheck();
 
-  // ─── Real‑time presence listener ────────────────────────────
+  // ─── Presence listener ────────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     const presenceRef = ref(db, 'presence/online');
-    presenceUnsubRef.current = onValue(presenceRef, (snapshot) => {
-      const data = snapshot.val() || {};
-      setOnlineUsers(data);
-    });
+    presenceUnsubRef.current = onValue(
+      presenceRef,
+      (snapshot) => {
+        const data = snapshot.val() || {};
+        setOnlineUsers(data);
+      },
+      (error) => console.error('❌ Presence error:', error)
+    );
     return () => {
       if (presenceUnsubRef.current) {
         presenceUnsubRef.current();
@@ -64,147 +89,224 @@ const Chats = () => {
     };
   }, [user]);
 
-  // ─── Load ONLY recent chats ────────────────────────────────────
+  // ─── Load chats ──────────────────────────────────────────────
   useEffect(() => {
-    if (!user) return;
-
-    setLoadingChats(true);
-    const userChatsRef = ref(db, `userChats/${user.uid}`);
-    const unsubscribe = onValue(userChatsRef, async (snapshot) => {
-      const data = snapshot.val();
-      if (!data) {
-        setRecentChats([]);
-        setLoadingChats(false);
-        return;
-      }
-
-      const partnerIds = Object.keys(data);
-      const chatPromises = partnerIds.map(async (partnerId) => {
-        try {
-          const meta = data[partnerId] || {};
-          // Only fetch profile for this specific partner
-          const profileRef = ref(db, `profiles/${partnerId}`);
-          const profileSnap = await get(profileRef);
-          const profile = profileSnap.val() || {};
-
-          let partnerName;
-          let isDeleted = false;
-
-          if (meta.partnerDeleted === true) {
-            partnerName = meta.partnerName || 'Deleted Account';
-            isDeleted = true;
-          } else {
-            partnerName = profile.name || profile.username || profile.displayName || partnerId;
-          }
-
-          const isSender = meta.lastSenderId === user.uid;
-          let displayMessage = meta.lastMessage || 'Start chatting...';
-          if (displayMessage !== 'Start chatting...') {
-            displayMessage = isSender
-              ? `You: ${displayMessage}`
-              : `${partnerName}: ${displayMessage}`;
-          }
-
-          return {
-            id: partnerId,
-            name: partnerName,
-            lastMessage: displayMessage,
-            timestamp: meta.lastUpdated || Date.now(),
-            lastSenderId: meta.lastSenderId || '',
-            unreadCount: meta.unreadCount || 0,
-            isDeleted: isDeleted,
-            online: !!onlineUsers[partnerId],
-          };
-        } catch (err) {
-          console.warn('Error loading chat partner:', partnerId, err);
-          return null;
-        }
-      });
-
-      const chatResults = await Promise.all(chatPromises);
-      const validChats = chatResults.filter(chat => chat !== null);
-      validChats.sort((a, b) => b.timestamp - a.timestamp);
-      setRecentChats(validChats);
+    if (!user) {
       setLoadingChats(false);
-    });
+      setSyncing(false);
+      return;
+    }
 
-    return () => unsubscribe();
+    const userChatsRef = ref(db, `userChats/${user.uid}`);
+
+    if (userChatsUnsubRef.current) {
+      userChatsUnsubRef.current();
+      userChatsUnsubRef.current = null;
+    }
+
+    const cachedData = getCache(cacheKey);
+    if (cachedData && cachedData.length > 0) {
+      setSyncing(true);
+    }
+
+    userChatsUnsubRef.current = onValue(
+      userChatsRef,
+      async (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+          setRecentChats([]);
+          setCache(cacheKey, []);
+          setLoadingChats(false);
+          setSyncing(false);
+          return;
+        }
+
+        const partnerIds = Object.keys(data);
+        const cached = getCache(cacheKey);
+        const hasCache = cached && cached.length > 0;
+
+        const fetchPartner = async (partnerId) => {
+          try {
+            const meta = data[partnerId] || {};
+            const profileRef = ref(db, `profiles/${partnerId}`);
+            const profileSnap = await withTimeout(get(profileRef), 8000);
+            const profile = profileSnap.val() || {};
+
+            let partnerName, isDeleted = false;
+            if (meta.partnerDeleted === true) {
+              partnerName = meta.partnerName || 'Deleted Account';
+              isDeleted = true;
+            } else {
+              partnerName = profile.name || profile.username || profile.displayName || meta.partnerName || 'Unknown User';
+            }
+            const isSender = meta.lastSenderId === user.uid;
+            let displayMessage = meta.lastMessage || 'Start chatting...';
+            if (displayMessage !== 'Start chatting...') {
+              displayMessage = isSender ? `You: ${displayMessage}` : `${partnerName}: ${displayMessage}`;
+            }
+
+            return {
+              id: partnerId,
+              name: partnerName,
+              lastMessage: displayMessage,
+              timestamp: meta.lastUpdated || Date.now(),
+              lastSenderId: meta.lastSenderId || '',
+              unreadCount: meta.unreadCount || 0,
+              isDeleted,
+              online: !!onlineUsers[partnerId],
+            };
+          } catch (err) {
+            console.warn('⚠️ Error loading partner:', partnerId, err.message);
+            const meta = data[partnerId] || {};
+            const fallbackName = meta.partnerName || 'Unknown User';
+            return {
+              id: partnerId,
+              name: fallbackName,
+              lastMessage: meta.lastMessage || 'Start chatting...',
+              timestamp: meta.lastUpdated || Date.now(),
+              lastSenderId: meta.lastSenderId || '',
+              unreadCount: meta.unreadCount || 0,
+              isDeleted: false,
+              online: !!onlineUsers[partnerId],
+            };
+          }
+        };
+
+        if (hasCache) {
+          const allItems = await Promise.all(partnerIds.map(id => fetchPartner(id)));
+          const validItems = allItems.filter(item => item !== null);
+          validItems.sort((a, b) => b.timestamp - a.timestamp);
+
+          const cachedMap = new Map(cached.map(item => [item.id, item]));
+          let changed = false;
+          const updatedItems = validItems.map(newItem => {
+            const old = cachedMap.get(newItem.id);
+            if (!old) { changed = true; return newItem; }
+            if (
+              old.name !== newItem.name ||
+              old.lastMessage !== newItem.lastMessage ||
+              old.timestamp !== newItem.timestamp ||
+              old.unreadCount !== newItem.unreadCount ||
+              old.isDeleted !== newItem.isDeleted ||
+              old.online !== newItem.online
+            ) {
+              changed = true;
+              return newItem;
+            }
+            return old;
+          });
+
+          if (changed) {
+            setRecentChats(updatedItems);
+            setCache(cacheKey, updatedItems);
+          }
+          setSyncing(false);
+          setLoadingChats(false);
+
+        } else {
+          setRecentChats([]);
+          setLoadingChats(true);
+          const processed = [];
+          const total = partnerIds.length;
+
+          for (let i = 0; i < total; i++) {
+            const partnerId = partnerIds[i];
+            const item = await fetchPartner(partnerId);
+            if (item) {
+              const newList = [item, ...processed.filter(c => c.id !== item.id)];
+              newList.sort((a, b) => b.timestamp - a.timestamp);
+              processed.length = 0;
+              processed.push(...newList);
+              setRecentChats([...processed]);
+            }
+          }
+
+          processed.sort((a, b) => b.timestamp - a.timestamp);
+          setRecentChats(processed);
+          setCache(cacheKey, processed);
+          setLoadingChats(false);
+          setSyncing(false);
+          hasSavedCache.current = true;
+        }
+      },
+      (error) => {
+        console.error('❌ userChats listener error:', error);
+        const cached = getCache(cacheKey);
+        if (cached && cached.length > 0) {
+          setRecentChats(cached);
+          setLoadingChats(false);
+          setSyncing(false);
+        } else {
+          setRecentChats([]);
+          setLoadingChats(false);
+          setSyncing(false);
+        }
+      }
+    );
+
+    return () => {
+      if (userChatsUnsubRef.current) {
+        userChatsUnsubRef.current();
+        userChatsUnsubRef.current = null;
+      }
+    };
   }, [user, onlineUsers]);
 
-  // ─── Search handler – on‑demand Firebase query ──────────────
-  const performSearch = (queryText) => {
+  // ─── Search handler with detailed logging ──────────────────────
+  const performSearch = async (queryText) => {
     const trimmed = queryText.trim().toLowerCase();
+    console.log('🔍 [Search] performSearch called with query:', trimmed);
+
     if (trimmed.length < 2) {
+      console.log('🔍 [Search] Query too short, clearing results');
       setResults([]);
       setIsSearching(false);
       return;
     }
 
     setIsSearching(true);
+    console.log('🔍 [Search] Setting isSearching = true');
 
-    // Use Firebase query on profiles with name index
-    const profilesRef = ref(db, 'profiles');
-    const q = query(
-      profilesRef,
-      orderByChild('name'),
-      startAt(trimmed),
-      endAt(trimmed + '\uf8ff'),
-      limitToFirst(20)
-    );
+    try {
+      console.log('🔍 [Search] Calling searchProfiles with:', trimmed, 'user.uid:', user?.uid);
+      const users = await searchProfiles(trimmed, user.uid, 20);
+      console.log('🔍 [Search] searchProfiles returned:', users);
 
-    get(q)
-      .then((snapshot) => {
-        const data = snapshot.val();
-        if (!data) {
-          setResults([]);
-          setIsSearching(false);
-          return;
-        }
+      // Add online status from presence
+      const withOnline = users.map(u => ({
+        ...u,
+        isOnline: !!onlineUsers[u.id],
+      }));
+      console.log('🔍 [Search] withOnline:', withOnline);
 
-        // Convert to array and exclude self
-        const usersList = Object.entries(data)
-          .map(([uid, profile]) => ({
-            id: uid,
-            name: profile.name || profile.username || profile.displayName || 'Unknown',
-            username: profile.username || '',
-            displayName: profile.displayName || '',
-            country: profile.country || '',
-            city: profile.city || '',
-            interests: profile.interests || [],
-            skills: profile.skills || [],
-            isOnline: !!onlineUsers[uid],
-            status: profile.status || 'Active',
-            lastActive: profile.lastActive || 'Just now',
-            mutualConnections: 0,
-            bio: profile.bio || '',
-            avatar: profile.avatar || '',
-            mood: profile.mood || 'neutral',
-            activeSkin: profile.activeSkin || null,
-          }))
-          .filter((u) => u.id !== user.uid);
-
-        setResults(usersList);
-        setIsSearching(false);
-      })
-      .catch((err) => {
-        console.error('Search error:', err);
-        setResults([]);
-        setIsSearching(false);
-      });
+      setResults(withOnline);
+      console.log('🔍 [Search] setResults called with', withOnline.length, 'items');
+    } catch (err) {
+      console.error('❌ [Search] Search failed:', err);
+      console.error('❌ [Search] Error details:', err.message, err.stack);
+      setResults([]);
+    } finally {
+      setIsSearching(false);
+      console.log('🔍 [Search] setIsSearching(false)');
+    }
   };
 
-  // ─── Debounced search trigger ────────────────────────────────
+  // ─── Debounced search ──────────────────────────────────────────
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
 
     const query = searchQuery.trim().toLowerCase();
+    console.log('🔍 [Search] useEffect triggered, query:', query);
+
     if (query.length === 0) {
+      console.log('🔍 [Search] Empty query, clearing results');
       setResults([]);
       setIsSearching(false);
       return;
     }
 
     searchTimeout.current = setTimeout(() => {
+      console.log('🔍 [Search] Debounce fired, executing performSearch');
       performSearch(query);
     }, 300);
 
@@ -213,7 +315,7 @@ const Chats = () => {
     };
   }, [searchQuery]);
 
-  // ─── Start chat ─────────────────────────────────────────────
+  // ─── Start chat ────────────────────────────────────────────────
   const startChat = (selectedUser) => {
     if (!selectedUser) return;
     navigate(`/chat/${selectedUser.id}`, {
@@ -228,7 +330,6 @@ const Chats = () => {
     });
   };
 
-  // ─── Match reasons ──────────────────────────────────────────
   const getMatchReasons = (user) => {
     if (!user) return [];
     const reasons = [];
@@ -251,7 +352,6 @@ const Chats = () => {
   // ─── Render ──────────────────────────────────────────────────
   return (
     <div className="chats-page">
-      {/* ─── Search Bar ────────────────────────────────────────── */}
       <div className="search-container">
         <div className="search-input-wrapper">
           <i className="fas fa-search search-icon" />
@@ -278,7 +378,6 @@ const Chats = () => {
         </div>
       </div>
 
-      {/* ─── Search Results ────────────────────────────────────── */}
       {searchQuery.trim().length > 0 ? (
         <div className="search-results">
           {isSearching ? (
@@ -357,14 +456,14 @@ const Chats = () => {
           )}
         </div>
       ) : (
-        /* ─── Recent Chats ────────────────────────────────────── */
         <div className="recent-chats">
           <div className="section-header">
             <span>Recent Conversations</span>
+            {syncing && <span className="sync-indicator">🔄 Syncing...</span>}
           </div>
           {loadingChats ? (
             <div className="no-chats">
-              <Spinner size={48} />
+              <Skeleton count={5} />
             </div>
           ) : recentChats.length > 0 ? (
             recentChats.map((chat) => {

@@ -9,17 +9,9 @@ import Modal from '../../common/Modal';
 import { SKINS, getSkinById } from '../../../constants/echomoji';
 import { useNavigate } from 'react-router-dom';
 import Spinner from '../../common/Spinner';
+import { getCache, setCache } from '../../../services/cacheService';
 
-// ─── Sub-component for a single skin item (memoized) ──────────────
-const SkinItem = React.memo(({ 
-  skin, 
-  isOwned, 
-  isActive, 
-  timeLeft, 
-  isExpired, 
-  onApply, 
-  onPurchase 
-}) => {
+const SkinItem = React.memo(({ skin, isOwned, isActive, timeLeft, isExpired, onApply, onPurchase }) => {
   const skinObj = {
     bgStart: skin.bgStart,
     bgEnd: skin.bgEnd,
@@ -39,12 +31,7 @@ const SkinItem = React.memo(({
         opacity: isExpired ? 0.4 : 1,
       }}
     >
-      <ECHOMOJI
-        mood="neutral"
-        skin={skinObj}
-        size={48}
-        interactive={false}
-      />
+      <ECHOMOJI mood="neutral" skin={skinObj} size={48} interactive={false} />
       <div style={{ marginTop: '6px', fontSize: '12px', fontWeight: 600 }}>{skin.name}</div>
       {skin.isLimited && <div style={{ fontSize: '10px', color: '#F59E0B' }}>🔥 Limited</div>}
       {isOwned && skin.isLimited && (
@@ -97,7 +84,6 @@ const SkinItem = React.memo(({
   );
 });
 
-// ─── Main Component ──────────────────────────────────────────────
 const ECHOMojiTab = () => {
   const { user } = useAuth();
   const [ownedSkins, setOwnedSkins] = useState([]);
@@ -109,6 +95,7 @@ const ECHOMojiTab = () => {
   const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
   const timerRef = useRef(null);
+  const cacheKey = `echomoji_${user?.uid}`;
 
   // ─── Modal State ──────────────────────────────────────────────
   const [modal, setModal] = useState({
@@ -134,53 +121,59 @@ const ECHOMojiTab = () => {
     return () => clearInterval(timerRef.current);
   }, []);
 
-  // ─── Load user's data (coins, skins, mood) ──────────────────────
+  // ─── Load user's data (coins, skins, mood) with caching ───────
   useEffect(() => {
     if (!user) return;
-    console.log('🟢 Loading user data for', user.uid);
-    setLoading(true);
+
+    // 1. Load from cache instantly
+    const cached = getCache(cacheKey);
+    if (cached) {
+      setOwnedSkins(cached.owned || []);
+      setActiveSkin(cached.active || null);
+      setCoins(cached.coins || 0);
+      // ✅ Set loading to false immediately – no spinner
+      setLoading(false);
+      console.log('📦 [cache] ECHOMOJI data loaded from cache');
+    } else {
+      // No cache – show spinner while loading
+      setLoading(true);
+    }
 
     const userSkinsRef = ref(db, `userSkins/${user.uid}`);
 
-    // 1. Real‑time listener for coins, owned skins, active skin
+    // 2. Real‑time listener – updates cache and state in background
     const unsubSkins = onValue(userSkinsRef, (snap) => {
       const data = snap.val();
-      console.log('📦 [onValue] userSkins data:', data);
       if (data) {
-        setOwnedSkins(data.owned || []);
-        setActiveSkin(data.active || null);
-        const coinsVal = data.coins !== undefined ? data.coins : 350;
-        setCoins(coinsVal);
-        console.log(`💰 [onValue] Coins set to: ${coinsVal}`);
+        const payload = {
+          owned: data.owned || [],
+          active: data.active || null,
+          coins: data.coins !== undefined ? data.coins : 350,
+        };
+        setOwnedSkins(payload.owned);
+        setActiveSkin(payload.active);
+        setCoins(payload.coins);
+        setCache(cacheKey, payload);
+        // ✅ Ensure loading is false after data arrives
+        setLoading(false);
+        console.log(`💰 [onValue] Coins set to: ${payload.coins}`);
       } else {
-        console.log('⚠️ No userSkins – creating with 350');
-        update(ref(db, `userSkins/${user.uid}`), {
-          owned: [],
-          active: null,
-          coins: 350,
-        });
+        // Create fallback
+        const fallback = { owned: [], active: null, coins: 350 };
+        update(ref(db, `userSkins/${user.uid}`), fallback);
         setOwnedSkins([]);
         setActiveSkin(null);
         setCoins(350);
+        setCache(cacheKey, fallback);
+        setLoading(false);
       }
-      setLoading(false);
     }, (error) => {
       console.error('Error in userSkins listener:', error);
-      setLoading(false);
+      // If error and we had cache, keep it; otherwise set loading false
+      if (!cached) {
+        setLoading(false);
+      }
     });
-
-    // 2. One‑time safety net read (in case listener fails)
-    get(userSkinsRef)
-      .then((snap) => {
-        const data = snap.val();
-        console.log('📦 [get] userSkins data:', data);
-        if (data && data.coins !== undefined) {
-          setCoins(data.coins);
-          console.log(`💰 [get] Coins set to: ${data.coins}`);
-        }
-        // Don't set loading false here, the listener will
-      })
-      .catch((err) => console.error('Error reading userSkins:', err));
 
     // 3. Mood (from profiles)
     const profileRef = ref(db, `profiles/${user.uid}`);
@@ -318,8 +311,7 @@ const ECHOMojiTab = () => {
     });
   }, [validOwnedSkins, activeSkin, purchaseDataMap, getTimeRemaining]);
 
-  console.log('🟣 Rendering JSX with', { ownedSkins: ownedSkins.length, coins, activeSkin });
-
+  // If still loading after cache attempt, show spinner
   if (loading) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}>
@@ -408,7 +400,7 @@ const ECHOMojiTab = () => {
         </div>
       </div>
 
-      {/* ─── Modal ──────────────────────────────────────────────── */}
+      {/* Modal */}
       <Modal
         isOpen={modal.isOpen}
         onClose={closeModal}

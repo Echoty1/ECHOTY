@@ -1,3 +1,4 @@
+// src/services/firebase.js
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
@@ -13,7 +14,17 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
 
-console.log('🔥 Firebase Config loaded:', firebaseConfig);
+// Validate required config
+const missingKeys = Object.entries(firebaseConfig)
+  .filter(([key, value]) => !value && key !== 'measurementId') // measurementId is optional
+  .map(([key]) => key);
+
+if (missingKeys.length > 0) {
+  console.error(
+    `❌ Firebase config missing required keys: ${missingKeys.join(', ')}. ` +
+    `Please set them in your environment variables (REACT_APP_FIREBASE_*).`
+  );
+}
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);

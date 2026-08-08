@@ -15,12 +15,17 @@ import Terms from './components/pages/Other/Terms';
 import Privacy from './components/pages/Other/Privacy';
 import Report from './components/pages/Other/Report';
 import Settings from './components/pages/Other/Settings';
+import About from './components/pages/Other/About';
 import CoinPurchase from './components/pages/CoinPurchase/CoinPurchase';
 import Login from './components/Auth/Login';
 import Navbar from './components/Layout/Navbar';
 import BottomNav from './components/Layout/BottomNav';
 import { useAuth } from './hooks/useAuth';
-import About from './components/pages/Other/About';
+import NetworkStatus from './components/common/NetworkStatus';
+
+// ─── WebSocket (using env var) ────────────────────────────────────
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || window.location.origin;
+const WS_URL = BACKEND_URL.replace('http', 'ws').replace('https', 'wss');
 
 // ─── ScrollToTop component ──────────────────────────────────────
 function ScrollToTop() {
@@ -65,15 +70,24 @@ function LoadingScreen() {
         letterSpacing: '4px',
       }}>ECHO</div>
       <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: '12px', letterSpacing: '6px', textTransform: 'uppercase', marginTop: '4px' }}>
-        The future of conversations
+        Discover. Connect. Echo.
       </div>
-      <div style={{ width: '200px', height: '3px', background: 'rgba(255,255,255,0.04)', borderRadius: '4px', marginTop: '30px', overflow: 'hidden' }}>
+      <div style={{
+        width: '200px',
+        height: '4px',
+        background: 'rgba(255,255,255,0.05)',
+        borderRadius: '4px',
+        marginTop: '30px',
+        overflow: 'hidden',
+        boxShadow: '0 0 10px rgba(108,60,225,0.2)',
+      }}>
         <div style={{
           height: '100%',
-          width: '30%',
-          background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
+          width: '40%',
+          background: 'linear-gradient(90deg, #6C3CE1, #EC4899, #6C3CE1)',
           borderRadius: '4px',
           animation: 'shimmer 1.5s ease-in-out infinite',
+          willChange: 'transform',
         }} />
       </div>
     </div>
@@ -98,6 +112,7 @@ function AppContent() {
   return (
     <>
       <Navbar />
+      <NetworkStatus />
       <ScrollToTop />
       <div
         id="main-content"
@@ -122,8 +137,8 @@ function AppContent() {
           <Route path="/report" element={<Report />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/coins" element={<CoinPurchase />} />
-          <Route path="*" element={<Navigate to="/" />} />
           <Route path="/about" element={<About />} />
+          <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </div>
       <BottomNav />

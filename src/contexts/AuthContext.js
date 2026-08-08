@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { ref, get, set, onDisconnect, update } from 'firebase/database';
+import { ref, set, onDisconnect, update, onValue } from 'firebase/database';
 
 export const AuthContext = createContext();
 
@@ -14,80 +14,91 @@ export const AuthProvider = ({ children }) => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         try {
-          // Set online presence
-          const onlineRef = ref(db, `presence/online/${firebaseUser.uid}`);
-          await set(onlineRef, true);
-          const disconnectRef = ref(db, `presence/online/${firebaseUser.uid}`);
-          await onDisconnect(disconnectRef).set(false);
+          const uid = firebaseUser.uid;
+          console.log('👤 User authenticated:', uid);
 
-          const profileRef = ref(db, `profiles/${firebaseUser.uid}`);
-          const snapshot = await get(profileRef);
+          // Presence
+          const onlineRef = ref(db, `presence/online/${uid}`);
+          set(onlineRef, true).catch(() => {});
+          onDisconnect(onlineRef).set(false);
 
-          if (!snapshot.exists()) {
-            // ✅ New user: create profile with correct name
-            const name = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
-            const newProfile = {
-              name: name,
-              avatar: '',
-              mood: 'neutral',
-              activeSkin: null,
-              bio: 'New to ECHO! 🌊',
-              interests: [],
-              skills: [],
-              country: '',
-              city: '',
-              status: '🟢 Active',
-              lastActive: Date.now(),
-              createdAt: Date.now(),
-            };
-            await set(profileRef, newProfile);
-            await set(ref(db, `accounts/${firebaseUser.uid}`), {
-              email: firebaseUser.email,
-              joined: Date.now(),
-              banned: false,
-            });
-            await set(ref(db, `userSkins/${firebaseUser.uid}`), {
-              owned: [],
-              active: null,
-              coins: 350,
-              purchases: {},
-            });
-            setUser({ ...firebaseUser, ...newProfile });
-          } else {
-            // ✅ Existing user: ensure name is correct
-            const profileData = snapshot.val();
-            let needsUpdate = false;
+          const profileRef = ref(db, `profiles/${uid}`);
 
-            // If name is missing or is "User" (default), fix it
-            if (!profileData.name || profileData.name === 'User') {
-              const correctName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
-              if (profileData.name !== correctName) {
-                await update(profileRef, { name: correctName });
-                profileData.name = correctName;
-                needsUpdate = true;
+          const unsubscribe = onValue(
+            profileRef,
+            (snapshot) => {
+              if (snapshot.exists()) {
+                const profileData = snapshot.val();
+                console.log('📂 Existing profile loaded:', profileData);
+
+                // ─── Ensure searchName exists (migration) ──
+                const name = profileData.name || profileData.displayName || profileData.username || firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
+                const searchName = name.toLowerCase();
+                if (!profileData.searchName || profileData.searchName !== searchName) {
+                  update(profileRef, { searchName })
+                    .then(() => console.log('✅ Updated searchName for existing user'))
+                    .catch(err => console.warn('Could not update searchName:', err));
+                  profileData.searchName = searchName;
+                }
+
+                setUser({ ...firebaseUser, ...profileData });
+                setLoading(false);
+              } else {
+                // ─── New user: create profile with searchName ──
+                const name = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
+                console.log('👤 Creating new profile for:', name);
+                const newProfile = {
+                  name,
+                  searchName: name.toLowerCase(), // ✅ for search
+                  avatar: '',
+                  mood: 'neutral',
+                  activeSkin: null,
+                  bio: 'New to ECHO! 🌊',
+                  interests: [],
+                  skills: [],
+                  country: '',
+                  city: '',
+                  status: '🟢 Active',
+                  lastActive: Date.now(),
+                  createdAt: Date.now(),
+                };
+                set(profileRef, newProfile)
+                  .then(() => {
+                    setUser({ ...firebaseUser, ...newProfile });
+                    setLoading(false);
+                  })
+                  .catch(err => {
+                    console.error('Error creating profile:', err);
+                    setLoading(false);
+                  });
+                Promise.all([
+                  set(ref(db, `accounts/${uid}`), {
+                    email: firebaseUser.email,
+                    joined: Date.now(),
+                    banned: false,
+                  }),
+                  set(ref(db, `userSkins/${uid}`), {
+                    owned: [],
+                    active: null,
+                    coins: 350,
+                    purchases: {},
+                  }),
+                ]).catch(err => console.warn('Error creating auxiliary nodes:', err));
               }
+            },
+            (error) => {
+              console.error('❌ Profile listener error:', error);
+              setLoading(false);
             }
+          );
 
-            // Also ensure other fields exist if needed
-            if (!profileData.interests) {
-              await update(profileRef, { interests: [] });
-              profileData.interests = [];
-              needsUpdate = true;
-            }
-            if (!profileData.skills) {
-              await update(profileRef, { skills: [] });
-              profileData.skills = [];
-              needsUpdate = true;
-            }
-
-            setUser({ ...firebaseUser, ...profileData });
-          }
-          setLoading(false);
+          return () => unsubscribe();
         } catch (err) {
-          console.error('Error setting up user:', err);
+          console.error('❌ Auth error:', err);
           setLoading(false);
         }
       } else {
+        console.log('🔴 User signed out');
         setUser(null);
         setLoading(false);
       }
@@ -101,9 +112,7 @@ export const AuthProvider = ({ children }) => {
       try {
         const onlineRef = ref(db, `presence/online/${user.uid}`);
         await set(onlineRef, false);
-      } catch (err) {
-        console.error('Error setting offline:', err);
-      }
+      } catch (err) {}
     }
     await signOut(auth);
   };
