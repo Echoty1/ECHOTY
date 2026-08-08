@@ -86,10 +86,8 @@ export const ProfileProvider = ({ children }) => {
       try {
         const snapshot = await get(profileRef);
         let data = snapshot.val();
-        console.log(`📦 ProfileProvider: Fallback data for ${uid}:`, data);
         if (!data) {
           data = { name: uid, avatar: '', mood: 'neutral', activeSkin: null };
-          // Only set if user is logged in
           if (user && user.uid) {
             await set(profileRef, data);
           }
@@ -100,12 +98,12 @@ export const ProfileProvider = ({ children }) => {
           }
         }
         setProfiles((prev) => ({ ...prev, [uid]: data }));
-        setLoading(false);
       } catch (err) {
         console.error(`❌ ProfileProvider: Fallback error for ${uid}:`, err);
         setProfiles((prev) => ({ ...prev, [uid]: { name: uid, avatar: '', mood: 'neutral', activeSkin: null } }));
-        setLoading(false);
       }
+      // ✅ Always set loading to false
+      setLoading(false);
       if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
     };
 

@@ -8,6 +8,11 @@ import {
   ref,
   onValue,
   get,
+  query,
+  orderByChild,
+  startAt,
+  endAt,
+  limitToFirst,
 } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
@@ -35,8 +40,7 @@ const Chats = () => {
   const [results, setResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [recentChats, setRecentChats] = useState([]);
-  const [allUsers, setAllUsers] = useState([]);
-  const [loadingUsers, setLoadingUsers] = useState(true);
+  const [loadingChats, setLoadingChats] = useState(true);
   const [onlineUsers, setOnlineUsers] = useState({});
   const inputRef = useRef(null);
   const searchTimeout = useRef(null);
@@ -60,15 +64,17 @@ const Chats = () => {
     };
   }, [user]);
 
-  // ─── Load recent chats ──────────────────────────────────────
+  // ─── Load ONLY recent chats ────────────────────────────────────
   useEffect(() => {
     if (!user) return;
 
+    setLoadingChats(true);
     const userChatsRef = ref(db, `userChats/${user.uid}`);
     const unsubscribe = onValue(userChatsRef, async (snapshot) => {
       const data = snapshot.val();
       if (!data) {
         setRecentChats([]);
+        setLoadingChats(false);
         return;
       }
 
@@ -76,6 +82,7 @@ const Chats = () => {
       const chatPromises = partnerIds.map(async (partnerId) => {
         try {
           const meta = data[partnerId] || {};
+          // Only fetch profile for this specific partner
           const profileRef = ref(db, `profiles/${partnerId}`);
           const profileSnap = await get(profileRef);
           const profile = profileSnap.val() || {};
@@ -118,144 +125,93 @@ const Chats = () => {
       const validChats = chatResults.filter(chat => chat !== null);
       validChats.sort((a, b) => b.timestamp - a.timestamp);
       setRecentChats(validChats);
+      setLoadingChats(false);
     });
 
     return () => unsubscribe();
   }, [user, onlineUsers]);
 
-  // ─── Load all users for search ──────────────────────────────
-  useEffect(() => {
-    if (!user) return;
-    setLoadingUsers(true);
-    console.log('🔍 Chats: Loading all profiles...');
-
-    const profilesRef = ref(db, 'profiles');
-    const unsubscribe = onValue(
-      profilesRef,
-      (snapshot) => {
-        const data = snapshot.val();
-        console.log('📦 Chats: Raw profiles data:', data);
-
-        if (data) {
-          const usersList = Object.entries(data)
-            .map(([uid, profile]) => {
-              const name = profile.name || profile.username || profile.displayName || 'Unknown';
-              return {
-                id: uid,
-                name: name,
-                username: profile.username || '',
-                displayName: profile.displayName || '',
-                country: profile.country || '',
-                city: profile.city || '',
-                interests: Array.isArray(profile.interests) ? profile.interests : [],
-                skills: Array.isArray(profile.skills) ? profile.skills : [],
-                isOnline: !!onlineUsers[uid],
-                status: profile.status || 'Active',
-                lastActive: profile.lastActive || 'Just now',
-                mutualConnections: 0,
-                bio: profile.bio || '',
-                avatar: profile.avatar || '',
-                mood: profile.mood || 'neutral',
-                activeSkin: profile.activeSkin || null,
-              };
-            })
-            .filter(u => u.id !== user.uid);
-
-          console.log(`👥 Chats: Loaded ${usersList.length} other users.`);
-          if (usersList.length > 0) {
-            console.log('👤 First user:', usersList[0].name);
-          }
-          setAllUsers(usersList);
-        } else {
-          console.warn('⚠️ Chats: No profiles found.');
-          setAllUsers([]);
-        }
-        setLoadingUsers(false);
-      },
-      (error) => {
-        console.error('❌ Chats: Error loading profiles:', error);
-        setLoadingUsers(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user, onlineUsers]);
-
-  // ─── Search handler ──────────────────────────────────────────
-  useEffect(() => {
-    if (searchTimeout.current) clearTimeout(searchTimeout.current);
-
-    const query = searchQuery.trim().toLowerCase();
-    console.log(`🔎 Chats: Search query: "${query}"`);
-
-    if (query.length === 0) {
-      setResults([]);
-      setIsSearching(false);
-      return;
-    }
-
-    if (query.length < 2) {
-      setResults([]);
-      setIsSearching(false);
-      return;
-    }
-
-    if (allUsers.length === 0) {
-      console.warn('⚠️ Chats: No users to search.');
+  // ─── Search handler – on‑demand Firebase query ──────────────
+  const performSearch = (queryText) => {
+    const trimmed = queryText.trim().toLowerCase();
+    if (trimmed.length < 2) {
       setResults([]);
       setIsSearching(false);
       return;
     }
 
     setIsSearching(true);
-    searchTimeout.current = setTimeout(() => {
-      const filtered = allUsers
-        .map(user => {
-          let score = 0;
-          const searchable = [
-            user.name,
-            user.username,
-            user.displayName,
-            user.country,
-            user.city,
-            ...user.interests,
-            ...user.skills,
-            user.bio,
-          ].join(' ').toLowerCase();
 
-          if (user.name.toLowerCase() === query) score += 100;
-          else if (user.name.toLowerCase().includes(query)) score += 80;
+    // Use Firebase query on profiles with name index
+    const profilesRef = ref(db, 'profiles');
+    const q = query(
+      profilesRef,
+      orderByChild('name'),
+      startAt(trimmed),
+      endAt(trimmed + '\uf8ff'),
+      limitToFirst(20)
+    );
 
-          if (user.username.toLowerCase().includes(query)) score += 70;
-          if (user.displayName.toLowerCase().includes(query)) score += 60;
+    get(q)
+      .then((snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+          setResults([]);
+          setIsSearching(false);
+          return;
+        }
 
-          if (user.country.toLowerCase().includes(query)) score += 50;
-          if (user.city.toLowerCase().includes(query)) score += 40;
+        // Convert to array and exclude self
+        const usersList = Object.entries(data)
+          .map(([uid, profile]) => ({
+            id: uid,
+            name: profile.name || profile.username || profile.displayName || 'Unknown',
+            username: profile.username || '',
+            displayName: profile.displayName || '',
+            country: profile.country || '',
+            city: profile.city || '',
+            interests: profile.interests || [],
+            skills: profile.skills || [],
+            isOnline: !!onlineUsers[uid],
+            status: profile.status || 'Active',
+            lastActive: profile.lastActive || 'Just now',
+            mutualConnections: 0,
+            bio: profile.bio || '',
+            avatar: profile.avatar || '',
+            mood: profile.mood || 'neutral',
+            activeSkin: profile.activeSkin || null,
+          }))
+          .filter((u) => u.id !== user.uid);
 
-          for (const interest of user.interests) {
-            if (interest.toLowerCase().includes(query)) score += 30;
-          }
-          for (const skill of user.skills) {
-            if (skill.toLowerCase().includes(query)) score += 25;
-          }
+        setResults(usersList);
+        setIsSearching(false);
+      })
+      .catch((err) => {
+        console.error('Search error:', err);
+        setResults([]);
+        setIsSearching(false);
+      });
+  };
 
-          if (user.bio.toLowerCase().includes(query)) score += 20;
+  // ─── Debounced search trigger ────────────────────────────────
+  useEffect(() => {
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
 
-          return { ...user, score };
-        })
-        .filter(user => user.score > 0)
-        .sort((a, b) => b.score - a.score)
-        .slice(0, 20);
-
-      console.log(`🔎 Chats: Found ${filtered.length} results.`);
-      setResults(filtered);
+    const query = searchQuery.trim().toLowerCase();
+    if (query.length === 0) {
+      setResults([]);
       setIsSearching(false);
+      return;
+    }
+
+    searchTimeout.current = setTimeout(() => {
+      performSearch(query);
     }, 300);
 
     return () => {
       if (searchTimeout.current) clearTimeout(searchTimeout.current);
     };
-  }, [searchQuery, allUsers]);
+  }, [searchQuery]);
 
   // ─── Start chat ─────────────────────────────────────────────
   const startChat = (selectedUser) => {
@@ -396,9 +352,7 @@ const Chats = () => {
             <div className="no-results">
               <span>🔍</span>
               <p>No results found</p>
-              <span className="no-results-sub">
-                {loadingUsers ? 'Loading users...' : 'Try a different search'}
-              </span>
+              <span className="no-results-sub">Try a different search</span>
             </div>
           )}
         </div>
@@ -408,7 +362,11 @@ const Chats = () => {
           <div className="section-header">
             <span>Recent Conversations</span>
           </div>
-          {recentChats.length > 0 ? (
+          {loadingChats ? (
+            <div className="no-chats">
+              <Spinner size={48} />
+            </div>
+          ) : recentChats.length > 0 ? (
             recentChats.map((chat) => {
               if (!chat) return null;
               return (
@@ -442,14 +400,8 @@ const Chats = () => {
             })
           ) : (
             <div className="no-chats">
-              {loadingUsers ? (
-                <Spinner size={48} />
-              ) : (
-                <>
-                  <p>No conversations yet</p>
-                  <span>Search for people to start chatting</span>
-                </>
-              )}
+              <p>No conversations yet</p>
+              <span>Search for people to start chatting</span>
             </div>
           )}
         </div>
