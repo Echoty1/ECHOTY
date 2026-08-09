@@ -42,7 +42,7 @@ function ScrollToTop() {
   return null;
 }
 
-// ─── Loading Screen ─────────────────────────────────────────────
+// ─── Loading Screen (Echo‑themed) ─────────────────────────────
 function LoadingScreen() {
   return (
     <div style={{
@@ -52,42 +52,93 @@ function LoadingScreen() {
       justifyContent: 'center',
       height: '100vh',
       background: '#0A0A0F',
+      position: 'relative',
+      overflow: 'hidden',
     }}>
-      <div style={{ width: '80px', height: '80px', marginBottom: '20px', animation: 'float 2s ease-in-out infinite' }}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+      {/* ─── Echo Rings (pulsing) ───────────────────────────── */}
+      <div style={{
+        position: 'absolute',
+        width: '240px',
+        height: '240px',
+        borderRadius: '50%',
+        border: '2px solid rgba(108, 60, 225, 0.2)',
+        animation: 'echoRingPulse 2.5s ease-out infinite',
+      }} />
+      <div style={{
+        position: 'absolute',
+        width: '320px',
+        height: '320px',
+        borderRadius: '50%',
+        border: '2px solid rgba(236, 72, 153, 0.15)',
+        animation: 'echoRingPulse 3s ease-out infinite 0.5s',
+      }} />
+      <div style={{
+        position: 'absolute',
+        width: '400px',
+        height: '400px',
+        borderRadius: '50%',
+        border: '2px solid rgba(108, 60, 225, 0.1)',
+        animation: 'echoRingPulse 3.5s ease-out infinite 1s',
+      }} />
+
+      {/* ─── Logo ────────────────────────────────────────────── */}
+      <div style={{
+        width: '100px',
+        height: '100px',
+        marginBottom: '20px',
+        animation: 'echoFloat 2.5s ease-in-out infinite',
+        position: 'relative',
+        zIndex: 2,
+      }}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" style={{ width: '100%', height: '100%' }}>
           <rect width="512" height="512" rx="96" fill="#182830" />
           <path d="M 120 120 H 280 V 176 H 180 V 228 H 260 V 284 H 180 V 336 H 280 V 392 H 120 Z" fill="#6C3CE1" />
           <path d="M 320 160 A 140 140 0 0 1 320 352" stroke="#6C3CE1" strokeWidth="36" fill="none" strokeLinecap="round" />
           <path d="M 370 200 A 90 90 0 0 1 370 312" stroke="#EC4899" strokeWidth="32" strokeOpacity="0.6" fill="none" strokeLinecap="round" />
         </svg>
       </div>
+
+      {/* ─── ECHO text (bolder with glow) ────────────────────── */}
       <div style={{
-        fontSize: '32px',
+        fontSize: '40px',
         fontWeight: 900,
         background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
         WebkitBackgroundClip: 'text',
         WebkitTextFillColor: 'transparent',
-        letterSpacing: '4px',
+        letterSpacing: '8px',
+        zIndex: 2,
+        textShadow: '0 0 40px rgba(108,60,225,0.3), 0 0 80px rgba(236,72,153,0.15)',
+        fontFamily: 'Inter, sans-serif',
       }}>ECHO</div>
-      <div style={{ color: 'rgba(255,255,255,0.25)', fontSize: '12px', letterSpacing: '6px', textTransform: 'uppercase', marginTop: '4px' }}>
+
+      <div style={{
+        color: 'rgba(255,255,255,0.2)',
+        fontSize: '13px',
+        letterSpacing: '8px',
+        textTransform: 'uppercase',
+        marginTop: '2px',
+        zIndex: 2,
+      }}>
         Discover. Connect. Echo.
       </div>
+
+      {/* ─── Loading Bar (now moves properly) ────────────────── */}
       <div style={{
         width: '200px',
-        height: '4px',
+        height: '3px',
         background: 'rgba(255,255,255,0.05)',
         borderRadius: '4px',
         marginTop: '30px',
         overflow: 'hidden',
-        boxShadow: '0 0 10px rgba(108,60,225,0.2)',
+        zIndex: 2,
+        boxShadow: '0 0 15px rgba(108,60,225,0.1)',
       }}>
         <div style={{
           height: '100%',
-          width: '40%',
+          width: '200%', // ← MUST be wider than container to slide
           background: 'linear-gradient(90deg, #6C3CE1, #EC4899, #6C3CE1)',
           borderRadius: '4px',
-          animation: 'shimmer 1.5s ease-in-out infinite',
-          willChange: 'transform',
+          animation: 'shimmer 1.8s ease-in-out infinite',
         }} />
       </div>
     </div>

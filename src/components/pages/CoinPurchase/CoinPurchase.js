@@ -234,7 +234,7 @@ const CoinPurchase = () => {
         textAlign: 'center',
       }}>
         <div style={{ fontSize: '14px', color: '#888', marginBottom: '8px' }}>
-          📤 After payment, send your receipt and GMail to:
+          📤 After payment, send your receipt and UID (you can find it in your profile page) to:
         </div>
         <div style={{ fontSize: '18px', fontWeight: 700, color: '#10B981', marginBottom: '12px' }}>
           {WHATSAPP_NUMBER}
@@ -259,7 +259,7 @@ const CoinPurchase = () => {
           onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
         >
           <i className="fab fa-whatsapp" style={{ fontSize: '20px' }} />
-          Send Receipt and GMail on WhatsApp
+          Send Receipt and UID on WhatsApp
         </button>
         <div style={{ fontSize: '12px', color: '#555', marginTop: '12px' }}>
           Your coins will be added within 24 hours after verification.

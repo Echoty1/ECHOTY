@@ -31,57 +31,49 @@ export const AuthProvider = ({ children }) => {
                 const profileData = snapshot.val();
                 console.log('📂 Existing profile loaded:', profileData);
 
-                // ─── Determine current name ──────────────────
-                const suggestedName =
+                // ─── Get correct name from Google ────────────
+                const googleName =
                   firebaseUser.displayName ||
                   firebaseUser.email?.split('@')[0] ||
                   'User';
 
-                let currentName = profileData.name ||
-                  profileData.displayName ||
-                  profileData.username ||
-                  suggestedName;
+                const currentName = profileData.name || profileData.displayName || profileData.username || '';
+
+                // ─── Update if name is missing, UID, "User", or differs ──
+                const isUid = currentName.length >= 28; // typical Firebase UID length
+                const isDefault = !currentName || currentName === 'User' || isUid;
 
                 let needsUpdate = false;
                 const updatedData = {};
 
-                // ─── Fix name if it's still the default fallback ──
-                const isDefaultName = !profileData.name ||
-                  profileData.name === 'User' ||
-                  profileData.name === uid;
-
-                if (isDefaultName && suggestedName !== profileData.name) {
-                  updatedData.name = suggestedName;
-                  updatedData.searchName = suggestedName.toLowerCase();
+                if (isDefault || currentName.toLowerCase() !== googleName.toLowerCase()) {
+                  updatedData.name = googleName;
+                  updatedData.searchName = googleName.toLowerCase();
                   needsUpdate = true;
-                  currentName = suggestedName;
-                }
-
-                // ─── Ensure searchName is correct ────────────
-                const searchName = (currentName || 'User').toLowerCase();
-                if (!profileData.searchName || profileData.searchName !== searchName) {
-                  updatedData.searchName = searchName;
-                  needsUpdate = true;
+                  console.log(`🔄 Updating name from "${currentName}" to "${googleName}"`);
+                } else {
+                  // Ensure searchName is correct
+                  const expectedSearch = (currentName || 'User').toLowerCase();
+                  if (profileData.searchName !== expectedSearch) {
+                    updatedData.searchName = expectedSearch;
+                    needsUpdate = true;
+                  }
                 }
 
                 if (needsUpdate) {
                   update(profileRef, updatedData)
                     .then(() => console.log('✅ Updated profile:', updatedData))
-                    .catch((err) =>
-                      console.warn('Could not update profile:', err)
-                    );
-                  // Merge changes into profileData for the user object
+                    .catch((err) => console.warn('Could not update profile:', err));
+                  // Immediately merge changes for UI
                   Object.assign(profileData, updatedData);
                 }
 
+                // ─── Set user with merged data ────────────────
                 setUser({ ...firebaseUser, ...profileData });
                 setLoading(false);
               } else {
-                // ─── New user: create profile ──────────────
-                const name =
-                  firebaseUser.displayName ||
-                  firebaseUser.email?.split('@')[0] ||
-                  'User';
+                // ─── New user: create profile ────────────────
+                const name = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
                 console.log('👤 Creating new profile for:', name);
                 const newProfile = {
                   name,
@@ -107,6 +99,7 @@ export const AuthProvider = ({ children }) => {
                     console.error('Error creating profile:', err);
                     setLoading(false);
                   });
+                // Create auxiliary nodes
                 Promise.all([
                   set(ref(db, `accounts/${uid}`), {
                     email: firebaseUser.email,
