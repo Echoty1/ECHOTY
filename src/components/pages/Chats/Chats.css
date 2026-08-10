@@ -451,3 +451,21 @@
 .chat-presence-dot-small .presence-dot.offline {
   background: #EF4444;
 }
+
+/* AI Assistant item styling */
+.chat-item.ai-item {
+  background: rgba(108, 60, 225, 0.1);
+  border: 1px solid rgba(108, 60, 225, 0.25);
+  border-radius: 14px;
+  margin-bottom: 12px;
+}
+
+.ai-badge {
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 6px;
+  border-radius: 6px;
+  margin-left: 6px;
+}

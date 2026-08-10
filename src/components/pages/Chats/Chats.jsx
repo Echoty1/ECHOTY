@@ -9,22 +9,30 @@ import {
   onValue,
   get,
   query,
-  orderByChild,
-  startAt,
-  endAt,
-  limitToFirst,
   orderByKey,
   limitToLast,
 } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
+import Modal from '../../common/Modal';
 import './Chats.css';
 import { getCache, setCache } from '../../../services/cacheService';
-import { searchProfiles } from '../../../services/searchService';
+import { searchProfiles, prefetchProfilesIndex } from '../../../services/searchService';
 import { useInfiniteScroll } from '../../../hooks/useInfiniteScroll';
 import { SkeletonChatItem } from '../../common/SkeletonLoader';
 
 const CHAT_CHUNK_SIZE = 20;
+
+// ECHO AI Constant Configuration
+const ECHO_AI_USER = {
+  id: 'echo_ai_assistant',
+  name: 'ECHO AI',
+  isAi: true,
+  online: true,
+  mood: 'happy',
+  lastMessage: 'Your AI assistant is ready to help!',
+  unreadCount: 0,
+};
 
 const timeAgo = (timestamp) => {
   if (!timestamp) return '';
@@ -40,18 +48,21 @@ const timeAgo = (timestamp) => {
   return 'Just now';
 };
 
-// ─── Fetch profile with timeout and retry ──────────────────
-const fetchProfileWithTimeout = (uid, timeoutMs) => {
+// ─── Fetch profile with safe unsub initialization & timeout ───
+const fetchProfileWithTimeout = (uid, timeoutMs = 3000) => {
   return new Promise((resolve, reject) => {
+    let unsub = null;
+
     const timeout = setTimeout(() => {
+      if (typeof unsub === 'function') unsub();
       reject(new Error('Timeout'));
     }, timeoutMs);
 
-    const unsub = onValue(
+    unsub = onValue(
       ref(db, `profiles/${uid}`),
       (snapshot) => {
         clearTimeout(timeout);
-        unsub();
+        if (typeof unsub === 'function') unsub();
         const data = snapshot.val();
         if (data) {
           resolve(data);
@@ -61,7 +72,7 @@ const fetchProfileWithTimeout = (uid, timeoutMs) => {
       },
       (error) => {
         clearTimeout(timeout);
-        unsub();
+        if (typeof unsub === 'function') unsub();
         reject(error);
       }
     );
@@ -70,14 +81,13 @@ const fetchProfileWithTimeout = (uid, timeoutMs) => {
 
 const loadPartnerData = async (partnerId, retryCount = 0) => {
   try {
-    const profile = await fetchProfileWithTimeout(partnerId, 5000);
+    const profile = await fetchProfileWithTimeout(partnerId, 3000);
     return profile;
   } catch (error) {
     console.warn(`⚠️ Error loading partner: ${partnerId}`, error.message);
 
-    if (retryCount < 3) {
+    if (retryCount < 2) {
       const delay = Math.pow(2, retryCount) * 1000;
-      console.log(`🔄 Retrying ${partnerId} in ${delay}ms (attempt ${retryCount + 1}/3)`);
       await new Promise((resolve) => setTimeout(resolve, delay));
       return loadPartnerData(partnerId, retryCount + 1);
     }
@@ -94,10 +104,13 @@ const loadPartnerData = async (partnerId, retryCount = 0) => {
 const Chats = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+
   const [searchQuery, setSearchQuery] = useState('');
   const [results, setResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState({});
+  const [showAiModal, setShowAiModal] = useState(false);
+
   const inputRef = useRef(null);
   const searchTimeout = useRef(null);
   const presenceUnsubRef = useRef(null);
@@ -115,11 +128,17 @@ const Chats = () => {
   const [hasMore, setHasMore] = useState(true);
   const [lastChatKey, setLastChatKey] = useState(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const hasSavedCache = useRef(!!getCache(cacheKey));
 
   useDeletedAccountCheck();
 
-  // ─── Presence listener ────────────────────────────────────────
+  // ─── Fast Pre-fetch profiles as soon as user enters ─────────
+  useEffect(() => {
+    if (user) {
+      prefetchProfilesIndex(user.uid);
+    }
+  }, [user]);
+
+  // ─── Online Presence listener ───────────────────────────────
   useEffect(() => {
     if (!user) return;
     const presenceRef = ref(db, 'presence/online');
@@ -141,8 +160,7 @@ const Chats = () => {
 
   // ─── Load chats with pagination ──────────────────────────────
   const loadChats = useCallback(async (loadMore = false) => {
-    if (!user) return;
-    if (isLoadingMore) return;
+    if (!user || isLoadingMore) return;
 
     setIsLoadingMore(true);
 
@@ -182,17 +200,14 @@ const Chats = () => {
         }))
         .sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
 
-      // Check if we have more
       if (chatList.length < CHAT_CHUNK_SIZE) {
         setHasMore(false);
       }
 
-      // Update last key for pagination
       if (chatList.length > 0) {
         setLastChatKey(chatList[chatList.length - 1].id);
       }
 
-      // ─── Process partners in background ────────────────────
       const processedChats = await Promise.all(
         chatList.map(async (chat) => {
           try {
@@ -217,6 +232,9 @@ const Chats = () => {
             return {
               id: chat.id,
               name: partnerName,
+              avatar: profile.avatar || chat.partnerAvatar,
+              mood: profile.mood || 'neutral',
+              activeSkin: profile.activeSkin,
               lastMessage: displayMessage,
               timestamp: chat.lastUpdated || Date.now(),
               lastSenderId: chat.lastSenderId || '',
@@ -239,23 +257,21 @@ const Chats = () => {
         })
       );
 
-      const validItems = processedChats.filter((item) => item !== null);
+      const validItems = processedChats.filter(Boolean);
 
       if (loadMore) {
-        setRecentChats(prev => [...prev, ...validItems]);
+        setRecentChats((prev) => [...prev, ...validItems]);
       } else {
         setRecentChats(validItems);
         await setCache(cacheKey, validItems, 300);
       }
-
-      setLoadingChats(false);
-      setIsLoadingMore(false);
     } catch (error) {
       console.error('Error loading chats:', error);
+    } finally {
       setLoadingChats(false);
       setIsLoadingMore(false);
     }
-  }, [user, lastChatKey, isLoadingMore, onlineUsers]);
+  }, [user, lastChatKey, isLoadingMore, onlineUsers, cacheKey]);
 
   // ─── Real-time listener for new chats ────────────────────────
   useEffect(() => {
@@ -271,15 +287,11 @@ const Chats = () => {
       userChatsUnsubRef.current = null;
     }
 
-    // Load initial chunk
     loadChats(false);
 
-    // Real-time listener for updates
     userChatsUnsubRef.current = onValue(
       userChatsRef,
       async (snapshot) => {
-        // Just refresh the list on any change
-        // We'll reload from the listener but keep the cache
         const data = snapshot.val();
         if (!data) {
           setRecentChats([]);
@@ -288,7 +300,6 @@ const Chats = () => {
           return;
         }
 
-        // Reset pagination state for full refresh
         setHasMore(true);
         setLastChatKey(null);
         await loadChats(false);
@@ -312,7 +323,7 @@ const Chats = () => {
         userChatsUnsubRef.current = null;
       }
     };
-  }, [user, onlineUsers]);
+  }, [user]);
 
   // ─── Infinite scroll ──────────────────────────────────────────
   const { containerRef, setHasMore: setScrollHasMore } = useInfiniteScroll(
@@ -326,12 +337,12 @@ const Chats = () => {
 
   useEffect(() => {
     setScrollHasMore(hasMore);
-  }, [hasMore]);
+  }, [hasMore, setScrollHasMore]);
 
-  // ─── Search handler with 2‑character threshold ──────────────
+  // ─── Fast Search Handler (1-char threshold & 100ms debounce) ───
   const performSearch = async (queryText) => {
     const trimmed = queryText.trim().toLowerCase();
-    if (trimmed.length < 2) {
+    if (trimmed.length < 1) {
       setResults([]);
       setIsSearching(false);
       return;
@@ -339,8 +350,8 @@ const Chats = () => {
 
     setIsSearching(true);
     try {
-      const users = await searchProfiles(trimmed, user.uid, 20);
-      const withOnline = users.map((u) => ({
+      const searchRes = await searchProfiles(trimmed, user.uid, 20);
+      const withOnline = (searchRes.results || []).map((u) => ({
         ...u,
         isOnline: !!onlineUsers[u.id],
       }));
@@ -353,7 +364,6 @@ const Chats = () => {
     }
   };
 
-  // ─── Debounced search ──────────────────────────────────────────
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     const query = searchQuery.trim().toLowerCase();
@@ -364,15 +374,20 @@ const Chats = () => {
     }
     searchTimeout.current = setTimeout(() => {
       performSearch(query);
-    }, 300);
+    }, 100);
+
     return () => {
       if (searchTimeout.current) clearTimeout(searchTimeout.current);
     };
   }, [searchQuery]);
 
-  // ─── Start chat ────────────────────────────────────────────────
+  // ─── Start chat logic ─────────────────────────────────────────
   const startChat = (selectedUser) => {
     if (!selectedUser) return;
+    if (selectedUser.isAi) {
+      setShowAiModal(true);
+      return;
+    }
     navigate(`/chat/${selectedUser.id}`, {
       state: {
         userName: selectedUser.name,
@@ -385,19 +400,19 @@ const Chats = () => {
     });
   };
 
-  const getMatchReasons = (user) => {
-    if (!user) return [];
+  const getMatchReasons = (userItem) => {
+    if (!userItem) return [];
     const reasons = [];
-    if (user.isOnline) reasons.push('⚡ Active now');
-    if (user.mutualConnections > 0) reasons.push(`👥 ${user.mutualConnections} mutual connections`);
+    if (userItem.isOnline) reasons.push('⚡ Active now');
+    if (userItem.mutualConnections > 0) reasons.push(`👥 ${userItem.mutualConnections} mutual connections`);
     const q = searchQuery.trim().toLowerCase();
-    if (q && user.interests.some((i) => i.toLowerCase().includes(q))) {
+    if (q && userItem.interests?.some((i) => i.toLowerCase().includes(q))) {
       reasons.push('🤖 Shared interests');
     }
-    if (q && user.country.toLowerCase().includes(q)) {
+    if (q && userItem.country?.toLowerCase().includes(q)) {
       reasons.push('📍 Same country');
     }
-    if (q && user.city.toLowerCase().includes(q)) {
+    if (q && userItem.city?.toLowerCase().includes(q)) {
       reasons.push('📍 Same city');
     }
     if (reasons.length === 0) reasons.push('✨ Suggested for you');
@@ -406,7 +421,21 @@ const Chats = () => {
 
   // ─── Render ──────────────────────────────────────────────────
   return (
-    <div className="chats-page">
+    <div className="chats-page" ref={containerRef}>
+      {/* AI Modal for "Coming Soon" */}
+      <Modal
+        isOpen={showAiModal}
+        onClose={() => setShowAiModal(false)}
+        title="ECHO AI Assistant"
+        message="Coming Soon 🤖✨"
+        type="info"
+        actions={
+          <button className="btn-edit" onClick={() => setShowAiModal(false)}>
+            Close
+          </button>
+        }
+      />
+
       <div className="search-container">
         <div className="search-input-wrapper">
           <i className="fas fa-search search-icon" />
@@ -433,6 +462,7 @@ const Chats = () => {
         </div>
       </div>
 
+      {/* Search Results */}
       {searchQuery.trim().length > 0 ? (
         <div className="search-results">
           {isSearching ? (
@@ -457,9 +487,9 @@ const Chats = () => {
                   >
                     <div className="result-avatar">
                       {person.avatar ? (
-                        <img src={person.avatar} alt={person.name} className="avatar-img" />
+                        <img src={person.avatar} alt={person.name} className="user-profile-img" />
                       ) : (
-                        <span className="avatar-text">{person.name[0]?.toUpperCase() || 'U'}</span>
+                        <div className="avatar-placeholder">{person.name?.[0]?.toUpperCase() || 'U'}</div>
                       )}
                       <span className={`presence-dot ${person.isOnline ? 'online' : 'offline'}`} />
                     </div>
@@ -474,10 +504,10 @@ const Chats = () => {
                         {person.country} {person.city && `· ${person.city}`}
                       </div>
                       <div className="result-tags">
-                        {person.interests.slice(0, 2).map((interest, i) => (
+                        {(person.interests || []).slice(0, 2).map((interest, i) => (
                           <span key={i} className="result-tag">#{interest}</span>
                         ))}
-                        {person.skills.slice(0, 1).map((skill, i) => (
+                        {(person.skills || []).slice(0, 1).map((skill, i) => (
                           <span key={i} className="result-tag skill">⚡{skill}</span>
                         ))}
                       </div>
@@ -489,7 +519,7 @@ const Chats = () => {
                     </div>
                     <div className="result-echomoji">
                       <ECHOMOJI
-                        mood={person.mood || 'neutral'}
+                        mood={person.mood || 'happy'}
                         skin={person.activeSkin ? getSkinById(person.activeSkin) : null}
                         size={40}
                         interactive={false}
@@ -511,13 +541,36 @@ const Chats = () => {
           )}
         </div>
       ) : (
-        <div className="recent-chats" ref={containerRef}>
+        /* Recent Conversations List */
+        <div className="recent-chats">
           <div className="section-header">
             <span>Recent Conversations</span>
           </div>
+
+          {/* Global ECHO AI Floating Card */}
+          <div className="chat-item ai-item floating-ai-card" onClick={() => startChat(ECHO_AI_USER)}>
+            <div className="chat-avatar">
+              <div className="chat-avatar-container ai-avatar-frame floating-ai-avatar">
+                <div className="echomoji-wrapper">
+                  <ECHOMOJI mood="happy" size={52} interactive={false} animated={true} />
+                </div>
+              </div>
+              <span className="presence-dot online" />
+            </div>
+            <div className="chat-info">
+              <div className="chat-title-row">
+                <span className="chat-name">{ECHO_AI_USER.name}</span>
+                <span className="ai-badge">AI</span>
+              </div>
+              <div className="chat-last">{ECHO_AI_USER.lastMessage}</div>
+            </div>
+            <div className="chat-time">Always Active</div>
+          </div>
+
+          {/* Skeleton Loaders during fetch */}
           {loadingChats && recentChats.length === 0 ? (
             <div className="no-chats">
-              {[...Array(5)].map((_, i) => (
+              {Array.from({ length: 5 }).map((_, i) => (
                 <SkeletonChatItem key={i} />
               ))}
             </div>
@@ -528,11 +581,17 @@ const Chats = () => {
                 return (
                   <div
                     key={chat.id}
-                    className="chat-item"
-                    onClick={() => navigate(`/chat/${chat.id}`)}
+                    className="chat-item regular-chat-item"
+                    onClick={() => startChat(chat)}
                   >
+                    {/* Regular Contact: Left Profile Picture */}
                     <div className="chat-avatar">
-                      {chat.name?.[0]?.toUpperCase() || 'U'}
+                      {chat.avatar ? (
+                        <img src={chat.avatar} alt={chat.name} className="user-profile-img" />
+                      ) : (
+                        <div className="avatar-placeholder">{chat.name?.[0]?.toUpperCase() || 'U'}</div>
+                      )}
+                      <span className={`presence-dot ${chat.online ? 'online' : 'offline'}`} />
                       {chat.unreadCount > 0 && (
                         <span className="unread-badge">{chat.unreadCount}</span>
                       )}
@@ -540,17 +599,30 @@ const Chats = () => {
                         <span className="archived-badge" title="Account deleted – archived">📁</span>
                       )}
                     </div>
+
+                    {/* Middle: Chat Info */}
                     <div className="chat-info">
-                      <div className="chat-name">
-                        {chat.name || 'Unknown'}
-                        {chat.isDeleted && <span className="archived-label"> (archived)</span>}
+                      <div className="chat-title-row">
+                        <span className="chat-name">
+                          {chat.name || 'Unknown'}
+                          {chat.isDeleted && <span className="archived-label"> (archived)</span>}
+                        </span>
                       </div>
                       <div className="chat-last">{chat.lastMessage || 'Start chatting...'}</div>
                     </div>
-                    <div className="chat-time">{timeAgo(chat.timestamp)}</div>
-                    <div className="chat-presence-dot-small">
-                      <span className={`presence-dot ${chat.online ? 'online' : 'offline'}`} />
+
+                    {/* Middle-Right: Separate EchoMoji Display */}
+                    <div className="chat-echomoji-middle">
+                      <ECHOMOJI
+                        mood={chat.mood || 'neutral'}
+                        skin={chat.activeSkin ? getSkinById(chat.activeSkin) : null}
+                        size={38}
+                        interactive={false}
+                      />
                     </div>
+
+                    {/* Right: Timestamp */}
+                    <div className="chat-time">{timeAgo(chat.timestamp)}</div>
                   </div>
                 );
               })}
@@ -573,6 +645,131 @@ const Chats = () => {
           )}
         </div>
       )}
+
+      {/* Embedded CSS Overrides for Smooth Floating Animations */}
+      <style>{`
+        /* Smooth Floating Animation Keyframes */
+        @keyframes floatCard {
+          0%, 100% {
+            transform: translateY(0px);
+            box-shadow: 0 4px 20px rgba(108, 60, 225, 0.15);
+          }
+          50% {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(108, 60, 225, 0.3);
+          }
+        }
+
+        @keyframes floatAvatar {
+          0%, 100% {
+            transform: translateY(0px) scale(1);
+          }
+          50% {
+            transform: translateY(-3px) scale(1.04);
+          }
+        }
+
+        /* Floating AI Card */
+        .chat-item.ai-item.floating-ai-card {
+          background: rgba(108, 60, 225, 0.08);
+          border: 1px solid rgba(124, 58, 237, 0.3);
+          border-radius: 14px;
+          padding: 10px 14px;
+          margin-bottom: 12px;
+          animation: floatCard 4s ease-in-out infinite;
+          transition: background 0.2s ease, border-color 0.2s ease;
+        }
+
+        .chat-item.ai-item.floating-ai-card:hover {
+          background: rgba(108, 60, 225, 0.18);
+          border-color: rgba(124, 58, 237, 0.5);
+        }
+
+        /* Floating AI Avatar Frame */
+        .chat-avatar-container.ai-avatar-frame.floating-ai-avatar {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          overflow: hidden;
+          background: radial-gradient(circle, #431d93 0%, #170d38 100%);
+          border: 1px solid rgba(138, 92, 246, 0.5);
+          box-shadow: 0 0 12px rgba(108, 60, 225, 0.4);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          animation: floatAvatar 3s ease-in-out infinite;
+        }
+
+        .echomoji-wrapper {
+          width: 100%;
+          height: 100%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transform: scale(1.15);
+        }
+
+        /* User Profile Image & Placeholder */
+        .user-profile-img {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          object-fit: cover;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .avatar-placeholder {
+          width: 48px;
+          height: 48px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #3a2b5c, #231b36);
+          color: #ffffff;
+          font-weight: 700;
+          font-size: 18px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        /* Layout structure for regular chat item */
+        .regular-chat-item {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .chat-echomoji-middle {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin-left: auto;
+          margin-right: 8px;
+          flex-shrink: 0;
+        }
+
+        .chat-title-row {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .ai-badge {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          background: linear-gradient(135deg, #7C3AED, #EC4899);
+          color: #ffffff;
+          font-size: 10px;
+          font-weight: 800;
+          letter-spacing: 0.5px;
+          padding: 2px 6px;
+          border-radius: 6px;
+          line-height: 1;
+          height: 16px;
+          box-shadow: 0 2px 4px rgba(124, 58, 237, 0.3);
+        }
+      `}</style>
     </div>
   );
 };

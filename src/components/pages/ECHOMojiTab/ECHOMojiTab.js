@@ -9,7 +9,26 @@ import Modal from '../../common/Modal';
 import { SKINS, getSkinById } from '../../../constants/echomoji';
 import { useNavigate } from 'react-router-dom';
 import SkeletonLoader from '../../common/SkeletonLoader';
-import { getCache, setCache } from '../../../services/cacheService';
+
+// Helper for sub-millisecond synchronous storage reads/writes
+const STORAGE_PREFIX = 'echo_cache_';
+
+const getFastLocal = (key) => {
+  try {
+    const item = localStorage.getItem(STORAGE_PREFIX + key);
+    return item ? JSON.parse(item) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const setFastLocal = (key, val) => {
+  try {
+    localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(val));
+  } catch (e) {
+    console.error('FastCache write error', e);
+  }
+};
 
 // Isolated countdown badge to avoid re-rendering parent component on ticks
 const CountdownBadge = React.memo(({ purchase }) => {
@@ -121,14 +140,19 @@ const SkinItem = React.memo(({ skin, isOwned, isActive, purchase, onApply, onPur
 
 const ECHOMojiTab = () => {
   const { user } = useAuth();
-  const [ownedSkins, setOwnedSkins] = useState([]);
-  const [activeSkin, setActiveSkin] = useState(null);
-  const [coins, setCoins] = useState(null); // null indicates loading state
-  const [currentMood, setCurrentMood] = useState(null); // null indicates loading state
-  const [purchaseDataMap, setPurchaseDataMap] = useState({});
   const navigate = useNavigate();
 
-  const cacheKey = useMemo(() => `echomoji_${user?.uid}`, [user?.uid]);
+  // Instant local memory fetch on mount (0ms latency)
+  const initialCache = useMemo(() => {
+    if (!user?.uid) return null;
+    return getFastLocal(`echomoji_${user.uid}`);
+  }, [user?.uid]);
+
+  const [ownedSkins, setOwnedSkins] = useState(() => initialCache?.owned || []);
+  const [activeSkin, setActiveSkin] = useState(() => initialCache?.active || null);
+  const [coins, setCoins] = useState(() => (typeof initialCache?.coins === 'number' ? initialCache.coins : null));
+  const [currentMood, setCurrentMood] = useState(() => initialCache?.mood || null);
+  const [purchaseDataMap, setPurchaseDataMap] = useState(() => initialCache?.purchases || {});
 
   const [modal, setModal] = useState({
     isOpen: false,
@@ -140,75 +164,69 @@ const ECHOMojiTab = () => {
   const showModal = (title, message, type = 'info') => setModal({ isOpen: true, title, message, type });
   const closeModal = () => setModal((prev) => ({ ...prev, isOpen: false }));
 
-  // Instant Hydration + Realtime Firebase Listeners
+  // Background Realtime Sync
   useEffect(() => {
     if (!user?.uid) return;
 
     let isMounted = true;
+    const cacheKey = `echomoji_${user.uid}`;
 
-    // 1. Instant Cache Load
-    getCache(cacheKey).then((cached) => {
-      if (cached && isMounted) {
-        setOwnedSkins(cached.owned || []);
-        setActiveSkin(cached.active || null);
-        setCoins(cached.coins ?? 350);
-      }
+    // 1. Real-time User Skins Listener
+    const userSkinsRef = ref(db, `userSkins/${user.uid}`);
+    const unsubSkins = onValue(userSkinsRef, (snap) => {
+      if (!isMounted) return;
+      const data = snap.val() || {};
+      const newOwned = data.owned || [];
+      const newActive = data.active || null;
+      const newCoins = typeof data.coins === 'number' ? data.coins : 350;
+      const newPurchases = data.purchases || {};
+
+      setOwnedSkins(newOwned);
+      setActiveSkin(newActive);
+      setCoins(newCoins);
+      setPurchaseDataMap(newPurchases);
+
+      const updatedCache = {
+        ...(getFastLocal(cacheKey) || {}),
+        owned: newOwned,
+        active: newActive,
+        coins: newCoins,
+        purchases: newPurchases,
+      };
+      setFastLocal(cacheKey, updatedCache);
     });
 
-    // 2. Real-time User Skins Listener
-    const userSkinsRef = ref(db, `userSkins/${user.uid}`);
-    const unsubSkins = onValue(
-      userSkinsRef,
-      (snap) => {
-        if (!isMounted) return;
-        const data = snap.val();
-        let payload;
-        if (data) {
-          payload = {
-            owned: data.owned || [],
-            active: data.active || null,
-            coins: typeof data.coins === 'number' ? data.coins : 350,
-          };
-          if (data.purchases) setPurchaseDataMap(data.purchases);
-        } else {
-          payload = { owned: [], active: null, coins: 350 };
-          update(ref(db, `userSkins/${user.uid}`), payload);
-        }
-        setOwnedSkins(payload.owned);
-        setActiveSkin(payload.active);
-        setCoins(payload.coins);
-        setCache(cacheKey, payload);
-      },
-      (err) => console.error('Error fetching skins:', err)
-    );
-
-    // 3. Real-time Profile Listener for Mood Changes
+    // 2. Real-time Profile Mood Listener
     const profileRef = ref(db, `profiles/${user.uid}`);
-    const unsubProfile = onValue(
-      profileRef,
-      (snap) => {
-        if (!isMounted) return;
-        const data = snap.val();
-        if (data?.mood) {
-          setCurrentMood(data.mood);
-        } else {
-          setCurrentMood('neutral');
-        }
-      },
-      (err) => console.error('Error fetching mood:', err)
-    );
+    const unsubProfile = onValue(profileRef, (snap) => {
+      if (!isMounted) return;
+      const data = snap.val();
+      const newMood = data?.mood || 'neutral';
+
+      setCurrentMood(newMood);
+
+      const updatedCache = {
+        ...(getFastLocal(cacheKey) || {}),
+        mood: newMood,
+      };
+      setFastLocal(cacheKey, updatedCache);
+    });
 
     return () => {
       isMounted = false;
       unsubSkins();
       unsubProfile();
     };
-  }, [user?.uid, cacheKey]);
+  }, [user?.uid]);
 
   const handleMoodChange = useCallback(
     (mood) => {
       if (!user) return;
       setCurrentMood(mood);
+      const cacheKey = `echomoji_${user.uid}`;
+      const currentCache = getFastLocal(cacheKey) || {};
+      setFastLocal(cacheKey, { ...currentCache, mood });
+
       update(ref(db, `profiles/${user.uid}`), { mood }).catch((err) =>
         console.error('Failed to update mood:', err)
       );
@@ -229,10 +247,12 @@ const ECHOMojiTab = () => {
       setOwnedSkins(newOwned);
       setCoins(newCoins);
 
-      update(ref(db, `userSkins/${user.uid}`), {
+      const updates = {
         owned: newOwned,
         coins: newCoins,
-      });
+      };
+
+      update(ref(db, `userSkins/${user.uid}`), updates);
 
       const skin = SKINS.find((s) => s.id === skinId);
       if (skin?.isLimited) {
@@ -336,7 +356,6 @@ const ECHOMojiTab = () => {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
           <div style={{ fontSize: '16px', fontWeight: 700 }}>🛍️ Skins</div>
           <div style={{ fontSize: '14px', color: '#F59E0B', display: 'flex', alignItems: 'center', gap: '8px' }}>
-            {/* Targeted Skeleton for Coins */}
             {coins === null ? (
               <div
                 style={{

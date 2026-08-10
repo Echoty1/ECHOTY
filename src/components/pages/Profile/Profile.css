@@ -286,3 +286,48 @@
     flex: 1 0 100%;
   }
 }
+
+.location-edit-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-top: 10px;
+}
+
+.profile-select {
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(22, 18, 38, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: #ffffff;
+  font-size: 14px;
+  outline: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.profile-select:focus {
+  border-color: #8b5cf6;
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.3);
+}
+
+.profile-select:disabled {
+  background: rgba(255, 255, 255, 0.04);
+  color: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.05);
+  cursor: not-allowed;
+}
+
+/* Ensure options look readable on dark backgrounds */
+.profile-select option {
+  background-color: #161226;
+  color: #ffffff;
+  padding: 8px;
+}
+
+@media (max-width: 600px) {
+  .location-edit-grid {
+    grid-template-columns: 1fr;
+  }
+}

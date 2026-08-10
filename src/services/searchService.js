@@ -4,63 +4,58 @@ import { ref, query, orderByChild, startAt, endAt, limitToFirst, get } from 'fir
 import { getCache, setCache } from './cacheService';
 import { getKeys, removeItem } from './storageService';
 
-const SEARCH_TIMEOUT = 5000;
+const SEARCH_TIMEOUT = 3000;
 const SEARCH_CACHE_TTL = 5 * 60; // 5 minutes
 
-// ─── Local memory cache for profiles (fallback) ─────────────
-let allProfilesCache = null;
-let allProfilesCacheTime = 0;
-const ALL_PROFILES_TTL = 60 * 60; // 1 hour
+let fullIndexCache = null;
 
 /**
- * Helper to fetch all profiles as a fallback option when indexed query fails
+ * Fast pre-fetches profile search index as soon as user opens the app or website
  */
-const fetchAllProfiles = async () => {
-  const now = Date.now();
-  if (allProfilesCache && (now - allProfilesCacheTime) < ALL_PROFILES_TTL * 1000) {
-    return allProfilesCache;
-  }
-
+export const prefetchProfilesIndex = async (currentUserId) => {
   try {
-    const snapshot = await get(ref(db, 'profiles'));
+    const cached = await getCache('search_full_index');
+    if (cached) {
+      fullIndexCache = cached;
+      return;
+    }
+
+    const profilesRef = ref(db, 'profiles');
+    const q = query(profilesRef, orderByChild('searchName'), limitToFirst(150));
+    const snapshot = await get(q);
     const data = snapshot.val();
-    if (!data) return [];
 
-    const profiles = Object.entries(data).map(([uid, profile]) => ({
-      id: uid,
-      name: profile.name || profile.displayName || profile.username || 'Unknown User',
-      username: profile.username || '',
-      displayName: profile.displayName || '',
-      country: profile.country || '',
-      city: profile.city || '',
-      interests: profile.interests || [],
-      skills: profile.skills || [],
-      status: profile.status || 'Active',
-      lastActive: profile.lastActive || 'Just now',
-      bio: profile.bio || '',
-      avatar: profile.avatar || '',
-      mood: profile.mood || 'neutral',
-      activeSkin: profile.activeSkin || null,
-      searchName: profile.searchName || '',
-    }));
+    if (data) {
+      const parsed = Object.entries(data)
+        .map(([id, p]) => ({
+          id,
+          name: p.name || p.displayName || p.username || 'Unknown User',
+          username: p.username || '',
+          displayName: p.displayName || '',
+          country: p.country || '',
+          city: p.city || '',
+          interests: p.interests || [],
+          skills: p.skills || [],
+          status: p.status || 'Active',
+          lastActive: p.lastActive || 'Just now',
+          bio: p.bio || '',
+          avatar: p.avatar || '',
+          mood: p.mood || 'neutral',
+          activeSkin: p.activeSkin || null,
+          searchName: p.searchName || (p.name ? p.name.toLowerCase() : ''),
+        }))
+        .filter((p) => p.id !== currentUserId);
 
-    allProfilesCache = profiles;
-    allProfilesCacheTime = now;
-    return profiles;
+      fullIndexCache = parsed;
+      await setCache('search_full_index', parsed, SEARCH_CACHE_TTL);
+    }
   } catch (err) {
-    console.error('❌ Failed to fetch all profiles:', err);
-    return [];
+    console.warn('⚡ Fast prefetch skipped or offline:', err.message);
   }
 };
 
 /**
- * Search profiles with pagination support and 2-character threshold
- * @param {string} queryText - The search term (min 2 characters)
- * @param {string} currentUserId - UID of the logged-in user
- * @param {number} limit - Max results per page (default 20)
- * @param {number} offset - Number of results to skip (default 0)
- * @param {number} timeoutMs - Timeout in milliseconds (default 5000)
- * @returns {Promise<{results: Array, total: number, hasMore: boolean}>}
+ * Ultra-fast profile search with memory pre-fetch, 1-char threshold & caching
  */
 export const searchProfiles = async (
   queryText,
@@ -70,14 +65,14 @@ export const searchProfiles = async (
   timeoutMs = SEARCH_TIMEOUT
 ) => {
   const trimmed = queryText.trim().toLowerCase();
-  if (trimmed.length < 2) {
+  if (!trimmed) {
     return { results: [], total: 0, hasMore: false };
   }
 
   const cacheKey = `search_users_${trimmed}`;
   const cached = await getCache(cacheKey);
   if (cached) {
-    const filtered = cached.filter(user => user.id !== currentUserId);
+    const filtered = cached.filter((user) => user.id !== currentUserId);
     const paginated = filtered.slice(offset, offset + limit);
     return {
       results: paginated,
@@ -86,7 +81,27 @@ export const searchProfiles = async (
     };
   }
 
-  // ─── Try the indexed Firebase query first ──────────────
+  // Check pre-fetched local memory cache first for instant sub-millisecond return
+  if (fullIndexCache && fullIndexCache.length > 0) {
+    const matched = fullIndexCache.filter(
+      (u) =>
+        u.id !== currentUserId &&
+        (u.name?.toLowerCase().includes(trimmed) ||
+          u.searchName?.toLowerCase().includes(trimmed) ||
+          u.username?.toLowerCase().includes(trimmed))
+    );
+    if (matched.length > 0) {
+      await setCache(cacheKey, matched, SEARCH_CACHE_TTL);
+      const paginated = matched.slice(offset, offset + limit);
+      return {
+        results: paginated,
+        total: matched.length,
+        hasMore: offset + limit < matched.length,
+      };
+    }
+  }
+
+  // Firebase Realtime DB Query Fallback
   try {
     const profilesRef = ref(db, 'profiles');
     const q = query(
@@ -94,7 +109,7 @@ export const searchProfiles = async (
       orderByChild('searchName'),
       startAt(trimmed),
       endAt(trimmed + '\uf8ff'),
-      limitToFirst(limit + offset)
+      limitToFirst(limit + offset + 5)
     );
 
     const snapshot = await Promise.race([
@@ -124,7 +139,7 @@ export const searchProfiles = async (
           activeSkin: profile.activeSkin || null,
           searchName: profile.searchName || '',
         }))
-        .filter(u => u.id !== currentUserId);
+        .filter((u) => u.id !== currentUserId);
 
       if (allResults.length > 0) {
         await setCache(cacheKey, allResults, SEARCH_CACHE_TTL);
@@ -138,62 +153,28 @@ export const searchProfiles = async (
       };
     }
   } catch (err) {
-    console.warn(`⚠️ Indexed query failed: ${err.message}. Falling back to local search.`);
+    console.warn(`⚠️ Indexed query fallback: ${err.message}`);
   }
 
-  // ─── Fallback: local search over all profiles ──────────────
-  const allProfiles = await fetchAllProfiles();
-  if (!allProfiles.length) {
-    return { results: [], total: 0, hasMore: false };
-  }
-
-  const filtered = allProfiles
-    .filter(p => p.searchName && p.searchName.startsWith(trimmed))
-    .filter(p => p.id !== currentUserId);
-
-  if (filtered.length > 0) {
-    await setCache(cacheKey, filtered, SEARCH_CACHE_TTL);
-  }
-
-  const paginated = filtered.slice(offset, offset + limit);
-  return {
-    results: paginated,
-    total: filtered.length,
-    hasMore: offset + limit < filtered.length,
-  };
+  return { results: [], total: 0, hasMore: false };
 };
 
 /**
- * Searches users or messages with a strict minimum 2-character limit
- * and layered cache for sub-millisecond repeated responses.
- * @param {string} queryTerm - Search input
- * @param {string} type - Search domain ('users' | 'messages')
- * @param {string} currentUserId - Current logged-in user ID
+ * Searches users or messages with instant cache
  */
 export const searchEntities = async (queryTerm, type = 'users', currentUserId = null) => {
   const trimmed = queryTerm.trim();
-
-  // 1. Minimum 2-character threshold check
-  if (!trimmed || trimmed.length < 2) {
-    return [];
-  }
+  if (!trimmed) return [];
 
   const cacheKey = `search_${type}_${trimmed.toLowerCase()}`;
-
-  // 2. Instant Memory/Storage Cache Check
   const cachedResults = await getCache(cacheKey);
-  if (cachedResults) {
-    return cachedResults;
-  }
+  if (cachedResults) return cachedResults;
 
-  // 3. Execution flow
   try {
     if (type === 'users') {
       const response = await searchProfiles(trimmed, currentUserId);
       return response.results;
     }
-    
-    // Default or unhandled search types return empty set
     return [];
   } catch (error) {
     console.error('Search error:', error);

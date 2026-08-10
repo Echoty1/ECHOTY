@@ -1,11 +1,32 @@
 // src/components/pages/Profile/Profile.js
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { db } from '../../../services/firebase';
 import { ref, onValue, update, set } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
+import { Country, City } from 'country-state-city';
 import './Profile.css';
+
+// Synchronous fast storage helpers (<1ms response time)
+const STORAGE_PREFIX = 'echo_cache_';
+
+const getFastLocal = (key) => {
+  try {
+    const item = localStorage.getItem(STORAGE_PREFIX + key);
+    return item ? JSON.parse(item) : null;
+  } catch (e) {
+    return null;
+  }
+};
+
+const setFastLocal = (key, val) => {
+  try {
+    localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(val));
+  } catch (e) {
+    console.error('FastCache write error', e);
+  }
+};
 
 // Reusable Pulse Skeleton Block
 const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', style = {} }) => (
@@ -23,10 +44,17 @@ const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', 
 
 const Profile = () => {
   const { user } = useAuth();
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+
+  // Instant local memory state initialization (0ms frame render)
+  const cachedProfile = useMemo(() => {
+    if (!user?.uid) return null;
+    return getFastLocal(`profile_${user.uid}`);
+  }, [user?.uid]);
+
+  const [profile, setProfile] = useState(() => cachedProfile);
+  const [loading, setLoading] = useState(() => !cachedProfile);
   const [editing, setEditing] = useState(false);
-  const [editData, setEditData] = useState({
+  const [editData, setEditData] = useState(() => cachedProfile || {
     name: '',
     avatar: '',
     mood: 'neutral',
@@ -35,34 +63,85 @@ const Profile = () => {
     interests: [],
     skills: [],
     country: '',
+    countryCode: '',
     city: '',
   });
+
   const [tagInput, setTagInput] = useState('');
   const [skillInput, setSkillInput] = useState('');
   const fileInputRef = useRef(null);
   const tagInputRef = useRef(null);
   const skillInputRef = useRef(null);
 
-  // Real-time Profile Listener
+  // ─── Country & City Data Handlers ────────────────────────────
+  const countriesList = useMemo(() => Country.getAllCountries(), []);
+
+  // Compute ISO Code for current country selection
+  const matchedCountryCode = useMemo(() => {
+    if (editData.countryCode) return editData.countryCode;
+    if (editData.country) {
+      const found = countriesList.find(
+        (c) => c.name.toLowerCase() === editData.country.toLowerCase()
+      );
+      return found ? found.isoCode : '';
+    }
+    return '';
+  }, [editData.country, editData.countryCode, countriesList]);
+
+  // Cities list calculated strictly based on selected country
+  const citiesList = useMemo(() => {
+    return matchedCountryCode ? City.getCitiesOfCountry(matchedCountryCode) : [];
+  }, [matchedCountryCode]);
+
+  const handleCountrySelect = (e) => {
+    const selectedIsoCode = e.target.value;
+    if (!selectedIsoCode) {
+      setEditData({
+        ...editData,
+        country: '',
+        countryCode: '',
+        city: '',
+      });
+      return;
+    }
+
+    const countryObj = Country.getCountryByCode(selectedIsoCode);
+    setEditData({
+      ...editData,
+      country: countryObj ? countryObj.name : '',
+      countryCode: selectedIsoCode,
+      city: '', // Reset city on country change
+    });
+  };
+
+  const handleCitySelect = (e) => {
+    setEditData({
+      ...editData,
+      city: e.target.value,
+    });
+  };
+
+  // Background Real-time Profile Listener
   useEffect(() => {
     if (!user?.uid) return;
 
+    const cacheKey = `profile_${user.uid}`;
     const profileRef = ref(db, `profiles/${user.uid}`);
+
     const unsubscribe = onValue(
       profileRef,
       async (snapshot) => {
+        let safeData;
         if (snapshot.exists()) {
           const data = snapshot.val();
-          const safeData = {
+          safeData = {
             ...data,
             name: data.name || data.username || data.displayName || user.displayName || 'User',
             interests: data.interests || [],
             skills: data.skills || [],
           };
-          setProfile(safeData);
-          setEditData((prev) => (editing ? prev : safeData));
         } else {
-          const defaultProfile = {
+          safeData = {
             name: user.displayName || user.email?.split('@')[0] || 'User',
             avatar: '',
             mood: 'neutral',
@@ -71,14 +150,17 @@ const Profile = () => {
             interests: [],
             skills: [],
             country: '',
+            countryCode: '',
             city: '',
             lastActive: Date.now(),
             createdAt: Date.now(),
           };
-          await set(profileRef, defaultProfile);
-          setProfile(defaultProfile);
-          setEditData(defaultProfile);
+          await set(profileRef, safeData);
         }
+
+        setProfile(safeData);
+        setFastLocal(cacheKey, safeData);
+        if (!editing) setEditData(safeData);
         setLoading(false);
       },
       (err) => {
@@ -93,10 +175,13 @@ const Profile = () => {
   const handleSave = async () => {
     if (!user) return;
     try {
+      const cacheKey = `profile_${user.uid}`;
+      setProfile(editData);
+      setFastLocal(cacheKey, editData);
+      setEditing(false);
+
       const profileRef = ref(db, `profiles/${user.uid}`);
       await update(profileRef, editData);
-      setProfile(editData);
-      setEditing(false);
     } catch (err) {
       console.error('Error saving profile:', err);
     }
@@ -224,21 +309,59 @@ const Profile = () => {
           <div className="profile-name">{profile?.name || 'User'}</div>
         )}
 
-        {/* Location */}
+        {/* Location Dropdown Options */}
         {editing ? (
           <div className="profile-location-inputs">
-            <input
-              type="text"
-              value={editData.country || ''}
-              onChange={(e) => setEditData({ ...editData, country: e.target.value })}
-              placeholder="Country"
-            />
-            <input
-              type="text"
+            {/* Country Dropdown */}
+            <select
+              value={matchedCountryCode}
+              onChange={handleCountrySelect}
+              style={{
+                flex: 1,
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '8px',
+                padding: '8px 10px',
+                color: '#fff',
+                fontSize: '13px',
+                outline: 'none',
+              }}
+            >
+              <option value="" style={{ background: '#12121a', color: '#fff' }}>-- Select Country --</option>
+              {countriesList.map((c) => (
+                <option key={c.isoCode} value={c.isoCode} style={{ background: '#12121a', color: '#fff' }}>
+                  {c.flag} {c.name}
+                </option>
+              ))}
+            </select>
+
+            {/* Dependent City Dropdown */}
+            <select
               value={editData.city || ''}
-              onChange={(e) => setEditData({ ...editData, city: e.target.value })}
-              placeholder="City"
-            />
+              onChange={handleCitySelect}
+              disabled={!matchedCountryCode}
+              style={{
+                flex: 1,
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '8px',
+                padding: '8px 10px',
+                color: '#fff',
+                fontSize: '13px',
+                outline: 'none',
+                opacity: matchedCountryCode ? 1 : 0.5,
+                cursor: matchedCountryCode ? 'pointer' : 'not-allowed',
+              }}
+            >
+              <option value="" style={{ background: '#12121a', color: '#fff' }}>
+                {!matchedCountryCode ? 'Select country first' : '-- Select City --'}
+              </option>
+              {citiesList.map((city, idx) => (
+                <option key={`${city.name}-${idx}`} value={city.name} style={{ background: '#12121a', color: '#fff' }}>
+                  {city.name}
+                </option>
+              ))}
+            </select>
           </div>
         ) : loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0' }}>
