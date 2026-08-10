@@ -3,8 +3,11 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@capacitor/android": "^8.5.0",
+    "@capacitor/preferences": "^8.0.1",
     "firebase": "^10.12.0",
     "react": "^18.3.0",
+    "react-device-detect": "^2.2.3",
     "react-dom": "^18.3.0",
     "react-router-dom": "^6.23.0"
   },
@@ -15,6 +18,8 @@
     "eject": "react-scripts eject"
   },
   "devDependencies": {
+    "@capacitor/cli": "^8.5.0",
+    "@capacitor/core": "^8.5.0",
     "react-scripts": "5.0.1"
   },
   "browserslist": {

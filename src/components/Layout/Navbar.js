@@ -1,12 +1,12 @@
 // src/components/Layout/Navbar.js
-import React, { useEffect } from 'react';
+import React, { useEffect, memo } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useProfile } from '../../contexts/ProfileContext';
 import ECHOMOJI from '../UI/ECHOMOJI';
 import { getSkinById } from '../../constants/echomoji';
 
-const Navbar = () => {
+const Navbar = memo(() => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
@@ -15,12 +15,11 @@ const Navbar = () => {
   const pathParts = location.pathname.split('/');
   const userId = pathParts[1] === 'chat' ? pathParts[2] : undefined;
   const isChatRoute = location.pathname.startsWith('/chat/');
-  
 
   // ─── Use Profile Context ─────────────────────────────────
   const { profiles, presence, loading, fetchProfile, getProfile, isOnline } = useProfile();
 
-  // ─── Fetch profiles (only once) ─────────────────────────
+  // ─── Fetch profiles ──────────────────────────────────────
   useEffect(() => {
     if (user?.uid) fetchProfile(user.uid);
   }, [user?.uid, fetchProfile]);
@@ -50,9 +49,6 @@ const Navbar = () => {
 
   const isLoadingOwn = loading && !ownProfile;
   const isLoadingPartner = isChatRoute && loading && !partnerProfile;
-
-  // ─── Log for debugging (optional) ────────────────────────
-  console.log('🔁 Navbar updated:', { partnerName, partnerIsOnline, echomoji });
 
   return (
     <nav
@@ -269,6 +265,8 @@ const Navbar = () => {
       </div>
     </nav>
   );
-};
+});
+
+Navbar.displayName = 'Navbar';
 
 export default Navbar;

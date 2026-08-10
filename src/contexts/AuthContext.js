@@ -17,13 +17,41 @@ export const AuthProvider = ({ children }) => {
           const uid = firebaseUser.uid;
           console.log('👤 User authenticated:', uid);
 
+          // ✅ Set loading to false IMMEDIATELY – let the user in!
+          // Profile data will load in the background.
+          setLoading(false);
+
           // Presence
           const onlineRef = ref(db, `presence/online/${uid}`);
           set(onlineRef, true).catch(() => {});
           onDisconnect(onlineRef).set(false);
 
+          // ─── Set a basic user object immediately ──────────
+          // This allows the app to render instantly with fallback data.
+          const baseUser = {
+            uid: firebaseUser.uid,
+            email: firebaseUser.email,
+            displayName: firebaseUser.displayName,
+            photoURL: firebaseUser.photoURL,
+            emailVerified: firebaseUser.emailVerified,
+            // Fallback profile data (will be overwritten)
+            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
+            avatar: firebaseUser.photoURL || '',
+            mood: 'neutral',
+            activeSkin: null,
+            bio: '',
+            interests: [],
+            skills: [],
+            country: '',
+            city: '',
+            status: '🟢 Active',
+            lastActive: Date.now(),
+          };
+          setUser(baseUser);
+
           const profileRef = ref(db, `profiles/${uid}`);
 
+          // ─── Load profile in the background ──────────────
           const unsubscribe = onValue(
             profileRef,
             (snapshot) => {
@@ -68,9 +96,14 @@ export const AuthProvider = ({ children }) => {
                   Object.assign(profileData, updatedData);
                 }
 
-                // ─── Set user with merged data ────────────────
-                setUser({ ...firebaseUser, ...profileData });
-                setLoading(false);
+                // ─── Update user with full profile data ──────
+                setUser((prev) => ({
+                  ...prev,
+                  ...profileData,
+                  // Ensure displayName is preserved
+                  displayName: firebaseUser.displayName || profileData.name || prev?.name || 'User',
+                  photoURL: firebaseUser.photoURL || profileData.avatar || '',
+                }));
               } else {
                 // ─── New user: create profile ────────────────
                 const name = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
@@ -78,7 +111,7 @@ export const AuthProvider = ({ children }) => {
                 const newProfile = {
                   name,
                   searchName: name.toLowerCase(),
-                  avatar: '',
+                  avatar: firebaseUser.photoURL || '',
                   mood: 'neutral',
                   activeSkin: null,
                   bio: 'New to ECHO! 🌊',
@@ -90,16 +123,19 @@ export const AuthProvider = ({ children }) => {
                   lastActive: Date.now(),
                   createdAt: Date.now(),
                 };
-                set(profileRef, newProfile)
-                  .then(() => {
-                    setUser({ ...firebaseUser, ...newProfile });
-                    setLoading(false);
-                  })
-                  .catch((err) => {
-                    console.error('Error creating profile:', err);
-                    setLoading(false);
-                  });
-                // Create auxiliary nodes
+
+                // Update user immediately with new profile data
+                setUser((prev) => ({
+                  ...prev,
+                  ...newProfile,
+                }));
+
+                // Save to Firebase (non-blocking)
+                set(profileRef, newProfile).catch((err) => {
+                  console.error('Error creating profile:', err);
+                });
+
+                // Create auxiliary nodes (non-blocking)
                 Promise.all([
                   set(ref(db, `accounts/${uid}`), {
                     email: firebaseUser.email,
@@ -119,7 +155,7 @@ export const AuthProvider = ({ children }) => {
             },
             (error) => {
               console.error('❌ Profile listener error:', error);
-              setLoading(false);
+              // Keep the base user even if profile fails
             }
           );
 

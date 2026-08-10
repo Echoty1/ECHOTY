@@ -1,6 +1,7 @@
 // src/components/pages/Other/Privacy.js
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { getItem, setItem } from '../../../services/storageService';
 import './LegalPages.css';
 
 const Privacy = () => {
@@ -11,28 +12,29 @@ const Privacy = () => {
   const [friendsSuggest, setFriendsSuggest] = useState(true);
   const [storiesPersonalized, setStoriesPersonalized] = useState(true);
 
-  const handleSave = () => {
-    // In a real app, save to Firebase or localStorage
-    localStorage.setItem('echo_privacy_analytics', analytics);
-    localStorage.setItem('echo_privacy_marketing', marketing);
-    localStorage.setItem('echo_privacy_location', locationPrecise ? 'precise' : 'approximate');
-    localStorage.setItem('echo_privacy_friends', friendsSuggest ? 'enabled' : 'disabled');
-    localStorage.setItem('echo_privacy_stories', storiesPersonalized ? 'personalized' : 'standard');
+  const handleSave = async () => {
+    await setItem('echo_privacy_analytics', String(analytics));
+    await setItem('echo_privacy_marketing', String(marketing));
+    await setItem('echo_privacy_location', locationPrecise ? 'precise' : 'approximate');
+    await setItem('echo_privacy_friends', friendsSuggest ? 'enabled' : 'disabled');
+    await setItem('echo_privacy_stories', storiesPersonalized ? 'personalized' : 'standard');
     alert('Preferences saved!');
   };
 
   useEffect(() => {
-    // Load from localStorage
-    const a = localStorage.getItem('echo_privacy_analytics');
-    if (a !== null) setAnalytics(a === 'true');
-    const m = localStorage.getItem('echo_privacy_marketing');
-    if (m !== null) setMarketing(m === 'true');
-    const l = localStorage.getItem('echo_privacy_location');
-    if (l !== null) setLocationPrecise(l === 'precise');
-    const f = localStorage.getItem('echo_privacy_friends');
-    if (f !== null) setFriendsSuggest(f === 'enabled');
-    const s = localStorage.getItem('echo_privacy_stories');
-    if (s !== null) setStoriesPersonalized(s === 'personalized');
+    const loadSettings = async () => {
+      const a = await getItem('echo_privacy_analytics');
+      if (a !== null) setAnalytics(a === 'true');
+      const m = await getItem('echo_privacy_marketing');
+      if (m !== null) setMarketing(m === 'true');
+      const l = await getItem('echo_privacy_location');
+      if (l !== null) setLocationPrecise(l === 'precise');
+      const f = await getItem('echo_privacy_friends');
+      if (f !== null) setFriendsSuggest(f === 'enabled');
+      const s = await getItem('echo_privacy_stories');
+      if (s !== null) setStoriesPersonalized(s === 'personalized');
+    };
+    loadSettings();
   }, []);
 
   return (

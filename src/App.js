@@ -1,8 +1,8 @@
 // src/App.js
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider } from './contexts/AuthContext';
-import { ProfileProvider } from './contexts/ProfileContext';
+import { ProfileProvider, useProfile } from './contexts/ProfileContext';
 import { PresenceProvider } from './contexts/PresenceContext';
 import { CacheProvider } from './contexts/CacheContext';
 import Home from './components/pages/Home/Home';
@@ -22,10 +22,7 @@ import Navbar from './components/Layout/Navbar';
 import BottomNav from './components/Layout/BottomNav';
 import { useAuth } from './hooks/useAuth';
 import NetworkStatus from './components/common/NetworkStatus';
-
-// ─── WebSocket (using env var) ────────────────────────────────────
-const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || window.location.origin;
-const WS_URL = BACKEND_URL.replace('http', 'ws').replace('https', 'wss');
+import { Storage } from '@capacitor/storage';
 
 // ─── ScrollToTop component ──────────────────────────────────────
 function ScrollToTop() {
@@ -55,7 +52,6 @@ function LoadingScreen() {
       position: 'relative',
       overflow: 'hidden',
     }}>
-      {/* ─── Echo Rings (pulsing) ───────────────────────────── */}
       <div style={{
         position: 'absolute',
         width: '240px',
@@ -81,7 +77,6 @@ function LoadingScreen() {
         animation: 'echoRingPulse 3.5s ease-out infinite 1s',
       }} />
 
-      {/* ─── Logo ────────────────────────────────────────────── */}
       <div style={{
         width: '100px',
         height: '100px',
@@ -98,7 +93,6 @@ function LoadingScreen() {
         </svg>
       </div>
 
-      {/* ─── ECHO text (bolder with glow) ────────────────────── */}
       <div style={{
         fontSize: '40px',
         fontWeight: 900,
@@ -122,7 +116,6 @@ function LoadingScreen() {
         Discover. Connect. Echo.
       </div>
 
-      {/* ─── Loading Bar (now moves properly) ────────────────── */}
       <div style={{
         width: '200px',
         height: '3px',
@@ -135,7 +128,7 @@ function LoadingScreen() {
       }}>
         <div style={{
           height: '100%',
-          width: '200%', // ← MUST be wider than container to slide
+          width: '200%',
           background: 'linear-gradient(90deg, #6C3CE1, #EC4899, #6C3CE1)',
           borderRadius: '4px',
           animation: 'shimmer 1.8s ease-in-out infinite',
@@ -148,12 +141,25 @@ function LoadingScreen() {
 // ─── AppContent ─────────────────────────────────────────────────
 function AppContent() {
   const { user, loading } = useAuth();
+  const { fetchProfile } = useProfile();
   const [minTimePassed, setMinTimePassed] = useState(false);
 
+  // ─── Initialize Capacitor Storage ──────────────────────────────
   useEffect(() => {
-    const timer = setTimeout(() => setMinTimePassed(true), 3500);
+    Storage.configure({});
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMinTimePassed(true), 2000);
     return () => clearTimeout(timer);
   }, []);
+
+  // 🚀 Start pre-fetching the logged-in user's profile immediately
+  useEffect(() => {
+    if (user?.uid) {
+      fetchProfile(user.uid);
+    }
+  }, [user?.uid, fetchProfile]);
 
   const showLoading = loading || !minTimePassed;
 

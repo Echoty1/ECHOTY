@@ -2,11 +2,24 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { db } from '../../../services/firebase';
-import { ref, get, update, set } from 'firebase/database';
+import { ref, onValue, update, set } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import './Profile.css';
-import Spinner from '../../common/Spinner';
+
+// Reusable Pulse Skeleton Block
+const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', style = {} }) => (
+  <div
+    style={{
+      width,
+      height,
+      borderRadius,
+      background: 'rgba(255,255,255,0.08)',
+      animation: 'pulse 1.5s infinite ease-in-out',
+      ...style,
+    }}
+  />
+);
 
 const Profile = () => {
   const { user } = useAuth();
@@ -30,13 +43,14 @@ const Profile = () => {
   const tagInputRef = useRef(null);
   const skillInputRef = useRef(null);
 
-  // Load profile
+  // Real-time Profile Listener
   useEffect(() => {
-    if (!user) return;
-    const fetchProfile = async () => {
-      try {
-        const profileRef = ref(db, `profiles/${user.uid}`);
-        const snapshot = await get(profileRef);
+    if (!user?.uid) return;
+
+    const profileRef = ref(db, `profiles/${user.uid}`);
+    const unsubscribe = onValue(
+      profileRef,
+      async (snapshot) => {
         if (snapshot.exists()) {
           const data = snapshot.val();
           const safeData = {
@@ -46,7 +60,7 @@ const Profile = () => {
             skills: data.skills || [],
           };
           setProfile(safeData);
-          setEditData(safeData);
+          setEditData((prev) => (editing ? prev : safeData));
         } else {
           const defaultProfile = {
             name: user.displayName || user.email?.split('@')[0] || 'User',
@@ -65,14 +79,16 @@ const Profile = () => {
           setProfile(defaultProfile);
           setEditData(defaultProfile);
         }
-      } catch (err) {
-        console.error('Error loading profile:', err);
-      } finally {
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Error listening to profile:', err);
         setLoading(false);
       }
-    };
-    fetchProfile();
-  }, [user]);
+    );
+
+    return () => unsubscribe();
+  }, [user?.uid, editing]);
 
   const handleSave = async () => {
     if (!user) return;
@@ -100,7 +116,7 @@ const Profile = () => {
   const handleTagInputChange = (e) => {
     const value = e.target.value;
     if (value.includes(',')) {
-      const parts = value.split(',').map(s => s.trim()).filter(Boolean);
+      const parts = value.split(',').map((s) => s.trim()).filter(Boolean);
       if (parts.length) {
         setEditData({ ...editData, interests: [...(editData.interests || []), ...parts] });
         setTagInput('');
@@ -130,7 +146,7 @@ const Profile = () => {
   const handleSkillInputChange = (e) => {
     const value = e.target.value;
     if (value.includes(',')) {
-      const parts = value.split(',').map(s => s.trim()).filter(Boolean);
+      const parts = value.split(',').map((s) => s.trim()).filter(Boolean);
       if (parts.length) {
         setEditData({ ...editData, skills: [...(editData.skills || []), ...parts] });
         setSkillInput('');
@@ -156,16 +172,7 @@ const Profile = () => {
     setEditData({ ...editData, skills: newSkills });
   };
 
-  // In the render, replace:
-  if (loading) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-        <Spinner size={48} />
-      </div>
-    );
-  }
-
-  const activeSkinObj = profile.activeSkin ? getSkinById(profile.activeSkin) : null;
+  const activeSkinObj = profile?.activeSkin ? getSkinById(profile.activeSkin) : null;
   const skinForPreview = activeSkinObj
     ? {
         bgStart: activeSkinObj.bgStart,
@@ -175,18 +182,17 @@ const Profile = () => {
       }
     : null;
 
-  const currentMood = profile.mood || 'neutral';
-  const initials = (profile.name || 'U')[0].toUpperCase();
+  const currentMood = profile?.mood || 'neutral';
+  const initials = ((profile?.name || user?.displayName || 'U')[0] || 'U').toUpperCase();
 
   return (
     <div className="profile-page">
       <div className="profile-card">
-        {/* Avatar */}
-        <div
-          className="profile-avatar"
-          onClick={() => editing && fileInputRef.current?.click()}
-        >
-          {editData.avatar ? (
+        {/* Avatar Section */}
+        <div className="profile-avatar" onClick={() => editing && fileInputRef.current?.click()}>
+          {loading ? (
+            <SkeletonBlock width="100%" height="100%" borderRadius="50%" />
+          ) : editData.avatar ? (
             <img src={editData.avatar} alt="Avatar" />
           ) : (
             <span>{initials}</span>
@@ -210,8 +216,12 @@ const Profile = () => {
             onChange={(e) => setEditData({ ...editData, name: e.target.value })}
             placeholder="Your name"
           />
+        ) : loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
+            <SkeletonBlock width="140px" height="22px" />
+          </div>
         ) : (
-          <div className="profile-name">{profile.name || 'User'}</div>
+          <div className="profile-name">{profile?.name || 'User'}</div>
         )}
 
         {/* Location */}
@@ -230,15 +240,19 @@ const Profile = () => {
               placeholder="City"
             />
           </div>
+        ) : loading ? (
+          <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0' }}>
+            <SkeletonBlock width="100px" height="14px" />
+          </div>
         ) : (
           <div className="profile-location">
-            {profile.country && profile.city
+            {profile?.country && profile?.city
               ? `${profile.country} · ${profile.city}`
-              : profile.country || profile.city || '📍 Location not set'}
+              : profile?.country || profile?.city || '📍 Location not set'}
           </div>
         )}
 
-        {/* EchoMoji Preview */}
+        {/* EchoMoji Preview Section */}
         <div
           style={{
             display: 'flex',
@@ -248,27 +262,32 @@ const Profile = () => {
             margin: '12px 0',
           }}
         >
-          <ECHOMOJI
-            mood={currentMood}
-            skin={skinForPreview}
-            size={56}
-            interactive={false}
-          />
+          {loading ? (
+            <SkeletonBlock width="56px" height="56px" borderRadius="12px" />
+          ) : (
+            <ECHOMOJI mood={currentMood} skin={skinForPreview} size={56} interactive={false} animated={false} />
+          )}
+
           <div style={{ textAlign: 'left' }}>
-            <div style={{ fontSize: 14, color: '#888' }}>
-              Mood: <span style={{ textTransform: 'capitalize', color: '#fff' }}>
-                {currentMood}
-              </span>
-            </div>
-            {activeSkinObj && (
-              <div style={{ fontSize: 12, color: '#6C3CE1' }}>
-                ✦ {activeSkinObj.name}
-              </div>
+            {loading ? (
+              <>
+                <SkeletonBlock width="80px" height="14px" style={{ marginBottom: 4 }} />
+                <SkeletonBlock width="60px" height="12px" />
+              </>
+            ) : (
+              <>
+                <div style={{ fontSize: 14, color: '#888' }}>
+                  Mood: <span style={{ textTransform: 'capitalize', color: '#fff' }}>{currentMood}</span>
+                </div>
+                {activeSkinObj && (
+                  <div style={{ fontSize: 12, color: '#6C3CE1' }}>✦ {activeSkinObj.name}</div>
+                )}
+              </>
             )}
           </div>
         </div>
 
-        {/* Bio */}
+        {/* Bio Section */}
         {editing ? (
           <textarea
             className="profile-bio-textarea"
@@ -276,8 +295,13 @@ const Profile = () => {
             onChange={(e) => setEditData({ ...editData, bio: e.target.value })}
             placeholder="Tell the world about yourself..."
           />
+        ) : loading ? (
+          <div style={{ margin: '12px 0' }}>
+            <SkeletonBlock width="80%" height="14px" style={{ margin: '0 auto 6px' }} />
+            <SkeletonBlock width="60%" height="14px" style={{ margin: '0 auto' }} />
+          </div>
         ) : (
-          <div className="profile-bio">{profile.bio || 'No bio yet.'}</div>
+          <div className="profile-bio">{profile?.bio || 'No bio yet.'}</div>
         )}
 
         {/* ─── INTERESTS ────────────────────────────────────── */}
@@ -323,19 +347,24 @@ const Profile = () => {
                   value={tagInput}
                   onChange={handleTagInputChange}
                   onKeyDown={handleTagKeyDown}
-                  placeholder={!editData.interests?.length ? "Add interests (press Enter or comma)" : ""}
+                  placeholder={!editData.interests?.length ? 'Add interests (press Enter or comma)' : ''}
                   className="profile-tag-input"
                 />
               </div>
-              <div style={{ fontSize: 10, color: '#555', textAlign: 'left' }}>
-                Press <kbd style={{ background: '#222', padding: '1px 6px', borderRadius: 4, color: '#aaa' }}>Enter</kbd> or <kbd style={{ background: '#222', padding: '1px 6px', borderRadius: 4, color: '#aaa' }}>,</kbd> to add
-              </div>
+            </div>
+          ) : loading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, margin: '8px 0' }}>
+              <SkeletonBlock width="60px" height="24px" borderRadius="20px" />
+              <SkeletonBlock width="75px" height="24px" borderRadius="20px" />
+              <SkeletonBlock width="50px" height="24px" borderRadius="20px" />
             </div>
           ) : (
             <div className="profile-tags-container">
-              {(profile.interests || []).length > 0 ? (
+              {(profile?.interests || []).length > 0 ? (
                 profile.interests.map((interest, idx) => (
-                  <span key={idx} className="profile-tag">#{interest}</span>
+                  <span key={idx} className="profile-tag">
+                    #{interest}
+                  </span>
                 ))
               ) : (
                 <span style={{ color: '#555', fontSize: 12 }}>No interests added yet</span>
@@ -387,19 +416,23 @@ const Profile = () => {
                   value={skillInput}
                   onChange={handleSkillInputChange}
                   onKeyDown={handleSkillKeyDown}
-                  placeholder={!editData.skills?.length ? "Add skills (press Enter or comma)" : ""}
+                  placeholder={!editData.skills?.length ? 'Add skills (press Enter or comma)' : ''}
                   className="profile-tag-input"
                 />
               </div>
-              <div style={{ fontSize: 10, color: '#555', textAlign: 'left' }}>
-                Press <kbd style={{ background: '#222', padding: '1px 6px', borderRadius: 4, color: '#aaa' }}>Enter</kbd> or <kbd style={{ background: '#222', padding: '1px 6px', borderRadius: 4, color: '#aaa' }}>,</kbd> to add
-              </div>
+            </div>
+          ) : loading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, margin: '8px 0' }}>
+              <SkeletonBlock width="70px" height="24px" borderRadius="20px" />
+              <SkeletonBlock width="65px" height="24px" borderRadius="20px" />
             </div>
           ) : (
             <div className="profile-tags-container">
-              {(profile.skills || []).length > 0 ? (
+              {(profile?.skills || []).length > 0 ? (
                 profile.skills.map((skill, idx) => (
-                  <span key={idx} className="profile-tag skill">⚡{skill}</span>
+                  <span key={idx} className="profile-tag skill">
+                    ⚡{skill}
+                  </span>
                 ))
               ) : (
                 <span style={{ color: '#555', fontSize: 12 }}>No skills added yet</span>
@@ -428,7 +461,7 @@ const Profile = () => {
               </button>
             </>
           ) : (
-            <button className="btn-edit" onClick={() => setEditing(true)}>
+            <button className="btn-edit" onClick={() => setEditing(true)} disabled={loading}>
               ✎ Edit Profile
             </button>
           )}
@@ -446,7 +479,7 @@ const Profile = () => {
         }}
       >
         <div style={{ fontSize: 12, color: '#555', fontFamily: 'monospace' }}>
-          UID: {user?.uid}
+          UID: {user?.uid || '...'}
         </div>
         <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>{user?.email}</div>
       </div>

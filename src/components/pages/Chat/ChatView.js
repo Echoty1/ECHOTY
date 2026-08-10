@@ -1,57 +1,79 @@
 // src/components/pages/Chat/ChatView.js
-import React, { useState, useEffect, useRef } from 'react';
-import { useAuth } from '../../../hooks/useAuth';
-import { useNavigate, useParams, useLocation } from 'react-router-dom';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../../../services/firebase';
-import Modal from '../../common/Modal';
-import { removeChat, markChatAsKept } from '../../../services/accountCleanup';
 import {
   ref,
-  push,
+  query,
+  orderByChild,
+  limitToLast,
   onChildAdded,
   onValue,
   update,
+  push,
+  set,
   get,
   serverTimestamp,
-  set,
   onDisconnect,
 } from 'firebase/database';
+import { useAuth } from '../../../hooks/useAuth';
+import { useProfile } from '../../../contexts/ProfileContext';
+import ECHOMOJI from '../../UI/ECHOMOJI';
+import { getSkinById } from '../../../constants/echomoji';
+import Modal from '../../common/Modal';
+import { removeChat, markChatAsKept } from '../../../services/accountCleanup';
+import { useInfiniteScroll } from '../../../hooks/useInfiniteScroll';
+import { getCache, setCache } from '../../../services/cacheService';
+import { SkeletonMessage } from '../../common/SkeletonLoader';
 import './ChatView.css';
+
+const CHUNK_SIZE = 25;
 
 const ChatView = () => {
   const { userId } = useParams();
   const { user } = useAuth();
+  const { profiles, fetchProfile } = useProfile();
   const navigate = useNavigate();
   const location = useLocation();
+
+  // ─── Get name from navigation state ─────────────────────
+  const cachedName = location.state?.userName || 'User';
+  const cachedAvatar = location.state?.userAvatar || '';
+
   const [messages, setMessages] = useState([]);
-  const [newMessage, setNewMessage] = useState('');
-  const [partnerProfile, setPartnerProfile] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [showDeletedModal, setShowDeletedModal] = useState(false);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [hasMore, setHasMore] = useState(true);
+  const [oldestTimestamp, setOldestTimestamp] = useState(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [isReadOnly, setIsReadOnly] = useState(false);
+  const [showDeletedModal, setShowDeletedModal] = useState(false);
   const [keptPartnerName, setKeptPartnerName] = useState('');
+
+  // ─── Partner state – initialised immediately with cached data ──
+  const [partner, setPartner] = useState({
+    uid: userId,
+    name: cachedName,
+    avatar: cachedAvatar,
+    mood: 'neutral',
+    activeSkin: null,
+    online: false,
+    isPlaceholder: true,
+  });
+
   const messagesEndRef = useRef(null);
-  const inputRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const isActive = useRef(true);
-  const chatIdRef = useRef(null);
-
-  const partnerNameFromState = location.state?.userName || 'User';
-
-  // ─── Compute chatId ──────────────────────────────────────────
   const chatId = [user?.uid, userId].sort().join('_');
-  chatIdRef.current = chatId;
+  const chatCacheKey = `chat_${chatId}`;
 
   // ─── Active state & presence ──────────────────────────────
   useEffect(() => {
     if (!user || !userId) return;
-
     isActive.current = true;
-
-    // Set presence in this chat
     const presenceRef = ref(db, `presence/chat/${chatId}/${user.uid}`);
     set(presenceRef, true);
     onDisconnect(presenceRef).set(false);
-
     return () => {
       isActive.current = false;
       set(presenceRef, false);
@@ -62,50 +84,62 @@ const ChatView = () => {
   useEffect(() => {
     if (!user || !userId) return;
 
-    const profileRef = ref(db, `profiles/${userId}`);
-    const unsubscribe = onValue(profileRef, async (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setPartnerProfile({
-          ...data,
-          name: data.name || data.username || data.displayName || userId,
-          uid: userId,
-        });
-        setIsReadOnly(false);
-        setIsLoading(false);
-        return;
-      }
+    // We already have the cached name, so we can hide loading immediately.
+    setLoading(false);
 
-      // Partner profile missing → check if already kept
-      try {
-        const chatEntryRef = ref(db, `userChats/${user.uid}/${userId}`);
-        const chatSnap = await get(chatEntryRef);
-        const chatData = chatSnap.val();
-        if (chatData?.partnerDeleted === true) {
-          setIsReadOnly(true);
-          setKeptPartnerName(chatData.partnerName || 'Deleted Account');
-          setPartnerProfile(null);
-          setIsLoading(false);
-        } else {
-          setPartnerProfile(null);
-          setIsLoading(false);
-          setShowDeletedModal(true);
+    const profileRef = ref(db, `profiles/${userId}`);
+    const unsubscribe = onValue(
+      profileRef,
+      async (snapshot) => {
+        const data = snapshot.val();
+        if (data) {
+          // Update partner with fresh data
+          setPartner({
+            uid: userId,
+            name: data.name || data.username || data.displayName || cachedName || userId,
+            avatar: data.avatar || cachedAvatar,
+            mood: data.mood || 'neutral',
+            activeSkin: data.activeSkin || null,
+            online: data.online || false,
+            isPlaceholder: false,
+            ...data,
+          });
+          setIsReadOnly(false);
+          return;
         }
-      } catch (err) {
-        console.error('Error checking chat status:', err);
-        setIsLoading(false);
+
+        // Partner profile missing → check if already kept
+        try {
+          const chatEntryRef = ref(db, `userChats/${user.uid}/${userId}`);
+          const chatSnap = await get(chatEntryRef);
+          const chatData = chatSnap.val();
+          if (chatData?.partnerDeleted === true) {
+            setIsReadOnly(true);
+            setKeptPartnerName(chatData.partnerName || 'Deleted Account');
+            setPartner((prev) => ({
+              ...prev,
+              name: chatData.partnerName || cachedName || 'Deleted Account',
+              isPlaceholder: false,
+            }));
+          } else {
+            setShowDeletedModal(true);
+          }
+        } catch (err) {
+          console.error('Error checking chat status:', err);
+        }
+      },
+      (error) => {
+        console.warn('Profile listener error, keeping cached name:', error);
       }
-    });
+    );
 
     return () => unsubscribe();
-  }, [userId, user]);
+  }, [userId, user, cachedName, cachedAvatar]);
 
-  // ─── Reset unread count (only if node exists) ──────────────
+  // ─── Reset unread count ────────────────────────────────────
   useEffect(() => {
     if (!user || !userId || isReadOnly) return;
     const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-
-    // ✅ Only reset if the node already exists (prevents auto-creation)
     get(myChatRef).then((snap) => {
       if (snap.exists()) {
         update(myChatRef, { unreadCount: 0 }).catch(() => {});
@@ -113,58 +147,239 @@ const ChatView = () => {
     }).catch(() => {});
   }, [user, userId, isReadOnly]);
 
-  // ─── Load messages ──────────────────────────────────────────
-  useEffect(() => {
-    if (!user || !userId) return;
-    const chatId = [user.uid, userId].sort().join('_');
-    const messagesRef = ref(db, `messages/${chatId}`);
-    setMessages([]);
+  // ─── Load messages with pagination ──────────────────────────
+  const loadMessages = useCallback(async (loadMore = false) => {
+    if (!chatId || !user) return;
+    if (isLoadingMore) return;
 
-    const unsubscribe = onChildAdded(messagesRef, async (snapshot) => {
-      const data = snapshot.val();
-      setMessages((prev) => [...prev, { id: snapshot.key, ...data }]);
+    setIsLoadingMore(true);
 
-      if (!isReadOnly && data.senderId !== user.uid && data.text) {
-        try {
-          const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-          const partnerName = partnerProfile?.name || userId;
-          const partnerAvatar = partnerProfile?.avatar || '';
+    try {
+      const messagesRef = ref(db, `messages/${chatId}`);
+      let q;
 
-          const unreadDelta = isActive.current ? 0 : 1;
-          const snap = await get(myChatRef);
-          const currentUnread = snap.val()?.unreadCount || 0;
-          const newUnread = Math.max(0, currentUnread + unreadDelta);
-
-          await update(myChatRef, {
-            lastMessage: data.text,
-            lastSenderId: data.senderId,
-            lastUpdated: serverTimestamp(),
-            partnerName: partnerName,
-            partnerAvatar: partnerAvatar,
-            unreadCount: newUnread,
-          });
-        } catch (err) {
-          console.error('❌ Error updating receiver userChats:', err);
-        }
+      if (loadMore && oldestTimestamp) {
+        // Load older messages (before oldest)
+        q = query(
+          messagesRef,
+          orderByChild('timestamp'),
+          endAt(oldestTimestamp - 1),
+          limitToLast(CHUNK_SIZE)
+        );
+      } else {
+        // Load latest messages
+        q = query(
+          messagesRef,
+          orderByChild('timestamp'),
+          limitToLast(CHUNK_SIZE)
+        );
       }
 
+      const snapshot = await get(q);
+      const data = snapshot.val();
+
+      if (!data) {
+        if (loadMore) setHasMore(false);
+        setLoading(false);
+        setIsLoadingMore(false);
+        return [];
+      }
+
+      const messageList = Object.entries(data)
+        .map(([id, msg]) => ({
+          id,
+          ...msg,
+          timestamp: msg.timestamp || Date.now(),
+        }))
+        .sort((a, b) => a.timestamp - b.timestamp);
+
+      if (messageList.length < CHUNK_SIZE) {
+        setHasMore(false);
+      }
+
+      // Update oldest timestamp for next load
+      if (messageList.length > 0) {
+        setOldestTimestamp(messageList[0].timestamp);
+      }
+
+      if (loadMore) {
+        // Prepend older messages
+        setMessages(prev => [...messageList, ...prev]);
+      } else {
+        // Replace with latest messages
+        setMessages(messageList);
+        // Cache messages for instant load next time
+        await setCache(chatCacheKey, messageList, 300);
+        // Scroll to bottom
+        setTimeout(() => {
+          if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
+          }
+        }, 100);
+      }
+
+      setLoading(false);
+      setIsLoadingMore(false);
+      return messageList;
+    } catch (error) {
+      console.error('Error loading messages:', error);
+      setLoading(false);
+      setIsLoadingMore(false);
+      return [];
+    }
+  }, [chatId, user, oldestTimestamp, isLoadingMore]);
+
+  // ─── Initial load with cache ──────────────────────────────────
+  useEffect(() => {
+    if (!chatId || !user) return;
+
+    const loadInitial = async () => {
+      // Try cache first (instant)
+      const cached = await getCache(chatCacheKey);
+      if (cached && cached.length > 0) {
+        setMessages(cached);
+        setLoading(false);
+        if (cached.length > 0) {
+          setOldestTimestamp(cached[0].timestamp);
+        }
+        if (cached.length < CHUNK_SIZE) {
+          setHasMore(false);
+        }
+        // Still fetch fresh data in background
+        loadMessages(false);
+      } else {
+        await loadMessages(false);
+      }
+    };
+
+    loadInitial();
+
+    // ─── Real-time listener for new messages ──────────────────
+    const messagesRef = ref(db, `messages/${chatId}`);
+    const latestQuery = query(messagesRef, orderByChild('timestamp'), limitToLast(1));
+
+    const unsubscribe = onChildAdded(latestQuery, (snapshot) => {
+      const msg = snapshot.val();
+      if (!msg) return;
+
+      const newMsg = {
+        id: snapshot.key,
+        ...msg,
+        timestamp: msg.timestamp || Date.now(),
+      };
+
+      // Check if message already exists
+      setMessages(prev => {
+        const exists = prev.some(m => m.id === newMsg.id);
+        if (exists) return prev;
+        return [...prev, newMsg];
+      });
+
+      // Update cache with new message
+      const updatedMessages = [...messages, newMsg];
+      setCache(chatCacheKey, updatedMessages, 300);
+
+      // Scroll to bottom on new message (if not scrolling up)
       setTimeout(() => {
-        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+        if (messagesEndRef.current) {
+          messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
       }, 100);
     });
 
     return () => unsubscribe();
-  }, [user, userId, partnerProfile, isReadOnly]);
+  }, [chatId, user]);
 
-  // ─── Scroll to bottom ──────────────────────────────────────
+  // ─── Infinite scroll ──────────────────────────────────────────
+  const { containerRef, setHasMore: setScrollHasMore } = useInfiniteScroll(
+    async () => {
+      if (!hasMore || isLoadingMore) return;
+      await loadMessages(true);
+    },
+    300,
+    [hasMore, isLoadingMore]
+  );
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
+    setScrollHasMore(hasMore);
+  }, [hasMore]);
+
+  // ─── Send message ───────────────────────────────────────────
+  const sendMessage = async () => {
+    if (isReadOnly || !input.trim() || !user || !userId) return;
+
+    const messageText = input.trim();
+    setInput('');
+
+    const chatRef = ref(db, `messages/${chatId}`);
+    const newMessageRef = push(chatRef);
+    const messageData = {
+      senderId: user.uid,
+      text: messageText,
+      timestamp: serverTimestamp(),
+      read: false,
+    };
+
+    try {
+      await set(newMessageRef, messageData);
+
+      // Update sender's userChats
+      const partnerName = partner?.name || userId;
+      const partnerAvatar = partner?.avatar || '';
+      const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
+      await update(myChatRef, {
+        lastMessage: messageText,
+        lastSenderId: user.uid,
+        lastUpdated: serverTimestamp(),
+        partnerName,
+        partnerAvatar,
+        unreadCount: 0,
+      });
+
+      // Update receiver's userChats
+      const receiverPresenceRef = ref(db, `presence/chat/${chatId}/${userId}`);
+      const presenceSnap = await get(receiverPresenceRef);
+      const isReceiverActive = presenceSnap.val() === true;
+
+      const receiverChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+      const receiverSnap = await get(receiverChatRef);
+      const currentUnread = receiverSnap.val()?.unreadCount || 0;
+      const newUnread = isReceiverActive ? 0 : currentUnread + 1;
+
+      await update(receiverChatRef, {
+        lastMessage: messageText,
+        lastSenderId: user.uid,
+        lastUpdated: serverTimestamp(),
+        partnerName: user?.displayName || user?.email?.split('@')[0] || 'User',
+        partnerAvatar: user?.photoURL || '',
+        unreadCount: newUnread,
+      });
+    } catch (err) {
+      console.error('❌ Error sending message:', err);
+      setInput(messageText);
+    }
+  };
+
+  // ─── Mark messages as read ──────────────────────────────────
+  useEffect(() => {
+    if (!userId || messages.length === 0 || isReadOnly) return;
+    const unreadMessages = messages.filter(
+      (msg) => msg.senderId === userId && !msg.read
+    );
+    if (unreadMessages.length === 0) return;
+    const updates = {};
+    unreadMessages.forEach((msg) => {
+      updates[`messages/${chatId}/${msg.id}/read`] = true;
+    });
+    update(ref(db), updates).catch((err) =>
+      console.warn('Error marking read:', err)
+    );
+  }, [messages, userId, chatId, isReadOnly]);
 
   // ─── Modal handlers ────────────────────────────────────────
   const handleKeepChat = async () => {
     setShowDeletedModal(false);
-    const name = partnerProfile?.name || userId;
+    const name = partner?.name || userId;
     await markChatAsKept(user.uid, userId, name);
     setIsReadOnly(true);
     setKeptPartnerName(name);
@@ -178,74 +393,18 @@ const ChatView = () => {
     navigate('/chats');
   };
 
-  // ─── Send message ──────────────────────────────────────────
-  const sendMessage = async (e) => {
-    e.preventDefault();
-    if (isReadOnly || !newMessage.trim() || !user || !userId) return;
-
-    const chatId = [user.uid, userId].sort().join('_');
-    const messagesRef = ref(db, `messages/${chatId}`);
-    const messageData = {
-      senderId: user.uid,
-      text: newMessage.trim(),
-      timestamp: serverTimestamp(),
-    };
-
-    try {
-      await push(messagesRef, messageData);
-
-      // Always update sender's userChats (creates if needed)
-      const partnerName = partnerProfile?.name || userId;
-      const partnerAvatar = partnerProfile?.avatar || '';
-      const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-      await update(myChatRef, {
-        lastMessage: newMessage.trim(),
-        lastSenderId: user.uid,
-        lastUpdated: serverTimestamp(),
-        partnerName: partnerName,
-        partnerAvatar: partnerAvatar,
-      });
-
-      // ─── Check if receiver is active in this chat ──────────
-      const receiverPresenceRef = ref(db, `presence/chat/${chatId}/${userId}`);
-      const presenceSnap = await get(receiverPresenceRef);
-      const isReceiverActive = presenceSnap.val() === true;
-
-      // Always update receiver's userChats with the latest message,
-      // but only increment unread if not active.
-      const receiverChatRef = ref(db, `userChats/${userId}/${user.uid}`);
-      const receiverSnap = await get(receiverChatRef);
-      const currentUnread = receiverSnap.val()?.unreadCount || 0;
-      const newUnread = isReceiverActive ? 0 : currentUnread + 1;
-
-      await update(receiverChatRef, {
-        lastMessage: newMessage.trim(),
-        lastSenderId: user.uid,
-        lastUpdated: serverTimestamp(),
-        partnerName: user?.name || user?.displayName || 'User',
-        partnerAvatar: user?.avatar || '',
-        unreadCount: newUnread,
-      });
-
-      console.log(`📩 Message sent. Receiver active: ${isReceiverActive}, unread: ${newUnread}`);
-
-    } catch (err) {
-      console.error('❌ Error sending message:', err);
-    } finally {
-      setNewMessage('');
-      inputRef.current?.focus();
-    }
-  };
-
-  if (isLoading) {
+  // ─── Loading state ──────────────────────────────────────────
+  if (loading && messages.length === 0) {
     return (
-      <div className="chat-loading">
-        <div className="loading-spinner" />
-        <span>Loading conversation...</span>
+      <div style={{ padding: '16px', paddingTop: '70px', maxWidth: '480px', margin: '0 auto' }}>
+        {[...Array(8)].map((_, i) => (
+          <SkeletonMessage key={i} />
+        ))}
       </div>
     );
   }
 
+  // ─── Modal actions ─────────────────────────────────────────
   const modalActions = (
     <>
       <button
@@ -287,6 +446,9 @@ const ChatView = () => {
     </>
   );
 
+  // ─── Main render ────────────────────────────────────────────
+  const displayName = partner?.name || cachedName || 'User';
+
   return (
     <div className="chat-view">
       <Modal
@@ -298,7 +460,40 @@ const ChatView = () => {
         actions={modalActions}
       />
 
-      <div className="chat-messages">
+      {/* Header */}
+      <div className="chat-header">
+        <button className="back-btn" onClick={() => navigate('/chats')}>←</button>
+        <div className="partner-info">
+          {partner && !partner.isPlaceholder ? (
+            <ECHOMOJI
+              mood={partner.mood || 'neutral'}
+              skin={partner.activeSkin ? getSkinById(partner.activeSkin) : null}
+              size={40}
+              interactive={false}
+            />
+          ) : (
+            <div className="avatar-placeholder" style={{ backgroundColor: '#6C3CE1', color: '#fff', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 600 }}>
+              {displayName[0]?.toUpperCase() || 'U'}
+            </div>
+          )}
+          <div className="partner-details">
+            <span className="partner-name">{displayName}</span>
+            <span className="partner-status">
+              {isReadOnly ? 'Archived' : partner?.online ? 'Online' : 'Offline'}
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* Messages */}
+      <div className="messages-container" ref={containerRef}>
+        {isLoadingMore && (
+          <div className="loading-more">Loading older messages...</div>
+        )}
+        {!hasMore && messages.length > 0 && (
+          <div className="no-more-messages">Beginning of conversation</div>
+        )}
+
         {messages.length === 0 ? (
           <div className="chat-empty">
             <span>💬</span>
@@ -308,45 +503,39 @@ const ChatView = () => {
             </span>
           </div>
         ) : (
-          messages.map((msg) => {
-            const isSender = msg.senderId === user?.uid;
-            const partnerInitial = partnerProfile?.name?.[0]?.toUpperCase() || 'U';
-            return (
-              <div key={msg.id} className={`chat-message ${isSender ? 'sent' : 'received'}`}>
-                <div className="chat-bubble">
-                  {!isSender && (
-                    <div className="chat-sender-avatar">
-                      {partnerProfile?.avatar ? <img src={partnerProfile.avatar} alt="" /> : partnerInitial}
-                    </div>
-                  )}
-                  <div className="chat-text">{msg.text}</div>
-                </div>
-                <div className="chat-time">
+          messages.map((msg) => (
+            <div
+              key={msg.id}
+              className={`message ${msg.senderId === user?.uid ? 'sent' : 'received'}`}
+            >
+              <div className="message-bubble">
+                <span className="message-text">{msg.text}</span>
+                <span className="message-time">
                   {msg.timestamp
                     ? new Date(msg.timestamp).toLocaleTimeString([], {
                         hour: '2-digit',
                         minute: '2-digit',
                       })
                     : ''}
-                </div>
+                </span>
               </div>
-            );
-          })
+            </div>
+          ))
         )}
         <div ref={messagesEndRef} />
       </div>
 
+      {/* Input */}
       {!isReadOnly ? (
-        <form className="chat-input-form" onSubmit={sendMessage}>
+        <form className="chat-input-form" onSubmit={(e) => { e.preventDefault(); sendMessage(); }}>
           <input
-            ref={inputRef}
             type="text"
             className="chat-input"
             placeholder="Type a message..."
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
           />
-          <button type="submit" className="chat-send-btn" disabled={!newMessage.trim()}>
+          <button type="submit" className="chat-send-btn" disabled={!input.trim()}>
             <i className="fas fa-paper-plane" />
           </button>
         </form>

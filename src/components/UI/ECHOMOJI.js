@@ -1,5 +1,5 @@
 // src/components/UI/ECHOMOJI.js
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { EXPRESSIONS, MOOD_THEMES, ACCESSORIES } from '../../constants/echomoji';
 
 const ECHOMOJI = ({
@@ -8,6 +8,7 @@ const ECHOMOJI = ({
   size = 48,
   pulse = false,
   interactive = true,
+  animated = true, // YouTube-style toggle: false for static grid thumbnails
   skin = null,
   onMoodChange = null,
   onDoubleClick = null,
@@ -21,10 +22,11 @@ const ECHOMOJI = ({
   const accessory = ACCESSORIES[mood] || null;
 
   // External pulse trigger
-  React.useEffect(() => {
+  useEffect(() => {
     if (pulse) {
       setIsPulsing(true);
-      setTimeout(() => setIsPulsing(false), 700);
+      const timer = setTimeout(() => setIsPulsing(false), 700);
+      return () => clearTimeout(timer);
     }
   }, [pulse]);
 
@@ -32,18 +34,20 @@ const ECHOMOJI = ({
     if (interactive && onMoodChange) {
       onMoodChange();
     }
-    // Add a ripple on click
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left - size / 4;
-    const y = e.clientY - rect.top - size / 4;
-    const id = Date.now();
-    setRipples((prev) => [...prev, { id, x, y }]);
-    setTimeout(() => {
-      setRipples((prev) => prev.filter((r) => r.id !== id));
-    }, 800);
+    // Add ripple on click if interactive
+    if (interactive) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left - size / 4;
+      const y = e.clientY - rect.top - size / 4;
+      const id = Date.now();
+      setRipples((prev) => [...prev, { id, x, y }]);
+      setTimeout(() => {
+        setRipples((prev) => prev.filter((r) => r.id !== id));
+      }, 800);
 
-    setIsPulsing(true);
-    setTimeout(() => setIsPulsing(false), 700);
+      setIsPulsing(true);
+      setTimeout(() => setIsPulsing(false), 700);
+    }
   };
 
   const handleDoubleClick = () => {
@@ -56,22 +60,22 @@ const ECHOMOJI = ({
     borderRadius: '20%',
     background: `linear-gradient(135deg, ${theme.bgStart}, ${theme.bgEnd})`,
     boxShadow: isHovered
-      ? `0 8px 40px ${theme.glowColor}80, 0 0 80px ${theme.glowColor}40`
-      : `0 4px 24px ${theme.glowColor}40, 0 0 60px ${theme.glowColor}20`,
-    backdropFilter: 'blur(12px)',
+      ? `0 8px 30px ${theme.glowColor}80`
+      : `0 4px 16px ${theme.glowColor}40`,
+    backdropFilter: animated ? 'blur(12px)' : 'none',
     border: '1px solid rgba(255,255,255,0.08)',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     position: 'relative',
     cursor: interactive ? 'pointer' : 'default',
-    transition: 'background 0.5s ease, box-shadow 0.3s ease, transform 0.3s ease',
-    willChange: 'transform',
-    transform: isPulsing ? 'scale(1.08)' : isHovered ? 'scale(1.06) rotate(-2deg)' : 'scale(1)',
-    animation: 'echoFloat 3s ease-in-out infinite',
+    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+    willChange: animated ? 'transform' : 'auto',
+    transform: isPulsing ? 'scale(1.08)' : isHovered ? 'scale(1.05)' : 'scale(1)',
+    animation: animated ? 'echoFloat 3s ease-in-out infinite' : 'none',
   };
 
-  // CSS class-based animation for ring pulses
+  // Ring styling helper
   const ringStyle = (delay = 0, scale = 1.2) => ({
     position: 'absolute',
     borderRadius: '50%',
@@ -80,8 +84,8 @@ const ECHOMOJI = ({
     pointerEvents: 'none',
     width: size * scale,
     height: size * scale,
-    top: size * (1 - scale) / 2,
-    left: size * (1 - scale) / 2,
+    top: (size * (1 - scale)) / 2,
+    left: (size * (1 - scale)) / 2,
     animation: `echoRingPulse 3s ease-out infinite ${delay}s`,
   });
 
@@ -94,10 +98,14 @@ const ECHOMOJI = ({
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
     >
-      {/* Echo Rings */}
-      <div style={ringStyle(0, 1.2)} />
-      <div style={ringStyle(0.5, 1.4)} />
-      <div style={ringStyle(1.0, 1.6)} />
+      {/* Echo Rings only rendered when animated flag is true */}
+      {animated && (
+        <>
+          <div style={ringStyle(0, 1.2)} />
+          <div style={ringStyle(0.5, 1.4)} />
+          <div style={ringStyle(1.0, 1.6)} />
+        </>
+      )}
 
       {/* Click ripples */}
       {ripples.map((r) => (
@@ -117,13 +125,19 @@ const ECHOMOJI = ({
         />
       ))}
 
-      {/* SVG Face */}
+      {/* SVG Face Expression */}
       <svg viewBox="0 0 48 48" style={{ width: '80%', height: '80%' }}>
         <g stroke={theme.ledColor} strokeWidth="3" strokeLinecap="round" fill="none">
-          <path d={EXPRESSIONS[expr].eyes[0]} />
-          <path d={EXPRESSIONS[expr].eyes[1]} />
+          <path d={EXPRESSIONS[expr]?.eyes[0] || EXPRESSIONS.neutral.eyes[0]} />
+          <path d={EXPRESSIONS[expr]?.eyes[1] || EXPRESSIONS.neutral.eyes[1]} />
         </g>
-        <path d={EXPRESSIONS[expr].mouth} stroke={theme.ledColor} strokeWidth="3" strokeLinecap="round" fill="none" />
+        <path
+          d={EXPRESSIONS[expr]?.mouth || EXPRESSIONS.neutral.mouth}
+          stroke={theme.ledColor}
+          strokeWidth="3"
+          strokeLinecap="round"
+          fill="none"
+        />
       </svg>
 
       {/* Accessory */}
@@ -136,7 +150,6 @@ const ECHOMOJI = ({
             right: accessory.right || -8,
             fontSize: accessory.size || 14,
             pointerEvents: 'none',
-            animation: 'accessoryPop 0.4s ease-out',
           }}
         >
           {accessory.emoji}
@@ -164,4 +177,4 @@ const ECHOMOJI = ({
   );
 };
 
-export default ECHOMOJI;
+export default React.memo(ECHOMOJI);

@@ -1,5 +1,5 @@
 // src/components/pages/Chats/Chats.jsx
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../../services/firebase';
@@ -13,13 +13,18 @@ import {
   startAt,
   endAt,
   limitToFirst,
+  orderByKey,
+  limitToLast,
 } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import './Chats.css';
-import Skeleton from '../../common/Skeleton';
 import { getCache, setCache } from '../../../services/cacheService';
 import { searchProfiles } from '../../../services/searchService';
+import { useInfiniteScroll } from '../../../hooks/useInfiniteScroll';
+import { SkeletonChatItem } from '../../common/SkeletonLoader';
+
+const CHAT_CHUNK_SIZE = 20;
 
 const timeAgo = (timestamp) => {
   if (!timestamp) return '';
@@ -35,12 +40,55 @@ const timeAgo = (timestamp) => {
   return 'Just now';
 };
 
-// Helper: timeout a promise (8 seconds)
-const withTimeout = (promise, ms = 8000) => {
-  return Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms)),
-  ]);
+// ─── Fetch profile with timeout and retry ──────────────────
+const fetchProfileWithTimeout = (uid, timeoutMs) => {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      reject(new Error('Timeout'));
+    }, timeoutMs);
+
+    const unsub = onValue(
+      ref(db, `profiles/${uid}`),
+      (snapshot) => {
+        clearTimeout(timeout);
+        unsub();
+        const data = snapshot.val();
+        if (data) {
+          resolve(data);
+        } else {
+          reject(new Error('Profile not found'));
+        }
+      },
+      (error) => {
+        clearTimeout(timeout);
+        unsub();
+        reject(error);
+      }
+    );
+  });
+};
+
+const loadPartnerData = async (partnerId, retryCount = 0) => {
+  try {
+    const profile = await fetchProfileWithTimeout(partnerId, 5000);
+    return profile;
+  } catch (error) {
+    console.warn(`⚠️ Error loading partner: ${partnerId}`, error.message);
+
+    if (retryCount < 3) {
+      const delay = Math.pow(2, retryCount) * 1000;
+      console.log(`🔄 Retrying ${partnerId} in ${delay}ms (attempt ${retryCount + 1}/3)`);
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      return loadPartnerData(partnerId, retryCount + 1);
+    }
+
+    return {
+      name: 'User',
+      avatar: '',
+      mood: 'neutral',
+      isFallback: true,
+    };
+  }
 };
 
 const Chats = () => {
@@ -64,7 +112,9 @@ const Chats = () => {
   });
 
   const [loadingChats, setLoadingChats] = useState(() => !getCache(cacheKey));
-  const [syncing, setSyncing] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [lastChatKey, setLastChatKey] = useState(null);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const hasSavedCache = useRef(!!getCache(cacheKey));
 
   useDeletedAccountCheck();
@@ -89,11 +139,128 @@ const Chats = () => {
     };
   }, [user]);
 
-  // ─── Load chats ──────────────────────────────────────────────
+  // ─── Load chats with pagination ──────────────────────────────
+  const loadChats = useCallback(async (loadMore = false) => {
+    if (!user) return;
+    if (isLoadingMore) return;
+
+    setIsLoadingMore(true);
+
+    try {
+      const userChatsRef = ref(db, `userChats/${user.uid}`);
+      let q;
+
+      if (loadMore && lastChatKey) {
+        q = query(
+          userChatsRef,
+          orderByKey(),
+          endAt(lastChatKey),
+          limitToLast(CHAT_CHUNK_SIZE + 1)
+        );
+      } else {
+        q = query(
+          userChatsRef,
+          orderByKey(),
+          limitToLast(CHAT_CHUNK_SIZE)
+        );
+      }
+
+      const snapshot = await get(q);
+      const data = snapshot.val();
+
+      if (!data) {
+        if (loadMore) setHasMore(false);
+        setLoadingChats(false);
+        setIsLoadingMore(false);
+        return;
+      }
+
+      const chatList = Object.entries(data)
+        .map(([partnerId, chat]) => ({
+          id: partnerId,
+          ...chat,
+        }))
+        .sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+
+      // Check if we have more
+      if (chatList.length < CHAT_CHUNK_SIZE) {
+        setHasMore(false);
+      }
+
+      // Update last key for pagination
+      if (chatList.length > 0) {
+        setLastChatKey(chatList[chatList.length - 1].id);
+      }
+
+      // ─── Process partners in background ────────────────────
+      const processedChats = await Promise.all(
+        chatList.map(async (chat) => {
+          try {
+            const profile = await loadPartnerData(chat.id);
+            let partnerName;
+            let isDeleted = false;
+
+            if (chat.partnerDeleted === true) {
+              partnerName = chat.partnerName || 'Deleted Account';
+              isDeleted = true;
+            } else {
+              partnerName = profile.name || profile.username || profile.displayName || chat.partnerName || 'Unknown User';
+            }
+
+            const isSender = chat.lastSenderId === user.uid;
+            let displayMessage = chat.lastMessage || 'Start chatting...';
+            if (displayMessage !== 'Start chatting...') {
+              displayMessage = isSender ? `You: ${displayMessage}` : `${partnerName}: ${displayMessage}`;
+              if (displayMessage.length > 30) displayMessage = displayMessage.substring(0, 30) + '...';
+            }
+
+            return {
+              id: chat.id,
+              name: partnerName,
+              lastMessage: displayMessage,
+              timestamp: chat.lastUpdated || Date.now(),
+              lastSenderId: chat.lastSenderId || '',
+              unreadCount: chat.unreadCount || 0,
+              isDeleted,
+              online: !!onlineUsers[chat.id],
+            };
+          } catch (err) {
+            return {
+              id: chat.id,
+              name: chat.partnerName || 'Unknown User',
+              lastMessage: chat.lastMessage || 'Start chatting...',
+              timestamp: chat.lastUpdated || Date.now(),
+              lastSenderId: chat.lastSenderId || '',
+              unreadCount: chat.unreadCount || 0,
+              isDeleted: false,
+              online: !!onlineUsers[chat.id],
+            };
+          }
+        })
+      );
+
+      const validItems = processedChats.filter((item) => item !== null);
+
+      if (loadMore) {
+        setRecentChats(prev => [...prev, ...validItems]);
+      } else {
+        setRecentChats(validItems);
+        await setCache(cacheKey, validItems, 300);
+      }
+
+      setLoadingChats(false);
+      setIsLoadingMore(false);
+    } catch (error) {
+      console.error('Error loading chats:', error);
+      setLoadingChats(false);
+      setIsLoadingMore(false);
+    }
+  }, [user, lastChatKey, isLoadingMore, onlineUsers]);
+
+  // ─── Real-time listener for new chats ────────────────────────
   useEffect(() => {
     if (!user) {
       setLoadingChats(false);
-      setSyncing(false);
       return;
     }
 
@@ -104,130 +271,27 @@ const Chats = () => {
       userChatsUnsubRef.current = null;
     }
 
-    const cachedData = getCache(cacheKey);
-    if (cachedData && cachedData.length > 0) {
-      setSyncing(true);
-    }
+    // Load initial chunk
+    loadChats(false);
 
+    // Real-time listener for updates
     userChatsUnsubRef.current = onValue(
       userChatsRef,
       async (snapshot) => {
+        // Just refresh the list on any change
+        // We'll reload from the listener but keep the cache
         const data = snapshot.val();
         if (!data) {
           setRecentChats([]);
           setCache(cacheKey, []);
           setLoadingChats(false);
-          setSyncing(false);
           return;
         }
 
-        const partnerIds = Object.keys(data);
-        const cached = getCache(cacheKey);
-        const hasCache = cached && cached.length > 0;
-
-        const fetchPartner = async (partnerId) => {
-          try {
-            const meta = data[partnerId] || {};
-            const profileRef = ref(db, `profiles/${partnerId}`);
-            const profileSnap = await withTimeout(get(profileRef), 8000);
-            const profile = profileSnap.val() || {};
-
-            let partnerName, isDeleted = false;
-            if (meta.partnerDeleted === true) {
-              partnerName = meta.partnerName || 'Deleted Account';
-              isDeleted = true;
-            } else {
-              partnerName = profile.name || profile.username || profile.displayName || meta.partnerName || 'Unknown User';
-            }
-            const isSender = meta.lastSenderId === user.uid;
-            let displayMessage = meta.lastMessage || 'Start chatting...';
-            if (displayMessage !== 'Start chatting...') {
-              displayMessage = isSender ? `You: ${displayMessage}` : `${partnerName}: ${displayMessage}`;
-            }
-
-            return {
-              id: partnerId,
-              name: partnerName,
-              lastMessage: displayMessage,
-              timestamp: meta.lastUpdated || Date.now(),
-              lastSenderId: meta.lastSenderId || '',
-              unreadCount: meta.unreadCount || 0,
-              isDeleted,
-              online: !!onlineUsers[partnerId],
-            };
-          } catch (err) {
-            console.warn('⚠️ Error loading partner:', partnerId, err.message);
-            const meta = data[partnerId] || {};
-            const fallbackName = meta.partnerName || 'Unknown User';
-            return {
-              id: partnerId,
-              name: fallbackName,
-              lastMessage: meta.lastMessage || 'Start chatting...',
-              timestamp: meta.lastUpdated || Date.now(),
-              lastSenderId: meta.lastSenderId || '',
-              unreadCount: meta.unreadCount || 0,
-              isDeleted: false,
-              online: !!onlineUsers[partnerId],
-            };
-          }
-        };
-
-        if (hasCache) {
-          const allItems = await Promise.all(partnerIds.map(id => fetchPartner(id)));
-          const validItems = allItems.filter(item => item !== null);
-          validItems.sort((a, b) => b.timestamp - a.timestamp);
-
-          const cachedMap = new Map(cached.map(item => [item.id, item]));
-          let changed = false;
-          const updatedItems = validItems.map(newItem => {
-            const old = cachedMap.get(newItem.id);
-            if (!old) { changed = true; return newItem; }
-            if (
-              old.name !== newItem.name ||
-              old.lastMessage !== newItem.lastMessage ||
-              old.timestamp !== newItem.timestamp ||
-              old.unreadCount !== newItem.unreadCount ||
-              old.isDeleted !== newItem.isDeleted ||
-              old.online !== newItem.online
-            ) {
-              changed = true;
-              return newItem;
-            }
-            return old;
-          });
-
-          if (changed) {
-            setRecentChats(updatedItems);
-            setCache(cacheKey, updatedItems);
-          }
-          setSyncing(false);
-          setLoadingChats(false);
-
-        } else {
-          setRecentChats([]);
-          setLoadingChats(true);
-          const processed = [];
-          const total = partnerIds.length;
-
-          for (let i = 0; i < total; i++) {
-            const partnerId = partnerIds[i];
-            const item = await fetchPartner(partnerId);
-            if (item) {
-              const newList = [item, ...processed.filter(c => c.id !== item.id)];
-              newList.sort((a, b) => b.timestamp - a.timestamp);
-              processed.length = 0;
-              processed.push(...newList);
-              setRecentChats([...processed]);
-            }
-          }
-
-          processed.sort((a, b) => b.timestamp - a.timestamp);
-          setRecentChats(processed);
-          setCache(cacheKey, processed);
-          setLoadingChats(false);
-          setSyncing(false);
-          hasSavedCache.current = true;
-        }
+        // Reset pagination state for full refresh
+        setHasMore(true);
+        setLastChatKey(null);
+        await loadChats(false);
       },
       (error) => {
         console.error('❌ userChats listener error:', error);
@@ -235,11 +299,9 @@ const Chats = () => {
         if (cached && cached.length > 0) {
           setRecentChats(cached);
           setLoadingChats(false);
-          setSyncing(false);
         } else {
           setRecentChats([]);
           setLoadingChats(false);
-          setSyncing(false);
         }
       }
     );
@@ -252,64 +314,57 @@ const Chats = () => {
     };
   }, [user, onlineUsers]);
 
-  // ─── Search handler with detailed logging ──────────────────────
+  // ─── Infinite scroll ──────────────────────────────────────────
+  const { containerRef, setHasMore: setScrollHasMore } = useInfiniteScroll(
+    async () => {
+      if (!hasMore || isLoadingMore) return;
+      await loadChats(true);
+    },
+    300,
+    [hasMore, isLoadingMore]
+  );
+
+  useEffect(() => {
+    setScrollHasMore(hasMore);
+  }, [hasMore]);
+
+  // ─── Search handler with 2‑character threshold ──────────────
   const performSearch = async (queryText) => {
     const trimmed = queryText.trim().toLowerCase();
-    console.log('🔍 [Search] performSearch called with query:', trimmed);
-
     if (trimmed.length < 2) {
-      console.log('🔍 [Search] Query too short, clearing results');
       setResults([]);
       setIsSearching(false);
       return;
     }
 
     setIsSearching(true);
-    console.log('🔍 [Search] Setting isSearching = true');
-
     try {
-      console.log('🔍 [Search] Calling searchProfiles with:', trimmed, 'user.uid:', user?.uid);
       const users = await searchProfiles(trimmed, user.uid, 20);
-      console.log('🔍 [Search] searchProfiles returned:', users);
-
-      // Add online status from presence
-      const withOnline = users.map(u => ({
+      const withOnline = users.map((u) => ({
         ...u,
         isOnline: !!onlineUsers[u.id],
       }));
-      console.log('🔍 [Search] withOnline:', withOnline);
-
       setResults(withOnline);
-      console.log('🔍 [Search] setResults called with', withOnline.length, 'items');
     } catch (err) {
       console.error('❌ [Search] Search failed:', err);
-      console.error('❌ [Search] Error details:', err.message, err.stack);
       setResults([]);
     } finally {
       setIsSearching(false);
-      console.log('🔍 [Search] setIsSearching(false)');
     }
   };
 
   // ─── Debounced search ──────────────────────────────────────────
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
-
     const query = searchQuery.trim().toLowerCase();
-    console.log('🔍 [Search] useEffect triggered, query:', query);
-
     if (query.length === 0) {
-      console.log('🔍 [Search] Empty query, clearing results');
       setResults([]);
       setIsSearching(false);
       return;
     }
-
     searchTimeout.current = setTimeout(() => {
-      console.log('🔍 [Search] Debounce fired, executing performSearch');
       performSearch(query);
     }, 300);
-
     return () => {
       if (searchTimeout.current) clearTimeout(searchTimeout.current);
     };
@@ -336,7 +391,7 @@ const Chats = () => {
     if (user.isOnline) reasons.push('⚡ Active now');
     if (user.mutualConnections > 0) reasons.push(`👥 ${user.mutualConnections} mutual connections`);
     const q = searchQuery.trim().toLowerCase();
-    if (q && user.interests.some(i => i.toLowerCase().includes(q))) {
+    if (q && user.interests.some((i) => i.toLowerCase().includes(q))) {
       reasons.push('🤖 Shared interests');
     }
     if (q && user.country.toLowerCase().includes(q)) {
@@ -456,47 +511,60 @@ const Chats = () => {
           )}
         </div>
       ) : (
-        <div className="recent-chats">
+        <div className="recent-chats" ref={containerRef}>
           <div className="section-header">
             <span>Recent Conversations</span>
-            {syncing && <span className="sync-indicator">🔄 Syncing...</span>}
           </div>
-          {loadingChats ? (
+          {loadingChats && recentChats.length === 0 ? (
             <div className="no-chats">
-              <Skeleton count={5} />
+              {[...Array(5)].map((_, i) => (
+                <SkeletonChatItem key={i} />
+              ))}
             </div>
           ) : recentChats.length > 0 ? (
-            recentChats.map((chat) => {
-              if (!chat) return null;
-              return (
-                <div
-                  key={chat.id}
-                  className="chat-item"
-                  onClick={() => navigate(`/chat/${chat.id}`)}
-                >
-                  <div className="chat-avatar">
-                    {chat.name?.[0]?.toUpperCase() || 'U'}
-                    {chat.unreadCount > 0 && (
-                      <span className="unread-badge">{chat.unreadCount}</span>
-                    )}
-                    {chat.isDeleted && (
-                      <span className="archived-badge" title="Account deleted – archived">📁</span>
-                    )}
-                  </div>
-                  <div className="chat-info">
-                    <div className="chat-name">
-                      {chat.name || 'Unknown'}
-                      {chat.isDeleted && <span className="archived-label"> (archived)</span>}
+            <>
+              {recentChats.map((chat) => {
+                if (!chat) return null;
+                return (
+                  <div
+                    key={chat.id}
+                    className="chat-item"
+                    onClick={() => navigate(`/chat/${chat.id}`)}
+                  >
+                    <div className="chat-avatar">
+                      {chat.name?.[0]?.toUpperCase() || 'U'}
+                      {chat.unreadCount > 0 && (
+                        <span className="unread-badge">{chat.unreadCount}</span>
+                      )}
+                      {chat.isDeleted && (
+                        <span className="archived-badge" title="Account deleted – archived">📁</span>
+                      )}
                     </div>
-                    <div className="chat-last">{chat.lastMessage || 'Start chatting...'}</div>
+                    <div className="chat-info">
+                      <div className="chat-name">
+                        {chat.name || 'Unknown'}
+                        {chat.isDeleted && <span className="archived-label"> (archived)</span>}
+                      </div>
+                      <div className="chat-last">{chat.lastMessage || 'Start chatting...'}</div>
+                    </div>
+                    <div className="chat-time">{timeAgo(chat.timestamp)}</div>
+                    <div className="chat-presence-dot-small">
+                      <span className={`presence-dot ${chat.online ? 'online' : 'offline'}`} />
+                    </div>
                   </div>
-                  <div className="chat-time">{timeAgo(chat.timestamp)}</div>
-                  <div className="chat-presence-dot-small">
-                    <span className={`presence-dot ${chat.online ? 'online' : 'offline'}`} />
-                  </div>
+                );
+              })}
+              {isLoadingMore && (
+                <div className="loading-more-chats">
+                  <span>Loading more...</span>
                 </div>
-              );
-            })
+              )}
+              {!hasMore && recentChats.length > 0 && (
+                <div className="no-more-chats">
+                  <span>No more conversations</span>
+                </div>
+              )}
+            </>
           ) : (
             <div className="no-chats">
               <p>No conversations yet</p>

@@ -1,37 +1,41 @@
 // src/services/cache/CacheManager.js
-// Simple in‑memory cache with localStorage fallback
+// Simple in‑memory cache with storage fallback
+import { getItem, setItem, removeItem } from '../storageService';
 
 const CACHE_KEY = 'echo_v2_profiles';
 let memoryCache = new Map();
 
-// Load from localStorage on init
-export const loadCache = () => {
+// Load from storage on init
+export const loadCache = async () => {
   try {
-    const stored = localStorage.getItem(CACHE_KEY);
+    const stored = await getItem(CACHE_KEY);
     if (stored) {
       const data = JSON.parse(stored);
       data.forEach(item => memoryCache.set(item.id, item));
     }
-    return Promise.resolve(memoryCache);
+    return memoryCache;
   } catch (e) {
-    return Promise.resolve(memoryCache);
+    console.warn('Failed to load cache:', e);
+    return memoryCache;
   }
 };
 
 export const getProfile = (uid) => memoryCache.get(uid) || null;
 
-export const setProfile = (uid, data) => {
+export const setProfile = async (uid, data) => {
   memoryCache.set(uid, data);
-  // persist to localStorage
+  // persist to storage
   try {
     const all = Array.from(memoryCache.values());
-    localStorage.setItem(CACHE_KEY, JSON.stringify(all));
+    await setItem(CACHE_KEY, JSON.stringify(all));
   } catch (e) { /* ignore */ }
 };
 
 export const getAllProfiles = () => Array.from(memoryCache.values());
 
-export const clearCache = () => {
+export const clearCache = async () => {
   memoryCache.clear();
-  localStorage.removeItem(CACHE_KEY);
+  try {
+    await removeItem(CACHE_KEY);
+  } catch (e) { /* ignore */ }
 };
