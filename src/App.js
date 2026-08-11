@@ -22,7 +22,6 @@ import Navbar from './components/Layout/Navbar';
 import BottomNav from './components/Layout/BottomNav';
 import { useAuth } from './hooks/useAuth';
 import NetworkStatus from './components/common/NetworkStatus';
-import { Storage } from '@capacitor/storage';
 
 // ─── ScrollToTop component ──────────────────────────────────────
 function ScrollToTop() {
