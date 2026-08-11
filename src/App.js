@@ -143,11 +143,6 @@ function AppContent() {
   const { fetchProfile } = useProfile();
   const [minTimePassed, setMinTimePassed] = useState(false);
 
-  // ─── Initialize Capacitor Storage ──────────────────────────────
-  useEffect(() => {
-    Storage.configure({});
-  }, []);
-
   useEffect(() => {
     const timer = setTimeout(() => setMinTimePassed(true), 2000);
     return () => clearTimeout(timer);

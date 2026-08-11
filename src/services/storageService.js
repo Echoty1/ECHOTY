@@ -3,8 +3,8 @@ import { Preferences } from '@capacitor/preferences';
 
 // Detect if we're running in a native app (Capacitor) or web
 export const isNativeApp = () => {
-  return typeof window !== 'undefined' && 
-         window.hasOwnProperty('Capacitor') && 
+  return typeof window !== 'undefined' &&
+         window.hasOwnProperty('Capacitor') &&
          window.Capacitor.isNative;
 };
 
