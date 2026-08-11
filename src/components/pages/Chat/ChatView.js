@@ -113,6 +113,7 @@ const ChatView = () => {
           const chatEntryRef = ref(db, `userChats/${user.uid}/${userId}`);
           const chatSnap = await get(chatEntryRef);
           const chatData = chatSnap.val();
+
           if (chatData?.partnerDeleted === true) {
             setIsReadOnly(true);
             setKeptPartnerName(chatData.partnerName || 'Deleted Account');
@@ -141,366 +142,226 @@ const ChatView = () => {
     if (!user || !userId || isReadOnly) return;
     const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
     get(myChatRef).then((snap) => {
-      if (snap.exists()) {
-        update(myChatRef, { unreadCount: 0 }).catch(() => {});
+      if (snap.exists() && snap.val()?.unreadCount > 0) {
+        update(myChatRef, { unreadCount: 0 }).catch(console.error);
       }
-    }).catch(() => {});
+    });
   }, [user, userId, isReadOnly]);
 
-  // ─── Load messages with pagination ──────────────────────────
-  const loadMessages = useCallback(async (loadMore = false) => {
-    if (!chatId || !user) return;
-    if (isLoadingMore) return;
+  // ─── Auto Scroll to Bottom ─────────────────────────────────
+  const scrollToBottom = (behavior = 'smooth') => {
+    messagesEndRef.current?.scrollIntoView({ behavior });
+  };
+
+  // ─── Load Initial Messages (Cached + Realtime) ──────────────
+  useEffect(() => {
+    if (!user || !userId) return;
+
+    let isMounted = true;
+
+    const loadInitialMessages = async () => {
+      const cachedData = await getCache(chatCacheKey);
+      if (cachedData && isMounted) {
+        setMessages(cachedData.messages || []);
+        setOldestTimestamp(cachedData.oldestTimestamp || null);
+        setHasMore(cachedData.hasMore ?? true);
+        setTimeout(() => scrollToBottom('auto'), 50);
+      }
+
+      const messagesRef = ref(db, `messages/${chatId}`);
+      const initialQuery = query(messagesRef, orderByChild('timestamp'), limitToLast(CHUNK_SIZE));
+
+      get(initialQuery).then((snapshot) => {
+        if (!isMounted) return;
+        const data = snapshot.val();
+        if (data) {
+          const msgList = Object.entries(data)
+            .map(([id, val]) => ({ id, ...val }))
+            .sort((a, b) => a.timestamp - b.timestamp);
+
+          setMessages(msgList);
+          if (msgList.length > 0) {
+            setOldestTimestamp(msgList[0].timestamp);
+          }
+          if (msgList.length < CHUNK_SIZE) {
+            setHasMore(false);
+          }
+
+          setCache(chatCacheKey, {
+            messages: msgList,
+            oldestTimestamp: msgList.length > 0 ? msgList[0].timestamp : null,
+            hasMore: msgList.length >= CHUNK_SIZE,
+          });
+        } else {
+          setHasMore(false);
+        }
+        setTimeout(() => scrollToBottom('auto'), 50);
+      });
+    };
+
+    loadInitialMessages();
+
+    // Listen for new incoming messages
+    const messagesRef = ref(db, `messages/${chatId}`);
+    const newMsgQuery = query(messagesRef, orderByChild('timestamp'), limitToLast(1));
+    const unsubscribeNew = onChildAdded(newMsgQuery, (snapshot) => {
+      if (!isMounted) return;
+      const newMsg = { id: snapshot.key, ...snapshot.val() };
+      setMessages((prev) => {
+        if (prev.some((m) => m.id === newMsg.id)) return prev;
+        const updated = [...prev, newMsg];
+        setCache(chatCacheKey, {
+          messages: updated,
+          oldestTimestamp: updated[0]?.timestamp || null,
+          hasMore: hasMore,
+        });
+        return updated;
+      });
+      setTimeout(() => scrollToBottom('smooth'), 100);
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribeNew();
+    };
+  }, [user, userId, chatId, chatCacheKey]);
+
+  // ─── Pagination: Load older messages ───────────────────────
+  const loadMoreMessages = useCallback(async () => {
+    if (!hasMore || isLoadingMore || !oldestTimestamp) return;
 
     setIsLoadingMore(true);
+    try {
+      const messagesRef = ref(db, `messages/${chatId}`);
+      const olderQuery = query(
+        messagesRef,
+        orderByChild('timestamp'),
+        limitToLast(CHUNK_SIZE + 1)
+      );
+
+      const snapshot = await get(olderQuery);
+      const data = snapshot.val();
+
+      if (data) {
+        const olderList = Object.entries(data)
+          .map(([id, val]) => ({ id, ...val }))
+          .filter((m) => m.timestamp < oldestTimestamp)
+          .sort((a, b) => a.timestamp - b.timestamp);
+
+        if (olderList.length > 0) {
+          setMessages((prev) => {
+            const combined = [...olderList, ...prev];
+            setCache(chatCacheKey, {
+              messages: combined,
+              oldestTimestamp: olderList[0].timestamp,
+              hasMore: olderList.length >= CHUNK_SIZE,
+            });
+            return combined;
+          });
+          setOldestTimestamp(olderList[0].timestamp);
+        } else {
+          setHasMore(false);
+        }
+      } else {
+        setHasMore(false);
+      }
+    } catch (err) {
+      console.error('Error loading older messages:', err);
+    } finally {
+      setIsLoadingMore(false);
+    }
+  }, [hasMore, isLoadingMore, oldestTimestamp, chatId, chatCacheKey]);
+
+  const { containerRef } = useInfiniteScroll(loadMoreMessages, 100, [
+    hasMore,
+    isLoadingMore,
+    oldestTimestamp,
+  ]);
+
+  // ─── Send Message ──────────────────────────────────────────
+  const sendMessage = async () => {
+    if (!input.trim() || !user || !userId || isReadOnly) return;
+
+    const textToSend = input.trim();
+    setInput('');
 
     try {
       const messagesRef = ref(db, `messages/${chatId}`);
-      let q;
+      const newMsgRef = push(messagesRef);
 
-      if (loadMore && oldestTimestamp) {
-        // Load older messages (before oldest)
-        q = query(
-          messagesRef,
-          orderByChild('timestamp'),
-          endAt(oldestTimestamp - 1),
-          limitToLast(CHUNK_SIZE)
-        );
-      } else {
-        // Load latest messages
-        q = query(
-          messagesRef,
-          orderByChild('timestamp'),
-          limitToLast(CHUNK_SIZE)
-        );
-      }
-
-      const snapshot = await get(q);
-      const data = snapshot.val();
-
-      if (!data) {
-        if (loadMore) setHasMore(false);
-        setLoading(false);
-        setIsLoadingMore(false);
-        return [];
-      }
-
-      const messageList = Object.entries(data)
-        .map(([id, msg]) => ({
-          id,
-          ...msg,
-          timestamp: msg.timestamp || Date.now(),
-        }))
-        .sort((a, b) => a.timestamp - b.timestamp);
-
-      if (messageList.length < CHUNK_SIZE) {
-        setHasMore(false);
-      }
-
-      // Update oldest timestamp for next load
-      if (messageList.length > 0) {
-        setOldestTimestamp(messageList[0].timestamp);
-      }
-
-      if (loadMore) {
-        // Prepend older messages
-        setMessages(prev => [...messageList, ...prev]);
-      } else {
-        // Replace with latest messages
-        setMessages(messageList);
-        // Cache messages for instant load next time
-        await setCache(chatCacheKey, messageList, 300);
-        // Scroll to bottom
-        setTimeout(() => {
-          if (messagesEndRef.current) {
-            messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
-          }
-        }, 100);
-      }
-
-      setLoading(false);
-      setIsLoadingMore(false);
-      return messageList;
-    } catch (error) {
-      console.error('Error loading messages:', error);
-      setLoading(false);
-      setIsLoadingMore(false);
-      return [];
-    }
-  }, [chatId, user, oldestTimestamp, isLoadingMore]);
-
-  // ─── Initial load with cache ──────────────────────────────────
-  useEffect(() => {
-    if (!chatId || !user) return;
-
-    const loadInitial = async () => {
-      // Try cache first (instant)
-      const cached = await getCache(chatCacheKey);
-      if (cached && cached.length > 0) {
-        setMessages(cached);
-        setLoading(false);
-        if (cached.length > 0) {
-          setOldestTimestamp(cached[0].timestamp);
-        }
-        if (cached.length < CHUNK_SIZE) {
-          setHasMore(false);
-        }
-        // Still fetch fresh data in background
-        loadMessages(false);
-      } else {
-        await loadMessages(false);
-      }
-    };
-
-    loadInitial();
-
-    // ─── Real-time listener for new messages ──────────────────
-    const messagesRef = ref(db, `messages/${chatId}`);
-    const latestQuery = query(messagesRef, orderByChild('timestamp'), limitToLast(1));
-
-    const unsubscribe = onChildAdded(latestQuery, (snapshot) => {
-      const msg = snapshot.val();
-      if (!msg) return;
-
-      const newMsg = {
-        id: snapshot.key,
-        ...msg,
-        timestamp: msg.timestamp || Date.now(),
+      const messageData = {
+        senderId: user.uid,
+        text: textToSend,
+        timestamp: serverTimestamp(),
       };
 
-      // Check if message already exists
-      setMessages(prev => {
-        const exists = prev.some(m => m.id === newMsg.id);
-        if (exists) return prev;
-        return [...prev, newMsg];
-      });
+      await set(newMsgRef, messageData);
 
-      // Update cache with new message
-      const updatedMessages = [...messages, newMsg];
-      setCache(chatCacheKey, updatedMessages, 300);
+      const now = Date.now();
+      const myChatMeta = ref(db, `userChats/${user.uid}/${userId}`);
+      const partnerChatMeta = ref(db, `userChats/${userId}/${user.uid}`);
 
-      // Scroll to bottom on new message (if not scrolling up)
-      setTimeout(() => {
-        if (messagesEndRef.current) {
-          messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-        }
-      }, 100);
-    });
-
-    return () => unsubscribe();
-  }, [chatId, user]);
-
-  // ─── Infinite scroll ──────────────────────────────────────────
-  const { containerRef, setHasMore: setScrollHasMore } = useInfiniteScroll(
-    async () => {
-      if (!hasMore || isLoadingMore) return;
-      await loadMessages(true);
-    },
-    300,
-    [hasMore, isLoadingMore]
-  );
-
-  useEffect(() => {
-    setScrollHasMore(hasMore);
-  }, [hasMore]);
-
-  // ─── Send message ───────────────────────────────────────────
-  const sendMessage = async () => {
-    if (isReadOnly || !input.trim() || !user || !userId) return;
-
-    const messageText = input.trim();
-    setInput('');
-
-    const chatRef = ref(db, `messages/${chatId}`);
-    const newMessageRef = push(chatRef);
-    const messageData = {
-      senderId: user.uid,
-      text: messageText,
-      timestamp: serverTimestamp(),
-      read: false,
-    };
-
-    try {
-      await set(newMessageRef, messageData);
-
-      // Update sender's userChats
-      const partnerName = partner?.name || userId;
-      const partnerAvatar = partner?.avatar || '';
-      const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-      await update(myChatRef, {
-        lastMessage: messageText,
-        lastSenderId: user.uid,
-        lastUpdated: serverTimestamp(),
-        partnerName,
-        partnerAvatar,
+      // Update sender's meta
+      await set(myChatMeta, {
+        lastMessage: textToSend,
+        timestamp: now,
         unreadCount: 0,
+        partnerName: partner.name || 'User',
       });
 
-      // Update receiver's userChats
-      const receiverPresenceRef = ref(db, `presence/chat/${chatId}/${userId}`);
-      const presenceSnap = await get(receiverPresenceRef);
-      const isReceiverActive = presenceSnap.val() === true;
+      // Update partner's meta
+      const partnerSnap = await get(partnerChatMeta);
+      const currentUnread = partnerSnap.val()?.unreadCount || 0;
 
-      const receiverChatRef = ref(db, `userChats/${userId}/${user.uid}`);
-      const receiverSnap = await get(receiverChatRef);
-      const currentUnread = receiverSnap.val()?.unreadCount || 0;
-      const newUnread = isReceiverActive ? 0 : currentUnread + 1;
-
-      await update(receiverChatRef, {
-        lastMessage: messageText,
-        lastSenderId: user.uid,
-        lastUpdated: serverTimestamp(),
-        partnerName: user?.displayName || user?.email?.split('@')[0] || 'User',
-        partnerAvatar: user?.photoURL || '',
-        unreadCount: newUnread,
+      await set(partnerChatMeta, {
+        lastMessage: textToSend,
+        timestamp: now,
+        unreadCount: currentUnread + 1,
+        partnerName: user.displayName || user.email?.split('@')[0] || 'User',
       });
     } catch (err) {
-      console.error('❌ Error sending message:', err);
-      setInput(messageText);
+      console.error('Failed to send message:', err);
     }
   };
 
-  // ─── Mark messages as read ──────────────────────────────────
-  useEffect(() => {
-    if (!userId || messages.length === 0 || isReadOnly) return;
-    const unreadMessages = messages.filter(
-      (msg) => msg.senderId === userId && !msg.read
-    );
-    if (unreadMessages.length === 0) return;
-    const updates = {};
-    unreadMessages.forEach((msg) => {
-      updates[`messages/${chatId}/${msg.id}/read`] = true;
-    });
-    update(ref(db), updates).catch((err) =>
-      console.warn('Error marking read:', err)
-    );
-  }, [messages, userId, chatId, isReadOnly]);
-
-  // ─── Modal handlers ────────────────────────────────────────
+  // ─── Handle Deleted Account Modal Actions ──────────────────
   const handleKeepChat = async () => {
-    setShowDeletedModal(false);
-    const name = partner?.name || userId;
-    await markChatAsKept(user.uid, userId, name);
-    setIsReadOnly(true);
-    setKeptPartnerName(name);
-  };
-
-  const handleDeleteChat = async () => {
-    setShowDeletedModal(false);
-    if (user && userId) {
-      await removeChat(user.uid, userId);
+    try {
+      await markChatAsKept(user.uid, userId, partner.name || cachedName);
+      setIsReadOnly(true);
+      setShowDeletedModal(false);
+    } catch (err) {
+      console.error('Failed to keep chat:', err);
     }
-    navigate('/chats');
   };
 
-  // ─── Loading state ──────────────────────────────────────────
-  if (loading && messages.length === 0) {
-    return (
-      <div style={{ padding: '16px', paddingTop: '70px', maxWidth: '480px', margin: '0 auto' }}>
-        {[...Array(8)].map((_, i) => (
-          <SkeletonMessage key={i} />
-        ))}
-      </div>
-    );
-  }
-
-  // ─── Modal actions ─────────────────────────────────────────
-  const modalActions = (
-    <>
-      <button
-        onClick={handleKeepChat}
-        style={{
-          padding: '10px 24px',
-          borderRadius: '50px',
-          background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
-          border: 'none',
-          color: '#fff',
-          fontWeight: 600,
-          fontSize: '14px',
-          cursor: 'pointer',
-          transition: 'transform 0.2s',
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
-        onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-      >
-        Keep
-      </button>
-      <button
-        onClick={handleDeleteChat}
-        style={{
-          padding: '10px 24px',
-          borderRadius: '50px',
-          background: '#EF4444',
-          border: 'none',
-          color: '#fff',
-          fontWeight: 600,
-          fontSize: '14px',
-          cursor: 'pointer',
-          transition: 'transform 0.2s',
-        }}
-        onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.02)')}
-        onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-      >
-        Delete
-      </button>
-    </>
-  );
-
-  // ─── Main render ────────────────────────────────────────────
-  const displayName = partner?.name || cachedName || 'User';
+  const handleRemoveChat = async () => {
+    try {
+      await removeChat(user.uid, userId);
+      setShowDeletedModal(false);
+      navigate('/chats');
+    } catch (err) {
+      console.error('Failed to remove chat:', err);
+    }
+  };
 
   return (
     <div className="chat-view">
-      <Modal
-        isOpen={showDeletedModal}
-        onClose={() => {}}
-        title="Account Deleted"
-        message="This user has deleted their account. Would you like to keep this chat as a read‑only archive, or delete it?"
-        type="warning"
-        actions={modalActions}
-      />
-
-      {/* Header */}
-      <div className="chat-header">
-        <button className="back-btn" onClick={() => navigate('/chats')}>←</button>
-        <div className="partner-info">
-          {partner && !partner.isPlaceholder ? (
-            <ECHOMOJI
-              mood={partner.mood || 'neutral'}
-              skin={partner.activeSkin ? getSkinById(partner.activeSkin) : null}
-              size={40}
-              interactive={false}
-            />
-          ) : (
-            <div className="avatar-placeholder" style={{ backgroundColor: '#6C3CE1', color: '#fff', width: 40, height: 40, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 600 }}>
-              {displayName[0]?.toUpperCase() || 'U'}
-            </div>
-          )}
-          <div className="partner-details">
-            <span className="partner-name">{displayName}</span>
-            <span className="partner-status">
-              {isReadOnly ? 'Archived' : partner?.online ? 'Online' : 'Offline'}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Messages */}
+      {/* ─── MESSAGES CONTAINER ────────────────────────────── */}
       <div className="messages-container" ref={containerRef}>
-        {isLoadingMore && (
-          <div className="loading-more">Loading older messages...</div>
-        )}
-        {!hasMore && messages.length > 0 && (
-          <div className="no-more-messages">Beginning of conversation</div>
-        )}
+        {isLoadingMore && <div className="loading-more">Loading older messages...</div>}
 
-        {messages.length === 0 ? (
+        {loading ? (
+          <>
+            <SkeletonMessage />
+            <SkeletonMessage />
+            <SkeletonMessage />
+          </>
+        ) : messages.length === 0 ? (
           <div className="chat-empty">
             <span>💬</span>
-            <p>No messages yet</p>
-            <span className="chat-empty-sub">
-              {isReadOnly ? 'This chat is archived.' : 'Say hello to start the conversation'}
-            </span>
+            <p>No messages yet.</p>
+            <p className="chat-empty-sub">Say hello to start the conversation!</p>
           </div>
         ) : (
           messages.map((msg) => (
@@ -525,9 +386,15 @@ const ChatView = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
+      {/* ─── INPUT FORM BAR / ARCHIVED BANNER ───────────── */}
       {!isReadOnly ? (
-        <form className="chat-input-form" onSubmit={(e) => { e.preventDefault(); sendMessage(); }}>
+        <form
+          className="chat-input-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            sendMessage();
+          }}
+        >
           <input
             type="text"
             className="chat-input"
@@ -544,6 +411,45 @@ const ChatView = () => {
           <i className="fas fa-lock" /> This conversation is archived (account deleted).
         </div>
       )}
+
+      {/* ─── DELETED ACCOUNT MODAL ───────────────────────── */}
+      <Modal
+        isOpen={showDeletedModal}
+        onClose={() => setShowDeletedModal(false)}
+        title="Account Deleted"
+      >
+        <p style={{ color: '#ccc', marginBottom: '20px' }}>
+          This user’s account has been deleted. Would you like to keep the chat history as read-only or remove it completely?
+        </p>
+        <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+          <button
+            onClick={handleRemoveChat}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              background: '#ef4444',
+              color: '#fff',
+              cursor: 'pointer',
+            }}
+          >
+            Remove Chat
+          </button>
+          <button
+            onClick={handleKeepChat}
+            style={{
+              padding: '8px 16px',
+              borderRadius: '8px',
+              border: 'none',
+              background: '#6C3CE1',
+              color: '#fff',
+              cursor: 'pointer',
+            }}
+          >
+            Keep Chat (Read-Only)
+          </button>
+        </div>
+      </Modal>
     </div>
   );
 };
