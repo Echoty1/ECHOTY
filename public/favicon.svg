@@ -1,6 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="100%" height="100%">
-  <rect width="512" height="512" rx="96" fill="#182830" />
-  <path d="M 120 120 H 280 V 176 H 180 V 228 H 260 V 284 H 180 V 336 H 280 V 392 H 120 Z" fill="#6C3CE1" />
-  <path d="M 320 160 A 140 140 0 0 1 320 352" stroke="#6C3CE1" stroke-width="36" fill="none" stroke-linecap="round" />
-  <path d="M 370 200 A 90 90 0 0 1 370 312" stroke="#EC4899" stroke-width="32" stroke-opacity="0.6" fill="none" stroke-linecap="round" />
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 320" width="512" height="512"><metadata><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#" xmlns:dc="http://purl.org/dc/elements/1.1/"><rdf:Description><dc:creator>RealFaviconGenerator</dc:creator><dc:source>https://realfavicongenerator.net</dc:source></rdf:Description></rdf:RDF></metadata><rect width="320" height="320" rx="60" fill="#182830"></rect><g transform="translate(-100, -100)">
+    <path d="M 120 120 H 280 V 176 H 180 V 228 H 260 V 284 H 180 V 336 H 280 V 392 H 120 Z" fill="#6C3CE1"></path>
+    <path d="M 320 160 A 140 140 0 0 1 320 352" stroke="#6C3CE1" stroke-width="36" fill="none" stroke-linecap="round"></path>
+    <path d="M 370 200 A 90 90 0 0 1 370 312" stroke="#EC4899" stroke-width="32" stroke-opacity="0.6" fill="none" stroke-linecap="round"></path>
+  </g></svg>
