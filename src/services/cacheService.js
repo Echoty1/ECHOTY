@@ -6,7 +6,6 @@ const CACHE_VERSION = 'v2';
 
 // ─── In-memory cache (fastest) ────────────────────────────────
 const memoryCache = new Map();
-const MEMORY_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Get cached data (memory first, then storage)
@@ -58,17 +57,16 @@ export const setCache = async (key, data, ttlSeconds = 300) => {
   // Store in memory
   memoryCache.set(fullKey, { data, expires: expiry });
   
-  // Store in storage (async, don't await)
-  try {
-    const cacheData = {
-      data,
-      expiry,
-      version: CACHE_VERSION,
-    };
-    await setItem(fullKey, JSON.stringify(cacheData));
-  } catch (error) {
+  // Store in persistent storage (async background task)
+  const cacheData = {
+    data,
+    expiry,
+    version: CACHE_VERSION,
+  };
+
+  setItem(fullKey, JSON.stringify(cacheData)).catch((error) => {
     console.error('Cache set error:', error);
-  }
+  });
 };
 
 /**

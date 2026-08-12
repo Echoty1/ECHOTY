@@ -115,16 +115,22 @@ const Chats = () => {
   const searchTimeout = useRef(null);
   const presenceUnsubRef = useRef(null);
   const userChatsUnsubRef = useRef(null);
+  const initialLoadDone = useRef(false);
+  const isInitialLoading = useRef(false);
 
   const cacheKey = `chats_${user?.uid}`;
 
   // ─── State ─────────────────────────────────────────────────────
+  // ✅ Ensure recentChats is ALWAYS an array
   const [recentChats, setRecentChats] = useState(() => {
     const cached = getCache(cacheKey);
-    return cached || [];
+    return Array.isArray(cached) ? cached : [];
   });
 
-  const [loadingChats, setLoadingChats] = useState(() => !getCache(cacheKey));
+  const [loadingChats, setLoadingChats] = useState(() => {
+    const cached = getCache(cacheKey);
+    return !(Array.isArray(cached) && cached.length > 0);
+  });
   const [hasMore, setHasMore] = useState(true);
   const [lastChatKey, setLastChatKey] = useState(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -158,17 +164,105 @@ const Chats = () => {
     };
   }, [user]);
 
-  // ─── Load chats with pagination ──────────────────────────────
-  const loadChats = useCallback(async (loadMore = false) => {
-    if (!user || isLoadingMore) return;
+  // ─── Sequential initial load ──────────────────────────────────
+  const loadInitialChatsSequentially = useCallback(async () => {
+    if (!user || isInitialLoading.current) return;
+    isInitialLoading.current = true;
+    setLoadingChats(true);
+    // Reset to empty array to ensure clean state
+    setRecentChats([]);
 
+    try {
+      const userChatsRef = ref(db, `userChats/${user.uid}`);
+      const snapshot = await get(userChatsRef);
+      const data = snapshot.val();
+
+      if (!data) {
+        setRecentChats([]);
+        setLoadingChats(false);
+        isInitialLoading.current = false;
+        initialLoadDone.current = true;
+        return;
+      }
+
+      // Convert to array and sort by lastUpdated descending
+      const entries = Object.entries(data).map(([id, chat]) => ({ id, ...chat }));
+      const sorted = entries.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+
+      const newChats = [];
+      for (const chat of sorted) {
+        try {
+          const profile = await loadPartnerData(chat.id);
+          let partnerName, isDeleted = false;
+          if (chat.partnerDeleted === true) {
+            partnerName = chat.partnerName || 'Deleted Account';
+            isDeleted = true;
+          } else {
+            partnerName = profile.name || profile.username || profile.displayName || chat.partnerName || 'Unknown User';
+          }
+          const isSender = chat.lastSenderId === user.uid;
+          let displayMessage = chat.lastMessage || 'Start chatting...';
+          if (displayMessage !== 'Start chatting...') {
+            displayMessage = isSender ? `You: ${displayMessage}` : `${partnerName}: ${displayMessage}`;
+            if (displayMessage.length > 30) displayMessage = displayMessage.substring(0, 30) + '...';
+          }
+          const item = {
+            id: chat.id,
+            name: partnerName,
+            avatar: profile.avatar || chat.partnerAvatar,
+            mood: profile.mood || 'neutral',
+            activeSkin: profile.activeSkin,
+            lastMessage: displayMessage,
+            timestamp: chat.lastUpdated || Date.now(),
+            lastSenderId: chat.lastSenderId || '',
+            unreadCount: chat.unreadCount || 0,
+            isDeleted,
+          };
+          newChats.push(item);
+          // Update state incrementally
+          setRecentChats((prev) => [...prev, item]);
+        } catch (err) {
+          console.warn(`Failed to load chat for ${chat.id}:`, err);
+          const fallbackItem = {
+            id: chat.id,
+            name: chat.partnerName || 'Unknown User',
+            lastMessage: chat.lastMessage || 'Start chatting...',
+            timestamp: chat.lastUpdated || Date.now(),
+            lastSenderId: chat.lastSenderId || '',
+            unreadCount: chat.unreadCount || 0,
+            isDeleted: false,
+          };
+          newChats.push(fallbackItem);
+          setRecentChats((prev) => [...prev, fallbackItem]);
+        }
+      }
+
+      // Cache the final list
+      await setCache(cacheKey, newChats, 300);
+      initialLoadDone.current = true;
+    } catch (error) {
+      console.error('Error loading initial chats sequentially:', error);
+      const cached = getCache(cacheKey);
+      if (Array.isArray(cached) && cached.length > 0) {
+        setRecentChats(cached);
+      } else {
+        setRecentChats([]);
+      }
+    } finally {
+      setLoadingChats(false);
+      isInitialLoading.current = false;
+    }
+  }, [user, cacheKey]);
+
+  // ─── Load more chats (pagination) ────────────────────────────
+  const loadMoreChats = useCallback(async () => {
+    if (!user || isLoadingMore || !hasMore) return;
     setIsLoadingMore(true);
 
     try {
       const userChatsRef = ref(db, `userChats/${user.uid}`);
       let q;
-
-      if (loadMore && lastChatKey) {
+      if (lastChatKey) {
         q = query(
           userChatsRef,
           orderByKey(),
@@ -185,10 +279,8 @@ const Chats = () => {
 
       const snapshot = await get(q);
       const data = snapshot.val();
-
       if (!data) {
-        if (loadMore) setHasMore(false);
-        setLoadingChats(false);
+        setHasMore(false);
         setIsLoadingMore(false);
         return;
       }
@@ -203,32 +295,27 @@ const Chats = () => {
       if (chatList.length < CHAT_CHUNK_SIZE) {
         setHasMore(false);
       }
-
       if (chatList.length > 0) {
         setLastChatKey(chatList[chatList.length - 1].id);
       }
 
-      const processedChats = await Promise.all(
+      const processed = await Promise.all(
         chatList.map(async (chat) => {
           try {
             const profile = await loadPartnerData(chat.id);
-            let partnerName;
-            let isDeleted = false;
-
+            let partnerName, isDeleted = false;
             if (chat.partnerDeleted === true) {
               partnerName = chat.partnerName || 'Deleted Account';
               isDeleted = true;
             } else {
               partnerName = profile.name || profile.username || profile.displayName || chat.partnerName || 'Unknown User';
             }
-
             const isSender = chat.lastSenderId === user.uid;
             let displayMessage = chat.lastMessage || 'Start chatting...';
             if (displayMessage !== 'Start chatting...') {
               displayMessage = isSender ? `You: ${displayMessage}` : `${partnerName}: ${displayMessage}`;
               if (displayMessage.length > 30) displayMessage = displayMessage.substring(0, 30) + '...';
             }
-
             return {
               id: chat.id,
               name: partnerName,
@@ -240,7 +327,6 @@ const Chats = () => {
               lastSenderId: chat.lastSenderId || '',
               unreadCount: chat.unreadCount || 0,
               isDeleted,
-              online: !!onlineUsers[chat.id],
             };
           } catch (err) {
             return {
@@ -251,27 +337,19 @@ const Chats = () => {
               lastSenderId: chat.lastSenderId || '',
               unreadCount: chat.unreadCount || 0,
               isDeleted: false,
-              online: !!onlineUsers[chat.id],
             };
           }
         })
       );
 
-      const validItems = processedChats.filter(Boolean);
-
-      if (loadMore) {
-        setRecentChats((prev) => [...prev, ...validItems]);
-      } else {
-        setRecentChats(validItems);
-        await setCache(cacheKey, validItems, 300);
-      }
+      const validItems = processed.filter(Boolean);
+      setRecentChats((prev) => [...prev, ...validItems]);
     } catch (error) {
-      console.error('Error loading chats:', error);
+      console.error('Error loading more chats:', error);
     } finally {
-      setLoadingChats(false);
       setIsLoadingMore(false);
     }
-  }, [user, lastChatKey, isLoadingMore, onlineUsers, cacheKey]);
+  }, [user, lastChatKey, hasMore, isLoadingMore]);
 
   // ─── Real-time listener for new chats ────────────────────────
   useEffect(() => {
@@ -287,32 +365,28 @@ const Chats = () => {
       userChatsUnsubRef.current = null;
     }
 
-    loadChats(false);
+    // Start sequential load
+    loadInitialChatsSequentially();
 
     userChatsUnsubRef.current = onValue(
       userChatsRef,
       async (snapshot) => {
-        const data = snapshot.val();
-        if (!data) {
-          setRecentChats([]);
-          setCache(cacheKey, []);
-          setLoadingChats(false);
-          return;
-        }
-
-        setHasMore(true);
-        setLastChatKey(null);
-        await loadChats(false);
+        if (!initialLoadDone.current || isLoadingMore) return;
+        setRecentChats([]);
+        initialLoadDone.current = false;
+        await loadInitialChatsSequentially();
       },
       (error) => {
         console.error('❌ userChats listener error:', error);
         const cached = getCache(cacheKey);
-        if (cached && cached.length > 0) {
+        if (Array.isArray(cached) && cached.length > 0) {
           setRecentChats(cached);
           setLoadingChats(false);
+          initialLoadDone.current = true;
         } else {
           setRecentChats([]);
           setLoadingChats(false);
+          initialLoadDone.current = true;
         }
       }
     );
@@ -323,16 +397,16 @@ const Chats = () => {
         userChatsUnsubRef.current = null;
       }
     };
-  }, [user]);
+  }, [user, loadInitialChatsSequentially, cacheKey, isLoadingMore]);
 
-  // ─── Infinite scroll ──────────────────────────────────────────
+  // ─── Infinite scroll for older chats ──────────────────────────
   const { containerRef, setHasMore: setScrollHasMore } = useInfiniteScroll(
     async () => {
-      if (!hasMore || isLoadingMore) return;
-      await loadChats(true);
+      if (!hasMore || isLoadingMore || loadingChats) return;
+      await loadMoreChats();
     },
     300,
-    [hasMore, isLoadingMore]
+    [hasMore, isLoadingMore, loadingChats]
   );
 
   useEffect(() => {
@@ -422,7 +496,6 @@ const Chats = () => {
   // ─── Render ──────────────────────────────────────────────────
   return (
     <div className="chats-page" ref={containerRef}>
-      {/* AI Modal for "Coming Soon" */}
       <Modal
         isOpen={showAiModal}
         onClose={() => setShowAiModal(false)}
@@ -567,77 +640,78 @@ const Chats = () => {
             <div className="chat-time">Always Active</div>
           </div>
 
-          {/* Skeleton Loaders during fetch */}
-          {loadingChats && recentChats.length === 0 ? (
-            <div className="no-chats">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <SkeletonChatItem key={i} />
-              ))}
-            </div>
-          ) : recentChats.length > 0 ? (
-            <>
-              {recentChats.map((chat) => {
-                if (!chat) return null;
-                return (
-                  <div
-                    key={chat.id}
-                    className="chat-item regular-chat-item"
-                    onClick={() => startChat(chat)}
-                  >
-                    {/* Regular Contact: Left Profile Picture */}
-                    <div className="chat-avatar">
-                      {chat.avatar ? (
-                        <img src={chat.avatar} alt={chat.name} className="user-profile-img" />
-                      ) : (
-                        <div className="avatar-placeholder">{chat.name?.[0]?.toUpperCase() || 'U'}</div>
-                      )}
-                      <span className={`presence-dot ${chat.online ? 'online' : 'offline'}`} />
-                      {chat.unreadCount > 0 && (
-                        <span className="unread-badge">{chat.unreadCount}</span>
-                      )}
-                      {chat.isDeleted && (
-                        <span className="archived-badge" title="Account deleted – archived">📁</span>
-                      )}
-                    </div>
+          {/* Render each chat */}
+          {recentChats.map((chat) => {
+            if (!chat) return null;
+            const isOnline = !!onlineUsers[chat.id];
+            return (
+              <div
+                key={chat.id}
+                className="chat-item regular-chat-item"
+                onClick={() => startChat(chat)}
+              >
+                {/* Avatar */}
+                <div className="chat-avatar">
+                  {chat.avatar ? (
+                    <img src={chat.avatar} alt={chat.name} className="user-profile-img" />
+                  ) : (
+                    <div className="avatar-placeholder">{chat.name?.[0]?.toUpperCase() || 'U'}</div>
+                  )}
+                  <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
+                  {chat.unreadCount > 0 && (
+                    <span className="unread-badge">{chat.unreadCount}</span>
+                  )}
+                  {chat.isDeleted && (
+                    <span className="archived-badge" title="Account deleted – archived">📁</span>
+                  )}
+                </div>
 
-                    {/* Middle: Chat Info */}
-                    <div className="chat-info">
-                      <div className="chat-title-row">
-                        <span className="chat-name">
-                          {chat.name || 'Unknown'}
-                          {chat.isDeleted && <span className="archived-label"> (archived)</span>}
-                        </span>
-                      </div>
-                      <div className="chat-last">{chat.lastMessage || 'Start chatting...'}</div>
-                    </div>
-
-                    {/* Middle-Right: Separate EchoMoji Display */}
-                    <div className="chat-echomoji-middle">
-                      <ECHOMOJI
-                        mood={chat.mood || 'neutral'}
-                        skin={chat.activeSkin ? getSkinById(chat.activeSkin) : null}
-                        size={38}
-                        interactive={false}
-                      />
-                    </div>
-
-                    {/* Right: Timestamp */}
-                    <div className="chat-time">{timeAgo(chat.timestamp)}</div>
+                {/* Chat Info */}
+                <div className="chat-info">
+                  <div className="chat-title-row">
+                    <span className="chat-name">
+                      {chat.name || 'Unknown'}
+                      {chat.isDeleted && <span className="archived-label"> (archived)</span>}
+                    </span>
                   </div>
-                );
-              })}
-              {isLoadingMore && (
-                <div className="loading-more-chats">
-                  <span>Loading more...</span>
+                  <div className="chat-last">{chat.lastMessage || 'Start chatting...'}</div>
                 </div>
-              )}
-              {!hasMore && recentChats.length > 0 && (
-                <div className="no-more-chats">
-                  <span>No more conversations</span>
+
+                {/* EchoMoji */}
+                <div className="chat-echomoji-middle">
+                  <ECHOMOJI
+                    mood={chat.mood || 'neutral'}
+                    skin={chat.activeSkin ? getSkinById(chat.activeSkin) : null}
+                    size={38}
+                    interactive={false}
+                  />
                 </div>
-              )}
-            </>
-          ) : (
+
+                {/* Timestamp */}
+                <div className="chat-time">{timeAgo(chat.timestamp)}</div>
+              </div>
+            );
+          })}
+
+          {/* Sequential Skeleton – stays at bottom while loading initial chats */}
+          {loadingChats && <SkeletonChatItem />}
+
+          {/* Loading more indicator for pagination */}
+          {isLoadingMore && (
+            <div className="loading-more-chats">
+              <span>Loading more...</span>
+            </div>
+          )}
+
+          {/* End of list message */}
+          {!hasMore && recentChats.length > 0 && (
+            <div className="no-more-chats">
+              <span>No more conversations</span>
+            </div>
+          )}
+
+          {/* Empty state – only when not loading and no chats */}
+          {!loadingChats && recentChats.length === 0 && (
             <div className="no-chats">
               <p>No conversations yet</p>
               <span>Search for people to start chatting</span>
@@ -648,28 +722,14 @@ const Chats = () => {
 
       {/* Embedded CSS Overrides for Smooth Floating Animations */}
       <style>{`
-        /* Smooth Floating Animation Keyframes */
         @keyframes floatCard {
-          0%, 100% {
-            transform: translateY(0px);
-            box-shadow: 0 4px 20px rgba(108, 60, 225, 0.15);
-          }
-          50% {
-            transform: translateY(-5px);
-            box-shadow: 0 10px 25px rgba(108, 60, 225, 0.3);
-          }
+          0%, 100% { transform: translateY(0px); box-shadow: 0 4px 20px rgba(108, 60, 225, 0.15); }
+          50% { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(108, 60, 225, 0.3); }
         }
-
         @keyframes floatAvatar {
-          0%, 100% {
-            transform: translateY(0px) scale(1);
-          }
-          50% {
-            transform: translateY(-3px) scale(1.04);
-          }
+          0%, 100% { transform: translateY(0px) scale(1); }
+          50% { transform: translateY(-3px) scale(1.04); }
         }
-
-        /* Floating AI Card */
         .chat-item.ai-item.floating-ai-card {
           background: rgba(108, 60, 225, 0.08);
           border: 1px solid rgba(124, 58, 237, 0.3);
@@ -679,13 +739,10 @@ const Chats = () => {
           animation: floatCard 4s ease-in-out infinite;
           transition: background 0.2s ease, border-color 0.2s ease;
         }
-
         .chat-item.ai-item.floating-ai-card:hover {
           background: rgba(108, 60, 225, 0.18);
           border-color: rgba(124, 58, 237, 0.5);
         }
-
-        /* Floating AI Avatar Frame */
         .chat-avatar-container.ai-avatar-frame.floating-ai-avatar {
           width: 48px;
           height: 48px;
@@ -699,7 +756,6 @@ const Chats = () => {
           justify-content: center;
           animation: floatAvatar 3s ease-in-out infinite;
         }
-
         .echomoji-wrapper {
           width: 100%;
           height: 100%;
@@ -708,8 +764,6 @@ const Chats = () => {
           justify-content: center;
           transform: scale(1.15);
         }
-
-        /* User Profile Image & Placeholder */
         .user-profile-img {
           width: 48px;
           height: 48px;
@@ -717,7 +771,6 @@ const Chats = () => {
           object-fit: cover;
           border: 1px solid rgba(255, 255, 255, 0.1);
         }
-
         .avatar-placeholder {
           width: 48px;
           height: 48px;
@@ -731,14 +784,11 @@ const Chats = () => {
           justify-content: center;
           border: 1px solid rgba(255, 255, 255, 0.1);
         }
-
-        /* Layout structure for regular chat item */
         .regular-chat-item {
           display: flex;
           align-items: center;
           gap: 12px;
         }
-
         .chat-echomoji-middle {
           display: flex;
           align-items: center;
@@ -747,13 +797,11 @@ const Chats = () => {
           margin-right: 8px;
           flex-shrink: 0;
         }
-
         .chat-title-row {
           display: flex;
           align-items: center;
           gap: 6px;
         }
-
         .ai-badge {
           display: inline-flex;
           align-items: center;
