@@ -7,9 +7,11 @@ import { ref, onValue, update, set } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import { Country, City } from 'country-state-city';
+import GifLibraryModal from '../../GifLibrary/GifLibraryModal';
+import AvatarPicker from '../../AvatarPicker/AvatarPicker';
+import Toast from '../../Toast/Toast';
 import './Profile.css';
 
-// Synchronous fast storage helpers (<1ms response time)
 const STORAGE_PREFIX = 'echo_cache_';
 
 const getFastLocal = (key) => {
@@ -29,7 +31,6 @@ const setFastLocal = (key, val) => {
   }
 };
 
-// Reusable Pulse Skeleton Block
 const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', style = {} }) => (
   <div
     style={{
@@ -43,11 +44,38 @@ const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', 
   />
 );
 
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const TEMPLATE_MOODS = ['happy', 'cool', 'laughing', 'excited', 'wink'];
+
+// ─── 10 Default Animated Interest Templates ─────────────────────
+const DEFAULT_INTEREST_TEMPLATES = [
+  '🎮 Gaming',
+  '🎵 Music',
+  '💻 Tech',
+  '🍿 Movies',
+  '🎨 Art',
+  '⛩️ Anime',
+  '🏋️ Fitness',
+  '📸 Photography',
+  '✈️ Travel',
+  '🚀 Coding',
+];
+
+// Cloudinary Configuration
+const CLOUDINARY_CLOUD_NAME = 'rjlscgan'; // Replace with your cloud name if different
+const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads'; // Replace with your unsigned upload preset name
+
 const Profile = () => {
   const { user } = useAuth();
   const { refreshProfile } = useProfile();
 
-  // Instant local memory state initialization (0ms frame render)
+  const [showGifLibrary, setShowGifLibrary] = useState(false);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [copiedUid, setCopiedUid] = useState(false);
+  const [templateIndex, setTemplateIndex] = useState(0);
+
   const cachedProfile = useMemo(() => {
     if (!user?.uid) return null;
     return getFastLocal(`profile_${user.uid}`);
@@ -59,23 +87,34 @@ const Profile = () => {
   const [editData, setEditData] = useState(() => cachedProfile || {
     name: '',
     avatar: '',
-    mood: 'neutral',
+    videoUrl: '',
+    mood: 'happy',
     activeSkin: null,
     bio: '',
     interests: [],
-    skills: [],
     country: '',
     countryCode: '',
     city: '',
   });
 
   const [tagInput, setTagInput] = useState('');
-  const [skillInput, setSkillInput] = useState('');
-  const fileInputRef = useRef(null);
+  const imageInputRef = useRef(null);
+  const gifInputRef = useRef(null);
   const tagInputRef = useRef(null);
-  const skillInputRef = useRef(null);
 
-  // ─── Country & City Data Handlers ────────────────────────────
+  // Rotate mood avatar when no custom avatar/skin exists
+  useEffect(() => {
+    const hasCustomAvatar = editData.videoUrl || editData.avatar || profile?.videoUrl || profile?.avatar || profile?.activeSkin;
+    if (hasCustomAvatar) return;
+
+    const interval = setInterval(() => {
+      setTemplateIndex((prev) => (prev + 1) % TEMPLATE_MOODS.length);
+    }, 2500);
+
+    return () => clearInterval(interval);
+  }, [editData, profile]);
+
+  // Countries & Cities
   const countriesList = useMemo(() => Country.getAllCountries(), []);
 
   const matchedCountryCode = useMemo(() => {
@@ -96,15 +135,9 @@ const Profile = () => {
   const handleCountrySelect = (e) => {
     const selectedIsoCode = e.target.value;
     if (!selectedIsoCode) {
-      setEditData({
-        ...editData,
-        country: '',
-        countryCode: '',
-        city: '',
-      });
+      setEditData({ ...editData, country: '', countryCode: '', city: '' });
       return;
     }
-
     const countryObj = Country.getCountryByCode(selectedIsoCode);
     setEditData({
       ...editData,
@@ -115,13 +148,10 @@ const Profile = () => {
   };
 
   const handleCitySelect = (e) => {
-    setEditData({
-      ...editData,
-      city: e.target.value,
-    });
+    setEditData({ ...editData, city: e.target.value });
   };
 
-  // ─── Background Real-time Profile Listener ───────────────────
+  // Listen to user profile
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -138,17 +168,18 @@ const Profile = () => {
             ...data,
             name: data.name || data.username || data.displayName || user.displayName || 'User',
             interests: data.interests || [],
-            skills: data.skills || [],
+            avatar: data.avatar || '',
+            videoUrl: data.videoUrl || '',
           };
         } else {
           safeData = {
             name: user.displayName || user.email?.split('@')[0] || 'User',
             avatar: '',
-            mood: 'neutral',
+            videoUrl: '',
+            mood: 'happy',
             activeSkin: null,
             bio: 'New to ECHO! 🌊',
             interests: [],
-            skills: [],
             country: '',
             countryCode: '',
             city: '',
@@ -172,7 +203,6 @@ const Profile = () => {
     return () => unsubscribe();
   }, [user?.uid, editing]);
 
-  // ─── SAVE PROFILE ─────────────────────────────────────────────
   const handleSave = async () => {
     if (!user) return;
 
@@ -180,37 +210,115 @@ const Profile = () => {
       const cacheKey = `profile_${user.uid}`;
       const profileRef = ref(db, `profiles/${user.uid}`);
 
-      // 1. Update Firebase
       await update(profileRef, editData);
-
-      // 2. Update local cache (fast storage)
       setFastLocal(cacheKey, editData);
-
-      // 3. Update local profile state
       setProfile(editData);
-
-      // 4. Refresh ProfileContext cache
       await refreshProfile(user.uid);
-
-      // 5. Exit edit mode
       setEditing(false);
-
+      setToast({ message: 'Profile saved successfully!', type: 'success' });
     } catch (error) {
       console.error('Error saving profile:', error);
+      setToast({ message: 'Failed to save profile.', type: 'error' });
     }
   };
 
-  const handleAvatarUpload = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      setEditData({ ...editData, avatar: reader.result });
-    };
-    reader.readAsDataURL(file);
+  const handleCopyUid = () => {
+    if (!user?.uid) return;
+    navigator.clipboard.writeText(user.uid);
+    setCopiedUid(true);
+    setTimeout(() => setCopiedUid(false), 2000);
   };
 
-  // ─── Interests ──────────────────────────────────────────────
+  // ─── Cloudinary Upload Handler ──────────────────────────────────
+  const handleUploadMedia = async (file, isGifOnly = false) => {
+    if (!user) return;
+
+    if (file.size > MAX_FILE_SIZE) {
+      setToast({ message: 'File size exceeds 5 MB. Choose a smaller file.', type: 'error' });
+      return;
+    }
+
+    if (isGifOnly) {
+      if (file.type !== 'image/gif') {
+        setToast({ message: 'Only GIF files (.gif) are allowed.', type: 'error' });
+        return;
+      }
+    } else {
+      const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+      if (!validTypes.includes(file.type)) {
+        setToast({ message: 'Please upload a valid image (PNG, JPEG, WEBP).', type: 'error' });
+        return;
+      }
+    }
+
+    setUploading(true);
+    try {
+      // Direct Upload to Cloudinary
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
+
+      const downloadUrl = data.secure_url;
+
+      const updateData = {};
+      if (file.type === 'image/gif') {
+        updateData.videoUrl = downloadUrl;
+        updateData.avatar = downloadUrl;
+        updateData.activeSkin = null;
+      } else {
+        updateData.avatar = downloadUrl;
+        updateData.videoUrl = ''; // Clear videoUrl when uploading static image!
+        updateData.activeSkin = null;
+      }
+
+      await update(ref(db, `profiles/${user.uid}`), updateData);
+      setProfile((prev) => ({ ...prev, ...updateData }));
+      setEditData((prev) => ({ ...prev, ...updateData }));
+      await refreshProfile(user.uid);
+
+      setToast({ message: 'Media uploaded successfully!', type: 'success' });
+      setShowAvatarPicker(false);
+    } catch (err) {
+      console.error('Upload error:', err);
+      setToast({ message: 'Upload failed. Check Cloudinary preset.', type: 'error' });
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleImageFile = (e) => {
+    if (e.target.files[0]) handleUploadMedia(e.target.files[0], false);
+    e.target.value = '';
+  };
+
+  const handleGifFile = (e) => {
+    if (e.target.files[0]) handleUploadMedia(e.target.files[0], true);
+    e.target.value = '';
+  };
+
+  const handleGifSelect = async (gif) => {
+    try {
+      const updateData = { videoUrl: gif.url, avatar: gif.url, activeSkin: null };
+      await update(ref(db, `profiles/${user.uid}`), updateData);
+      setProfile((prev) => ({ ...prev, ...updateData }));
+      setEditData((prev) => ({ ...prev, ...updateData }));
+      await refreshProfile(user.uid);
+      setShowGifLibrary(false);
+      setToast({ message: 'Profile GIF updated!', type: 'success' });
+    } catch (err) {
+      console.error('Failed to set GIF:', err);
+      setToast({ message: 'Failed to set GIF.', type: 'error' });
+    }
+  };
+
   const handleTagInputChange = (e) => {
     const value = e.target.value;
     if (value.includes(',')) {
@@ -240,69 +348,45 @@ const Profile = () => {
     setEditData({ ...editData, interests: newInterests });
   };
 
-  // ─── Skills ──────────────────────────────────────────────────
-  const handleSkillInputChange = (e) => {
-    const value = e.target.value;
-    if (value.includes(',')) {
-      const parts = value.split(',').map((s) => s.trim()).filter(Boolean);
-      if (parts.length) {
-        setEditData({ ...editData, skills: [...(editData.skills || []), ...parts] });
-        setSkillInput('');
-      }
-    } else {
-      setSkillInput(value);
-    }
-  };
-
-  const handleSkillKeyDown = (e) => {
-    if (e.key === 'Enter' && skillInput.trim()) {
-      e.preventDefault();
-      const newSkill = skillInput.trim();
-      if (!(editData.skills || []).includes(newSkill)) {
-        setEditData({ ...editData, skills: [...(editData.skills || []), newSkill] });
-      }
-      setSkillInput('');
-    }
-  };
-
-  const removeSkill = (index) => {
-    const newSkills = (editData.skills || []).filter((_, i) => i !== index);
-    setEditData({ ...editData, skills: newSkills });
-  };
-
   const activeSkinObj = profile?.activeSkin ? getSkinById(profile.activeSkin) : null;
-  const skinForPreview = activeSkinObj
-    ? {
-        bgStart: activeSkinObj.bgStart,
-        bgEnd: activeSkinObj.bgEnd,
-        ledColor: activeSkinObj.ledColor,
-        glowColor: activeSkinObj.glowColor,
-      }
-    : null;
+  
+  // Media priority display fix
+  const activeVideoUrl = editing ? editData.videoUrl : profile?.videoUrl;
+  const activeAvatarUrl = editing ? editData.avatar : profile?.avatar;
+  const currentMediaUrl = activeVideoUrl || activeAvatarUrl;
 
-  const currentMood = profile?.mood || 'neutral';
-  const initials = ((profile?.name || user?.displayName || 'U')[0] || 'U').toUpperCase();
+  const isVideoFormat = activeVideoUrl && (activeVideoUrl.endsWith('.mp4') || activeVideoUrl.endsWith('.webm'));
+
+  // Interest checks
+  const currentInterests = editing ? editData.interests : profile?.interests;
+  const hasInterests = currentInterests && currentInterests.length > 0;
 
   return (
     <div className="profile-page">
+      <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleImageFile} />
+      <input type="file" ref={gifInputRef} accept="image/gif" style={{ display: 'none' }} onChange={handleGifFile} />
+
       <div className="profile-card">
-        {/* Avatar Section */}
-        <div className="profile-avatar" onClick={() => editing && fileInputRef.current?.click()}>
+        {/* Avatar */}
+        <div
+          className="profile-avatar"
+          onClick={() => editing && setShowAvatarPicker(true)}
+          style={{ cursor: editing ? 'pointer' : 'default', position: 'relative' }}
+        >
           {loading ? (
             <SkeletonBlock width="100%" height="100%" borderRadius="50%" />
-          ) : editData.avatar ? (
-            <img src={editData.avatar} alt="Avatar" />
+          ) : isVideoFormat ? (
+            <video src={currentMediaUrl} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+          ) : currentMediaUrl ? (
+            <img src={currentMediaUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+          ) : activeSkinObj ? (
+            <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={110} />
           ) : (
-            <span>{initials}</span>
+            <div style={{ transform: 'scale(1.1)', transition: 'all 0.3s ease' }}>
+              <ECHOMOJI mood={TEMPLATE_MOODS[templateIndex]} size={110} />
+            </div>
           )}
           {editing && <div className="avatar-overlay">Tap to change</div>}
-          <input
-            type="file"
-            ref={fileInputRef}
-            onChange={handleAvatarUpload}
-            accept="image/*"
-            style={{ display: 'none' }}
-          />
         </div>
 
         {/* Name */}
@@ -322,318 +406,189 @@ const Profile = () => {
           <div className="profile-name">{profile?.name || 'User'}</div>
         )}
 
-        {/* Location Dropdown Options */}
+        {/* Location Dropdowns */}
         {editing ? (
-          <div className="profile-location-inputs">
-            {/* Country Dropdown */}
+          <div className="profile-location-inputs" style={{ display: 'flex', gap: '8px', margin: '12px 0' }}>
             <select
               value={matchedCountryCode}
               onChange={handleCountrySelect}
               style={{
                 flex: 1,
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: '#1E1E2A',
+                color: '#FFFFFF',
+                border: '1px solid rgba(255,255,255,0.15)',
                 borderRadius: '8px',
-                padding: '8px 10px',
-                color: '#fff',
+                padding: '8px',
                 fontSize: '13px',
-                outline: 'none',
               }}
             >
-              <option value="" style={{ background: '#12121a', color: '#fff' }}>-- Select Country --</option>
+              <option value="" style={{ background: '#1E1E2A', color: '#FFF' }}>Select Country</option>
               {countriesList.map((c) => (
-                <option key={c.isoCode} value={c.isoCode} style={{ background: '#12121a', color: '#fff' }}>
-                  {c.flag} {c.name}
+                <option key={c.isoCode} value={c.isoCode} style={{ background: '#1E1E2A', color: '#FFF' }}>
+                  {c.name}
                 </option>
               ))}
             </select>
 
-            {/* Dependent City Dropdown */}
             <select
               value={editData.city || ''}
               onChange={handleCitySelect}
               disabled={!matchedCountryCode}
               style={{
                 flex: 1,
-                background: 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.1)',
+                background: '#1E1E2A',
+                color: '#FFFFFF',
+                border: '1px solid rgba(255,255,255,0.15)',
                 borderRadius: '8px',
-                padding: '8px 10px',
-                color: '#fff',
+                padding: '8px',
                 fontSize: '13px',
-                outline: 'none',
                 opacity: matchedCountryCode ? 1 : 0.5,
-                cursor: matchedCountryCode ? 'pointer' : 'not-allowed',
               }}
             >
-              <option value="" style={{ background: '#12121a', color: '#fff' }}>
-                {!matchedCountryCode ? 'Select country first' : '-- Select City --'}
-              </option>
-              {citiesList.map((city, idx) => (
-                <option key={`${city.name}-${idx}`} value={city.name} style={{ background: '#12121a', color: '#fff' }}>
-                  {city.name}
+              <option value="" style={{ background: '#1E1E2A', color: '#FFF' }}>Select City</option>
+              {citiesList.map((ct, idx) => (
+                <option key={`${ct.name}-${idx}`} value={ct.name} style={{ background: '#1E1E2A', color: '#FFF' }}>
+                  {ct.name}
                 </option>
               ))}
             </select>
           </div>
-        ) : loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', margin: '6px 0' }}>
-            <SkeletonBlock width="100px" height="14px" />
-          </div>
         ) : (
-          <div className="profile-location">
-            {profile?.country && profile?.city
-              ? `${profile.country} · ${profile.city}`
-              : profile?.country || profile?.city || '📍 Location not set'}
-          </div>
+          (profile?.city || profile?.country) && (
+            <div className="profile-location" style={{ fontSize: '13px', color: '#888', marginTop: '4px' }}>
+              📍 {[profile.city, profile.country].filter(Boolean).join(', ')}
+            </div>
+          )
         )}
 
-        {/* EchoMoji Preview Section */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'center',
-            alignItems: 'center',
-            gap: 12,
-            margin: '12px 0',
-          }}
-        >
-          {loading ? (
-            <SkeletonBlock width="56px" height="56px" borderRadius="12px" />
-          ) : (
-            <ECHOMOJI mood={currentMood} skin={skinForPreview} size={56} interactive={false} animated={false} />
-          )}
-
-          <div style={{ textAlign: 'left' }}>
-            {loading ? (
-              <>
-                <SkeletonBlock width="80px" height="14px" style={{ marginBottom: 4 }} />
-                <SkeletonBlock width="60px" height="12px" />
-              </>
-            ) : (
-              <>
-                <div style={{ fontSize: 14, color: '#888' }}>
-                  Mood: <span style={{ textTransform: 'capitalize', color: '#fff' }}>{currentMood}</span>
-                </div>
-                {activeSkinObj && (
-                  <div style={{ fontSize: 12, color: '#6C3CE1' }}>✦ {activeSkinObj.name}</div>
-                )}
-              </>
-            )}
-          </div>
-        </div>
-
-        {/* Bio Section */}
+        {/* Bio */}
         {editing ? (
           <textarea
-            className="profile-bio-textarea"
+            className="profile-bio-input"
             value={editData.bio || ''}
             onChange={(e) => setEditData({ ...editData, bio: e.target.value })}
-            placeholder="Tell the world about yourself..."
+            placeholder="Write a short bio..."
+            rows={3}
+            style={{ width: '100%', marginTop: '12px', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px' }}
           />
-        ) : loading ? (
-          <div style={{ margin: '12px 0' }}>
-            <SkeletonBlock width="80%" height="14px" style={{ margin: '0 auto 6px' }} />
-            <SkeletonBlock width="60%" height="14px" style={{ margin: '0 auto' }} />
-          </div>
         ) : (
-          <div className="profile-bio">{profile?.bio || 'No bio yet.'}</div>
+          profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>{profile.bio}</p>
         )}
 
-        {/* ─── INTERESTS ────────────────────────────────────── */}
-        <div style={{ marginTop: 12 }}>
+        {/* ── Interests Section ── */}
+        <div className="profile-section" style={{ marginTop: '16px', textAlign: 'left', overflow: 'hidden' }}>
+          <h4 style={{ fontSize: '14px', color: '#AAA', marginBottom: '8px' }}>Interests</h4>
+
           {editing ? (
-            <div>
-              <div className="profile-tag-input-wrapper">
-                {(editData.interests || []).map((tag, idx) => (
-                  <span
-                    key={idx}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      background: 'rgba(108,60,225,0.2)',
-                      color: '#8B5CF6',
-                      padding: '4px 10px 4px 14px',
-                      borderRadius: 20,
-                      fontSize: 12,
-                      fontWeight: 500,
-                    }}
-                  >
-                    #{tag}
-                    <button
-                      onClick={() => removeTag(idx)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#8B5CF6',
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        padding: '0 2px',
-                        opacity: 0.7,
-                      }}
-                    >
-                      ✕
-                    </button>
+            <div className="tag-input-container">
+              <div className="tags-wrapper" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                {(editData.interests || []).map((interest, idx) => (
+                  <span key={idx} className="profile-tag" style={{ background: '#6C3CE1', color: '#FFF', padding: '4px 10px', borderRadius: '12px', fontSize: '12px' }}>
+                    {interest}
+                    <button type="button" onClick={() => removeTag(idx)} style={{ background: 'none', border: 'none', color: '#fff', marginLeft: '6px', cursor: 'pointer' }}>×</button>
                   </span>
                 ))}
-                <input
-                  ref={tagInputRef}
-                  type="text"
-                  value={tagInput}
-                  onChange={handleTagInputChange}
-                  onKeyDown={handleTagKeyDown}
-                  placeholder={!editData.interests?.length ? 'Add interests (press Enter or comma)' : ''}
-                  className="profile-tag-input"
-                />
               </div>
+              <input
+                ref={tagInputRef}
+                type="text"
+                value={tagInput}
+                onChange={handleTagInputChange}
+                onKeyDown={handleTagKeyDown}
+                placeholder="Type interest & press Enter..."
+                style={{ width: '100%', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px', fontSize: '13px' }}
+              />
             </div>
-          ) : loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, margin: '8px 0' }}>
-              <SkeletonBlock width="60px" height="24px" borderRadius="20px" />
-              <SkeletonBlock width="75px" height="24px" borderRadius="20px" />
-              <SkeletonBlock width="50px" height="24px" borderRadius="20px" />
+          ) : hasInterests ? (
+            <div className="tags-wrapper" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {profile.interests.map((interest, idx) => (
+                <span key={idx} className="profile-tag" style={{ background: 'rgba(108,60,225,0.3)', color: '#FFF', padding: '4px 10px', borderRadius: '12px', fontSize: '12px' }}>
+                  {interest}
+                </span>
+              ))}
             </div>
           ) : (
-            <div className="profile-tags-container">
-              {(profile?.interests || []).length > 0 ? (
-                profile.interests.map((interest, idx) => (
-                  <span key={idx} className="profile-tag">
-                    #{interest}
-                  </span>
-                ))
-              ) : (
-                <span style={{ color: '#555', fontSize: 12 }}>No interests added yet</span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* ─── SKILLS ────────────────────────────────────────── */}
-        <div style={{ marginTop: 12 }}>
-          {editing ? (
-            <div>
-              <div className="profile-tag-input-wrapper">
-                {(editData.skills || []).map((skill, idx) => (
-                  <span
-                    key={idx}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                      background: 'rgba(236,72,153,0.15)',
-                      color: '#EC4899',
-                      padding: '4px 10px 4px 14px',
-                      borderRadius: 20,
-                      fontSize: 12,
-                      fontWeight: 500,
-                    }}
-                  >
-                    ⚡{skill}
-                    <button
-                      onClick={() => removeSkill(idx)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: '#EC4899',
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        padding: '0 2px',
-                        opacity: 0.7,
-                      }}
-                    >
-                      ✕
-                    </button>
-                  </span>
-                ))}
-                <input
-                  ref={skillInputRef}
-                  type="text"
-                  value={skillInput}
-                  onChange={handleSkillInputChange}
-                  onKeyDown={handleSkillKeyDown}
-                  placeholder={!editData.skills?.length ? 'Add skills (press Enter or comma)' : ''}
-                  className="profile-tag-input"
-                />
-              </div>
-            </div>
-          ) : loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', gap: 6, margin: '8px 0' }}>
-              <SkeletonBlock width="70px" height="24px" borderRadius="20px" />
-              <SkeletonBlock width="65px" height="24px" borderRadius="20px" />
-            </div>
-          ) : (
-            <div className="profile-tags-container">
-              {(profile?.skills || []).length > 0 ? (
-                profile.skills.map((skill, idx) => (
-                  <span key={idx} className="profile-tag skill">
-                    ⚡{skill}
-                  </span>
-                ))
-              ) : (
-                <span style={{ color: '#555', fontSize: 12 }}>No skills added yet</span>
-              )}
-            </div>
-          )}
-        </div>
-
-        {/* Actions */}
-        <div className="profile-edit-actions">
-          {editing ? (
-            <>
-              <button className="btn-save" onClick={handleSave}>
-                Save Profile
-              </button>
-              <button
-                className="btn-cancel"
-                onClick={() => {
-                  setEditData(profile);
-                  setEditing(false);
-                  setTagInput('');
-                  setSkillInput('');
+            <div className="moving-interests-container" style={{ width: '100%', overflow: 'hidden', padding: '6px 0' }}>
+              <div
+                className="moving-interests-track"
+                style={{
+                  display: 'flex',
+                  gap: '8px',
+                  width: 'max-content',
+                  animation: 'scrollInterests 18s linear infinite',
                 }}
               >
+                {[...DEFAULT_INTEREST_TEMPLATES, ...DEFAULT_INTEREST_TEMPLATES].map((item, idx) => (
+                  <span
+                    key={idx}
+                    style={{
+                      background: 'rgba(255, 255, 255, 0.08)',
+                      color: '#AAA',
+                      border: '1px solid rgba(255, 255, 255, 0.12)',
+                      padding: '4px 12px',
+                      borderRadius: '12px',
+                      fontSize: '12px',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {item}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="profile-actions" style={{ marginTop: '24px', display: 'flex', gap: '12px', justifyContent: 'center' }}>
+          {editing ? (
+            <>
+              <button className="save-btn" onClick={handleSave} style={{ background: '#6C3CE1', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer', fontWeight: 600 }}>
+                Save
+              </button>
+              <button className="cancel-btn" onClick={() => { setEditing(false); setEditData(profile); }} style={{ background: '#333', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer' }}>
                 Cancel
               </button>
             </>
           ) : (
-            <button className="btn-edit" onClick={() => setEditing(true)} disabled={loading}>
-              ✎ Edit Profile
+            <button className="edit-btn" onClick={() => setEditing(true)} style={{ background: '#6C3CE1', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer', fontWeight: 600 }}>
+              Edit Profile
             </button>
           )}
         </div>
       </div>
 
-      {/* UID & Email */}
-      <div
-        style={{
-          background: 'rgba(18,18,26,0.6)',
-          borderRadius: 16,
-          padding: '16px 20px',
-          border: '1px solid rgba(255,255,255,0.04)',
-          textAlign: 'center',
-        }}
-      >
-        <div style={{ fontSize: 12, color: '#555', fontFamily: 'monospace' }}>
-          UID: {user?.uid || '...'}
+      {/* Account Details */}
+      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: '16px', border: '1px solid rgba(255,255,255,0.08)', marginTop: '16px' }}>
+        <div style={{ fontSize: '12px', color: '#888', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>
+          Account Details
         </div>
-        <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>{user?.email}</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
+          <span style={{ fontSize: '13px', color: '#AAA' }}>Email</span>
+          <span style={{ fontSize: '13px', color: '#FFF', fontWeight: 500 }}>{user?.email || 'N/A'}</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '8px' }}>
+          <div>
+            <div style={{ fontSize: '13px', color: '#AAA' }}>User ID (UID)</div>
+            <div style={{ fontSize: '11px', color: '#6C3CE1', fontFamily: 'monospace', marginTop: '2px', wordBreak: 'break-all' }}>{user?.uid}</div>
+          </div>
+          <button onClick={handleCopyUid} style={{ background: copiedUid ? '#10B981' : '#6C3CE1', color: '#FFF', border: 'none', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', flexShrink: 0, marginLeft: '12px' }}>
+            {copiedUid ? 'Copied! ✓' : 'Copy UID'}
+          </button>
+        </div>
       </div>
 
-      {/* Policy */}
-      <div
-        style={{
-          background: 'rgba(18,18,26,0.3)',
-          borderRadius: 12,
-          padding: '12px 16px',
-          border: '1px solid rgba(255,255,255,0.03)',
-          textAlign: 'center',
-        }}
-      >
-        <p style={{ fontSize: 11, color: '#555', lineHeight: 1.5, margin: 0 }}>
-          By using ECHO, you agree to treat others with respect.
-        </p>
-      </div>
+      <AvatarPicker
+        isOpen={showAvatarPicker}
+        onClose={() => setShowAvatarPicker(false)}
+        onUploadImage={() => imageInputRef.current?.click()}
+        onUploadGif={() => gifInputRef.current?.click()}
+        onChooseLibrary={() => { setShowAvatarPicker(false); setShowGifLibrary(true); }}
+        uploading={uploading}
+      />
+
+      <GifLibraryModal isOpen={showGifLibrary} onClose={() => setShowGifLibrary(false)} onSelect={handleGifSelect} />
+      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
     </div>
   );
 };

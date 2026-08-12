@@ -331,3 +331,138 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Avatar Picker Styles */
+.avatar-picker-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 10000;
+  animation: fadeIn 0.2s ease;
+}
+
+.avatar-picker-sheet {
+  background: #1a1a24;
+  border-radius: 20px 20px 0 0;
+  padding: 20px 24px 32px;
+  width: 100%;
+  max-width: 480px;
+  animation: slideUp 0.3s ease;
+  box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+}
+
+.avatar-picker-handle {
+  width: 36px;
+  height: 4px;
+  background: rgba(255,255,255,0.15);
+  border-radius: 4px;
+  margin: 0 auto 16px;
+}
+
+.avatar-picker-sheet h3 {
+  color: #fff;
+  font-size: 18px;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.avatar-picker-options {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.avatar-picker-option {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.06);
+  border-radius: 12px;
+  padding: 14px 16px;
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.avatar-picker-option:hover {
+  background: rgba(255,255,255,0.08);
+}
+
+.avatar-picker-option:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.avatar-picker-icon {
+  font-size: 24px;
+  width: 36px;
+  text-align: center;
+}
+
+.avatar-picker-cancel {
+  margin-top: 12px;
+  width: 100%;
+  padding: 14px;
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 12px;
+  color: #888;
+  font-size: 16px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.avatar-picker-cancel:hover {
+  background: rgba(255,255,255,0.04);
+}
+
+@keyframes slideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.profile-avatar {
+  position: relative; /* already there, but double-check */
+  width: 100px;
+  height: 100px;
+  border-radius: 50%;
+  overflow: hidden;
+  margin: 0 auto;
+  /* ... */
+}
+
+.avatar-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(0,0,0,0.6);
+  color: #fff;
+  text-align: center;
+  padding: 4px 0;
+  font-size: 12px;
+  border-radius: 0 0 50% 50%;
+}
+
+@keyframes scrollInterests {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+} 

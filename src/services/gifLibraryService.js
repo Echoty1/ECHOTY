@@ -6,6 +6,17 @@ import { getCache, setCache } from './cacheService';
 const CACHE_KEY = 'gif_library';
 const CACHE_TTL = 60 * 60; // 1 hour
 
+// src/services/gifLibraryService.js
+const resolveUrl = (url) => {
+  if (!url) return '';
+  if (url.startsWith('http://') || url.startsWith('https://')) {
+    return url;
+  }
+  // In development: http://localhost:3000/videos/library/...
+  // In production: https://your-app.com/videos/library/...
+  return window.location.origin + (url.startsWith('/') ? url : '/' + url);
+};
+
 export const fetchGifLibrary = async (forceRefresh = false) => {
   if (!forceRefresh) {
     const cached = await getCache(CACHE_KEY);
@@ -16,10 +27,10 @@ export const fetchGifLibrary = async (forceRefresh = false) => {
     const snapshot = await get(ref(db, 'gifLibrary'));
     if (snapshot.exists()) {
       const data = snapshot.val();
-      // Convert object to array
       const library = Object.entries(data).map(([id, item]) => ({
         id,
         ...item,
+        url: resolveUrl(item.url), // ensure absolute URL
       }));
       await setCache(CACHE_KEY, library, CACHE_TTL);
       return library;
@@ -27,7 +38,6 @@ export const fetchGifLibrary = async (forceRefresh = false) => {
     return [];
   } catch (err) {
     console.error('Failed to fetch GIF library:', err);
-    // Return cached data even if expired, as fallback
     const cached = await getCache(CACHE_KEY);
     return cached || [];
   }

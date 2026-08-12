@@ -1,0 +1,296 @@
+/* src/components/GifLibrary/GifLibraryModal.css */
+.gif-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+}
+
+.gif-modal-content {
+  background: #1a1a24;
+  border-radius: 20px;
+  width: 90%;
+  max-width: 700px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.9);
+  border: 1px solid rgba(255,255,255,0.06);
+  position: relative;
+}
+
+.gif-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.gif-modal-header h2 {
+  color: #fff;
+  font-size: 20px;
+  margin: 0;
+}
+
+.gif-modal-coins {
+  background: rgba(245, 215, 66, 0.15);
+  color: #f5d742;
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-weight: bold;
+  font-size: 14px;
+  border: 1px solid rgba(245, 215, 66, 0.3);
+}
+
+.gif-modal-close {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 24px;
+  cursor: pointer;
+}
+
+.gif-search-bar input {
+  width: 100%;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.1);
+  padding: 10px 14px;
+  border-radius: 12px;
+  color: #fff;
+  font-size: 14px;
+  margin-bottom: 12px;
+}
+
+.gif-categories {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+  margin-bottom: 12px;
+}
+
+.gif-cat-btn {
+  background: rgba(255,255,255,0.05);
+  border: none;
+  color: #888;
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.gif-cat-btn.active {
+  background: #6C3CE1;
+  color: #fff;
+}
+
+.gif-grid-container {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.gif-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1px));
+  grid-auto-rows: 130px;
+  gap: 12px;
+}
+
+.gif-item {
+  position: relative;
+  border-radius: 12px;
+  overflow: hidden;
+  cursor: pointer;
+  background: #000;
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+.gif-item img, .gif-item video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Permanent coin badge on top right */
+.gif-coin-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #f5d742;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 10px;
+  border: 1px solid rgba(245, 215, 66, 0.4);
+  backdrop-filter: blur(4px);
+  z-index: 2;
+}
+
+.gif-unlocked-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: rgba(16, 185, 129, 0.85);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 3px 6px;
+  border-radius: 10px;
+  z-index: 2;
+}
+
+/* Hover overlay for title */
+.gif-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0,0,0,0.85));
+  padding: 8px;
+  display: flex;
+  align-items: flex-end;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.gif-item:hover .gif-overlay {
+  opacity: 1;
+}
+
+.gif-title {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.gif-loading, .gif-empty {
+  color: #666;
+  text-align: center;
+  padding: 40px;
+  font-size: 14px;
+}
+
+/* Purchase Modal overlay */
+.gif-purchase-modal {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  z-index: 100;
+}
+
+.gif-purchase-content {
+  background: #232332;
+  padding: 24px;
+  border-radius: 16px;
+  text-align: center;
+  max-width: 320px;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+.gif-purchase-content h3 {
+  color: #fff;
+  margin-top: 0;
+  margin-bottom: 12px;
+}
+
+.gif-purchase-content p {
+  color: #ccc;
+  font-size: 14px;
+  margin: 6px 0;
+}
+
+.gif-purchase-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 18px;
+}
+
+.gif-purchase-actions button {
+  padding: 8px 18px;
+  border-radius: 20px;
+  border: none;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.gif-purchase-actions button:first-child {
+  background: #6C3CE1;
+  color: #fff;
+}
+
+.gif-purchase-actions button:last-child {
+  background: #333;
+  color: #ccc;
+}
+
+.gif-modal-controls {
+  display: flex;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+.gif-search-input {
+  width: 100%;
+  height: 42px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 0 16px;
+  color: #ffffff;
+  font-size: 14px;
+}
+
+/* Change opacity from 0 to 1 so overlay is always visible */
+.gif-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(transparent, rgba(0, 0, 0, 0.85));
+  padding: 8px 10px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  opacity: 1; /* Always visible */
+  pointer-events: none;
+}
+
+/* Ensure the text is clear and readable */
+.gif-title {
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 65%;
+}
+
+.gif-price {
+  color: #f5d742;
+  font-size: 12px;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.5);
+  padding: 2px 6px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
