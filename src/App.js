@@ -22,8 +22,10 @@ import Navbar from './components/Layout/Navbar';
 import BottomNav from './components/Layout/BottomNav';
 import { useAuth } from './hooks/useAuth';
 import NetworkStatus from './components/common/NetworkStatus';
+import RecoveryScreen from './components/Recovery/RecoveryScreen';
+import WhatsNewPopup from './components/WhatsNewPopup/WhatsNewPopup';
 
-// ─── ScrollToTop component ──────────────────────────────────────
+// ─── ScrollToTop ──────────────────────────────────────────────────
 function ScrollToTop() {
   const { pathname } = useLocation();
 
@@ -38,7 +40,7 @@ function ScrollToTop() {
   return null;
 }
 
-// ─── Loading Screen (Echo‑themed) ─────────────────────────────
+// ─── Loading Screen ──────────────────────────────────────────────
 function LoadingScreen() {
   return (
     <div style={{
@@ -142,23 +144,51 @@ function AppContent() {
   const { user, loading } = useAuth();
   const { fetchProfile } = useProfile();
   const [minTimePassed, setMinTimePassed] = useState(false);
+  const [showRecovery, setShowRecovery] = useState(false);
+
+  // ─── Determine backend URL ──────────────────────────────────
+  const backendUrl = process.env.REACT_APP_BACKEND_URL ||
+    (window.location.hostname === 'localhost' ? 'http://localhost:3000' : window.location.origin);
 
   useEffect(() => {
     const timer = setTimeout(() => setMinTimePassed(true), 2000);
     return () => clearTimeout(timer);
   }, []);
 
-  // 🚀 Start pre-fetching the logged-in user's profile immediately
   useEffect(() => {
     if (user?.uid) {
       fetchProfile(user.uid);
     }
   }, [user?.uid, fetchProfile]);
 
+  useEffect(() => {
+    if (user) {
+      const recoveryKey = `echo_has_recovered_${user.uid}`;
+      const hasRecovered = localStorage.getItem(recoveryKey);
+      if (!hasRecovered) {
+        setShowRecovery(true);
+      } else {
+        setShowRecovery(false);
+      }
+    }
+  }, [user]);
+
   const showLoading = loading || !minTimePassed;
 
   if (showLoading) return <LoadingScreen />;
   if (!user) return <Login />;
+
+  if (showRecovery) {
+    return (
+      <RecoveryScreen
+        uid={user.uid}
+        backendUrl={backendUrl}
+        onComplete={() => {
+          setShowRecovery(false);
+        }}
+      />
+    );
+  }
 
   return (
     <>
@@ -193,6 +223,9 @@ function AppContent() {
         </Routes>
       </div>
       <BottomNav />
+
+      {/* ─── What's New Popup ────────────────────────────────── */}
+      {user && <WhatsNewPopup uid={user.uid} />}
     </>
   );
 }
