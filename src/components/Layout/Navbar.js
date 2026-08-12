@@ -19,17 +19,22 @@ const Navbar = memo(() => {
   // ─── Use Profile Context ─────────────────────────────────
   const { profiles, presence, loading, fetchProfile, getProfile, isOnline } = useProfile();
 
-  // ─── Fetch profiles ──────────────────────────────────────
-  // ✅ Only fetch once – ProfileContext manages its own listeners
+  // ─── Fetch profiles with proper cleanup ────────────────────
   useEffect(() => {
     if (user?.uid) {
-      fetchProfile(user.uid);
+      const cleanup = fetchProfile(user.uid);
+      return () => {
+        if (typeof cleanup === 'function') cleanup();
+      };
     }
   }, [user?.uid, fetchProfile]);
 
   useEffect(() => {
     if (isChatRoute && userId) {
-      fetchProfile(userId);
+      const cleanup = fetchProfile(userId);
+      return () => {
+        if (typeof cleanup === 'function') cleanup();
+      };
     }
   }, [isChatRoute, userId, fetchProfile]);
 

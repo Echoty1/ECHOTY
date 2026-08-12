@@ -11,6 +11,7 @@ import {
   query,
   orderByKey,
   limitToLast,
+  endAt,
 } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
@@ -23,7 +24,7 @@ import { SkeletonChatItem } from '../../common/SkeletonLoader';
 
 const CHAT_CHUNK_SIZE = 20;
 
-// ECHO AI Constant Configuration
+// ─── ECHO AI Constant ────────────────────────────────────────────
 const ECHO_AI_USER = {
   id: 'echo_ai_assistant',
   name: 'ECHO AI',
@@ -48,55 +49,74 @@ const timeAgo = (timestamp) => {
   return 'Just now';
 };
 
-// ─── Fetch profile with safe unsub initialization & timeout ───
-const fetchProfileWithTimeout = (uid, timeoutMs = 3000) => {
-  return new Promise((resolve, reject) => {
-    let unsub = null;
-
-    const timeout = setTimeout(() => {
-      if (typeof unsub === 'function') unsub();
-      reject(new Error('Timeout'));
-    }, timeoutMs);
-
-    unsub = onValue(
-      ref(db, `profiles/${uid}`),
-      (snapshot) => {
-        clearTimeout(timeout);
-        if (typeof unsub === 'function') unsub();
-        const data = snapshot.val();
-        if (data) {
-          resolve(data);
-        } else {
-          reject(new Error('Profile not found'));
-        }
-      },
-      (error) => {
-        clearTimeout(timeout);
-        if (typeof unsub === 'function') unsub();
-        reject(error);
-      }
-    );
-  });
+// ─── Fast single fetch for partner profile ──────────────────────
+const loadPartnerData = async (partnerId) => {
+  try {
+    const profileRef = ref(db, `profiles/${partnerId}`);
+    const snapshot = await get(profileRef);
+    if (snapshot.exists()) {
+      return snapshot.val();
+    }
+  } catch (error) {
+    console.warn(`⚠️ Error loading partner profile: ${partnerId}`, error);
+  }
+  return null;
 };
 
-const loadPartnerData = async (partnerId, retryCount = 0) => {
+// ─── Process a single chat item ──────────────────────────────────
+const processChatItem = async (chat, user, onlineUsers) => {
   try {
-    const profile = await fetchProfileWithTimeout(partnerId, 3000);
-    return profile;
-  } catch (error) {
-    console.warn(`⚠️ Error loading partner: ${partnerId}`, error.message);
+    const profile = (await loadPartnerData(chat.id)) || {};
+    let partnerName;
+    let isDeleted = false;
 
-    if (retryCount < 2) {
-      const delay = Math.pow(2, retryCount) * 1000;
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      return loadPartnerData(partnerId, retryCount + 1);
+    if (chat.partnerDeleted === true) {
+      partnerName = chat.partnerName || 'Deleted Account';
+      isDeleted = true;
+    } else {
+      partnerName =
+        profile.name ||
+        profile.displayName ||
+        profile.username ||
+        chat.partnerName ||
+        chat.name ||
+        'User';
+    }
+
+    const isSender = chat.lastSenderId === user.uid;
+    let displayMessage = chat.lastMessage || 'Start chatting...';
+
+    if (displayMessage !== 'Start chatting...') {
+      displayMessage = isSender
+        ? `You: ${displayMessage}`
+        : `${partnerName}: ${displayMessage}`;
+      if (displayMessage.length > 30)
+        displayMessage = displayMessage.substring(0, 30) + '...';
     }
 
     return {
-      name: 'User',
-      avatar: '',
-      mood: 'neutral',
-      isFallback: true,
+      id: chat.id,
+      name: partnerName,
+      avatar: profile.avatar || chat.partnerAvatar || '',
+      mood: profile.mood || chat.mood || 'neutral',
+      activeSkin: profile.activeSkin || chat.activeSkin || 'default',
+      lastMessage: displayMessage,
+      timestamp: chat.lastUpdated || chat.timestamp || Date.now(),
+      lastSenderId: chat.lastSenderId || '',
+      unreadCount: chat.unreadCount || 0,
+      isDeleted,
+      online: !!onlineUsers[chat.id],
+    };
+  } catch (err) {
+    return {
+      id: chat.id,
+      name: chat.partnerName || chat.name || 'User',
+      lastMessage: chat.lastMessage || 'Start chatting...',
+      timestamp: chat.lastUpdated || Date.now(),
+      lastSenderId: chat.lastSenderId || '',
+      unreadCount: chat.unreadCount || 0,
+      isDeleted: false,
+      online: !!onlineUsers[chat.id],
     };
   }
 };
@@ -115,36 +135,51 @@ const Chats = () => {
   const searchTimeout = useRef(null);
   const presenceUnsubRef = useRef(null);
   const userChatsUnsubRef = useRef(null);
-  const initialLoadDone = useRef(false);
-  const isInitialLoading = useRef(false);
 
   const cacheKey = `chats_${user?.uid}`;
 
-  // ─── State ─────────────────────────────────────────────────────
-  // ✅ Ensure recentChats is ALWAYS an array
-  const [recentChats, setRecentChats] = useState(() => {
-    const cached = getCache(cacheKey);
-    return Array.isArray(cached) ? cached : [];
-  });
-
-  const [loadingChats, setLoadingChats] = useState(() => {
-    const cached = getCache(cacheKey);
-    return !(Array.isArray(cached) && cached.length > 0);
-  });
+  // ─── State ─────────────────────────────────────────────────────────
+  const [recentChats, setRecentChats] = useState([]);
+  const [loadingChats, setLoadingChats] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [lastChatKey, setLastChatKey] = useState(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useDeletedAccountCheck();
 
-  // ─── Fast Pre-fetch profiles as soon as user enters ─────────
+  // ─── Instant Cache Hydration (on mount) ──────────────────────────
+  useEffect(() => {
+    let isMounted = true;
+    if (!user?.uid) return;
+
+    const loadInitialCache = async () => {
+      try {
+        const cached = await getCache(cacheKey);
+        if (isMounted && Array.isArray(cached) && cached.length > 0) {
+          setRecentChats(cached);
+          // Instantly hide skeleton loader
+          setLoadingChats(false);
+        }
+      } catch (err) {
+        console.error('Error loading cache:', err);
+      }
+    };
+
+    loadInitialCache();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [user?.uid, cacheKey]);
+
+  // ─── Pre-fetch profiles index ───────────────────────────────────
   useEffect(() => {
     if (user) {
       prefetchProfilesIndex(user.uid);
     }
   }, [user]);
 
-  // ─── Online Presence listener ───────────────────────────────
+  // ─── Online Presence listener ─────────────────────────────────
   useEffect(() => {
     if (!user) return;
     const presenceRef = ref(db, 'presence/online');
@@ -164,194 +199,80 @@ const Chats = () => {
     };
   }, [user]);
 
-  // ─── Sequential initial load ──────────────────────────────────
-  const loadInitialChatsSequentially = useCallback(async () => {
-    if (!user || isInitialLoading.current) return;
-    isInitialLoading.current = true;
-    setLoadingChats(true);
-    // Reset to empty array to ensure clean state
-    setRecentChats([]);
+  // ─── Load Chats in Parallel (Fast YouTube Style) ─────────────
+  const loadChats = useCallback(
+    async (loadMore = false) => {
+      if (!user || isLoadingMore) return;
 
-    try {
-      const userChatsRef = ref(db, `userChats/${user.uid}`);
-      const snapshot = await get(userChatsRef);
-      const data = snapshot.val();
+      setIsLoadingMore(true);
 
-      if (!data) {
-        setRecentChats([]);
-        setLoadingChats(false);
-        isInitialLoading.current = false;
-        initialLoadDone.current = true;
-        return;
-      }
+      try {
+        const userChatsRef = ref(db, `userChats/${user.uid}`);
+        let q;
 
-      // Convert to array and sort by lastUpdated descending
-      const entries = Object.entries(data).map(([id, chat]) => ({ id, ...chat }));
-      const sorted = entries.sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
-
-      const newChats = [];
-      for (const chat of sorted) {
-        try {
-          const profile = await loadPartnerData(chat.id);
-          let partnerName, isDeleted = false;
-          if (chat.partnerDeleted === true) {
-            partnerName = chat.partnerName || 'Deleted Account';
-            isDeleted = true;
-          } else {
-            partnerName = profile.name || profile.username || profile.displayName || chat.partnerName || 'Unknown User';
-          }
-          const isSender = chat.lastSenderId === user.uid;
-          let displayMessage = chat.lastMessage || 'Start chatting...';
-          if (displayMessage !== 'Start chatting...') {
-            displayMessage = isSender ? `You: ${displayMessage}` : `${partnerName}: ${displayMessage}`;
-            if (displayMessage.length > 30) displayMessage = displayMessage.substring(0, 30) + '...';
-          }
-          const item = {
-            id: chat.id,
-            name: partnerName,
-            avatar: profile.avatar || chat.partnerAvatar,
-            mood: profile.mood || 'neutral',
-            activeSkin: profile.activeSkin,
-            lastMessage: displayMessage,
-            timestamp: chat.lastUpdated || Date.now(),
-            lastSenderId: chat.lastSenderId || '',
-            unreadCount: chat.unreadCount || 0,
-            isDeleted,
-          };
-          newChats.push(item);
-          // Update state incrementally
-          setRecentChats((prev) => [...prev, item]);
-        } catch (err) {
-          console.warn(`Failed to load chat for ${chat.id}:`, err);
-          const fallbackItem = {
-            id: chat.id,
-            name: chat.partnerName || 'Unknown User',
-            lastMessage: chat.lastMessage || 'Start chatting...',
-            timestamp: chat.lastUpdated || Date.now(),
-            lastSenderId: chat.lastSenderId || '',
-            unreadCount: chat.unreadCount || 0,
-            isDeleted: false,
-          };
-          newChats.push(fallbackItem);
-          setRecentChats((prev) => [...prev, fallbackItem]);
+        if (loadMore && lastChatKey) {
+          q = query(
+            userChatsRef,
+            orderByKey(),
+            endAt(lastChatKey),
+            limitToLast(CHAT_CHUNK_SIZE + 1)
+          );
+        } else {
+          q = query(userChatsRef, orderByKey(), limitToLast(CHAT_CHUNK_SIZE));
         }
-      }
 
-      // Cache the final list
-      await setCache(cacheKey, newChats, 300);
-      initialLoadDone.current = true;
-    } catch (error) {
-      console.error('Error loading initial chats sequentially:', error);
-      const cached = getCache(cacheKey);
-      if (Array.isArray(cached) && cached.length > 0) {
-        setRecentChats(cached);
-      } else {
-        setRecentChats([]);
-      }
-    } finally {
-      setLoadingChats(false);
-      isInitialLoading.current = false;
-    }
-  }, [user, cacheKey]);
+        const snapshot = await get(q);
+        const data = snapshot.val();
 
-  // ─── Load more chats (pagination) ────────────────────────────
-  const loadMoreChats = useCallback(async () => {
-    if (!user || isLoadingMore || !hasMore) return;
-    setIsLoadingMore(true);
+        if (!data) {
+          if (loadMore) setHasMore(false);
+          setLoadingChats(false);
+          setIsLoadingMore(false);
+          return;
+        }
 
-    try {
-      const userChatsRef = ref(db, `userChats/${user.uid}`);
-      let q;
-      if (lastChatKey) {
-        q = query(
-          userChatsRef,
-          orderByKey(),
-          endAt(lastChatKey),
-          limitToLast(CHAT_CHUNK_SIZE + 1)
+        const chatList = Object.entries(data)
+          .map(([partnerId, chat]) => ({
+            id: partnerId,
+            ...chat,
+          }))
+          .sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+
+        if (chatList.length < CHAT_CHUNK_SIZE) {
+          setHasMore(false);
+        }
+
+        if (chatList.length > 0) {
+          setLastChatKey(chatList[chatList.length - 1].id);
+        }
+
+        // ─── PARALLEL processing – all profiles fetched simultaneously ──
+        const loadedItems = await Promise.all(
+          chatList.map((chat) => processChatItem(chat, user, onlineUsers))
         );
-      } else {
-        q = query(
-          userChatsRef,
-          orderByKey(),
-          limitToLast(CHAT_CHUNK_SIZE)
-        );
-      }
 
-      const snapshot = await get(q);
-      const data = snapshot.val();
-      if (!data) {
-        setHasMore(false);
-        setIsLoadingMore(false);
-        return;
-      }
-
-      const chatList = Object.entries(data)
-        .map(([partnerId, chat]) => ({
-          id: partnerId,
-          ...chat,
-        }))
-        .sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
-
-      if (chatList.length < CHAT_CHUNK_SIZE) {
-        setHasMore(false);
-      }
-      if (chatList.length > 0) {
-        setLastChatKey(chatList[chatList.length - 1].id);
-      }
-
-      const processed = await Promise.all(
-        chatList.map(async (chat) => {
-          try {
-            const profile = await loadPartnerData(chat.id);
-            let partnerName, isDeleted = false;
-            if (chat.partnerDeleted === true) {
-              partnerName = chat.partnerName || 'Deleted Account';
-              isDeleted = true;
-            } else {
-              partnerName = profile.name || profile.username || profile.displayName || chat.partnerName || 'Unknown User';
-            }
-            const isSender = chat.lastSenderId === user.uid;
-            let displayMessage = chat.lastMessage || 'Start chatting...';
-            if (displayMessage !== 'Start chatting...') {
-              displayMessage = isSender ? `You: ${displayMessage}` : `${partnerName}: ${displayMessage}`;
-              if (displayMessage.length > 30) displayMessage = displayMessage.substring(0, 30) + '...';
-            }
-            return {
-              id: chat.id,
-              name: partnerName,
-              avatar: profile.avatar || chat.partnerAvatar,
-              mood: profile.mood || 'neutral',
-              activeSkin: profile.activeSkin,
-              lastMessage: displayMessage,
-              timestamp: chat.lastUpdated || Date.now(),
-              lastSenderId: chat.lastSenderId || '',
-              unreadCount: chat.unreadCount || 0,
-              isDeleted,
-            };
-          } catch (err) {
-            return {
-              id: chat.id,
-              name: chat.partnerName || 'Unknown User',
-              lastMessage: chat.lastMessage || 'Start chatting...',
-              timestamp: chat.lastUpdated || Date.now(),
-              lastSenderId: chat.lastSenderId || '',
-              unreadCount: chat.unreadCount || 0,
-              isDeleted: false,
-            };
+        setRecentChats((prev) => {
+          const currentList = Array.isArray(prev) ? prev : [];
+          if (loadMore) {
+            const existingIds = new Set(currentList.map((c) => c.id));
+            const newItems = loadedItems.filter((item) => !existingIds.has(item.id));
+            return [...currentList, ...newItems];
           }
-        })
-      );
+          return loadedItems;
+        });
 
-      const validItems = processed.filter(Boolean);
-      setRecentChats((prev) => [...prev, ...validItems]);
-    } catch (error) {
-      console.error('Error loading more chats:', error);
-    } finally {
-      setIsLoadingMore(false);
-    }
-  }, [user, lastChatKey, hasMore, isLoadingMore]);
+        await setCache(cacheKey, loadedItems, 300);
+      } catch (error) {
+        console.error('Error loading chats:', error);
+      } finally {
+        setLoadingChats(false);
+        setIsLoadingMore(false);
+      }
+    },
+    [user, lastChatKey, isLoadingMore, onlineUsers, cacheKey]
+  );
 
-  // ─── Real-time listener for new chats ────────────────────────
+  // ─── Real-time userChats Listener ─────────────────────────────
   useEffect(() => {
     if (!user) {
       setLoadingChats(false);
@@ -365,28 +286,36 @@ const Chats = () => {
       userChatsUnsubRef.current = null;
     }
 
-    // Start sequential load
-    loadInitialChatsSequentially();
+    loadChats(false);
 
     userChatsUnsubRef.current = onValue(
       userChatsRef,
       async (snapshot) => {
-        if (!initialLoadDone.current || isLoadingMore) return;
-        setRecentChats([]);
-        initialLoadDone.current = false;
-        await loadInitialChatsSequentially();
-      },
-      (error) => {
-        console.error('❌ userChats listener error:', error);
-        const cached = getCache(cacheKey);
-        if (Array.isArray(cached) && cached.length > 0) {
-          setRecentChats(cached);
-          setLoadingChats(false);
-          initialLoadDone.current = true;
-        } else {
+        const data = snapshot.val();
+        if (!data) {
           setRecentChats([]);
+          await setCache(cacheKey, []);
           setLoadingChats(false);
-          initialLoadDone.current = true;
+          return;
+        }
+
+        setHasMore(true);
+        setLastChatKey(null);
+        await loadChats(false);
+      },
+      async (error) => {
+        console.error('❌ userChats listener error:', error);
+        try {
+          const cached = await getCache(cacheKey);
+          if (Array.isArray(cached) && cached.length > 0) {
+            setRecentChats(cached);
+          } else {
+            setRecentChats([]);
+          }
+        } catch (err) {
+          setRecentChats([]);
+        } finally {
+          setLoadingChats(false);
         }
       }
     );
@@ -397,23 +326,22 @@ const Chats = () => {
         userChatsUnsubRef.current = null;
       }
     };
-  }, [user, loadInitialChatsSequentially, cacheKey, isLoadingMore]);
+  }, [user]);
 
-  // ─── Infinite scroll for older chats ──────────────────────────
-  const { containerRef, setHasMore: setScrollHasMore } = useInfiniteScroll(
-    async () => {
-      if (!hasMore || isLoadingMore || loadingChats) return;
-      await loadMoreChats();
-    },
-    300,
-    [hasMore, isLoadingMore, loadingChats]
-  );
+  // ─── Infinite Scroll ──────────────────────────────────────────
+  const handleLoadMore = useCallback(async () => {
+    if (hasMore && !isLoadingMore && !loadingChats) {
+      await loadChats(true);
+    }
+  }, [hasMore, isLoadingMore, loadingChats, loadChats]);
 
-  useEffect(() => {
-    setScrollHasMore(hasMore);
-  }, [hasMore, setScrollHasMore]);
+  const { containerRef } = useInfiniteScroll(handleLoadMore, 200, [
+    hasMore,
+    isLoadingMore,
+    loadingChats,
+  ]);
 
-  // ─── Fast Search Handler (1-char threshold & 100ms debounce) ───
+  // ─── Search Handlers ─────────────────────────────────────────
   const performSearch = async (queryText) => {
     const trimmed = queryText.trim().toLowerCase();
     if (trimmed.length < 1) {
@@ -492,6 +420,10 @@ const Chats = () => {
     if (reasons.length === 0) reasons.push('✨ Suggested for you');
     return reasons.slice(0, 3);
   };
+
+  const activeSkin = (skinId) => getSkinById(skinId);
+
+  const safeRecentChats = Array.isArray(recentChats) ? recentChats : [];
 
   // ─── Render ──────────────────────────────────────────────────
   return (
@@ -620,7 +552,7 @@ const Chats = () => {
             <span>Recent Conversations</span>
           </div>
 
-          {/* Global ECHO AI Floating Card */}
+          {/* ─── ECHO AI Floating Card ─────────────────────────────── */}
           <div className="chat-item ai-item floating-ai-card" onClick={() => startChat(ECHO_AI_USER)}>
             <div className="chat-avatar">
               <div className="chat-avatar-container ai-avatar-frame floating-ai-avatar">
@@ -640,8 +572,8 @@ const Chats = () => {
             <div className="chat-time">Always Active</div>
           </div>
 
-          {/* Render each chat */}
-          {recentChats.map((chat) => {
+          {/* ─── Render each chat ──────────────────────────────────── */}
+          {safeRecentChats.map((chat) => {
             if (!chat) return null;
             const isOnline = !!onlineUsers[chat.id];
             return (
@@ -693,25 +625,25 @@ const Chats = () => {
             );
           })}
 
-          {/* Sequential Skeleton – stays at bottom while loading initial chats */}
+          {/* ─── Single Skeleton (stays at bottom while loading) ──── */}
           {loadingChats && <SkeletonChatItem />}
 
-          {/* Loading more indicator for pagination */}
+          {/* ─── Loading more indicator ───────────────────────────── */}
           {isLoadingMore && (
             <div className="loading-more-chats">
               <span>Loading more...</span>
             </div>
           )}
 
-          {/* End of list message */}
-          {!hasMore && recentChats.length > 0 && (
+          {/* ─── End of list message ───────────────────────────────── */}
+          {!hasMore && safeRecentChats.length > 0 && (
             <div className="no-more-chats">
               <span>No more conversations</span>
             </div>
           )}
 
-          {/* Empty state – only when not loading and no chats */}
-          {!loadingChats && recentChats.length === 0 && (
+          {/* ─── Empty state ───────────────────────────────────────── */}
+          {!loadingChats && safeRecentChats.length === 0 && (
             <div className="no-chats">
               <p>No conversations yet</p>
               <span>Search for people to start chatting</span>
@@ -720,7 +652,7 @@ const Chats = () => {
         </div>
       )}
 
-      {/* Embedded CSS Overrides for Smooth Floating Animations */}
+      {/* ─── Embedded CSS ────────────────────────────────────────── */}
       <style>{`
         @keyframes floatCard {
           0%, 100% { transform: translateY(0px); box-shadow: 0 4px 20px rgba(108, 60, 225, 0.15); }

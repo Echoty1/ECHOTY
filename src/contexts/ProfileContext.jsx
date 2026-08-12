@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { db } from '../services/firebase';
 import { ref, onValue, get, set, update } from 'firebase/database';
 import { useAuth } from '../hooks/useAuth';
-import { getCache, setCache } from '../services/cacheService';
+import { getCache, setCache, clearCache } from '../services/cacheService';
 
 const ProfileContext = createContext();
 
@@ -34,21 +34,23 @@ export const ProfileProvider = ({ children }) => {
 
   // ─── Fetch profile and presence with instant cache hydration ─────────────────
   const fetchProfile = useCallback((uid) => {
-    if (!uid) return;
+    if (!uid) return null;
     if (listenerRefs.current[uid]) {
-      return;
+      console.log(`📦 ProfileProvider: Already listening to ${uid}`);
+      return listenerRefs.current[uid];
     }
 
     const cacheKey = `profile_${uid}`;
 
     // 1. INSTANT HYDRATION FROM CACHE (0ms Delay)
     getCache(cacheKey).then((cached) => {
-      if (cached) {
+      if (cached && cached.name) {
         setProfiles((prev) => ({
           ...prev,
           [uid]: { ...(prev[uid] || {}), ...cached },
         }));
         setLoading(false);
+        console.log(`📦 [cache] Profile for ${uid} loaded from cache`);
       }
     }).catch((err) => console.warn('Cache read error:', err));
 
@@ -68,17 +70,19 @@ export const ProfileProvider = ({ children }) => {
 
         let finalData = data || {};
 
+        // ─── Fix missing name (only for own profile) ──────────
         if (!finalData.name && isOwnProfile) {
           console.warn(`⚠️ ProfileProvider: Missing name for own profile (${uid}), fixing...`);
           const fallbackName = 'User';
           finalData.name = fallbackName;
           update(profileRef, { name: fallbackName }).catch(err => console.error('Update failed:', err));
         } else if (!finalData.name) {
+          console.log(`ℹ️ ProfileProvider: Missing name for ${uid} – using local fallback only`);
           finalData.name = 'User';
         }
 
-        // Cache fresh data locally
-        setCache(cacheKey, finalData);
+        // ─── Cache fresh data ──────────────────────────────────
+        setCache(cacheKey, finalData, 300);
 
         setProfiles((prev) => ({
           ...prev,
@@ -121,7 +125,7 @@ export const ProfileProvider = ({ children }) => {
           }
         }
         setProfiles((prev) => ({ ...prev, [targetUid]: data }));
-        setCache(cacheKey, data);
+        setCache(cacheKey, data, 300);
       } catch (err) {
         console.error(`❌ ProfileProvider: Fallback error for ${targetUid}:`, err);
         setProfiles((prev) => ({
@@ -133,7 +137,7 @@ export const ProfileProvider = ({ children }) => {
       if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
     };
 
-    // Presence listener
+    // ─── Presence listener ─────────────────────────────────────
     const presenceRef = ref(db, `presence/online/${uid}`);
     const unsubPresence = onValue(
       presenceRef,
@@ -147,13 +151,46 @@ export const ProfileProvider = ({ children }) => {
       }
     );
 
-    listenerRefs.current[uid] = () => {
+    // ─── Combined cleanup function ─────────────────────────────
+    const cleanup = () => {
       if (timeoutId) clearTimeout(timeoutId);
       unsubscribe();
       unsubPresence();
       delete listenerRefs.current[uid];
+      console.log(`🧹 ProfileProvider: Cleaned up listeners for ${uid}`);
     };
+
+    listenerRefs.current[uid] = cleanup;
+    return cleanup;
   }, [user]);
+
+  // ─── Refresh profile (force re-fetch, clear cache) ────────────
+  const refreshProfile = useCallback(async (uid) => {
+    if (!uid) return;
+
+    console.log(`🔄 ProfileProvider: Refreshing profile for ${uid}`);
+
+    // 1. Clear cache
+    const cacheKey = `profile_${uid}`;
+    await clearCache(cacheKey);
+
+    // 2. Remove from memory (will be re-fetched)
+    setProfiles((prev) => {
+      const updated = { ...prev };
+      delete updated[uid];
+      return updated;
+    });
+
+    // 3. Remove existing listener (if any)
+    if (listenerRefs.current[uid]) {
+      listenerRefs.current[uid]();
+      delete listenerRefs.current[uid];
+    }
+
+    // 4. Re-fetch fresh data
+    const cleanup = fetchProfile(uid);
+    return cleanup;
+  }, [fetchProfile]);
 
   // ─── Clean up on unmount ──────────────────────────────────────
   useEffect(() => {
@@ -168,6 +205,7 @@ export const ProfileProvider = ({ children }) => {
     presence,
     loading,
     fetchProfile,
+    refreshProfile,
     getProfile: (uid) => profiles[uid] || null,
     isOnline: (uid) => presence[uid] || false,
   };
