@@ -5,8 +5,6 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useProfile } from '../../contexts/ProfileContext';
 import ECHOMOJI from '../UI/ECHOMOJI';
 import { getSkinById } from '../../constants/echomoji';
-import { db } from '../../services/firebase';
-import { ref, onValue } from 'firebase/database';
 
 const Navbar = memo(() => {
   const { user, logout } = useAuth();
@@ -21,27 +19,17 @@ const Navbar = memo(() => {
   // ─── Use Profile Context ─────────────────────────────────
   const { profiles, presence, loading, fetchProfile, getProfile, isOnline } = useProfile();
 
-  // ─── Local state for partner live presence ────────────────
-  const [partnerOnline, setPartnerOnline] = useState(false);
-
   // ─── Fetch profiles ──────────────────────────────────────
+  // ✅ Only fetch once – ProfileContext manages its own listeners
   useEffect(() => {
-    if (user?.uid) fetchProfile(user.uid);
+    if (user?.uid) {
+      fetchProfile(user.uid);
+    }
   }, [user?.uid, fetchProfile]);
 
   useEffect(() => {
     if (isChatRoute && userId) {
       fetchProfile(userId);
-
-      // Realtime listener for active presence
-      const presenceRef = ref(db, `presence/${userId}`);
-      const unsubscribe = onValue(presenceRef, (snapshot) => {
-        const val = snapshot.val();
-        const onlineStatus = val === true || val?.state === 'online' || val?.online === true;
-        setPartnerOnline(onlineStatus);
-      });
-
-      return () => unsubscribe();
     }
   }, [isChatRoute, userId, fetchProfile]);
 
@@ -52,6 +40,9 @@ const Navbar = memo(() => {
   // ─── Compute display values ──────────────────────────────
   const ownName = ownProfile?.name || user?.displayName || user?.email?.split('@')[0] || 'User';
   const partnerName = partnerProfile?.name || userId || 'User';
+
+  // ─── Partner online status (from context) ────────────────
+  const partnerOnline = isChatRoute && userId ? isOnline(userId) : false;
 
   // ─── Partner EchoMoji ─────────────────────────────────────
   const getPartnerEchomoji = () => {
