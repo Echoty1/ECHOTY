@@ -7,6 +7,7 @@ import { getCache, setCache, clearCache } from '../services/cacheService';
 
 const ProfileContext = createContext();
 
+// ─── Named export for useProfile ──────────────────────────────
 export const useProfile = () => {
   const context = useContext(ProfileContext);
   if (!context) throw new Error('useProfile must be used within ProfileProvider');

@@ -1,6 +1,7 @@
 // src/components/pages/Profile/Profile.js
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
+import { useProfile } from '../../../contexts/ProfileContext';
 import { db } from '../../../services/firebase';
 import { ref, onValue, update, set } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
@@ -44,6 +45,7 @@ const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', 
 
 const Profile = () => {
   const { user } = useAuth();
+  const { refreshProfile } = useProfile();
 
   // Instant local memory state initialization (0ms frame render)
   const cachedProfile = useMemo(() => {
@@ -76,7 +78,6 @@ const Profile = () => {
   // ─── Country & City Data Handlers ────────────────────────────
   const countriesList = useMemo(() => Country.getAllCountries(), []);
 
-  // Compute ISO Code for current country selection
   const matchedCountryCode = useMemo(() => {
     if (editData.countryCode) return editData.countryCode;
     if (editData.country) {
@@ -88,7 +89,6 @@ const Profile = () => {
     return '';
   }, [editData.country, editData.countryCode, countriesList]);
 
-  // Cities list calculated strictly based on selected country
   const citiesList = useMemo(() => {
     return matchedCountryCode ? City.getCitiesOfCountry(matchedCountryCode) : [];
   }, [matchedCountryCode]);
@@ -110,7 +110,7 @@ const Profile = () => {
       ...editData,
       country: countryObj ? countryObj.name : '',
       countryCode: selectedIsoCode,
-      city: '', // Reset city on country change
+      city: '',
     });
   };
 
@@ -121,7 +121,7 @@ const Profile = () => {
     });
   };
 
-  // Background Real-time Profile Listener
+  // ─── Background Real-time Profile Listener ───────────────────
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -172,18 +172,31 @@ const Profile = () => {
     return () => unsubscribe();
   }, [user?.uid, editing]);
 
+  // ─── SAVE PROFILE ─────────────────────────────────────────────
   const handleSave = async () => {
     if (!user) return;
+
     try {
       const cacheKey = `profile_${user.uid}`;
-      setProfile(editData);
+      const profileRef = ref(db, `profiles/${user.uid}`);
+
+      // 1. Update Firebase
+      await update(profileRef, editData);
+
+      // 2. Update local cache (fast storage)
       setFastLocal(cacheKey, editData);
+
+      // 3. Update local profile state
+      setProfile(editData);
+
+      // 4. Refresh ProfileContext cache
+      await refreshProfile(user.uid);
+
+      // 5. Exit edit mode
       setEditing(false);
 
-      const profileRef = ref(db, `profiles/${user.uid}`);
-      await update(profileRef, editData);
-    } catch (err) {
-      console.error('Error saving profile:', err);
+    } catch (error) {
+      console.error('Error saving profile:', error);
     }
   };
 

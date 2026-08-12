@@ -17,8 +17,7 @@ export const AuthProvider = ({ children }) => {
           const uid = firebaseUser.uid;
           console.log('👤 User authenticated:', uid);
 
-          // ✅ Set loading to false IMMEDIATELY – let the user in!
-          // Profile data will load in the background.
+          // ✅ Set loading to false immediately – let the user in!
           setLoading(false);
 
           // Presence
@@ -27,14 +26,12 @@ export const AuthProvider = ({ children }) => {
           onDisconnect(onlineRef).set(false);
 
           // ─── Set a basic user object immediately ──────────
-          // This allows the app to render instantly with fallback data.
           const baseUser = {
             uid: firebaseUser.uid,
             email: firebaseUser.email,
             displayName: firebaseUser.displayName,
             photoURL: firebaseUser.photoURL,
             emailVerified: firebaseUser.emailVerified,
-            // Fallback profile data (will be overwritten)
             name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
             avatar: firebaseUser.photoURL || '',
             mood: 'neutral',
@@ -59,28 +56,30 @@ export const AuthProvider = ({ children }) => {
                 const profileData = snapshot.val();
                 console.log('📂 Existing profile loaded:', profileData);
 
-                // ─── Get correct name from Google ────────────
+                // ─── Get correct Google name for fallback ──
                 const googleName =
                   firebaseUser.displayName ||
                   firebaseUser.email?.split('@')[0] ||
                   'User';
 
+                // ─── Extract current name from profile ────
                 const currentName = profileData.name || profileData.displayName || profileData.username || '';
 
-                // ─── Update if name is missing, UID, "User", or differs ──
+                // ─── Only update name if it's missing or a placeholder ──
                 const isUid = currentName.length >= 28; // typical Firebase UID length
                 const isDefault = !currentName || currentName === 'User' || isUid;
 
                 let needsUpdate = false;
                 const updatedData = {};
 
-                if (isDefault || currentName.toLowerCase() !== googleName.toLowerCase()) {
+                // Only set name if it's missing or a placeholder
+                if (isDefault) {
                   updatedData.name = googleName;
                   updatedData.searchName = googleName.toLowerCase();
                   needsUpdate = true;
-                  console.log(`🔄 Updating name from "${currentName}" to "${googleName}"`);
+                  console.log(`🔄 Setting initial name from "${currentName}" to "${googleName}"`);
                 } else {
-                  // Ensure searchName is correct
+                  // Ensure searchName is correct (but don't change name)
                   const expectedSearch = (currentName || 'User').toLowerCase();
                   if (profileData.searchName !== expectedSearch) {
                     updatedData.searchName = expectedSearch;
@@ -96,14 +95,15 @@ export const AuthProvider = ({ children }) => {
                   Object.assign(profileData, updatedData);
                 }
 
-                // ─── Update user with full profile data ──────
+                // ─── Merge profile data into user ──────────
                 setUser((prev) => ({
                   ...prev,
                   ...profileData,
-                  // Ensure displayName is preserved
+                  // Ensure displayName is preserved from firebase
                   displayName: firebaseUser.displayName || profileData.name || prev?.name || 'User',
                   photoURL: firebaseUser.photoURL || profileData.avatar || '',
                 }));
+
               } else {
                 // ─── New user: create profile ────────────────
                 const name = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
