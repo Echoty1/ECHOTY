@@ -6,20 +6,35 @@ import { useProfile } from '../../contexts/ProfileContext';
 import ECHOMOJI from '../UI/ECHOMOJI';
 import { getSkinById } from '../../constants/echomoji';
 
+// Static direct asset path for ECHO AI
+const ECHO_AI_GIF = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
+
+const sanitizeName = (rawName, targetUid) => {
+  if (!rawName) return 'User';
+  const str = String(rawName).trim();
+  if (
+    str === targetUid ||
+    (str.length >= 20 && !str.includes(' ') && /^[a-zA-Z0-9_-]+$/.test(str))
+  ) {
+    return 'User';
+  }
+  return str;
+};
+
 const Navbar = memo(() => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
 
-  // ─── Parse userId from URL ──────────────────────────────
+  const [imgError, setImgError] = useState(false);
+
   const pathParts = location.pathname.split('/');
-  const userId = pathParts[1] === 'chat' ? pathParts[2] : undefined;
+  const targetUserId = pathParts[1] === 'chat' ? pathParts[2] : undefined;
   const isChatRoute = location.pathname.startsWith('/chat/');
+  const isEchoAiRoute = targetUserId === 'echo_ai_assistant';
 
-  // ─── Use Profile Context ─────────────────────────────────
-  const { profiles, presence, loading, fetchProfile, getProfile, isOnline } = useProfile();
+  const { fetchProfile, getProfile } = useProfile();
 
-  // ─── Fetch profiles with proper cleanup ────────────────────
   useEffect(() => {
     if (user?.uid) {
       const cleanup = fetchProfile(user.uid);
@@ -30,85 +45,64 @@ const Navbar = memo(() => {
   }, [user?.uid, fetchProfile]);
 
   useEffect(() => {
-    if (isChatRoute && userId) {
-      const cleanup = fetchProfile(userId);
+    if (isChatRoute && targetUserId && !isEchoAiRoute) {
+      const cleanup = fetchProfile(targetUserId);
       return () => {
         if (typeof cleanup === 'function') cleanup();
       };
     }
-  }, [isChatRoute, userId, fetchProfile]);
+  }, [isChatRoute, targetUserId, isEchoAiRoute, fetchProfile]);
 
-  // ─── Get fresh data from context ────────────────────────
+  const targetProfile = isChatRoute && targetUserId && !isEchoAiRoute
+    ? getProfile(targetUserId)
+    : null;
+
   const ownProfile = user?.uid ? getProfile(user.uid) : null;
-  const partnerProfile = isChatRoute && userId ? getProfile(userId) : null;
 
-  // ─── Compute display values ──────────────────────────────
-  const ownName = ownProfile?.name || user?.displayName || user?.email?.split('@')[0] || 'User';
-  const partnerName = partnerProfile?.name || userId || 'User';
+  // Avatar priority: If AI -> GIF; Else -> State or DB profile
+  const chatAvatar = isEchoAiRoute
+    ? ECHO_AI_GIF
+    : location.state?.userAvatar || targetProfile?.avatar || '';
 
-  // ─── Partner online status (from context) ────────────────
-  const partnerOnline = isChatRoute && userId ? isOnline(userId) : false;
+  const chatName = isEchoAiRoute
+    ? 'ECHO AI'
+    : sanitizeName(location.state?.userName || targetProfile?.name, targetUserId);
 
-  // ─── Partner EchoMoji ─────────────────────────────────────
-  const getPartnerEchomoji = () => {
-    if (!partnerProfile) return null;
-    const mood = partnerProfile.mood || 'neutral';
-    const skinId = partnerProfile.activeSkin;
-    const skin = skinId ? getSkinById(skinId) : null;
-    return { mood, skin };
-  };
-
-  const ownSkinId = ownProfile?.activeSkin;
-  const ownSkin = ownSkinId ? getSkinById(ownSkinId) : null;
-
-  const echomoji = getPartnerEchomoji();
-  const isLoadingOwn = loading && !ownProfile;
-  const isLoadingPartner = isChatRoute && loading && !partnerProfile;
+  const ownSkin = ownProfile?.activeSkin ? getSkinById(ownProfile.activeSkin) : null;
+  const ownName = sanitizeName(ownProfile?.name || ownProfile?.displayName || 'User', user?.uid);
 
   return (
     <nav
       style={{
-        position: 'fixed',
+        position: 'sticky',
         top: 0,
         left: 0,
         right: 0,
-        zIndex: 50,
-        background: 'rgba(10, 10, 15, 0.92)',
-        backdropFilter: 'blur(20px)',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        height: '60px',
+        backgroundColor: '#0A0A0F',
+        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '0 16px',
-        height: '60px',
+        zIndex: 1000,
         boxSizing: 'border-box',
       }}
     >
-      {/* ─── LEFT ────────────────────────────────────────── */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '12px',
-          minWidth: '44px',
-        }}
-      >
+      {/* ── LEFT SECTION ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
         {isChatRoute ? (
           <button
             onClick={() => navigate('/chats')}
             style={{
-              background: 'rgba(255, 255, 255, 0.06)',
-              border: '1px solid rgba(255, 255, 255, 0.08)',
+              background: 'none',
+              border: 'none',
               color: '#fff',
-              fontSize: '16px',
+              fontSize: '18px',
               cursor: 'pointer',
-              width: '36px',
-              height: '36px',
-              borderRadius: '50%',
+              padding: '4px',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              transition: 'background 0.2s ease',
             }}
           >
             <i className="fas fa-arrow-left" />
@@ -116,123 +110,102 @@ const Navbar = memo(() => {
         ) : (
           <span
             style={{
-              fontWeight: 800,
               fontSize: '20px',
-              background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent',
+              fontWeight: 800,
               letterSpacing: '1px',
+              color: '#fff',
             }}
           >
             ECHO
           </span>
         )}
+
+        {/* Chat Partner Header Details */}
+        {isChatRoute && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                width: '38px',
+                height: '38px',
+                borderRadius: '50%',
+                overflow: 'hidden',
+                background: 'rgba(255,255,255,0.05)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '1px solid rgba(255,255,255,0.15)',
+                flexShrink: 0,
+              }}
+            >
+              {chatAvatar && !imgError ? (
+                <img
+                  src={chatAvatar}
+                  alt={chatName}
+                  onError={() => setImgError(true)}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    display: 'block',
+                  }}
+                />
+              ) : (
+                <span style={{ color: '#fff', fontWeight: 700, fontSize: '15px' }}>
+                  {chatName[0]?.toUpperCase() || 'E'}
+                </span>
+              )}
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <span style={{ color: '#fff', fontWeight: 700, fontSize: '14px', lineHeight: '1.2' }}>
+                {chatName}
+              </span>
+              <span style={{ color: isEchoAiRoute ? '#a78bfa' : '#10B981', fontSize: '11px', marginTop: '2px' }}>
+                {isEchoAiRoute ? 'AI Assistant' : 'Online'}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
-      {/* ─── CENTER (Chat partner info) ──────────────────── */}
-      {isChatRoute && (
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-            cursor: 'pointer',
-            flex: 1,
-            justifyContent: 'center',
-          }}
-          onClick={() => navigate(`/profile/${userId}`)}
-        >
-          {isLoadingPartner ? (
-            <span style={{ color: '#666', fontSize: '13px' }}>Loading...</span>
-          ) : (
-            <>
-              {echomoji?.skin && (
-                <div style={{ flexShrink: 0 }}>
-                  <ECHOMOJI
-                    mood={echomoji.mood}
-                    skin={echomoji.skin}
-                    size={36}
-                    interactive={false}
-                  />
-                </div>
-              )}
-              <div
-                style={{
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'flex-start',
-                }}
-              >
-                <span
-                  style={{
-                    color: '#fff',
-                    fontWeight: 600,
-                    fontSize: '15px',
-                    lineHeight: '1.2',
-                  }}
-                >
-                  {partnerName}
-                </span>
-                <span
-                  style={{
-                    fontSize: '11px',
-                    color: partnerOnline ? '#10B981' : '#6B7280',
-                    fontWeight: 500,
-                  }}
-                >
-                  {partnerOnline ? '🟢 Online' : '⚪ Offline'}
-                </span>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {/* ─── RIGHT ────────────────────────────────────────── */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-          minWidth: '44px',
-          flexShrink: 0,
-          justifyContent: 'flex-end',
-        }}
-      >
+      {/* ── RIGHT SECTION ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         {!isChatRoute && ownSkin && (
           <ECHOMOJI
             mood={ownProfile?.mood || 'happy'}
             skin={ownSkin}
-            size={32}
+            size={30}
             interactive={false}
           />
         )}
-        <span
-          style={{
-            fontSize: '13px',
-            color: '#888',
-            fontWeight: 500,
-            whiteSpace: 'nowrap',
-            maxWidth: '70px',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {isChatRoute ? '' : isLoadingOwn ? '...' : ownName}
-        </span>
+        {!isChatRoute && (
+          <span
+            style={{
+              fontSize: '14px',
+              color: '#CCCCCC',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              maxWidth: '80px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {ownName}
+          </span>
+        )}
         <button
           onClick={logout}
+          title="Log Out"
+          aria-label="Log out"
           style={{
-            background: 'none',
-            border: 'none',
-            color: '#888',
-            fontSize: '18px',
+            background: 'rgba(239, 68, 68, 0.1)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            color: '#EF4444',
+            fontSize: '14px',
             cursor: 'pointer',
-            padding: '4px',
-            transition: 'color 0.2s ease',
+            padding: '6px 10px',
+            borderRadius: '10px',
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = '#EF4444')}
-          onMouseLeave={(e) => (e.currentTarget.style.color = '#888')}
         >
           <i className="fas fa-sign-out-alt" />
         </button>
@@ -241,5 +214,4 @@ const Navbar = memo(() => {
   );
 });
 
-Navbar.displayName = 'Navbar';
 export default Navbar;

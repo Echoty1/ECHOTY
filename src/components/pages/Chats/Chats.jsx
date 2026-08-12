@@ -1,7 +1,7 @@
 // src/components/pages/Chats/Chats.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../../../services/firebase';
 import { useDeletedAccountCheck } from '../../../hooks/useDeletedAccountCheck';
 import {
@@ -15,12 +15,12 @@ import {
 } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
-import Modal from '../../common/Modal';
 import './Chats.css';
 import { getCache, setCache } from '../../../services/cacheService';
 import { searchProfiles, prefetchProfilesIndex } from '../../../services/searchService';
 import { useInfiniteScroll } from '../../../hooks/useInfiniteScroll';
 import { SkeletonChatItem } from '../../common/SkeletonLoader';
+import { preloadMedia } from '../../../utils/mediaCache';
 
 const CHAT_CHUNK_SIZE = 20;
 
@@ -31,6 +31,7 @@ const ECHO_AI_USER = {
   isAi: true,
   online: true,
   mood: 'happy',
+  avatar: '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif',
   lastMessage: 'Your AI assistant is ready to help!',
   unreadCount: 0,
 };
@@ -49,7 +50,18 @@ const timeAgo = (timestamp) => {
   return 'Just now';
 };
 
-// ─── Fast single fetch for partner profile ──────────────────────
+const sanitizeName = (rawName, userId) => {
+  if (!rawName) return 'User';
+  const str = String(rawName).trim();
+  if (
+    str === userId ||
+    (str.length >= 20 && !str.includes(' ') && /^[a-zA-Z0-9_-]+$/.test(str))
+  ) {
+    return 'User';
+  }
+  return str;
+};
+
 const loadPartnerData = async (partnerId) => {
   try {
     const profileRef = ref(db, `profiles/${partnerId}`);
@@ -63,7 +75,6 @@ const loadPartnerData = async (partnerId) => {
   return null;
 };
 
-// ─── Process a single chat item ──────────────────────────────────
 const processChatItem = async (chat, user, onlineUsers) => {
   try {
     const profile = (await loadPartnerData(chat.id)) || {};
@@ -71,16 +82,17 @@ const processChatItem = async (chat, user, onlineUsers) => {
     let isDeleted = false;
 
     if (chat.partnerDeleted === true) {
-      partnerName = chat.partnerName || 'Deleted Account';
+      partnerName = sanitizeName(chat.partnerName, chat.id) || 'Deleted Account';
       isDeleted = true;
     } else {
-      partnerName =
+      partnerName = sanitizeName(
         profile.name ||
         profile.displayName ||
         profile.username ||
         chat.partnerName ||
-        chat.name ||
-        'User';
+        chat.name,
+        chat.id
+      );
     }
 
     const isSender = chat.lastSenderId === user.uid;
@@ -94,12 +106,16 @@ const processChatItem = async (chat, user, onlineUsers) => {
         displayMessage = displayMessage.substring(0, 30) + '...';
     }
 
+    const rawAvatar = profile.avatar || chat.partnerAvatar || '';
+    if (rawAvatar) preloadMedia(rawAvatar);
+
     return {
       id: chat.id,
       name: partnerName,
-      avatar: profile.avatar || chat.partnerAvatar || '',
+      avatar: rawAvatar,
       mood: profile.mood || chat.mood || 'neutral',
       activeSkin: profile.activeSkin || chat.activeSkin || 'default',
+      location: profile.location || [profile.city, profile.country].filter(Boolean).join(', ') || '',
       lastMessage: displayMessage,
       timestamp: chat.lastUpdated || chat.timestamp || Date.now(),
       lastSenderId: chat.lastSenderId || '',
@@ -110,7 +126,7 @@ const processChatItem = async (chat, user, onlineUsers) => {
   } catch (err) {
     return {
       id: chat.id,
-      name: chat.partnerName || chat.name || 'User',
+      name: sanitizeName(chat.partnerName || chat.name, chat.id),
       lastMessage: chat.lastMessage || 'Start chatting...',
       timestamp: chat.lastUpdated || Date.now(),
       lastSenderId: chat.lastSenderId || '',
@@ -124,12 +140,21 @@ const processChatItem = async (chat, user, onlineUsers) => {
 const Chats = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const routerLocation = useLocation();
 
-  const [searchQuery, setSearchQuery] = useState('');
+  const initialQuery = () => {
+    if (routerLocation.state?.searchQuery) {
+      return routerLocation.state.searchQuery;
+    }
+    sessionStorage.removeItem('chats_search_query');
+    return '';
+  };
+
+  const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [results, setResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(false);
+  const [isSearching, setIsSearching] = useState(() => initialQuery().trim().length > 0);
   const [onlineUsers, setOnlineUsers] = useState({});
-  const [showAiModal, setShowAiModal] = useState(false);
+  const [currentUserProfile, setCurrentUserProfile] = useState(null);
 
   const inputRef = useRef(null);
   const searchTimeout = useRef(null);
@@ -138,7 +163,6 @@ const Chats = () => {
 
   const cacheKey = `chats_${user?.uid}`;
 
-  // ─── State ─────────────────────────────────────────────────────────
   const [recentChats, setRecentChats] = useState([]);
   const [loadingChats, setLoadingChats] = useState(true);
   const [hasMore, setHasMore] = useState(true);
@@ -147,7 +171,40 @@ const Chats = () => {
 
   useDeletedAccountCheck();
 
-  // ─── Instant Cache Hydration (on mount) ──────────────────────────
+  // In src/components/pages/Chats/Chats.jsx
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const userChatsRef = ref(db, `userChats/${user.uid}`);
+
+    // Realtime listener triggers whenever userChats updates
+    const unsubscribe = onValue(userChatsRef, async (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
+        setRecentChats([]);
+        setLoadingChats(false);
+        return;
+      }
+
+      const chatList = Object.entries(data).map(([partnerId, chat]) => ({
+        id: partnerId,
+        ...chat,
+      })).sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+
+      const loadedItems = await Promise.all(
+        chatList.map((chat) => processChatItem(chat, user, onlineUsers))
+      );
+
+      setRecentChats(loadedItems);
+      setLoadingChats(false);
+      
+      // Update local cache with fresh list
+      await setCache(cacheKey, loadedItems, 300);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid, onlineUsers]);
+
   useEffect(() => {
     let isMounted = true;
     if (!user?.uid) return;
@@ -157,7 +214,6 @@ const Chats = () => {
         const cached = await getCache(cacheKey);
         if (isMounted && Array.isArray(cached) && cached.length > 0) {
           setRecentChats(cached);
-          // Instantly hide skeleton loader
           setLoadingChats(false);
         }
       } catch (err) {
@@ -172,14 +228,12 @@ const Chats = () => {
     };
   }, [user?.uid, cacheKey]);
 
-  // ─── Pre-fetch profiles index ───────────────────────────────────
   useEffect(() => {
     if (user) {
       prefetchProfilesIndex(user.uid);
     }
   }, [user]);
 
-  // ─── Online Presence listener ─────────────────────────────────
   useEffect(() => {
     if (!user) return;
     const presenceRef = ref(db, 'presence/online');
@@ -199,7 +253,6 @@ const Chats = () => {
     };
   }, [user]);
 
-  // ─── Load Chats in Parallel (Fast YouTube Style) ─────────────
   const loadChats = useCallback(
     async (loadMore = false) => {
       if (!user || isLoadingMore) return;
@@ -246,7 +299,6 @@ const Chats = () => {
           setLastChatKey(chatList[chatList.length - 1].id);
         }
 
-        // ─── PARALLEL processing – all profiles fetched simultaneously ──
         const loadedItems = await Promise.all(
           chatList.map((chat) => processChatItem(chat, user, onlineUsers))
         );
@@ -272,7 +324,6 @@ const Chats = () => {
     [user, lastChatKey, isLoadingMore, onlineUsers, cacheKey]
   );
 
-  // ─── Real-time userChats Listener ─────────────────────────────
   useEffect(() => {
     if (!user) {
       setLoadingChats(false);
@@ -328,7 +379,6 @@ const Chats = () => {
     };
   }, [user]);
 
-  // ─── Infinite Scroll ──────────────────────────────────────────
   const handleLoadMore = useCallback(async () => {
     if (hasMore && !isLoadingMore && !loadingChats) {
       await loadChats(true);
@@ -341,7 +391,6 @@ const Chats = () => {
     loadingChats,
   ]);
 
-  // ─── Search Handlers ─────────────────────────────────────────
   const performSearch = async (queryText) => {
     const trimmed = queryText.trim().toLowerCase();
     if (trimmed.length < 1) {
@@ -352,12 +401,54 @@ const Chats = () => {
 
     setIsSearching(true);
     try {
-      const searchRes = await searchProfiles(trimmed, user.uid, 20);
-      const withOnline = (searchRes.results || []).map((u) => ({
-        ...u,
-        isOnline: !!onlineUsers[u.id],
-      }));
-      setResults(withOnline);
+      const searchRes = await searchProfiles(trimmed, user.uid, 50);
+
+      const rawResults = Array.isArray(searchRes)
+        ? searchRes
+        : Array.isArray(searchRes?.results)
+        ? searchRes.results
+        : [];
+
+      const livePromises = rawResults.map(async (u) => {
+        if (!u || typeof u !== 'object') return null;
+        try {
+          const snap = await get(ref(db, `profiles/${u.id}`));
+          const freshData = snap.exists() ? snap.val() : {};
+
+          const safeDisplayName = sanitizeName(
+            freshData.name || freshData.displayName || freshData.username || u.name || u.displayName,
+            u.id
+          );
+
+          const userLoc =
+            freshData.location ||
+            [freshData.city, freshData.country].filter(Boolean).join(', ') ||
+            u.location ||
+            '';
+
+          return {
+            ...u,
+            ...freshData,
+            id: u.id,
+            name: safeDisplayName,
+            mood: freshData.mood || u.mood || 'happy',
+            activeSkin: freshData.activeSkin || u.activeSkin || 'default',
+            location: userLoc,
+            isOnline: !!onlineUsers[u.id],
+          };
+        } catch (err) {
+          return {
+            ...u,
+            name: sanitizeName(u.name || u.displayName, u.id),
+            isOnline: !!onlineUsers[u.id],
+          };
+        }
+      });
+
+      const resolved = await Promise.all(livePromises);
+      const updatedResults = resolved.filter(Boolean);
+
+      setResults(updatedResults);
     } catch (err) {
       console.error('❌ [Search] Search failed:', err);
       setResults([]);
@@ -368,79 +459,92 @@ const Chats = () => {
 
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    const query = searchQuery.trim().toLowerCase();
-    if (query.length === 0) {
+    const queryStr = searchQuery.trim();
+
+    if (queryStr.length === 0) {
+      sessionStorage.removeItem('chats_search_query');
       setResults([]);
       setIsSearching(false);
       return;
     }
+
+    sessionStorage.setItem('chats_search_query', queryStr);
+
     searchTimeout.current = setTimeout(() => {
-      performSearch(query);
-    }, 100);
+      performSearch(queryStr);
+    }, 150);
 
     return () => {
       if (searchTimeout.current) clearTimeout(searchTimeout.current);
     };
-  }, [searchQuery]);
+  }, [searchQuery, currentUserProfile, onlineUsers]);
 
-  // ─── Start chat logic ─────────────────────────────────────────
   const startChat = (selectedUser) => {
     if (!selectedUser) return;
-    if (selectedUser.isAi) {
-      setShowAiModal(true);
+    if (selectedUser.isAi || selectedUser.id === 'echo_ai_assistant') {
+      navigate('/chat/echo_ai_assistant');
       return;
     }
+
+    const safeUserName = sanitizeName(selectedUser.name, selectedUser.id);
+
     navigate(`/chat/${selectedUser.id}`, {
       state: {
-        userName: selectedUser.name,
+        userName: safeUserName,
         userStatus: selectedUser.status,
         userInterests: selectedUser.interests,
         userAvatar: selectedUser.avatar,
         userMood: selectedUser.mood,
         userActiveSkin: selectedUser.activeSkin,
+        searchQuery: searchQuery.trim(),
       },
     });
   };
 
-  const getMatchReasons = (userItem) => {
-    if (!userItem) return [];
-    const reasons = [];
-    if (userItem.isOnline) reasons.push('⚡ Active now');
-    if (userItem.mutualConnections > 0) reasons.push(`👥 ${userItem.mutualConnections} mutual connections`);
-    const q = searchQuery.trim().toLowerCase();
-    if (q && userItem.interests?.some((i) => i.toLowerCase().includes(q))) {
-      reasons.push('🤖 Shared interests');
-    }
-    if (q && userItem.country?.toLowerCase().includes(q)) {
-      reasons.push('📍 Same country');
-    }
-    if (q && userItem.city?.toLowerCase().includes(q)) {
-      reasons.push('📍 Same city');
-    }
-    if (reasons.length === 0) reasons.push('✨ Suggested for you');
-    return reasons.slice(0, 3);
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setResults([]);
+    sessionStorage.removeItem('chats_search_query');
+    inputRef.current?.focus();
   };
 
-  const activeSkin = (skinId) => getSkinById(skinId);
-
   const safeRecentChats = Array.isArray(recentChats) ? recentChats : [];
+  const safeResults = Array.isArray(results) ? results : [];
+  const isSearchActive = searchQuery.trim().length > 0;
 
-  // ─── Render ──────────────────────────────────────────────────
   return (
     <div className="chats-page" ref={containerRef}>
-      <Modal
-        isOpen={showAiModal}
-        onClose={() => setShowAiModal(false)}
-        title="ECHO AI Assistant"
-        message="Coming Soon 🤖✨"
-        type="info"
-        actions={
-          <button className="btn-edit" onClick={() => setShowAiModal(false)}>
-            Close
-          </button>
+      {/* ── Fixed Consistent Position Style ── */}
+      <style>{`
+        .chats-page {
+          padding-top: 12px !important;
+          margin-top: 0px !important;
         }
-      />
+        .search-container {
+          position: sticky;
+          top: 0;
+          z-index: 20;
+          background: #0A0A0F;
+          padding-top: 0px !important;
+          padding-bottom: 12px !important;
+          margin-bottom: 12px !important;
+        }
+        .chat-location-badge {
+          font-size: 11px;
+          color: #a78bfa;
+          background: rgba(167, 139, 250, 0.12);
+          padding: 2px 6px;
+          border-radius: 6px;
+          margin-left: 6px;
+          white-space: nowrap;
+        }
+        .regular-chat-item.location-matched {
+          border-left: 3px solid #8b5cf6;
+          background: rgba(139, 92, 246, 0.05);
+        }
+      `}</style>
 
+      {/* ── SEARCH BAR CONTAINER ── */}
       <div className="search-container">
         <div className="search-input-wrapper">
           <i className="fas fa-search search-icon" />
@@ -448,118 +552,99 @@ const Chats = () => {
             ref={inputRef}
             type="text"
             className="search-input"
-            placeholder="Search people, interests, skills..."
+            placeholder="Search people or locations..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           {searchQuery && (
-            <button
-              className="search-clear"
-              onClick={() => {
-                setSearchQuery('');
-                setResults([]);
-                inputRef.current?.focus();
-              }}
-            >
+            <button className="search-clear" onClick={handleClearSearch} aria-label="Clear search">
               ✕
             </button>
           )}
         </div>
       </div>
 
-      {/* Search Results */}
-      {searchQuery.trim().length > 0 ? (
-        <div className="search-results">
+      {isSearchActive ? (
+        <div className="recent-chats search-results-section">
+          <div className="section-header">
+            <span>Search Results {!isSearching && `(${safeResults.length})`}</span>
+          </div>
+
           {isSearching ? (
-            <div className="search-loading">
-              <span className="loading-dot">●</span>
-              <span className="loading-dot">●</span>
-              <span className="loading-dot">●</span>
+            <div className="search-skeleton-wrapper">
+              <SkeletonChatItem />
+              <SkeletonChatItem />
+              <SkeletonChatItem />
             </div>
-          ) : results.length > 0 ? (
-            <>
-              <div className="results-header">
-                <span>{results.length} results found</span>
-              </div>
-              {results.map((person, index) => {
-                if (!person) return null;
-                return (
-                  <div
-                    key={person.id}
-                    className={`result-item ${index === 0 ? 'top-result' : ''}`}
-                    style={{ animationDelay: `${index * 0.05}s` }}
-                    onClick={() => startChat(person)}
-                  >
-                    <div className="result-avatar">
-                      {person.avatar ? (
-                        <img src={person.avatar} alt={person.name} className="user-profile-img" />
-                      ) : (
-                        <div className="avatar-placeholder">{person.name?.[0]?.toUpperCase() || 'U'}</div>
+          ) : safeResults.length > 0 ? (
+            safeResults.map((person) => {
+              if (!person) return null;
+              const isOnline = !!onlineUsers[person.id];
+              return (
+                <div
+                  key={person.id}
+                  className="chat-item regular-chat-item"
+                  onClick={() => startChat(person)}
+                >
+                  <div className="chat-avatar">
+                    {person.avatar ? (
+                      <img src={person.avatar} alt={person.name} className="user-profile-img" />
+                    ) : (
+                      <div className="avatar-placeholder">{person.name?.[0]?.toUpperCase() || 'U'}</div>
+                    )}
+                    <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
+                  </div>
+
+                  <div className="chat-info">
+                    <div className="chat-title-row">
+                      <span className="chat-name">{person.name}</span>
+                      {person.location && (
+                        <span className="chat-location-badge">📍 {person.location}</span>
                       )}
-                      <span className={`presence-dot ${person.isOnline ? 'online' : 'offline'}`} />
                     </div>
-                    <div className="result-info">
-                      <div className="result-name-row">
-                        <span className="result-name">{person.name}</span>
-                        {person.score > 100 && (
-                          <span className="result-badge">★ Top Match</span>
-                        )}
-                      </div>
-                      <div className="result-meta">
-                        {person.country} {person.city && `· ${person.city}`}
-                      </div>
-                      <div className="result-tags">
-                        {(person.interests || []).slice(0, 2).map((interest, i) => (
-                          <span key={i} className="result-tag">#{interest}</span>
-                        ))}
-                        {(person.skills || []).slice(0, 1).map((skill, i) => (
-                          <span key={i} className="result-tag skill">⚡{skill}</span>
-                        ))}
-                      </div>
-                      <div className="result-reasons">
-                        {getMatchReasons(person).map((reason, i) => (
-                          <span key={i} className="result-reason">{reason}</span>
-                        ))}
-                      </div>
-                    </div>
-                    <div className="result-echomoji">
-                      <ECHOMOJI
-                        mood={person.mood || 'happy'}
-                        skin={person.activeSkin ? getSkinById(person.activeSkin) : null}
-                        size={40}
-                        interactive={false}
-                      />
-                    </div>
-                    <div className="result-action">
-                      <span className="result-connect">→</span>
+                    <div className="chat-last">
+                      {person.bio || person.status || 'Available on ECHO'}
                     </div>
                   </div>
-                );
-              })}
-            </>
+
+                  <div className="chat-echomoji-middle">
+                    <ECHOMOJI
+                      mood={person.mood || 'happy'}
+                      skin={person.activeSkin ? getSkinById(person.activeSkin) : null}
+                      size={38}
+                      interactive={false}
+                    />
+                  </div>
+                </div>
+              );
+            })
           ) : (
-            <div className="no-results">
-              <span>🔍</span>
-              <p>No results found</p>
-              <span className="no-results-sub">Try a different search</span>
+            <div className="no-chats-premium">
+              <div className="no-chats-icon-wrapper">
+                <i className="fas fa-user-slash" />
+              </div>
+              <p className="no-chats-title">No matching users found</p>
+              <span className="no-chats-subtitle">
+                Try searching for a different name, username, or location
+              </span>
             </div>
           )}
         </div>
       ) : (
-        /* Recent Conversations List */
         <div className="recent-chats">
           <div className="section-header">
             <span>Recent Conversations</span>
           </div>
 
-          {/* ─── ECHO AI Floating Card ─────────────────────────────── */}
+          {/* ECHO AI Card */}
           <div className="chat-item ai-item floating-ai-card" onClick={() => startChat(ECHO_AI_USER)}>
             <div className="chat-avatar">
-              <div className="chat-avatar-container ai-avatar-frame floating-ai-avatar">
-                <div className="echomoji-wrapper">
-                  <ECHOMOJI mood="happy" size={52} interactive={false} animated={true} />
-                </div>
-              </div>
+              <img
+                src={ECHO_AI_USER.avatar}
+                alt="ECHO AI"
+                className="user-profile-img"
+                style={{ objectFit: 'cover' }}
+              />
               <span className="presence-dot online" />
             </div>
             <div className="chat-info">
@@ -572,7 +657,7 @@ const Chats = () => {
             <div className="chat-time">Always Active</div>
           </div>
 
-          {/* ─── Render each chat ──────────────────────────────────── */}
+          {/* Render Recent Chats */}
           {safeRecentChats.map((chat) => {
             if (!chat) return null;
             const isOnline = !!onlineUsers[chat.id];
@@ -582,7 +667,6 @@ const Chats = () => {
                 className="chat-item regular-chat-item"
                 onClick={() => startChat(chat)}
               >
-                {/* Avatar */}
                 <div className="chat-avatar">
                   {chat.avatar ? (
                     <img src={chat.avatar} alt={chat.name} className="user-profile-img" />
@@ -598,18 +682,16 @@ const Chats = () => {
                   )}
                 </div>
 
-                {/* Chat Info */}
                 <div className="chat-info">
                   <div className="chat-title-row">
                     <span className="chat-name">
-                      {chat.name || 'Unknown'}
+                      {chat.name}
                       {chat.isDeleted && <span className="archived-label"> (archived)</span>}
                     </span>
                   </div>
                   <div className="chat-last">{chat.lastMessage || 'Start chatting...'}</div>
                 </div>
 
-                {/* EchoMoji */}
                 <div className="chat-echomoji-middle">
                   <ECHOMOJI
                     mood={chat.mood || 'neutral'}
@@ -619,137 +701,38 @@ const Chats = () => {
                   />
                 </div>
 
-                {/* Timestamp */}
                 <div className="chat-time">{timeAgo(chat.timestamp)}</div>
               </div>
             );
           })}
 
-          {/* ─── Single Skeleton (stays at bottom while loading) ──── */}
           {loadingChats && <SkeletonChatItem />}
 
-          {/* ─── Loading more indicator ───────────────────────────── */}
           {isLoadingMore && (
-            <div className="loading-more-chats">
-              <span>Loading more...</span>
+            <div className="premium-status-pill">
+              <div className="pill-spinner" />
+              <span>Fetching conversations...</span>
             </div>
           )}
 
-          {/* ─── End of list message ───────────────────────────────── */}
           {!hasMore && safeRecentChats.length > 0 && (
-            <div className="no-more-chats">
-              <span>No more conversations</span>
+            <div className="premium-end-pill">
+              <i className="fas fa-check-circle end-icon" />
+              <span>You're all caught up</span>
             </div>
           )}
 
-          {/* ─── Empty state ───────────────────────────────────────── */}
           {!loadingChats && safeRecentChats.length === 0 && (
-            <div className="no-chats">
-              <p>No conversations yet</p>
-              <span>Search for people to start chatting</span>
+            <div className="no-chats-premium">
+              <div className="no-chats-icon-wrapper">
+                <i className="fas fa-comments" />
+              </div>
+              <p className="no-chats-title">No conversations yet</p>
+              <span className="no-chats-subtitle">Search for people above to start a new chat</span>
             </div>
           )}
         </div>
       )}
-
-      {/* ─── Embedded CSS ────────────────────────────────────────── */}
-      <style>{`
-        @keyframes floatCard {
-          0%, 100% { transform: translateY(0px); box-shadow: 0 4px 20px rgba(108, 60, 225, 0.15); }
-          50% { transform: translateY(-5px); box-shadow: 0 10px 25px rgba(108, 60, 225, 0.3); }
-        }
-        @keyframes floatAvatar {
-          0%, 100% { transform: translateY(0px) scale(1); }
-          50% { transform: translateY(-3px) scale(1.04); }
-        }
-        .chat-item.ai-item.floating-ai-card {
-          background: rgba(108, 60, 225, 0.08);
-          border: 1px solid rgba(124, 58, 237, 0.3);
-          border-radius: 14px;
-          padding: 10px 14px;
-          margin-bottom: 12px;
-          animation: floatCard 4s ease-in-out infinite;
-          transition: background 0.2s ease, border-color 0.2s ease;
-        }
-        .chat-item.ai-item.floating-ai-card:hover {
-          background: rgba(108, 60, 225, 0.18);
-          border-color: rgba(124, 58, 237, 0.5);
-        }
-        .chat-avatar-container.ai-avatar-frame.floating-ai-avatar {
-          width: 48px;
-          height: 48px;
-          border-radius: 50%;
-          overflow: hidden;
-          background: radial-gradient(circle, #431d93 0%, #170d38 100%);
-          border: 1px solid rgba(138, 92, 246, 0.5);
-          box-shadow: 0 0 12px rgba(108, 60, 225, 0.4);
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          animation: floatAvatar 3s ease-in-out infinite;
-        }
-        .echomoji-wrapper {
-          width: 100%;
-          height: 100%;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          transform: scale(1.15);
-        }
-        .user-profile-img {
-          width: 48px;
-          height: 48px;
-          border-radius: 50%;
-          object-fit: cover;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .avatar-placeholder {
-          width: 48px;
-          height: 48px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #3a2b5c, #231b36);
-          color: #ffffff;
-          font-weight: 700;
-          font-size: 18px;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-        }
-        .regular-chat-item {
-          display: flex;
-          align-items: center;
-          gap: 12px;
-        }
-        .chat-echomoji-middle {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          margin-left: auto;
-          margin-right: 8px;
-          flex-shrink: 0;
-        }
-        .chat-title-row {
-          display: flex;
-          align-items: center;
-          gap: 6px;
-        }
-        .ai-badge {
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          background: linear-gradient(135deg, #7C3AED, #EC4899);
-          color: #ffffff;
-          font-size: 10px;
-          font-weight: 800;
-          letter-spacing: 0.5px;
-          padding: 2px 6px;
-          border-radius: 6px;
-          line-height: 1;
-          height: 16px;
-          box-shadow: 0 2px 4px rgba(124, 58, 237, 0.3);
-        }
-      `}</style>
     </div>
   );
 };
