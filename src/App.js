@@ -22,7 +22,6 @@ import Navbar from './components/Layout/Navbar';
 import BottomNav from './components/Layout/BottomNav';
 import { useAuth } from './hooks/useAuth';
 import NetworkStatus from './components/common/NetworkStatus';
-import RecoveryScreen from './components/Recovery/RecoveryScreen';
 import WhatsNewPopup from './components/WhatsNewPopup/WhatsNewPopup';
 
 // ─── ScrollToTop ──────────────────────────────────────────────────
@@ -144,11 +143,6 @@ function AppContent() {
   const { user, loading } = useAuth();
   const { fetchProfile } = useProfile();
   const [minTimePassed, setMinTimePassed] = useState(false);
-  const [showRecovery, setShowRecovery] = useState(false);
-
-  // ─── Determine backend URL ──────────────────────────────────
-  const backendUrl = process.env.REACT_APP_BACKEND_URL ||
-    (window.location.hostname === 'localhost' ? 'http://localhost:3000' : window.location.origin);
 
   useEffect(() => {
     const timer = setTimeout(() => setMinTimePassed(true), 2000);
@@ -161,34 +155,10 @@ function AppContent() {
     }
   }, [user?.uid, fetchProfile]);
 
-  useEffect(() => {
-    if (user) {
-      const recoveryKey = `echo_has_recovered_${user.uid}`;
-      const hasRecovered = localStorage.getItem(recoveryKey);
-      if (!hasRecovered) {
-        setShowRecovery(true);
-      } else {
-        setShowRecovery(false);
-      }
-    }
-  }, [user]);
-
   const showLoading = loading || !minTimePassed;
 
   if (showLoading) return <LoadingScreen />;
   if (!user) return <Login />;
-
-  if (showRecovery) {
-    return (
-      <RecoveryScreen
-        uid={user.uid}
-        backendUrl={backendUrl}
-        onComplete={() => {
-          setShowRecovery(false);
-        }}
-      />
-    );
-  }
 
   return (
     <>
