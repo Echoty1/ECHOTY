@@ -22,10 +22,10 @@ import { useInfiniteScroll } from '../../../hooks/useInfiniteScroll';
 import { SkeletonChatItem } from '../../common/SkeletonLoader';
 import { preloadMedia, useCachedImage } from '../../../utils/mediaCache';
 import { fetchLatestMessage } from '../../../services/messageCache';
+import { useProfile } from '../../../contexts/ProfileContext';
 
 const CHAT_CHUNK_SIZE = 20;
 
-// ─── ECHO AI Constant ────────────────────────────────────────────
 const ECHO_AI_USER = {
   id: 'echo_ai_assistant',
   name: 'ECHO AI',
@@ -37,7 +37,6 @@ const ECHO_AI_USER = {
   unreadCount: 0,
 };
 
-// ─── Helper Functions ────────────────────────────────────────────
 const timeAgo = (timestamp) => {
   if (!timestamp) return '';
   const now = Date.now();
@@ -105,7 +104,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
 
     let displayMessage = rawLastMessage;
     if (displayMessage !== 'Start chatting...') {
-      // If it's a media message, use a proper icon
       if (latest.type === 'media') {
         const mediaIcon = latest.mediaType === 'video' ? '🎬 Video' : '📷 Image';
         const isSender = lastSenderId === user.uid;
@@ -126,7 +124,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
         }
       }
     } else {
-      // Fallback: if chat.lastMessage already contains a media icon (set by userChats)
       if (chat.lastMessage === '📷 Image' || chat.lastMessage === '🎬 Video') {
         displayMessage = `${partnerName}: ${chat.lastMessage}`;
       }
@@ -135,7 +132,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
     const rawAvatar = profile.avatar || chat.partnerAvatar || '';
     if (rawAvatar) preloadMedia(rawAvatar);
 
-    // The `online` status is taken from the onlineUsers object.
     const isOnline = !!onlineUsers[chat.id];
 
     return {
@@ -153,7 +149,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
       online: isOnline,
     };
   } catch (err) {
-    // Fallback
     return {
       id: chat.id,
       name: sanitizeName(chat.partnerName || chat.name, chat.id),
@@ -167,32 +162,29 @@ const processChatItem = async (chat, user, onlineUsers) => {
   }
 };
 
-// ─── Sorting function for non-AI chats ──────────────────────────
+// ─── Sorting function ──────────────────────────────────────────
 const sortNonAIChats = (chats) => {
-  // Tier 2: Unread (unreadCount > 0) – sorted by most recent timestamp
-  const unreadChats = chats
-    .filter(c => c.unreadCount > 0)
-    .sort((a, b) => b.timestamp - a.timestamp);
+  const online = chats.filter(c => c.online === true);
+  const offline = chats.filter(c => c.online === false);
 
-  // Tier 3: Online (unreadCount === 0 && online === true)
-  const onlineChats = chats
-    .filter(c => c.unreadCount === 0 && c.online === true)
-    .sort((a, b) => a.name.localeCompare(b.name));
+  // Sort each group by timestamp descending (most recent first)
+  const onlineSorted = online.sort((a, b) => b.timestamp - a.timestamp);
+  const offlineSorted = offline.sort((a, b) => b.timestamp - a.timestamp);
 
-  // Tier 4: Offline (unreadCount === 0 && online === false) – alphabetical
-  const offlineChats = chats
-    .filter(c => c.unreadCount === 0 && c.online === false)
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  return [...unreadChats, ...onlineChats, ...offlineChats];
+  return [...onlineSorted, ...offlineSorted];
 };
 
-// ─── Memoized Chat Item Component ──────────────────────────────
+// ─── Memoized Chat Item ──────────────────────────────────────────
 const ChatItem = memo(({ chat, onStartChat }) => {
-  const isOnline = chat.online; // Already computed in processChatItem
+  const isOnline = chat.online;
   const hasUnread = chat.unreadCount > 0;
   const avatarUrl = chat.avatar || '';
   const cachedAvatar = useCachedImage(avatarUrl, null);
+  const { profiles } = useProfile();
+  const isProfileLoaded = profiles[chat.id] !== undefined;
+
+  // Show skeleton if name is "User" and profile not loaded
+  const showSkeleton = chat.name === 'User' && !isProfileLoaded;
 
   return (
     <div className="chat-item regular-chat-item" onClick={() => onStartChat(chat)}>
@@ -208,10 +200,14 @@ const ChatItem = memo(({ chat, onStartChat }) => {
       </div>
       <div className="chat-info">
         <div className="chat-title-row">
-          <span className="chat-name">
-            {chat.name}
-            {chat.isDeleted && <span className="archived-label"> (archived)</span>}
-          </span>
+          {showSkeleton ? (
+            <div className="skeleton-text" style={{ width: '80px', height: '16px' }} />
+          ) : (
+            <span className="chat-name">
+              {chat.name}
+              {chat.isDeleted && <span className="archived-label"> (archived)</span>}
+            </span>
+          )}
         </div>
         <div className="chat-last" style={{ fontWeight: hasUnread ? 700 : 400 }}>
           {chat.lastMessage || 'Start chatting...'}
@@ -286,19 +282,15 @@ const Chats = () => {
   }, [user]);
 
   // ─── Stale‑while‑revalidate: load cache then listen ──────────
-  // This effect depends on `onlineUsers` so that when presence changes,
-  // the list re-processes and re-sorts.
   useEffect(() => {
     if (!user?.uid) return;
 
-    // 1. Load from cache instantly
     const cached = getCache(cacheKey);
     if (cached && Array.isArray(cached) && cached.length > 0) {
       setRecentChats(cached);
       setLoadingChats(false);
     }
 
-    // 2. Real‑time listener for userChats
     const userChatsRef = ref(db, `userChats/${user.uid}`);
     userChatsUnsubRef.current = onValue(
       userChatsRef,
@@ -319,7 +311,6 @@ const Chats = () => {
           chatList.map((chat) => processChatItem(chat, user, onlineUsers))
         );
 
-        // Apply sorting (exclude AI, which is rendered separately)
         const nonAIChats = loadedItems.filter(c => c.id !== 'echo_ai_assistant');
         const sortedNonAI = sortNonAIChats(nonAIChats);
 
@@ -521,7 +512,6 @@ const Chats = () => {
 
   return (
     <div className="chats-page" ref={containerRef}>
-      {/* ── Search Bar ── */}
       <div className="search-container">
         <div className="search-input-wrapper">
           <i className="fas fa-search search-icon" />
@@ -534,9 +524,7 @@ const Chats = () => {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
           {searchQuery && (
-            <button className="search-clear" onClick={handleClearSearch} aria-label="Clear search">
-              ✕
-            </button>
+            <button className="search-clear" onClick={handleClearSearch}>✕</button>
           )}
         </div>
       </div>
@@ -594,9 +582,7 @@ const Chats = () => {
             })
           ) : (
             <div className="no-chats-premium">
-              <div className="no-chats-icon-wrapper">
-                <i className="fas fa-user-slash" />
-              </div>
+              <div className="no-chats-icon-wrapper"><i className="fas fa-user-slash" /></div>
               <p className="no-chats-title">No matching users found</p>
               <span className="no-chats-subtitle">
                 Try searching for a different name, username, or location
@@ -610,15 +596,10 @@ const Chats = () => {
             <span>Recent Conversations</span>
           </div>
 
-          {/* ─── ECHO AI Card (always at top) ─────────────────── */}
+          {/* ─── ECHO AI Card ─────────────────────────────────── */}
           <div className="chat-item ai-item floating-ai-card" onClick={() => startChat(ECHO_AI_USER)}>
             <div className="chat-avatar">
-              <img
-                src={ECHO_AI_USER.avatar}
-                alt="ECHO AI"
-                className="user-profile-img"
-                style={{ objectFit: 'cover' }}
-              />
+              <img src={ECHO_AI_USER.avatar} alt="ECHO AI" className="user-profile-img" style={{ objectFit: 'cover' }} />
               <span className="presence-dot online" />
             </div>
             <div className="chat-info">
@@ -636,9 +617,7 @@ const Chats = () => {
             <SkeletonChatItem />
           ) : safeRecentChats.length === 0 ? (
             <div className="no-chats-premium">
-              <div className="no-chats-icon-wrapper">
-                <i className="fas fa-comments" />
-              </div>
+              <div className="no-chats-icon-wrapper"><i className="fas fa-comments" /></div>
               <p className="no-chats-title">No conversations yet</p>
               <span className="no-chats-subtitle">Search for people above to start a new chat</span>
             </div>

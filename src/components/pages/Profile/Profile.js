@@ -10,6 +10,7 @@ import { Country, City } from 'country-state-city';
 import GifLibraryModal from '../../GifLibrary/GifLibraryModal';
 import AvatarPicker from '../../AvatarPicker/AvatarPicker';
 import Toast from '../../Toast/Toast';
+import { useCachedImage } from '../../../utils/mediaCache';
 import './Profile.css';
 
 const STORAGE_PREFIX = 'echo_cache_';
@@ -85,7 +86,6 @@ const Profile = () => {
     return getFastLocal(`echomoji_${user.uid}`);
   }, [user?.uid]);
 
-  // Synchronous state initialization from combined cache
   const [profile, setProfile] = useState(() => cachedProfile);
   const [activeSkinId, setActiveSkinId] = useState(() => cachedUserSkins?.active || cachedProfile?.activeSkin || null);
   const [loading, setLoading] = useState(() => !cachedProfile);
@@ -113,7 +113,6 @@ const Profile = () => {
     const profileCacheKey = `profile_${user.uid}`;
     const skinCacheKey = `echomoji_${user.uid}`;
 
-    // 1. Unified User Skins Listener
     const skinRef = ref(db, `userSkins/${user.uid}`);
     const unsubSkin = onValue(skinRef, (snap) => {
       if (!isMounted) return;
@@ -125,7 +124,6 @@ const Profile = () => {
       setFastLocal(skinCacheKey, { ...existingSkinCache, active: newActive });
     });
 
-    // 2. Profile Listener
     const profileRef = ref(db, `profiles/${user.uid}`);
     const unsubProfile = onValue(
       profileRef,
@@ -286,9 +284,11 @@ const Profile = () => {
         updateData.activeSkin = null;
       }
 
-      await update(ref(db, `profiles/${user.uid}`), updateData);
+      // ─── Optimistic update ──────────────────────────────
       setProfile((prev) => ({ ...prev, ...updateData }));
       setEditData((prev) => ({ ...prev, ...updateData }));
+
+      await update(ref(db, `profiles/${user.uid}`), updateData);
       await refreshProfile(user.uid);
 
       setToast({ message: 'Media uploaded successfully!', type: 'success' });
@@ -314,9 +314,11 @@ const Profile = () => {
   const handleGifSelect = async (gif) => {
     try {
       const updateData = { videoUrl: gif.url, avatar: gif.url, activeSkin: null };
-      await update(ref(db, `profiles/${user.uid}`), updateData);
+      // ─── Optimistic update ──────────────────────────────
       setProfile((prev) => ({ ...prev, ...updateData }));
       setEditData((prev) => ({ ...prev, ...updateData }));
+
+      await update(ref(db, `profiles/${user.uid}`), updateData);
       await refreshProfile(user.uid);
       setShowGifLibrary(false);
       setToast({ message: 'Profile GIF updated!', type: 'success' });
@@ -326,17 +328,21 @@ const Profile = () => {
     }
   };
 
-  // Instant pre-cached Skin Object lookup
+  // ─── Cached avatar ──────────────────────────────────────────
+  const currentMediaUrl = (editing ? editData.videoUrl : profile?.videoUrl) || 
+                          (editing ? editData.avatar : profile?.avatar);
+  // Use useCachedImage to get cached version (returns the cached URL or null)
+  const cachedMediaUrl = useCachedImage(currentMediaUrl, null);
+  // If cachedMediaUrl is not null, use it; otherwise fallback to original URL
+  const displayMediaUrl = cachedMediaUrl || currentMediaUrl;
+
+  const isVideoFormat = (editing ? editData.videoUrl : profile?.videoUrl) && 
+                        ((editing ? editData.videoUrl : profile?.videoUrl)?.endsWith('.mp4') || 
+                         (editing ? editData.videoUrl : profile?.videoUrl)?.endsWith('.webm'));
+
   const currentSkinId = activeSkinId || profile?.activeSkin;
   const activeSkinObj = useMemo(() => (currentSkinId ? getSkinById(currentSkinId) : null), [currentSkinId]);
 
-  const activeVideoUrl = editing ? editData.videoUrl : profile?.videoUrl;
-  const activeAvatarUrl = editing ? editData.avatar : profile?.avatar;
-  const currentMediaUrl = activeVideoUrl || activeAvatarUrl;
-
-  const isVideoFormat = activeVideoUrl && (activeVideoUrl.endsWith('.mp4') || activeVideoUrl.endsWith('.webm'));
-
-  // ─── Get first letter for avatar fallback ──────────────────────
   const getInitial = () => {
     const name = (editing ? editData.name : profile?.name) || 'User';
     return name[0]?.toUpperCase() || 'U';
@@ -357,16 +363,13 @@ const Profile = () => {
           {loading ? (
             <SkeletonBlock width="100%" height="100%" borderRadius="50%" />
           ) : isVideoFormat ? (
-            <video src={currentMediaUrl} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-          ) : currentMediaUrl ? (
-            <img src={currentMediaUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+            <video src={displayMediaUrl} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+          ) : displayMediaUrl ? (
+            <img src={displayMediaUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
           ) : activeSkinObj ? (
             <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={110} />
           ) : (
-            // Fallback: user initial
-            <div className="profile-avatar-initial">
-              {getInitial()}
-            </div>
+            <div className="profile-avatar-initial">{getInitial()}</div>
           )}
           {editing && <div className="avatar-overlay">Tap to change</div>}
         </div>
@@ -388,23 +391,16 @@ const Profile = () => {
           <div className="profile-name">{profile?.name || 'User'}</div>
         )}
 
-        {/* Instant ECHOMOJI displaying mood + skin together */}
         {!loading && (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '6px' }}>
-            <ECHOMOJI
-              mood={profile?.mood || 'happy'}
-              skin={activeSkinObj}
-              size={36}
-              interactive={false}
-              animated={true}
-            />
+            <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={36} interactive={false} animated={true} />
             <span style={{ fontSize: '13px', color: '#888', fontWeight: 500 }}>
               Mood: <strong style={{ color: '#FFF', textTransform: 'capitalize' }}>{profile?.mood || 'happy'}</strong>
             </span>
           </div>
         )}
 
-        {/* Location Dropdowns */}
+        {/* Location */}
         {editing ? (
           <div className="profile-location-inputs" style={{ display: 'flex', gap: '8px', margin: '12px 0' }}>
             <select
@@ -420,14 +416,11 @@ const Profile = () => {
                 fontSize: '13px',
               }}
             >
-              <option value="" style={{ background: '#1E1E2A', color: '#FFF' }}>Select Country</option>
+              <option value="">Select Country</option>
               {countriesList.map((c) => (
-                <option key={c.isoCode} value={c.isoCode} style={{ background: '#1E1E2A', color: '#FFF' }}>
-                  {c.name}
-                </option>
+                <option key={c.isoCode} value={c.isoCode}>{c.name}</option>
               ))}
             </select>
-
             <select
               value={editData.city || ''}
               onChange={handleCitySelect}
@@ -443,11 +436,9 @@ const Profile = () => {
                 opacity: matchedCountryCode ? 1 : 0.5,
               }}
             >
-              <option value="" style={{ background: '#1E1E2A', color: '#FFF' }}>Select City</option>
+              <option value="">Select City</option>
               {citiesList.map((ct, idx) => (
-                <option key={`${ct.name}-${idx}`} value={ct.name} style={{ background: '#1E1E2A', color: '#FFF' }}>
-                  {ct.name}
-                </option>
+                <option key={`${ct.name}-${idx}`} value={ct.name}>{ct.name}</option>
               ))}
             </select>
           </div>
@@ -473,7 +464,7 @@ const Profile = () => {
           profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>{profile.bio}</p>
         )}
 
-        {/* ─── Interests Templates (no heading, no editing) ──── */}
+        {/* Moving Interests Templates */}
         <div className="moving-interests-container" style={{ width: '100%', overflow: 'hidden', padding: '6px 0', marginTop: '12px' }}>
           <div
             className="moving-interests-track"
@@ -503,7 +494,7 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Action Buttons */}
+        {/* Actions */}
         <div className="profile-actions" style={{ marginTop: '24px', display: 'flex', gap: '12px', justifyContent: 'center' }}>
           {editing ? (
             <>
@@ -524,9 +515,7 @@ const Profile = () => {
 
       {/* Account Details */}
       <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: '16px', border: '1px solid rgba(255,255,255,0.08)', marginTop: '16px' }}>
-        <div style={{ fontSize: '12px', color: '#888', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>
-          Account Details
-        </div>
+        <div style={{ fontSize: '12px', color: '#888', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>Account Details</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
           <span style={{ fontSize: '13px', color: '#AAA' }}>Email</span>
           <span style={{ fontSize: '13px', color: '#FFF', fontWeight: 500 }}>{user?.email || 'N/A'}</span>

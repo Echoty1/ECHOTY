@@ -583,7 +583,6 @@ const ChatView = () => {
 
       const currentReply = replyTo;
       if (currentReply) {
-        // ✅ Use the SAME textSnippet that was shown in the preview
         msgData.replyTo = {
           messageId: currentReply.messageId,
           senderName: currentReply.senderName,
@@ -653,28 +652,6 @@ const ChatView = () => {
     const showReply = !isOwn && !isEchoAi;
 
     if (msg.type === 'media') {
-      const content = msg.isUploading ? (
-        <div className="media-upload-loading">
-          <div className="upload-spinner">
-            <svg className="spinner-ring" viewBox="0 0 50 50">
-              <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
-            </svg>
-            <span className="upload-progress-text">{Math.round(uploadProgress)}%</span>
-          </div>
-          <div className="media-upload-shimmer" />
-        </div>
-      ) : (
-        <>
-          {replyToDisplay && (
-            <RepliedMessage
-              replyTo={replyToDisplay}
-              onTap={() => scrollToMessage(replyToDisplay.messageId)}
-            />
-          )}
-          <ChatMediaMessage message={msg} />
-        </>
-      );
-
       return (
         <div
           className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
@@ -685,7 +662,17 @@ const ChatView = () => {
             onDelete={() => handleDeleteMessage(msg.id)}
             onReply={showReply ? () => handleReply(msg) : null}
           >
-            {content}
+            {replyToDisplay && (
+              <RepliedMessage
+                replyTo={replyToDisplay}
+                onTap={() => scrollToMessage(replyToDisplay.messageId)}
+              />
+            )}
+            <ChatMediaMessage 
+              message={msg} 
+              isUploading={msg.isUploading} 
+              uploadProgress={msg.uploadProgress} 
+            />
           </MessageMenu>
         </div>
       );

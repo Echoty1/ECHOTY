@@ -205,13 +205,13 @@ function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
-        <ProfileProvider>
-          <PresenceProvider>
+        <PresenceProvider>
+          <ProfileProvider>
             <CacheProvider>
               <AppContent />
             </CacheProvider>
-          </PresenceProvider>
-        </ProfileProvider>
+          </ProfileProvider>
+        </PresenceProvider>
       </AuthProvider>
     </BrowserRouter>
   );

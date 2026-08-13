@@ -25,7 +25,6 @@ const MessageMenu = ({ children, isOwn, onDelete, onReply }) => {
     };
   }, [isTouchDevice]);
 
-  // Determine which actions are available
   const showDelete = isOwn && typeof onDelete === 'function';
   const showReply = !isOwn && typeof onReply === 'function';
   const hasActions = showDelete || showReply;
@@ -34,7 +33,6 @@ const MessageMenu = ({ children, isOwn, onDelete, onReply }) => {
     return <>{children}</>;
   }
 
-  // Desktop: hover to reveal
   const handleMouseEnter = () => {
     if (!isTouchDevice) {
       setShowActions(true);
@@ -54,7 +52,6 @@ const MessageMenu = ({ children, isOwn, onDelete, onReply }) => {
     }
   };
 
-  // Mobile: tap to toggle
   const handleToggle = (e) => {
     if (isTouchDevice) {
       e.stopPropagation();

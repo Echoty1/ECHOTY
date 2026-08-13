@@ -1,34 +1,35 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { db } from '../services/firebase';
-import { ref, onValue } from 'firebase/database';
+// src/contexts/PresenceContext.jsx
+import React, { createContext, useContext, useEffect, useState } from 'react';
+import { listenPresence } from '../services/presenceService';
 
 const PresenceContext = createContext();
 
 export const PresenceProvider = ({ children }) => {
-  const [onlineUsers, setOnlineUsers] = useState(new Set());
+  const [onlineUsers, setOnlineUsers] = useState({});
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const onlineRef = ref(db, 'presence/online');
-    const unsub = onValue(onlineRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        setOnlineUsers(new Set(Object.keys(data)));
-      } else {
-        setOnlineUsers(new Set());
-      }
+    const unsub = listenPresence((data) => {
+      setOnlineUsers(data);
+      setLoading(false);
     });
     return () => unsub();
   }, []);
 
-  const subscribeToUser = (uid) => {
-    // Implement later – for now, just a placeholder
+  const isOnline = (uid) => {
+    if (!uid) return false;
+    return onlineUsers[uid] === true;
   };
 
   return (
-    <PresenceContext.Provider value={{ onlineUsers, subscribeToUser }}>
+    <PresenceContext.Provider value={{ onlineUsers, isOnline, loading }}>
       {children}
     </PresenceContext.Provider>
   );
 };
 
-export const usePresence = () => useContext(PresenceContext);
+export const usePresence = () => {
+  const ctx = useContext(PresenceContext);
+  if (!ctx) throw new Error('usePresence must be used within PresenceProvider');
+  return ctx;
+};

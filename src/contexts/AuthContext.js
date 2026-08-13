@@ -3,27 +3,32 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { auth, db } from '../services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { ref, set, onDisconnect, update, onValue } from 'firebase/database';
+import { initPresence } from '../services/presenceService';
 
 export const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const presenceCleanupRef = React.useRef(null);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      // Clean up previous presence if any
+      if (presenceCleanupRef.current) {
+        presenceCleanupRef.current();
+        presenceCleanupRef.current = null;
+      }
+
       if (firebaseUser) {
         try {
           const uid = firebaseUser.uid;
           console.log('👤 User authenticated:', uid);
 
-          // ✅ Set loading to false immediately – let the user in!
           setLoading(false);
 
-          // Presence
-          const onlineRef = ref(db, `presence/online/${uid}`);
-          set(onlineRef, true).catch(() => {});
-          onDisconnect(onlineRef).set(false);
+          // ✅ Initialize presence (robust)
+          presenceCleanupRef.current = initPresence(uid);
 
           // ─── Set a basic user object immediately ──────────
           const baseUser = {
@@ -56,30 +61,24 @@ export const AuthProvider = ({ children }) => {
                 const profileData = snapshot.val();
                 console.log('📂 Existing profile loaded:', profileData);
 
-                // ─── Get correct Google name for fallback ──
                 const googleName =
                   firebaseUser.displayName ||
                   firebaseUser.email?.split('@')[0] ||
                   'User';
 
-                // ─── Extract current name from profile ────
                 const currentName = profileData.name || profileData.displayName || profileData.username || '';
-
-                // ─── Only update name if it's missing or a placeholder ──
-                const isUid = currentName.length >= 28; // typical Firebase UID length
+                const isUid = currentName.length >= 28;
                 const isDefault = !currentName || currentName === 'User' || isUid;
 
                 let needsUpdate = false;
                 const updatedData = {};
 
-                // Only set name if it's missing or a placeholder
                 if (isDefault) {
                   updatedData.name = googleName;
                   updatedData.searchName = googleName.toLowerCase();
                   needsUpdate = true;
                   console.log(`🔄 Setting initial name from "${currentName}" to "${googleName}"`);
                 } else {
-                  // Ensure searchName is correct (but don't change name)
                   const expectedSearch = (currentName || 'User').toLowerCase();
                   if (profileData.searchName !== expectedSearch) {
                     updatedData.searchName = expectedSearch;
@@ -91,21 +90,17 @@ export const AuthProvider = ({ children }) => {
                   update(profileRef, updatedData)
                     .then(() => console.log('✅ Updated profile:', updatedData))
                     .catch((err) => console.warn('Could not update profile:', err));
-                  // Immediately merge changes for UI
                   Object.assign(profileData, updatedData);
                 }
 
-                // ─── Merge profile data into user ──────────
                 setUser((prev) => ({
                   ...prev,
                   ...profileData,
-                  // Ensure displayName is preserved from firebase
                   displayName: firebaseUser.displayName || profileData.name || prev?.name || 'User',
                   photoURL: firebaseUser.photoURL || profileData.avatar || '',
                 }));
 
               } else {
-                // ─── New user: create profile ────────────────
                 const name = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
                 console.log('👤 Creating new profile for:', name);
                 const newProfile = {
@@ -124,18 +119,15 @@ export const AuthProvider = ({ children }) => {
                   createdAt: Date.now(),
                 };
 
-                // Update user immediately with new profile data
                 setUser((prev) => ({
                   ...prev,
                   ...newProfile,
                 }));
 
-                // Save to Firebase (non-blocking)
                 set(profileRef, newProfile).catch((err) => {
                   console.error('Error creating profile:', err);
                 });
 
-                // Create auxiliary nodes (non-blocking)
                 Promise.all([
                   set(ref(db, `accounts/${uid}`), {
                     email: firebaseUser.email,
@@ -155,7 +147,6 @@ export const AuthProvider = ({ children }) => {
             },
             (error) => {
               console.error('❌ Profile listener error:', error);
-              // Keep the base user even if profile fails
             }
           );
 
@@ -166,6 +157,10 @@ export const AuthProvider = ({ children }) => {
         }
       } else {
         console.log('🔴 User signed out');
+        if (presenceCleanupRef.current) {
+          presenceCleanupRef.current();
+          presenceCleanupRef.current = null;
+        }
         setUser(null);
         setLoading(false);
       }
@@ -175,10 +170,13 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const handleLogout = async () => {
+    if (presenceCleanupRef.current) {
+      presenceCleanupRef.current();
+      presenceCleanupRef.current = null;
+    }
     if (user) {
       try {
-        const onlineRef = ref(db, `presence/online/${user.uid}`);
-        await set(onlineRef, false);
+        await set(ref(db, `presence/online/${user.uid}`), false);
       } catch (err) {}
     }
     await signOut(auth);

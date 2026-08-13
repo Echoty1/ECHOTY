@@ -98,6 +98,24 @@
   border-bottom-left-radius: 4px;
 }
 
+.message-bubble.deleting {
+  animation: deleteShrink 0.3s ease forwards;
+}
+.message-bubble.highlight-flash {
+  animation: highlightPulse 1s ease;
+}
+
+@keyframes deleteShrink {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.95); }
+  100% { opacity: 0; transform: scale(0.8); max-height: 0; padding: 0; margin: 0; overflow: hidden; }
+}
+@keyframes highlightPulse {
+  0% { background-color: rgba(108, 60, 225, 0.3); }
+  50% { background-color: rgba(108, 60, 225, 0.6); }
+  100% { background-color: transparent; }
+}
+
 /* ─── Media message styles ──────────────────────────────────── */
 .chat-media-video-wrapper,
 .chat-media-image-wrapper {
@@ -156,7 +174,6 @@
   z-index: 2;
   pointer-events: auto;
 }
-
 .video-mute-btn-overlay:hover {
   background: rgba(255, 255, 255, 0.2);
 }
@@ -172,7 +189,6 @@
   pointer-events: none;
   transition: transform 0.2s;
 }
-
 .chat-media-video-wrapper:hover .video-play-icon-overlay {
   transform: translate(-50%, -50%) scale(1.05);
 }
@@ -197,14 +213,12 @@
   overflow: hidden;
   z-index: 3;
 }
-
 .video-upload-progress .progress-bar {
   height: 100%;
   background: linear-gradient(90deg, #6C3CE1, #EC4899);
   transition: width 0.3s ease;
   border-radius: 2px;
 }
-
 .video-upload-progress .progress-text {
   position: absolute;
   top: 50%;
@@ -234,7 +248,6 @@
   padding: 20px;
   backdrop-filter: blur(8px);
 }
-
 .media-lightbox-content {
   position: relative;
   max-width: 90%;
@@ -243,7 +256,6 @@
   flex-direction: column;
   align-items: center;
 }
-
 .media-lightbox-image {
   max-width: 100%;
   max-height: 80vh;
@@ -251,7 +263,6 @@
   border-radius: 8px;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
 }
-
 .media-lightbox-caption {
   color: #ddd;
   font-size: 16px;
@@ -259,7 +270,6 @@
   text-align: center;
   max-width: 80%;
 }
-
 .media-lightbox-close {
   position: absolute;
   top: 12px;
@@ -286,13 +296,12 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.95);
-  z-index: 999999; /* higher than bottom nav */
+  z-index: 999999;
   display: flex;
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(8px);
 }
-
 .fullscreen-video-content {
   position: relative;
   max-width: 90%;
@@ -300,7 +309,6 @@
   width: 100%;
   height: auto;
 }
-
 .fullscreen-video {
   width: 100%;
   height: auto;
@@ -308,7 +316,6 @@
   object-fit: contain;
   border-radius: 8px;
 }
-
 .fullscreen-close-btn {
   position: absolute;
   top: 20px;
@@ -327,11 +334,9 @@
   backdrop-filter: blur(4px);
   transition: background 0.2s;
 }
-
 .fullscreen-close-btn:hover {
   background: rgba(255, 255, 255, 0.2);
 }
-
 .fullscreen-play-btn {
   position: absolute;
   bottom: 30px;
@@ -351,12 +356,10 @@
   backdrop-filter: blur(4px);
   transition: transform 0.2s, background 0.2s;
 }
-
 .fullscreen-play-btn:hover {
   transform: translateX(-50%) scale(1.1);
   background: rgba(255, 255, 255, 0.2);
 }
-
 .fullscreen-loading-spinner {
   position: absolute;
   top: 50%;
@@ -369,12 +372,10 @@
   color: #fff;
   font-size: 18px;
 }
-
 .fullscreen-loading-spinner i {
   font-size: 40px;
   opacity: 0.7;
 }
-
 .fullscreen-error {
   position: absolute;
   top: 50%;
@@ -388,12 +389,10 @@
   font-size: 16px;
   text-align: center;
 }
-
 .fullscreen-error i {
   font-size: 40px;
   color: #ef4444;
 }
-
 .fullscreen-error button {
   background: #6C3CE1;
   border: none;
@@ -417,7 +416,6 @@
   gap: 16px;
   border-radius: 12px;
 }
-
 .image-retry-btn {
   background: #6C3CE1;
   border: none;
@@ -432,7 +430,6 @@
   gap: 8px;
   transition: background 0.2s;
 }
-
 .image-retry-btn:hover {
   background: #7C4CE1;
 }
@@ -455,12 +452,10 @@
   z-index: 99998;
   animation: slideUp 0.3s ease-out;
 }
-
 @keyframes slideUp {
   from { transform: translateY(100%); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
-
 .media-preview-content {
   display: flex;
   flex-direction: column;
@@ -469,7 +464,6 @@
   margin: 0 auto;
   width: 100%;
 }
-
 .media-preview-close {
   align-self: flex-end;
   background: rgba(255, 255, 255, 0.08);
@@ -481,11 +475,9 @@
   border-radius: 30px;
   transition: background 0.2s;
 }
-
 .media-preview-close:hover {
   background: rgba(255, 255, 255, 0.15);
 }
-
 .media-preview-media {
   display: flex;
   justify-content: center;
@@ -496,14 +488,12 @@
   max-height: 350px;
   min-height: 120px;
 }
-
 .media-preview-image,
 .media-preview-video {
   max-width: 100%;
   max-height: 350px;
   object-fit: contain;
 }
-
 .media-preview-caption {
   width: 100%;
   padding: 12px 16px;
@@ -515,11 +505,9 @@
   outline: none;
   box-sizing: border-box;
 }
-
 .media-preview-caption:focus {
   border-color: #6C3CE1;
 }
-
 .media-preview-send {
   padding: 12px 24px;
   border-radius: 30px;
@@ -531,12 +519,10 @@
   cursor: pointer;
   transition: opacity 0.2s, transform 0.1s;
 }
-
 .media-preview-send:hover:not(:disabled) {
   opacity: 0.9;
   transform: scale(1.02);
 }
-
 .media-preview-send:disabled {
   opacity: 0.5;
   cursor: not-allowed;
@@ -548,53 +534,98 @@
   align-items: center;
   justify-content: center;
   padding: 20px;
-  min-height: 120px;
-  min-width: 120px;
+  min-height: 160px;
+  min-width: 160px;
+  position: relative;
 }
-
 .upload-spinner {
   position: relative;
-  width: 60px;
-  height: 60px;
+  width: 80px;
+  height: 80px;
 }
-
 .spinner-ring {
   animation: spin 1s linear infinite;
   transform-origin: center;
 }
-
 .spinner-path {
   stroke: #6C3CE1;
-  stroke-dasharray: 125;
-  stroke-dashoffset: 125;
+  stroke-dasharray: 150;
+  stroke-dashoffset: 150;
   animation: dash 1.5s ease-in-out infinite;
 }
-
 .upload-progress-text {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
   color: #fff;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 16px;
+  font-weight: 700;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+}
+.upload-spinner::before {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(108,60,225,0.2), transparent 70%);
+  animation: pulseGlow 1.5s ease-in-out infinite;
+}
+@keyframes pulseGlow {
+  0% { transform: scale(0.9); opacity: 0.3; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+  100% { transform: scale(0.9); opacity: 0.3; }
+}
+@keyframes spin { 100% { transform: rotate(360deg); } }
+@keyframes dash {
+  0% { stroke-dashoffset: 150; }
+  50% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -150; }
 }
 
-@keyframes spin {
-  100% { transform: rotate(360deg); }
+.media-upload-shimmer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(120deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0) 70%);
+  background-size: 200% 100%;
+  animation: shimmerMove 1.8s ease-in-out infinite;
+  border-radius: 12px;
+  z-index: 2;
+  pointer-events: none;
 }
-@keyframes dash {
-  0% { stroke-dashoffset: 125; }
-  50% { stroke-dashoffset: 0; }
-  100% { stroke-dashoffset: -125; }
+@keyframes shimmerMove {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.message-bubble.own .media-upload-loading {
+  background: rgba(108,60,225,0.15);
+  border-radius: 12px;
+}
+
+/* ─── Image upload overlay ────────────────────────────────────── */
+.image-upload-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  z-index: 3;
 }
 
 /* ─── Input bar ──────────────────────────────────────────────── */
 .chat-input-container {
   flex-shrink: 0;
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
   padding: 10px 16px;
   background: rgba(18, 18, 26, 0.95);
   backdrop-filter: blur(16px);
@@ -602,7 +633,12 @@
   box-sizing: border-box;
   width: 100%;
 }
-
+.chat-input-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+}
 .chat-attach-btn {
   background: none;
   border: none;
@@ -613,11 +649,9 @@
   transition: color 0.2s;
   flex-shrink: 0;
 }
-
 .chat-attach-btn:hover {
   color: #a78bfa;
 }
-
 .chat-input {
   flex: 1;
   padding: 12px 18px;
@@ -628,11 +662,9 @@
   font-size: 14px;
   outline: none;
 }
-
 .chat-input:focus {
   border-color: #6C3CE1;
 }
-
 .chat-send-btn {
   width: 42px;
   height: 42px;
@@ -646,55 +678,186 @@
   justify-content: center;
   flex-shrink: 0;
 }
-
 .chat-send-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
 
-/* ─── Delete button (always visible for own messages) ────────── */
+/* ─── Message actions (delete & reply) ────────────────────────── */
 .message-wrapper {
   position: relative;
   display: flex;
   flex-direction: column;
   width: 100%;
 }
-
-.message-delete-btn {
+.message-actions {
+  display: flex;
+  gap: 6px;
   position: absolute;
   bottom: 4px;
   right: 4px;
-  background: rgba(0, 0, 0, 0.5);
-  border: none;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  z-index: 5;
+  pointer-events: none;
+}
+.message-actions.visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+.message-action-btn {
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  width: 28px;
-  height: 28px;
+  border: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #ef4444;
-  font-size: 12px;
-  cursor: pointer;
-  opacity: 0.6;
-  transition: opacity 0.2s, background 0.2s;
-  z-index: 5;
+  background: rgba(0, 0, 0, 0.6);
   backdrop-filter: blur(4px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  transition: background 0.2s, transform 0.15s;
 }
-
-.message-delete-btn:hover {
-  opacity: 1;
+.message-action-btn.reply {
+  color: #a78bfa;
+}
+.message-action-btn.reply:hover {
+  background: rgba(167, 139, 250, 0.2);
+}
+.message-action-btn.delete {
+  color: #ef4444;
+}
+.message-action-btn.delete:hover {
   background: rgba(239, 68, 68, 0.2);
 }
-
-/* ─── Deletion animation ──────────────────────────────────────── */
-.message-bubble.deleting {
-  animation: deleteShrink 0.3s ease forwards;
+.message-action-btn:active {
+  transform: scale(0.9);
 }
 
-@keyframes deleteShrink {
-  0% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.5; transform: scale(0.95); }
-  100% { opacity: 0; transform: scale(0.8); max-height: 0; padding: 0; margin: 0; overflow: hidden; }
+/* ─── Reply preview in input bar ──────────────────────────────── */
+.reply-preview {
+  padding: 10px 16px 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px 12px 0 0;
+  margin: 0 12px;
+  width: calc(100% - 24px);
+}
+.reply-preview-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.reply-preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: #a78bfa;
+  font-weight: 600;
+}
+.reply-preview-header strong {
+  color: #fff;
+  font-weight: 700;
+}
+.reply-preview-close {
+  background: none;
+  border: none;
+  color: #888;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 4px 8px;
+  border-radius: 50%;
+  transition: background 0.2s;
+}
+.reply-preview-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+.reply-preview-body {
+  font-size: 14px;
+  color: #ccc;
+  padding-left: 4px;
+  border-left: 3px solid #6C3CE1;
+  padding-left: 12px;
+  display: flex;
+  align-items: center;
+  min-height: 28px;
+}
+.reply-preview-text {
+  opacity: 0.9;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 90%;
+  display: block;
+  font-weight: 500;
+}
+
+/* ─── Replied message inside bubble ────────────────────────────── */
+.replied-message {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 8px 10px;
+  margin-bottom: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 10px;
+  border-left: 4px solid #6C3CE1;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.replied-message:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+.replied-message-line {
+  display: none;
+}
+.replied-message-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+.replied-message-sender {
+  font-size: 12px;
+  font-weight: 700;
+  color: #a78bfa;
+  letter-spacing: 0.3px;
+}
+.replied-message-text {
+  font-size: 14px;
+  color: #ccc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 500;
+}
+.message-bubble.own .replied-message {
+  background: rgba(255, 255, 255, 0.08);
+  border-left-color: #a78bfa;
+}
+.message-bubble.own .replied-message-sender {
+  color: #c4b5fd;
+}
+.message-bubble.own .replied-message-text {
+  color: #e5e7eb;
+}
+.message-bubble.partner .replied-message {
+  background: rgba(255, 255, 255, 0.05);
+}
+.message-bubble.partner .replied-message-sender {
+  color: #a78bfa;
+}
+.message-bubble.partner .replied-message-text {
+  color: #d1d5db;
 }
 
 /* ─── Delete Confirmation Modal ────────────────────────────────── */
@@ -712,7 +875,6 @@
   z-index: 999999;
   animation: fadeIn 0.2s ease;
 }
-
 .delete-modal-content {
   background: #1a1a24;
   border-radius: 20px;
@@ -724,7 +886,6 @@
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
   animation: modalScale 0.2s ease;
 }
-
 .delete-modal-icon {
   width: 56px;
   height: 56px;
@@ -737,26 +898,22 @@
   font-size: 24px;
   color: #ef4444;
 }
-
 .delete-modal-content h3 {
   color: #fff;
   font-size: 18px;
   margin: 0 0 8px;
 }
-
 .delete-modal-content p {
   color: #aaa;
   font-size: 14px;
   line-height: 1.5;
   margin: 0 0 20px;
 }
-
 .delete-modal-actions {
   display: flex;
   gap: 12px;
   justify-content: center;
 }
-
 .delete-modal-btn {
   padding: 10px 24px;
   border-radius: 30px;
@@ -767,25 +924,20 @@
   transition: all 0.2s;
   min-width: 100px;
 }
-
 .delete-modal-btn.cancel {
   background: rgba(255, 255, 255, 0.08);
   color: #ccc;
 }
-
 .delete-modal-btn.cancel:hover {
   background: rgba(255, 255, 255, 0.15);
 }
-
 .delete-modal-btn.confirm {
   background: #ef4444;
   color: #fff;
 }
-
 .delete-modal-btn.confirm:hover {
   background: #dc2626;
 }
-
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -804,7 +956,6 @@
   }
   .chat-input-container {
     padding: 8px 12px;
-    gap: 8px;
   }
   .chat-input {
     padding: 10px 14px;
@@ -844,330 +995,6 @@
     padding: 8px 16px;
     font-size: 13px;
   }
-}
-
-/* Touch devices: no special menu – button is always visible */
-
-/* ─── Enhanced upload animation ───────────────────────────────── */
-.media-upload-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  min-height: 160px;
-  min-width: 160px;
-  position: relative;
-}
-
-.upload-spinner {
-  position: relative;
-  width: 80px;
-  height: 80px;
-}
-
-.spinner-ring {
-  animation: spin 1s linear infinite;
-  transform-origin: center;
-}
-
-.spinner-path {
-  stroke: #6C3CE1;
-  stroke-dasharray: 150;
-  stroke-dashoffset: 150;
-  animation: dash 1.5s ease-in-out infinite;
-}
-
-.upload-progress-text {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.6);
-}
-
-/* ─── Pulsing glow behind the spinner ──────────────────────────── */
-.upload-spinner::before {
-  content: '';
-  position: absolute;
-  inset: -10px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(108,60,225,0.2), transparent 70%);
-  animation: pulseGlow 1.5s ease-in-out infinite;
-}
-
-@keyframes pulseGlow {
-  0% { transform: scale(0.9); opacity: 0.3; }
-  50% { transform: scale(1.1); opacity: 0.8; }
-  100% { transform: scale(0.9); opacity: 0.3; }
-}
-
-@keyframes spin {
-  100% { transform: rotate(360deg); }
-}
-@keyframes dash {
-  0% { stroke-dashoffset: 150; }
-  50% { stroke-dashoffset: 0; }
-  100% { stroke-dashoffset: -150; }
-}
-
-/* ─── Shimmer overlay for media while uploading ────────────────── */
-.media-upload-shimmer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    120deg,
-    rgba(255,255,255,0) 30%,
-    rgba(255,255,255,0.05) 50%,
-    rgba(255,255,255,0) 70%
-  );
-  background-size: 200% 100%;
-  animation: shimmerMove 1.8s ease-in-out infinite;
-  border-radius: 12px;
-  z-index: 2;
-  pointer-events: none;
-}
-
-@keyframes shimmerMove {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-
-/* ─── For media items, keep the loading spinner centered ──────── */
-.message-bubble.own .media-upload-loading {
-  background: rgba(108,60,225,0.15);
-  border-radius: 12px;
-}
-
-/* ─── Message actions (delete button) – bottom‑right inside bubble ── */
-.message-wrapper {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-}
-
-.message-actions {
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  opacity: 0;
-  transform: scale(0.8);
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  z-index: 5;
-  pointer-events: none; /* prevent click when hidden */
-}
-
-.message-actions.visible {
-  opacity: 1;
-  transform: scale(1);
-  pointer-events: auto;
-}
-
-.message-delete-btn {
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #ef4444;
-  font-size: 13px;
-  cursor: pointer;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-  transition: background 0.2s, transform 0.15s;
-}
-
-.message-delete-btn:hover {
-  background: rgba(239, 68, 68, 0.2);
-  transform: scale(1.05);
-}
-
-.message-delete-btn:active {
-  transform: scale(0.9);
-}
-
-/* ─── Adjust for mobile ────────────────────────────────────────── */
-@media (max-width: 480px) {
-  .message-actions {
-    bottom: 2px;
-    right: 2px;
-  }
-  .message-delete-btn {
-    width: 28px;
-    height: 28px;
-    font-size: 11px;
-  }
-}
-
-/* ─── Message actions (delete & reply) ────────────────────────── */
-.message-actions {
-  display: flex;
-  gap: 6px;
-  position: absolute;
-  bottom: 4px;
-  right: 4px;
-  opacity: 0;
-  transform: scale(0.8);
-  transition: opacity 0.2s ease, transform 0.2s ease;
-  z-index: 5;
-  pointer-events: none;
-}
-
-.message-actions.visible {
-  opacity: 1;
-  transform: scale(1);
-  pointer-events: auto;
-}
-
-.message-action-btn {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  border: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: #fff;
-  font-size: 13px;
-  cursor: pointer;
-  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
-  transition: background 0.2s, transform 0.15s;
-}
-
-.message-action-btn.reply {
-  color: #a78bfa;
-}
-
-.message-action-btn.reply:hover {
-  background: rgba(167, 139, 250, 0.2);
-}
-
-.message-action-btn.delete {
-  color: #ef4444;
-}
-
-.message-action-btn.delete:hover {
-  background: rgba(239, 68, 68, 0.2);
-}
-
-.message-action-btn:active {
-  transform: scale(0.9);
-}
-
-/* ─── Reply preview in input bar ──────────────────────────────── */
-.reply-preview {
-  padding: 8px 16px;
-  background: rgba(255, 255, 255, 0.04);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px 12px 0 0;
-  margin: 0 12px;
-}
-
-.reply-preview-content {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.reply-preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  color: #a78bfa;
-}
-
-.reply-preview-header strong {
-  color: #fff;
-}
-
-.reply-preview-close {
-  background: none;
-  border: none;
-  color: #888;
-  cursor: pointer;
-  font-size: 14px;
-  padding: 2px;
-}
-
-.reply-preview-close:hover {
-  color: #fff;
-}
-
-.reply-preview-body {
-  font-size: 13px;
-  color: #aaa;
-  padding-left: 4px;
-  border-left: 3px solid #6C3CE1;
-  padding-left: 10px;
-}
-
-.reply-preview-text {
-  opacity: 0.8;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 90%;
-  display: block;
-}
-
-/* ─── Replied message inside bubble ────────────────────────────── */
-.replied-message {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  padding: 6px 8px;
-  margin-bottom: 4px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  border-left: 3px solid #6C3CE1;
-  cursor: pointer;
-}
-
-.replied-message-line {
-  width: 2px;
-  background: #6C3CE1;
-  border-radius: 2px;
-  flex-shrink: 0;
-  min-height: 30px;
-}
-
-.replied-message-content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-
-.replied-message-sender {
-  font-size: 11px;
-  font-weight: 600;
-  color: #a78bfa;
-}
-
-.replied-message-text {
-  font-size: 13px;
-  color: #aaa;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* ─── Adjust for mobile ────────────────────────────────────────── */
-@media (max-width: 480px) {
   .message-actions {
     bottom: 2px;
     right: 2px;
@@ -1184,181 +1011,94 @@
   }
 }
 
-/* ─── Reply preview in input bar ──────────────────────────────── */
-.chat-input-container {
-  display: flex;
-  flex-direction: column;
-  /* keep other styles */
+/* ─── GIF message ────────────────────────────────────────────── */
+.gif-message-container {
+  max-width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: transparent;
 }
 
-.chat-input-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
+.gif-message-img {
   width: 100%;
-}
-
-/* ─── Highlight flash for scrolled-to message ──────────────────── */
-.message-bubble.highlight-flash {
-  animation: highlightPulse 1s ease;
-}
-
-@keyframes highlightPulse {
-  0% { background-color: rgba(108, 60, 225, 0.3); }
-  50% { background-color: rgba(108, 60, 225, 0.6); }
-  100% { background-color: transparent; }
-}
-
-/* ─── Reply preview (inside input bar) ────────────────────────── */
-.reply-preview {
-  padding: 10px 16px 6px;
-  background: rgba(255, 255, 255, 0.04);
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 12px 12px 0 0;
-  margin: 0 12px;
-  width: calc(100% - 24px);
-}
-
-.reply-preview-content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.reply-preview-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 13px;
-  color: #a78bfa;
-  font-weight: 600;
-}
-
-.reply-preview-header strong {
-  color: #fff;
-  font-weight: 700;
-}
-
-.reply-preview-close {
-  background: none;
-  border: none;
-  color: #888;
-  cursor: pointer;
-  font-size: 16px;
-  padding: 4px 8px;
-  border-radius: 50%;
-  transition: background 0.2s;
-}
-
-.reply-preview-close:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-}
-
-.reply-preview-body {
-  font-size: 14px;
-  color: #ccc;
-  padding-left: 4px;
-  border-left: 3px solid #6C3CE1;
-  padding-left: 12px;
-  display: flex;
-  align-items: center;
-  min-height: 28px;
-}
-
-.reply-preview-text {
-  opacity: 0.9;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 90%;
+  max-height: 300px;
+  object-fit: contain;
   display: block;
-  font-weight: 500;
+  border-radius: 12px;
 }
 
-/* ─── Quoted message inside bubble ────────────────────────────── */
-.replied-message {
+.gif-message-caption {
+  padding: 6px 8px 4px;
+  color: #ddd;
+  font-size: 13px;
+  text-align: center;
+  opacity: 0.8;
+}
+
+/* ─── Typing indicator ────────────────────────────────────────── */
+.typing-indicator {
   display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  padding: 8px 10px;
-  margin-bottom: 6px;
-  background: rgba(255, 255, 255, 0.06);
-  border-radius: 10px;
-  border-left: 4px solid #6C3CE1;
+  gap: 6px;
+  padding: 4px 0;
+}
+
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #888;
+  animation: typingBounce 1.2s infinite ease-in-out;
+}
+
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-10px); }
+}
+
+/* ─── Mute button position ────────────────────────────────────── */
+.video-mute-btn-overlay {
+  /* default: right side */
+  right: 12px;
+  left: auto;
+}
+
+/* For own messages, move to left */
+.message-bubble.own .video-mute-btn-overlay {
+  right: auto;
+  left: 12px;
+}
+
+/* ─── Mute button: partner videos on left, own videos on right ─ */
+.message-bubble.partner .video-mute-btn-overlay {
+  right: auto;
+  left: 12px;
+}
+
+/* ─── Inline video controls ────────────────────────────────── */
+.video-mute-btn-overlay {
+  position: absolute;
+  bottom: 12px;
+  right: 12px; /* default: own messages (right) */
+  background: rgba(0, 0, 0, 0.6);
+  border: none;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
   cursor: pointer;
-  transition: background 0.15s;
-}
-
-.replied-message:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.replied-message-line {
-  width: 2px;
-  background: #6C3CE1;
-  border-radius: 2px;
-  flex-shrink: 0;
-  min-height: 34px;
-  display: none; /* we use border-left instead */
-}
-
-.replied-message-content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  flex: 1;
-  min-width: 0;
-}
-
-.replied-message-sender {
-  font-size: 12px;
-  font-weight: 700;
-  color: #a78bfa;
-  letter-spacing: 0.3px;
-}
-
-.replied-message-text {
   font-size: 14px;
-  color: #ccc;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  font-weight: 500;
-}
-
-/* ─── Adjust for dark bubble colors ───────────────────────────── */
-.message-bubble.own .replied-message {
-  background: rgba(255, 255, 255, 0.08);
-  border-left-color: #a78bfa;
-}
-
-.message-bubble.own .replied-message-sender {
-  color: #c4b5fd;
-}
-
-.message-bubble.own .replied-message-text {
-  color: #e5e7eb;
-}
-
-.message-bubble.partner .replied-message {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.message-bubble.partner .replied-message-sender {
-  color: #a78bfa;
-}
-
-.message-bubble.partner .replied-message-text {
-  color: #d1d5db;
-}
-
-.message-bubble.highlight-flash {
-  animation: highlightPulse 1s ease;
-}
-
-@keyframes highlightPulse {
-  0% { background-color: rgba(108, 60, 225, 0.3); }
-  50% { background-color: rgba(108, 60, 225, 0.6); }
-  100% { background-color: transparent; }
+  backdrop-filter: blur(4px);
+  transition: background 0.2s;
+  z-index: 2;
+  pointer-events: auto;
 }

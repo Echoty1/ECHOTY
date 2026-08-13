@@ -7,7 +7,6 @@ import { getCache, setCache, clearCache } from '../services/cacheService';
 
 const ProfileContext = createContext();
 
-// ─── Named export for useProfile ──────────────────────────────
 export const useProfile = () => {
   const context = useContext(ProfileContext);
   if (!context) throw new Error('useProfile must be used within ProfileProvider');
@@ -33,74 +32,44 @@ export const ProfileProvider = ({ children }) => {
     }
   }, [user]);
 
-  // ─── Fetch profile and presence with instant cache hydration ───────────
+  // ─── Fetch profile and presence with instant cache hydration ──
   const fetchProfile = useCallback((uid) => {
-    if (!uid) {
-      console.warn('⚠️ fetchProfile called with no uid');
-      return () => {};
-    }
-
-    if (listenerRefs.current[uid]) {
-      console.log(`📦 ProfileProvider: Already listening to ${uid}`);
-      return listenerRefs.current[uid];
-    }
+    if (!uid) return () => {};
+    if (listenerRefs.current[uid]) return listenerRefs.current[uid];
 
     const cacheKey = `profile_${uid}`;
 
-    // 1. INSTANT HYDRATION FROM CACHE (synchronous localStorage access)
+    // Cache hydration
     try {
       const cached = getCache(cacheKey);
       if (cached && cached.name) {
-        setProfiles((prev) => ({
-          ...prev,
-          [uid]: { ...(prev[uid] || {}), ...cached },
-        }));
+        setProfiles((prev) => ({ ...prev, [uid]: { ...(prev[uid] || {}), ...cached } }));
         setLoading(false);
-        console.log(`📦 [cache] Profile for ${uid} loaded from cache`);
       }
-    } catch (err) {
-      console.warn('Cache read error:', err);
-    }
+    } catch (err) { /* ignore */ }
 
-    console.log(`🔍 ProfileProvider: Listening to profile for ${uid}`);
     const profileRef = ref(db, `profiles/${uid}`);
     let timeoutId = null;
     let didReceiveData = false;
+    const isOwnProfile = user?.uid === uid;
 
-    const isOwnProfile = user && user.uid && uid === user.uid;
-
-    // ─── Realtime listener ─────────────────────────────────────
     const unsubscribe = onValue(
       profileRef,
       (snapshot) => {
         const data = snapshot.val();
         didReceiveData = true;
-        if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+        if (timeoutId) clearTimeout(timeoutId);
 
         let finalData = data || {};
-
-        // ─── Fix missing name (only for own profile) ──────────
         if (!finalData.name && isOwnProfile) {
-          console.warn(`⚠️ ProfileProvider: Missing name for own profile (${uid}), fixing...`);
-          const fallbackName = 'User';
-          finalData.name = fallbackName;
-          update(profileRef, { name: fallbackName }).catch(err => console.error('Update failed:', err));
+          finalData.name = 'User';
+          update(profileRef, { name: 'User' }).catch(() => {});
         } else if (!finalData.name) {
-          console.log(`ℹ️ ProfileProvider: Missing name for ${uid} – using local fallback only`);
           finalData.name = 'User';
         }
 
-        // ─── Cache fresh data ──────────────────────────────────
-        try {
-          setCache(cacheKey, finalData, 300);
-        } catch (err) {
-          console.warn('Cache write error:', err);
-        }
-
-        setProfiles((prev) => ({
-          ...prev,
-          [uid]: finalData,
-        }));
+        setCache(cacheKey, finalData, 300);
+        setProfiles((prev) => ({ ...prev, [uid]: finalData }));
         setLoading(false);
       },
       (error) => {
@@ -109,111 +78,87 @@ export const ProfileProvider = ({ children }) => {
       }
     );
 
-    // ─── Timeout fallback ──────────────────────────────────────
     timeoutId = setTimeout(() => {
-      if (!didReceiveData) {
-        console.warn(`⚠️ ProfileProvider: Timeout for ${uid}, using fallback`);
-        fallbackFetch(uid);
-      }
+      if (!didReceiveData) fallbackFetch(uid);
     }, 2000);
 
-    // ─── Fallback fetch (direct get) ──────────────────────────
     const fallbackFetch = async (targetUid) => {
       try {
         const snapshot = await get(profileRef);
         let data = snapshot.val();
-        const isOwn = user && user.uid && targetUid === user.uid;
-
+        const isOwn = user?.uid === targetUid;
         if (!data) {
-          if (isOwn) {
-            data = { name: targetUid, avatar: '', mood: 'neutral', activeSkin: null };
-            await set(profileRef, data);
-          } else {
-            data = { name: 'User', avatar: '', mood: 'neutral', activeSkin: null };
-          }
+          data = isOwn ? { name: targetUid, avatar: '', mood: 'neutral' } : { name: 'User', avatar: '', mood: 'neutral' };
+          await set(profileRef, data);
         } else if (!data.name) {
-          if (isOwn) {
-            data.name = targetUid;
-            await update(profileRef, { name: targetUid });
-          } else {
-            data.name = 'User';
-          }
+          data.name = isOwn ? targetUid : 'User';
+          await update(profileRef, { name: data.name });
         }
         setProfiles((prev) => ({ ...prev, [targetUid]: data }));
-        try {
-          setCache(cacheKey, data, 300);
-        } catch (err) {
-          console.warn('Cache write error:', err);
-        }
+        setCache(cacheKey, data, 300);
       } catch (err) {
         console.error(`❌ ProfileProvider: Fallback error for ${targetUid}:`, err);
         setProfiles((prev) => ({
           ...prev,
-          [targetUid]: prev[targetUid] || { name: 'User', avatar: '', mood: 'neutral', activeSkin: null }
+          [targetUid]: prev[targetUid] || { name: 'User', avatar: '', mood: 'neutral' }
         }));
       }
       setLoading(false);
-      if (timeoutId) { clearTimeout(timeoutId); timeoutId = null; }
+      if (timeoutId) clearTimeout(timeoutId);
     };
 
-    // ─── Presence listener ─────────────────────────────────────
+    // Presence listener
     const presenceRef = ref(db, `presence/online/${uid}`);
-    const unsubPresence = onValue(
-      presenceRef,
-      (snapshot) => {
-        const online = snapshot.val() === true;
-        setPresence((prev) => ({ ...prev, [uid]: online }));
-      },
-      (error) => {
-        console.warn(`⚠️ ProfileProvider: Presence error for ${uid}:`, error);
-        setPresence((prev) => ({ ...prev, [uid]: false }));
-      }
-    );
+    const unsubPresence = onValue(presenceRef, (snapshot) => {
+      const online = snapshot.val() === true;
+      setPresence((prev) => ({ ...prev, [uid]: online }));
+    }, (error) => {
+      console.warn(`⚠️ ProfileProvider: Presence error for ${uid}:`, error);
+      setPresence((prev) => ({ ...prev, [uid]: false }));
+    });
 
-    // ─── Combined cleanup function ─────────────────────────────
     const cleanup = () => {
       if (timeoutId) clearTimeout(timeoutId);
       unsubscribe();
       unsubPresence();
       delete listenerRefs.current[uid];
-      console.log(`🧹 ProfileProvider: Cleaned up listeners for ${uid}`);
     };
 
     listenerRefs.current[uid] = cleanup;
     return cleanup;
   }, [user]);
 
-  // ─── Refresh profile (force re-fetch, clear cache) ────────────
+  // ─── Refresh profile ──────────────────────────────────────────
   const refreshProfile = useCallback(async (uid) => {
     if (!uid) return;
-
-    console.log(`🔄 ProfileProvider: Refreshing profile for ${uid}`);
-
-    // 1. Clear cache
     const cacheKey = `profile_${uid}`;
-    try {
-      await clearCache(cacheKey);
-    } catch (err) {
-      console.warn('Cache clear error:', err);
-    }
-
-    // 2. Remove from memory (will be re-fetched)
-    setProfiles((prev) => {
-      const updated = { ...prev };
-      delete updated[uid];
-      return updated;
-    });
-
-    // 3. Remove existing listener (if any)
+    await clearCache(cacheKey);
+    setProfiles((prev) => { const updated = { ...prev }; delete updated[uid]; return updated; });
     if (listenerRefs.current[uid]) {
       listenerRefs.current[uid]();
       delete listenerRefs.current[uid];
     }
-
-    // 4. Re-fetch fresh data
-    const cleanup = fetchProfile(uid);
-    return cleanup;
+    return fetchProfile(uid);
   }, [fetchProfile]);
+
+  // ─── Get profile ──────────────────────────────────────────────
+  const getProfile = useCallback((uid) => {
+    if (!uid) return null;
+    return profiles[uid] || null;
+  }, [profiles]);
+
+  // ─── Update profile ────────────────────────────────────────────
+  const updateProfile = useCallback(async (uid, updates) => {
+    if (!uid || !user) return;
+    try {
+      const profileRef = ref(db, `profiles/${uid}`);
+      await update(profileRef, updates);
+      setProfiles((prev) => ({ ...prev, [uid]: { ...prev[uid], ...updates } }));
+    } catch (error) {
+      console.error('❌ Failed to update profile:', error);
+      throw error;
+    }
+  }, [user]);
 
   // ─── Clean up on unmount ──────────────────────────────────────
   useEffect(() => {
@@ -229,7 +174,8 @@ export const ProfileProvider = ({ children }) => {
     loading,
     fetchProfile,
     refreshProfile,
-    getProfile: (uid) => profiles[uid] || null,
+    getProfile,
+    updateProfile,
     isOnline: (uid) => presence[uid] || false,
   };
 
