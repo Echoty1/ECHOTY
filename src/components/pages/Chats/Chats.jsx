@@ -1,5 +1,5 @@
 // src/components/pages/Chats/Chats.jsx
-import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, memo } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../../../services/firebase';
@@ -17,10 +17,11 @@ import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import './Chats.css';
 import { getCache, setCache } from '../../../services/cacheService';
-import { searchProfiles, prefetchProfilesIndex } from '../../../services/searchService';
+import { searchProfiles } from '../../../services/searchService';
 import { useInfiniteScroll } from '../../../hooks/useInfiniteScroll';
 import { SkeletonChatItem } from '../../common/SkeletonLoader';
 import { preloadMedia, useCachedImage } from '../../../utils/mediaCache';
+import { fetchLatestMessage } from '../../../services/messageCache';
 
 const CHAT_CHUNK_SIZE = 20;
 
@@ -74,39 +75,6 @@ const loadPartnerData = async (partnerId) => {
     console.warn(`⚠️ Error loading partner profile: ${partnerId}`, error);
   }
   return null;
-};
-
-// ─── Message Cache (in‑memory for latest message) ──────────────
-const messageCache = new Map();
-
-/**
- * Fetch the absolute latest message (text + senderId) from the messages node.
- * Uses the COMPOSITE chat ID (both UIDs sorted).
- */
-const fetchLatestMessage = async (chatId) => {
-  const cacheKey = chatId;
-  const cached = messageCache.get(cacheKey);
-  if (cached) return cached;
-
-  try {
-    const messagesRef = ref(db, `chats/${chatId}/messages`);
-    const snapshot = await get(query(messagesRef, orderByKey(), limitToLast(1)));
-    if (snapshot.exists()) {
-      const data = snapshot.val();
-      const [key, msg] = Object.entries(data)[0];
-      const result = {
-        text: msg.text || 'Start chatting...',
-        senderId: msg.senderId || '',
-      };
-      messageCache.set(cacheKey, result);
-      return result;
-    }
-  } catch (err) {
-    console.warn(`⚠️ Could not fetch latest message for ${chatId}:`, err);
-  }
-  const fallback = { text: 'Start chatting...', senderId: '' };
-  messageCache.set(cacheKey, fallback);
-  return fallback;
 };
 
 // ─── Process a single chat item ─────────────────────────────────

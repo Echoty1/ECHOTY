@@ -15,6 +15,7 @@ import {
 import { useAuth } from '../../../hooks/useAuth';
 import { SkeletonMessage } from '../../common/SkeletonLoader';
 import { getCache, setCache } from '../../../services/cacheService';
+import { clearMessageCache } from '../../../services/messageCache';
 import './ChatView.css';
 
 const ECHO_AI_AVATAR = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
@@ -120,7 +121,11 @@ const ChatView = () => {
       setLoadingMessages(false);
       setCache(cacheKey, newMessages);
 
-      // Auto‑mark any new incoming message as read (with defensive checks)
+      // ── Clear message cache for this chat when a new message arrives ──
+      // This ensures the chat list shows the latest message immediately.
+      clearMessageCache(cId);
+
+      // Auto‑mark any new incoming message as read
       const latest = newMessages[newMessages.length - 1];
       if (
         latest &&
@@ -128,7 +133,6 @@ const ChatView = () => {
         latest.isRead === false
       ) {
         const msgRef = ref(db, `chats/${cId}/messages/${latest.id}`);
-        // Defensive: ensure `set` returns a promise-like value
         try {
           const promise = set(msgRef, { ...latest, isRead: true });
           if (promise && typeof promise.then === 'function') {
@@ -146,8 +150,6 @@ const ChatView = () => {
                 });
               })
               .catch((err) => console.warn('Auto‑mark read error:', err));
-          } else {
-            console.warn('set() did not return a Promise, skipping auto‑mark');
           }
         } catch (err) {
           console.warn('Auto‑mark read exception:', err);
@@ -246,6 +248,9 @@ const ChatView = () => {
         timestamp: serverTimestamp(),
         isRead: false,
       });
+
+      // ── Clear the message cache so the list shows this new message ──
+      clearMessageCache(cId);
 
       // Update sender's userChats
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
