@@ -1,10 +1,11 @@
 // src/components/Layout/Navbar.js
-import React, { useEffect, memo, useState } from 'react';
+import React, { useEffect, memo, useState, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useProfile } from '../../contexts/ProfileContext';
 import ECHOMOJI from '../UI/ECHOMOJI';
 import { getSkinById } from '../../constants/echomoji';
+import { useCachedImage, preloadMedia } from '../../utils/mediaCache';
 
 // Static direct asset path for ECHO AI
 const ECHO_AI_GIF = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
@@ -33,7 +34,7 @@ const Navbar = memo(() => {
   const isChatRoute = location.pathname.startsWith('/chat/');
   const isEchoAiRoute = targetUserId === 'echo_ai_assistant';
 
-  const { fetchProfile, getProfile } = useProfile();
+  const { fetchProfile, getProfile, isOnline } = useProfile();
 
   useEffect(() => {
     if (user?.uid) {
@@ -59,7 +60,7 @@ const Navbar = memo(() => {
 
   const ownProfile = user?.uid ? getProfile(user.uid) : null;
 
-  // Avatar priority: If AI -> GIF; Else -> State or DB profile
+  // Avatar priority: If AI -> GIF; else use cached avatar or fallback
   const chatAvatar = isEchoAiRoute
     ? ECHO_AI_GIF
     : location.state?.userAvatar || targetProfile?.avatar || '';
@@ -67,6 +68,37 @@ const Navbar = memo(() => {
   const chatName = isEchoAiRoute
     ? 'ECHO AI'
     : sanitizeName(location.state?.userName || targetProfile?.name, targetUserId);
+
+  // ── Preload the avatar for faster display ──
+  useEffect(() => {
+    if (chatAvatar) {
+      preloadMedia(chatAvatar);
+    }
+  }, [chatAvatar]);
+
+  // ── Reset imgError when avatar changes ──
+  useEffect(() => {
+    setImgError(false);
+  }, [chatAvatar]);
+
+  // ── Use cached avatar image (returns URL if not cached) ──
+  const cachedAvatar = useCachedImage(chatAvatar, null);
+  const avatarToShow = cachedAvatar || chatAvatar;
+
+  // ── Determine online status for non-AI chat ──
+  const isTargetOnline = targetUserId && !isEchoAiRoute ? isOnline(targetUserId) : false;
+
+  const statusText = isEchoAiRoute
+    ? 'AI Assistant'
+    : isTargetOnline
+    ? 'Online'
+    : 'Offline';
+
+  const statusColor = isEchoAiRoute
+    ? '#a78bfa'
+    : isTargetOnline
+    ? '#10B981'
+    : '#6B7280';
 
   const ownSkin = ownProfile?.activeSkin ? getSkinById(ownProfile.activeSkin) : null;
   const ownName = sanitizeName(ownProfile?.name || ownProfile?.displayName || 'User', user?.uid);
@@ -137,9 +169,10 @@ const Navbar = memo(() => {
                 flexShrink: 0,
               }}
             >
-              {chatAvatar && !imgError ? (
+              {avatarToShow && !imgError ? (
                 <img
-                  src={chatAvatar}
+                  key={chatAvatar} // Re-mount when avatar changes
+                  src={avatarToShow}
                   alt={chatName}
                   onError={() => setImgError(true)}
                   style={{
@@ -160,8 +193,8 @@ const Navbar = memo(() => {
               <span style={{ color: '#fff', fontWeight: 700, fontSize: '14px', lineHeight: '1.2' }}>
                 {chatName}
               </span>
-              <span style={{ color: isEchoAiRoute ? '#a78bfa' : '#10B981', fontSize: '11px', marginTop: '2px' }}>
-                {isEchoAiRoute ? 'AI Assistant' : 'Online'}
+              <span style={{ color: statusColor, fontSize: '11px', marginTop: '2px' }}>
+                {statusText}
               </span>
             </div>
           </div>

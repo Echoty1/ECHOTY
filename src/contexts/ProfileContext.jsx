@@ -33,9 +33,13 @@ export const ProfileProvider = ({ children }) => {
     }
   }, [user]);
 
-  // ─── Fetch profile and presence with instant cache hydration ─────────────────
+  // ─── Fetch profile and presence with instant cache hydration ───────────
   const fetchProfile = useCallback((uid) => {
-    if (!uid) return null;
+    if (!uid) {
+      console.warn('⚠️ fetchProfile called with no uid');
+      return () => {};
+    }
+
     if (listenerRefs.current[uid]) {
       console.log(`📦 ProfileProvider: Already listening to ${uid}`);
       return listenerRefs.current[uid];
@@ -43,8 +47,9 @@ export const ProfileProvider = ({ children }) => {
 
     const cacheKey = `profile_${uid}`;
 
-    // 1. INSTANT HYDRATION FROM CACHE (0ms Delay)
-    getCache(cacheKey).then((cached) => {
+    // 1. INSTANT HYDRATION FROM CACHE (synchronous localStorage access)
+    try {
+      const cached = getCache(cacheKey);
       if (cached && cached.name) {
         setProfiles((prev) => ({
           ...prev,
@@ -53,7 +58,9 @@ export const ProfileProvider = ({ children }) => {
         setLoading(false);
         console.log(`📦 [cache] Profile for ${uid} loaded from cache`);
       }
-    }).catch((err) => console.warn('Cache read error:', err));
+    } catch (err) {
+      console.warn('Cache read error:', err);
+    }
 
     console.log(`🔍 ProfileProvider: Listening to profile for ${uid}`);
     const profileRef = ref(db, `profiles/${uid}`);
@@ -62,6 +69,7 @@ export const ProfileProvider = ({ children }) => {
 
     const isOwnProfile = user && user.uid && uid === user.uid;
 
+    // ─── Realtime listener ─────────────────────────────────────
     const unsubscribe = onValue(
       profileRef,
       (snapshot) => {
@@ -83,7 +91,11 @@ export const ProfileProvider = ({ children }) => {
         }
 
         // ─── Cache fresh data ──────────────────────────────────
-        setCache(cacheKey, finalData, 300);
+        try {
+          setCache(cacheKey, finalData, 300);
+        } catch (err) {
+          console.warn('Cache write error:', err);
+        }
 
         setProfiles((prev) => ({
           ...prev,
@@ -97,6 +109,7 @@ export const ProfileProvider = ({ children }) => {
       }
     );
 
+    // ─── Timeout fallback ──────────────────────────────────────
     timeoutId = setTimeout(() => {
       if (!didReceiveData) {
         console.warn(`⚠️ ProfileProvider: Timeout for ${uid}, using fallback`);
@@ -104,6 +117,7 @@ export const ProfileProvider = ({ children }) => {
       }
     }, 2000);
 
+    // ─── Fallback fetch (direct get) ──────────────────────────
     const fallbackFetch = async (targetUid) => {
       try {
         const snapshot = await get(profileRef);
@@ -126,7 +140,11 @@ export const ProfileProvider = ({ children }) => {
           }
         }
         setProfiles((prev) => ({ ...prev, [targetUid]: data }));
-        setCache(cacheKey, data, 300);
+        try {
+          setCache(cacheKey, data, 300);
+        } catch (err) {
+          console.warn('Cache write error:', err);
+        }
       } catch (err) {
         console.error(`❌ ProfileProvider: Fallback error for ${targetUid}:`, err);
         setProfiles((prev) => ({
@@ -173,7 +191,11 @@ export const ProfileProvider = ({ children }) => {
 
     // 1. Clear cache
     const cacheKey = `profile_${uid}`;
-    await clearCache(cacheKey);
+    try {
+      await clearCache(cacheKey);
+    } catch (err) {
+      console.warn('Cache clear error:', err);
+    }
 
     // 2. Remove from memory (will be re-fetched)
     setProfiles((prev) => {

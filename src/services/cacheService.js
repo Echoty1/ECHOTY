@@ -1,19 +1,20 @@
 // src/services/cacheService.js
-import { getItem, setItem, removeItem, getKeys } from './storageService';
-
-const CACHE_PREFIX = 'echo_cache_';
+const CACHE_PREFIX = 'echocache_';
 const CACHE_VERSION = 'v2';
+const DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
 
-// ─── In-memory cache (fastest) ────────────────────────────────
+// ─── In‑memory cache (fastest) ────────────────────────────────
 const memoryCache = new Map();
 
+const getFullKey = (key) => `${CACHE_PREFIX}${CACHE_VERSION}_${key}`;
+
 /**
- * Get cached data (memory first, then storage)
+ * Get cached data (memory first, then localStorage)
  */
-export const getCache = async (key) => {
-  const fullKey = `${CACHE_PREFIX}${CACHE_VERSION}_${key}`;
-  
-  // 1. Check memory cache (fastest)
+export const getCache = (key) => {
+  const fullKey = getFullKey(key);
+
+  // 1. Check memory cache
   if (memoryCache.has(fullKey)) {
     const entry = memoryCache.get(fullKey);
     if (Date.now() < entry.expires) {
@@ -23,26 +24,23 @@ export const getCache = async (key) => {
     }
   }
 
-  // 2. Check storage (localStorage / Capacitor)
+  // 2. Check localStorage
   try {
-    const raw = await getItem(fullKey);
+    const raw = localStorage.getItem(fullKey);
     if (!raw) return null;
-    
     const parsed = JSON.parse(raw);
     if (parsed.expiry && Date.now() < parsed.expiry) {
-      // Store in memory for next time
-      memoryCache.set(fullKey, { 
-        data: parsed.data, 
-        expires: parsed.expiry 
+      memoryCache.set(fullKey, {
+        data: parsed.data,
+        expires: parsed.expiry,
       });
       return parsed.data;
     } else {
-      // Expired – clean up
-      await removeItem(fullKey);
+      localStorage.removeItem(fullKey);
       return null;
     }
   } catch (error) {
-    console.error('Cache get error:', error);
+    console.warn('Cache get error:', error);
     return null;
   }
 };
@@ -50,72 +48,82 @@ export const getCache = async (key) => {
 /**
  * Store data in cache
  */
-export const setCache = async (key, data, ttlSeconds = 300) => {
-  const fullKey = `${CACHE_PREFIX}${CACHE_VERSION}_${key}`;
+export const setCache = (key, data, ttlSeconds = 300) => {
+  const fullKey = getFullKey(key);
   const expiry = Date.now() + (ttlSeconds * 1000);
-  
-  // Store in memory
-  memoryCache.set(fullKey, { data, expires: expiry });
-  
-  // Store in persistent storage (async background task)
-  const cacheData = {
-    data,
-    expiry,
-    version: CACHE_VERSION,
-  };
 
-  setItem(fullKey, JSON.stringify(cacheData)).catch((error) => {
-    console.error('Cache set error:', error);
-  });
+  memoryCache.set(fullKey, { data, expires: expiry });
+
+  try {
+    const cacheData = {
+      data,
+      expiry,
+      version: CACHE_VERSION,
+    };
+    localStorage.setItem(fullKey, JSON.stringify(cacheData));
+  } catch (error) {
+    console.warn('Cache set error:', error);
+  }
 };
 
 /**
  * Remove a specific cache entry
  */
-export const clearCache = async (key) => {
-  const fullKey = `${CACHE_PREFIX}${CACHE_VERSION}_${key}`;
+export const clearCache = (key) => {
+  const fullKey = getFullKey(key);
   memoryCache.delete(fullKey);
   try {
-    await removeItem(fullKey);
+    localStorage.removeItem(fullKey);
   } catch (error) {
-    console.error('Clear cache error:', error);
+    console.warn('Clear cache error:', error);
   }
 };
 
 /**
  * Clear all echo cache
  */
-export const clearAllCache = async () => {
+export const clearAllCache = () => {
   memoryCache.clear();
   try {
-    const keys = await getKeys();
+    const keys = Object.keys(localStorage);
     for (const key of keys) {
       if (key.startsWith(CACHE_PREFIX)) {
-        await removeItem(key);
+        localStorage.removeItem(key);
       }
     }
   } catch (error) {
-    console.error('Clear all cache error:', error);
+    console.warn('Clear all cache error:', error);
+  }
+};
+
+// ─── Media cache (Base64) ──────────────────────────────────────
+const MEDIA_PREFIX = 'echomedia_';
+
+/**
+ * Get cached media (Base64 string)
+ */
+export const getMediaCache = (url) => {
+  if (!url) return null;
+  try {
+    const key = `${MEDIA_PREFIX}${url}`;
+    const raw = localStorage.getItem(key);
+    if (!raw) return null;
+    const item = JSON.parse(raw);
+    return item.data || null;
+  } catch (e) {
+    return null;
   }
 };
 
 /**
- * Check if cache is valid (version matches)
+ * Store media as Base64 in cache
  */
-export const isCacheValid = async (key) => {
-  const fullKey = `${CACHE_PREFIX}${CACHE_VERSION}_${key}`;
-  
-  if (memoryCache.has(fullKey)) {
-    const entry = memoryCache.get(fullKey);
-    return Date.now() < entry.expires;
-  }
-
+export const setMediaCache = (url, base64) => {
+  if (!url || !base64) return;
   try {
-    const raw = await getItem(fullKey);
-    if (!raw) return false;
-    const data = JSON.parse(raw);
-    return data.version === CACHE_VERSION && Date.now() < data.expiry;
-  } catch {
-    return false;
+    const key = `${MEDIA_PREFIX}${url}`;
+    localStorage.setItem(key, JSON.stringify({ data: base64 }));
+  } catch (e) {
+    console.warn('Media cache error:', e);
   }
 };

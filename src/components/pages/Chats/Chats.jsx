@@ -1,5 +1,5 @@
 // src/components/pages/Chats/Chats.jsx
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../../../services/firebase';
@@ -20,7 +20,7 @@ import { getCache, setCache } from '../../../services/cacheService';
 import { searchProfiles, prefetchProfilesIndex } from '../../../services/searchService';
 import { useInfiniteScroll } from '../../../hooks/useInfiniteScroll';
 import { SkeletonChatItem } from '../../common/SkeletonLoader';
-import { preloadMedia } from '../../../utils/mediaCache';
+import { preloadMedia, useCachedImage } from '../../../utils/mediaCache';
 
 const CHAT_CHUNK_SIZE = 20;
 
@@ -36,6 +36,7 @@ const ECHO_AI_USER = {
   unreadCount: 0,
 };
 
+// ─── Helper Functions ────────────────────────────────────────────
 const timeAgo = (timestamp) => {
   if (!timestamp) return '';
   const now = Date.now();
@@ -75,6 +76,40 @@ const loadPartnerData = async (partnerId) => {
   return null;
 };
 
+// ─── Message Cache (in‑memory for latest message) ──────────────
+const messageCache = new Map();
+
+/**
+ * Fetch the absolute latest message (text + senderId) from the messages node.
+ * Uses the COMPOSITE chat ID (both UIDs sorted).
+ */
+const fetchLatestMessage = async (chatId) => {
+  const cacheKey = chatId;
+  const cached = messageCache.get(cacheKey);
+  if (cached) return cached;
+
+  try {
+    const messagesRef = ref(db, `chats/${chatId}/messages`);
+    const snapshot = await get(query(messagesRef, orderByKey(), limitToLast(1)));
+    if (snapshot.exists()) {
+      const data = snapshot.val();
+      const [key, msg] = Object.entries(data)[0];
+      const result = {
+        text: msg.text || 'Start chatting...',
+        senderId: msg.senderId || '',
+      };
+      messageCache.set(cacheKey, result);
+      return result;
+    }
+  } catch (err) {
+    console.warn(`⚠️ Could not fetch latest message for ${chatId}:`, err);
+  }
+  const fallback = { text: 'Start chatting...', senderId: '' };
+  messageCache.set(cacheKey, fallback);
+  return fallback;
+};
+
+// ─── Process a single chat item ─────────────────────────────────
 const processChatItem = async (chat, user, onlineUsers) => {
   try {
     const profile = (await loadPartnerData(chat.id)) || {};
@@ -95,15 +130,23 @@ const processChatItem = async (chat, user, onlineUsers) => {
       );
     }
 
-    const isSender = chat.lastSenderId === user.uid;
-    let displayMessage = chat.lastMessage || 'Start chatting...';
+    // ── CORRECT: compute the composite chat ID (sorted) ──
+    const compositeChatId = [user.uid, chat.id].sort().join('_');
+    const latest = await fetchLatestMessage(compositeChatId);
+    let rawLastMessage = latest.text;
+    let lastSenderId = latest.senderId;
 
+    let displayMessage = rawLastMessage;
     if (displayMessage !== 'Start chatting...') {
-      displayMessage = isSender
-        ? `You: ${displayMessage}`
-        : `${partnerName}: ${displayMessage}`;
-      if (displayMessage.length > 30)
+      const isSender = lastSenderId === user.uid;
+      if (isSender) {
+        displayMessage = `You: ${displayMessage}`;
+      } else {
+        displayMessage = `${partnerName}: ${displayMessage}`;
+      }
+      if (displayMessage.length > 30) {
         displayMessage = displayMessage.substring(0, 30) + '...';
+      }
     }
 
     const rawAvatar = profile.avatar || chat.partnerAvatar || '';
@@ -118,12 +161,13 @@ const processChatItem = async (chat, user, onlineUsers) => {
       location: profile.location || [profile.city, profile.country].filter(Boolean).join(', ') || '',
       lastMessage: displayMessage,
       timestamp: chat.lastUpdated || chat.timestamp || Date.now(),
-      lastSenderId: chat.lastSenderId || '',
+      lastSenderId: lastSenderId,
       unreadCount: chat.unreadCount || 0,
       isDeleted,
       online: !!onlineUsers[chat.id],
     };
   } catch (err) {
+    // Fallback
     return {
       id: chat.id,
       name: sanitizeName(chat.partnerName || chat.name, chat.id),
@@ -137,6 +181,50 @@ const processChatItem = async (chat, user, onlineUsers) => {
   }
 };
 
+// ─── Memoized Chat Item Component ──────────────────────────────
+const ChatItem = memo(({ chat, onlineUsers, onStartChat }) => {
+  const isOnline = onlineUsers[chat.id] || false;
+  const hasUnread = chat.unreadCount > 0;
+  const avatarUrl = chat.avatar || '';
+  const cachedAvatar = useCachedImage(avatarUrl, null);
+
+  return (
+    <div className="chat-item regular-chat-item" onClick={() => onStartChat(chat)}>
+      <div className="chat-avatar">
+        {cachedAvatar ? (
+          <img src={cachedAvatar} alt={chat.name} className="user-profile-img" />
+        ) : (
+          <div className="avatar-placeholder">{chat.name?.[0]?.toUpperCase() || 'U'}</div>
+        )}
+        <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
+        {hasUnread && <span className="unread-badge">{chat.unreadCount}</span>}
+        {chat.isDeleted && <span className="archived-badge" title="Account deleted – archived">📁</span>}
+      </div>
+      <div className="chat-info">
+        <div className="chat-title-row">
+          <span className="chat-name">
+            {chat.name}
+            {chat.isDeleted && <span className="archived-label"> (archived)</span>}
+          </span>
+        </div>
+        <div className="chat-last" style={{ fontWeight: hasUnread ? 700 : 400 }}>
+          {chat.lastMessage || 'Start chatting...'}
+        </div>
+      </div>
+      <div className="chat-echomoji-middle">
+        <ECHOMOJI
+          mood={chat.mood || 'neutral'}
+          skin={chat.activeSkin ? getSkinById(chat.activeSkin) : null}
+          size={38}
+          interactive={false}
+        />
+      </div>
+      <div className="chat-time">{timeAgo(chat.timestamp)}</div>
+    </div>
+  );
+});
+
+// ─── Main Chats Component ────────────────────────────────────────
 const Chats = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -171,69 +259,57 @@ const Chats = () => {
 
   useDeletedAccountCheck();
 
-  // In src/components/pages/Chats/Chats.jsx
+  // ─── Stale‑while‑revalidate: load cache then listen ──────────
   useEffect(() => {
     if (!user?.uid) return;
 
-    const userChatsRef = ref(db, `userChats/${user.uid}`);
-
-    // Realtime listener triggers whenever userChats updates
-    const unsubscribe = onValue(userChatsRef, async (snapshot) => {
-      const data = snapshot.val();
-      if (!data) {
-        setRecentChats([]);
-        setLoadingChats(false);
-        return;
-      }
-
-      const chatList = Object.entries(data).map(([partnerId, chat]) => ({
-        id: partnerId,
-        ...chat,
-      })).sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
-
-      const loadedItems = await Promise.all(
-        chatList.map((chat) => processChatItem(chat, user, onlineUsers))
-      );
-
-      setRecentChats(loadedItems);
+    // 1. Load from cache instantly
+    const cached = getCache(cacheKey);
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      setRecentChats(cached);
       setLoadingChats(false);
-      
-      // Update local cache with fresh list
-      await setCache(cacheKey, loadedItems, 300);
-    });
+    }
 
-    return () => unsubscribe();
-  }, [user?.uid, onlineUsers]);
-
-  useEffect(() => {
-    let isMounted = true;
-    if (!user?.uid) return;
-
-    const loadInitialCache = async () => {
-      try {
-        const cached = await getCache(cacheKey);
-        if (isMounted && Array.isArray(cached) && cached.length > 0) {
-          setRecentChats(cached);
+    // 2. Real‑time listener for userChats
+    const userChatsRef = ref(db, `userChats/${user.uid}`);
+    userChatsUnsubRef.current = onValue(
+      userChatsRef,
+      async (snapshot) => {
+        const data = snapshot.val();
+        if (!data) {
+          setRecentChats([]);
           setLoadingChats(false);
+          setCache(cacheKey, []);
+          return;
         }
-      } catch (err) {
-        console.error('Error loading cache:', err);
-      }
-    };
 
-    loadInitialCache();
+        const chatList = Object.entries(data)
+          .map(([partnerId, chat]) => ({ id: partnerId, ...chat }))
+          .sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+
+        const loadedItems = await Promise.all(
+          chatList.map((chat) => processChatItem(chat, user, onlineUsers))
+        );
+
+        setRecentChats(loadedItems);
+        setLoadingChats(false);
+        setCache(cacheKey, loadedItems);
+      },
+      (error) => {
+        console.error('❌ userChats listener error:', error);
+        setLoadingChats(false);
+      }
+    );
 
     return () => {
-      isMounted = false;
+      if (userChatsUnsubRef.current) {
+        userChatsUnsubRef.current();
+        userChatsUnsubRef.current = null;
+      }
     };
-  }, [user?.uid, cacheKey]);
+  }, [user?.uid, onlineUsers, cacheKey]);
 
-  useEffect(() => {
-    if (user) {
-      prefetchProfilesIndex(user.uid);
-    }
-  }, [user]);
-
+  // ─── Presence listener ──────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     const presenceRef = ref(db, 'presence/online');
@@ -253,16 +329,14 @@ const Chats = () => {
     };
   }, [user]);
 
+  // ─── Infinite scroll ──────────────────────────────────────────
   const loadChats = useCallback(
     async (loadMore = false) => {
       if (!user || isLoadingMore) return;
-
       setIsLoadingMore(true);
-
       try {
         const userChatsRef = ref(db, `userChats/${user.uid}`);
         let q;
-
         if (loadMore && lastChatKey) {
           q = query(
             userChatsRef,
@@ -273,36 +347,22 @@ const Chats = () => {
         } else {
           q = query(userChatsRef, orderByKey(), limitToLast(CHAT_CHUNK_SIZE));
         }
-
         const snapshot = await get(q);
         const data = snapshot.val();
-
         if (!data) {
           if (loadMore) setHasMore(false);
           setLoadingChats(false);
           setIsLoadingMore(false);
           return;
         }
-
         const chatList = Object.entries(data)
-          .map(([partnerId, chat]) => ({
-            id: partnerId,
-            ...chat,
-          }))
+          .map(([partnerId, chat]) => ({ id: partnerId, ...chat }))
           .sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
-
-        if (chatList.length < CHAT_CHUNK_SIZE) {
-          setHasMore(false);
-        }
-
-        if (chatList.length > 0) {
-          setLastChatKey(chatList[chatList.length - 1].id);
-        }
-
+        if (chatList.length < CHAT_CHUNK_SIZE) setHasMore(false);
+        if (chatList.length > 0) setLastChatKey(chatList[chatList.length - 1].id);
         const loadedItems = await Promise.all(
           chatList.map((chat) => processChatItem(chat, user, onlineUsers))
         );
-
         setRecentChats((prev) => {
           const currentList = Array.isArray(prev) ? prev : [];
           if (loadMore) {
@@ -312,8 +372,7 @@ const Chats = () => {
           }
           return loadedItems;
         });
-
-        await setCache(cacheKey, loadedItems, 300);
+        setCache(cacheKey, loadedItems);
       } catch (error) {
         console.error('Error loading chats:', error);
       } finally {
@@ -323,61 +382,6 @@ const Chats = () => {
     },
     [user, lastChatKey, isLoadingMore, onlineUsers, cacheKey]
   );
-
-  useEffect(() => {
-    if (!user) {
-      setLoadingChats(false);
-      return;
-    }
-
-    const userChatsRef = ref(db, `userChats/${user.uid}`);
-
-    if (userChatsUnsubRef.current) {
-      userChatsUnsubRef.current();
-      userChatsUnsubRef.current = null;
-    }
-
-    loadChats(false);
-
-    userChatsUnsubRef.current = onValue(
-      userChatsRef,
-      async (snapshot) => {
-        const data = snapshot.val();
-        if (!data) {
-          setRecentChats([]);
-          await setCache(cacheKey, []);
-          setLoadingChats(false);
-          return;
-        }
-
-        setHasMore(true);
-        setLastChatKey(null);
-        await loadChats(false);
-      },
-      async (error) => {
-        console.error('❌ userChats listener error:', error);
-        try {
-          const cached = await getCache(cacheKey);
-          if (Array.isArray(cached) && cached.length > 0) {
-            setRecentChats(cached);
-          } else {
-            setRecentChats([]);
-          }
-        } catch (err) {
-          setRecentChats([]);
-        } finally {
-          setLoadingChats(false);
-        }
-      }
-    );
-
-    return () => {
-      if (userChatsUnsubRef.current) {
-        userChatsUnsubRef.current();
-        userChatsUnsubRef.current = null;
-      }
-    };
-  }, [user]);
 
   const handleLoadMore = useCallback(async () => {
     if (hasMore && !isLoadingMore && !loadingChats) {
@@ -391,6 +395,7 @@ const Chats = () => {
     loadingChats,
   ]);
 
+  // ─── Search ──────────────────────────────────────────────────
   const performSearch = async (queryText) => {
     const trimmed = queryText.trim().toLowerCase();
     if (trimmed.length < 1) {
@@ -398,34 +403,28 @@ const Chats = () => {
       setIsSearching(false);
       return;
     }
-
     setIsSearching(true);
     try {
       const searchRes = await searchProfiles(trimmed, user.uid, 50);
-
       const rawResults = Array.isArray(searchRes)
         ? searchRes
         : Array.isArray(searchRes?.results)
         ? searchRes.results
         : [];
-
       const livePromises = rawResults.map(async (u) => {
         if (!u || typeof u !== 'object') return null;
         try {
           const snap = await get(ref(db, `profiles/${u.id}`));
           const freshData = snap.exists() ? snap.val() : {};
-
           const safeDisplayName = sanitizeName(
             freshData.name || freshData.displayName || freshData.username || u.name || u.displayName,
             u.id
           );
-
           const userLoc =
             freshData.location ||
             [freshData.city, freshData.country].filter(Boolean).join(', ') ||
             u.location ||
             '';
-
           return {
             ...u,
             ...freshData,
@@ -444,10 +443,8 @@ const Chats = () => {
           };
         }
       });
-
       const resolved = await Promise.all(livePromises);
       const updatedResults = resolved.filter(Boolean);
-
       setResults(updatedResults);
     } catch (err) {
       console.error('❌ [Search] Search failed:', err);
@@ -460,24 +457,20 @@ const Chats = () => {
   useEffect(() => {
     if (searchTimeout.current) clearTimeout(searchTimeout.current);
     const queryStr = searchQuery.trim();
-
     if (queryStr.length === 0) {
       sessionStorage.removeItem('chats_search_query');
       setResults([]);
       setIsSearching(false);
       return;
     }
-
     sessionStorage.setItem('chats_search_query', queryStr);
-
     searchTimeout.current = setTimeout(() => {
       performSearch(queryStr);
     }, 150);
-
     return () => {
       if (searchTimeout.current) clearTimeout(searchTimeout.current);
     };
-  }, [searchQuery, currentUserProfile, onlineUsers]);
+  }, [searchQuery, onlineUsers]);
 
   const startChat = (selectedUser) => {
     if (!selectedUser) return;
@@ -485,9 +478,7 @@ const Chats = () => {
       navigate('/chat/echo_ai_assistant');
       return;
     }
-
     const safeUserName = sanitizeName(selectedUser.name, selectedUser.id);
-
     navigate(`/chat/${selectedUser.id}`, {
       state: {
         userName: safeUserName,
@@ -514,37 +505,7 @@ const Chats = () => {
 
   return (
     <div className="chats-page" ref={containerRef}>
-      {/* ── Fixed Consistent Position Style ── */}
-      <style>{`
-        .chats-page {
-          padding-top: 12px !important;
-          margin-top: 0px !important;
-        }
-        .search-container {
-          position: sticky;
-          top: 0;
-          z-index: 20;
-          background: #0A0A0F;
-          padding-top: 0px !important;
-          padding-bottom: 12px !important;
-          margin-bottom: 12px !important;
-        }
-        .chat-location-badge {
-          font-size: 11px;
-          color: #a78bfa;
-          background: rgba(167, 139, 250, 0.12);
-          padding: 2px 6px;
-          border-radius: 6px;
-          margin-left: 6px;
-          white-space: nowrap;
-        }
-        .regular-chat-item.location-matched {
-          border-left: 3px solid #8b5cf6;
-          background: rgba(139, 92, 246, 0.05);
-        }
-      `}</style>
-
-      {/* ── SEARCH BAR CONTAINER ── */}
+      {/* ── Search Bar ── */}
       <div className="search-container">
         <div className="search-input-wrapper">
           <i className="fas fa-search search-icon" />
@@ -569,7 +530,6 @@ const Chats = () => {
           <div className="section-header">
             <span>Search Results {!isSearching && `(${safeResults.length})`}</span>
           </div>
-
           {isSearching ? (
             <div className="search-skeleton-wrapper">
               <SkeletonChatItem />
@@ -594,7 +554,6 @@ const Chats = () => {
                     )}
                     <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
                   </div>
-
                   <div className="chat-info">
                     <div className="chat-title-row">
                       <span className="chat-name">{person.name}</span>
@@ -606,7 +565,6 @@ const Chats = () => {
                       {person.bio || person.status || 'Available on ECHO'}
                     </div>
                   </div>
-
                   <div className="chat-echomoji-middle">
                     <ECHOMOJI
                       mood={person.mood || 'happy'}
@@ -658,55 +616,26 @@ const Chats = () => {
           </div>
 
           {/* Render Recent Chats */}
-          {safeRecentChats.map((chat) => {
-            if (!chat) return null;
-            const isOnline = !!onlineUsers[chat.id];
-            return (
-              <div
-                key={chat.id}
-                className="chat-item regular-chat-item"
-                onClick={() => startChat(chat)}
-              >
-                <div className="chat-avatar">
-                  {chat.avatar ? (
-                    <img src={chat.avatar} alt={chat.name} className="user-profile-img" />
-                  ) : (
-                    <div className="avatar-placeholder">{chat.name?.[0]?.toUpperCase() || 'U'}</div>
-                  )}
-                  <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
-                  {chat.unreadCount > 0 && (
-                    <span className="unread-badge">{chat.unreadCount}</span>
-                  )}
-                  {chat.isDeleted && (
-                    <span className="archived-badge" title="Account deleted – archived">📁</span>
-                  )}
-                </div>
-
-                <div className="chat-info">
-                  <div className="chat-title-row">
-                    <span className="chat-name">
-                      {chat.name}
-                      {chat.isDeleted && <span className="archived-label"> (archived)</span>}
-                    </span>
-                  </div>
-                  <div className="chat-last">{chat.lastMessage || 'Start chatting...'}</div>
-                </div>
-
-                <div className="chat-echomoji-middle">
-                  <ECHOMOJI
-                    mood={chat.mood || 'neutral'}
-                    skin={chat.activeSkin ? getSkinById(chat.activeSkin) : null}
-                    size={38}
-                    interactive={false}
-                  />
-                </div>
-
-                <div className="chat-time">{timeAgo(chat.timestamp)}</div>
+          {loadingChats && safeRecentChats.length === 0 ? (
+            <SkeletonChatItem />
+          ) : safeRecentChats.length === 0 ? (
+            <div className="no-chats-premium">
+              <div className="no-chats-icon-wrapper">
+                <i className="fas fa-comments" />
               </div>
-            );
-          })}
-
-          {loadingChats && <SkeletonChatItem />}
+              <p className="no-chats-title">No conversations yet</p>
+              <span className="no-chats-subtitle">Search for people above to start a new chat</span>
+            </div>
+          ) : (
+            safeRecentChats.map((chat) => (
+              <ChatItem
+                key={chat.id}
+                chat={chat}
+                onlineUsers={onlineUsers}
+                onStartChat={startChat}
+              />
+            ))
+          )}
 
           {isLoadingMore && (
             <div className="premium-status-pill">
@@ -719,16 +648,6 @@ const Chats = () => {
             <div className="premium-end-pill">
               <i className="fas fa-check-circle end-icon" />
               <span>You're all caught up</span>
-            </div>
-          )}
-
-          {!loadingChats && safeRecentChats.length === 0 && (
-            <div className="no-chats-premium">
-              <div className="no-chats-icon-wrapper">
-                <i className="fas fa-comments" />
-              </div>
-              <p className="no-chats-title">No conversations yet</p>
-              <span className="no-chats-subtitle">Search for people above to start a new chat</span>
             </div>
           )}
         </div>

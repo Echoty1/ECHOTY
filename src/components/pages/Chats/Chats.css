@@ -208,7 +208,7 @@
 }
 
 .chat-avatar {
-  position: relative;
+  position: relative;   /* needed for badge positioning */
   width: 48px;
   height: 48px;
   flex-shrink: 0;
@@ -235,6 +235,7 @@
   justify-content: center;
 }
 
+/* ─── Presence Dot ─── */
 .presence-dot {
   position: absolute;
   bottom: 1px;
@@ -251,6 +252,47 @@
 
 .presence-dot.offline {
   background: #6B7280;
+}
+
+/* ─── UNREAD BADGE (positioned top-right over avatar) ─── */
+.unread-badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 20px;
+  background: #EF4444;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #0A0A0F;
+  box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
+  line-height: 1;
+  text-align: center;
+  pointer-events: none;   /* so clicks pass through to the parent item */
+}
+
+/* ─── Archived Badge ─── */
+.archived-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  font-size: 14px;
+  background: rgba(0, 0, 0, 0.6);
+  border-radius: 50%;
+  padding: 2px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.archived-label {
+  color: #888;
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .chat-info {
@@ -302,17 +344,32 @@
   background: rgba(167, 139, 250, 0.12);
   padding: 2px 6px;
   border-radius: 6px;
+  margin-left: 6px;
+  white-space: nowrap;
 }
 
-/* src/components/pages/Chats/Chats.css */
+/* ─── Fix for search results section ─── */
+.regular-chat-item.location-matched {
+  border-left: 3px solid #8b5cf6;
+  background: rgba(139, 92, 246, 0.05);
+}
 
-.chats-page {
-  min-height: 100vh;
-  background: #0A0A0F;
-  padding: 0 16px 100px;
-  width: 100%;
-  max-width: 100%;
-  margin: 0 auto;
-  overflow-x: hidden;
-  box-sizing: border-box;
+/* ─── Responsive ─── */
+@media (max-width: 480px) {
+  .chat-avatar {
+    width: 42px;
+    height: 42px;
+  }
+  .user-profile-img,
+  .avatar-placeholder {
+    width: 42px;
+    height: 42px;
+  }
+  .unread-badge {
+    min-width: 18px;
+    height: 18px;
+    font-size: 10px;
+    top: -3px;
+    right: -3px;
+  }
 }

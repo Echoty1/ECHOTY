@@ -4,6 +4,7 @@ import { fetchGifLibrary } from '../../services/gifLibraryService';
 import { useAuth } from '../../hooks/useAuth';
 import { db } from '../../services/firebase';
 import { ref, get, update, onValue } from 'firebase/database';
+import { preloadMedia } from '../../utils/mediaCache';
 import './GifLibraryModal.css';
 
 // Helper to safely convert any Firebase data structure into an Array
@@ -37,7 +38,12 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
         setLibrary(data);
         setFailedUrls(new Set());
 
-        // 2. Load user skins & unlocked GIFs
+        // 2. Preload all GIFs for faster display (caching)
+        data.forEach(gif => {
+          if (gif.url) preloadMedia(gif.url);
+        });
+
+        // 3. Load user skins & unlocked GIFs
         const userSkinsRef = ref(db, `userSkins/${user.uid}`);
         const snap = await get(userSkinsRef);
         if (snap.exists()) {
@@ -56,7 +62,7 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
 
     loadData();
 
-    // 3. Listen for coin & unlocked GIF updates
+    // 4. Listen for coin & unlocked GIF updates
     const userSkinsRef = ref(db, `userSkins/${user.uid}`);
     const unsubscribe = onValue(userSkinsRef, (snap) => {
       if (snap.exists()) {

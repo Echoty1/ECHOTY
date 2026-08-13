@@ -7,11 +7,14 @@ import {
   onValue,
   push,
   set,
+  update,
   get,
   serverTimestamp,
+  runTransaction,
 } from 'firebase/database';
 import { useAuth } from '../../../hooks/useAuth';
 import { SkeletonMessage } from '../../common/SkeletonLoader';
+import { getCache, setCache } from '../../../services/cacheService';
 import './ChatView.css';
 
 const ECHO_AI_AVATAR = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
@@ -43,21 +46,138 @@ const ChatView = () => {
   const [loadingMessages, setLoadingMessages] = useState(true);
 
   const messagesEndRef = useRef(null);
+  const chatId = useRef(null);
 
-  // Fetch current logged-in user profile
+  // Cache key for this chat's messages
+  const cacheKey = `messages_${user?.uid}_${userId}`;
+  const isMounted = useRef(true);
+
+  // ── Helper: Mark all messages as read for this chat ──
+  const markMessagesAsRead = async () => {
+    if (!user?.uid || !userId || isEchoAi) return;
+    const cId = [user.uid, userId].sort().join('_');
+    const messagesRef = ref(db, `chats/${cId}/messages`);
+
+    try {
+      const snapshot = await get(messagesRef);
+      if (!snapshot.exists()) return;
+      const data = snapshot.val();
+      const updates = {};
+      let hasUnread = false;
+      Object.entries(data).forEach(([key, msg]) => {
+        if (msg.receiverId === user.uid && msg.isRead === false) {
+          updates[`chats/${cId}/messages/${key}/isRead`] = true;
+          hasUnread = true;
+        }
+      });
+
+      if (!hasUnread) return;
+
+      await update(ref(db), updates);
+
+      const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
+      await set(myChatRef, {
+        id: userId,
+        partnerName: location.state?.userName || partnerProfile?.name || 'User',
+        partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
+        lastMessage: messages.length > 0 ? messages[messages.length - 1]?.text || '' : '',
+        lastSenderId: messages.length > 0 ? messages[messages.length - 1]?.senderId || '' : '',
+        lastUpdated: Date.now(),
+        unreadCount: 0,
+      });
+    } catch (err) {
+      console.warn('markMessagesAsRead error:', err);
+    }
+  };
+
+  // ─── Stale‑while‑revalidate for messages ────────────────────
+  useEffect(() => {
+    if (!user?.uid || !userId) return;
+    isMounted.current = true;
+
+    // 1. Load from cache instantly
+    const cached = getCache(cacheKey);
+    if (cached && Array.isArray(cached) && cached.length > 0) {
+      setMessages(cached);
+      setLoadingMessages(false);
+    }
+
+    // 2. Real‑time listener
+    const cId = [user.uid, userId].sort().join('_');
+    chatId.current = cId;
+    const messagesRef = ref(db, `chats/${cId}/messages`);
+
+    const unsubscribe = onValue(messagesRef, (snapshot) => {
+      if (!isMounted.current) return;
+      const data = snapshot.val();
+      let newMessages = [];
+      if (data) {
+        newMessages = Object.entries(data)
+          .map(([id, val]) => ({ id, ...val }))
+          .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      }
+      setMessages(newMessages);
+      setLoadingMessages(false);
+      setCache(cacheKey, newMessages);
+
+      // Auto‑mark any new incoming message as read (with defensive checks)
+      const latest = newMessages[newMessages.length - 1];
+      if (
+        latest &&
+        latest.receiverId === user.uid &&
+        latest.isRead === false
+      ) {
+        const msgRef = ref(db, `chats/${cId}/messages/${latest.id}`);
+        // Defensive: ensure `set` returns a promise-like value
+        try {
+          const promise = set(msgRef, { ...latest, isRead: true });
+          if (promise && typeof promise.then === 'function') {
+            promise
+              .then(() => {
+                const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
+                return set(myChatRef, {
+                  id: userId,
+                  partnerName: location.state?.userName || partnerProfile?.name || 'User',
+                  partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
+                  lastMessage: latest.text,
+                  lastSenderId: latest.senderId,
+                  lastUpdated: Date.now(),
+                  unreadCount: 0,
+                });
+              })
+              .catch((err) => console.warn('Auto‑mark read error:', err));
+          } else {
+            console.warn('set() did not return a Promise, skipping auto‑mark');
+          }
+        } catch (err) {
+          console.warn('Auto‑mark read exception:', err);
+        }
+      }
+    });
+
+    return () => {
+      isMounted.current = false;
+      unsubscribe();
+    };
+  }, [user?.uid, userId, cacheKey]);
+
+  // ── Mark as read on mount ──
+  useEffect(() => {
+    if (!user?.uid || !userId || isEchoAi) return;
+    markMessagesAsRead();
+  }, [user?.uid, userId, isEchoAi]);
+
+  // ── Fetch profiles ──
   useEffect(() => {
     if (!user?.uid) return;
     const myProfileRef = ref(db, `profiles/${user.uid}`);
     get(myProfileRef)
       .then((snap) => {
-        if (snap.exists()) {
-          setCurrentUserProfile(snap.val());
-        }
+        if (snap.exists()) setCurrentUserProfile(snap.val());
       })
       .catch(console.error);
   }, [user?.uid]);
 
-  // Load profile for title/state
   useEffect(() => {
     if (isEchoAi) {
       setPartnerProfile({
@@ -68,69 +188,22 @@ const ChatView = () => {
       });
       return;
     }
-
     if (userId) {
       const pRef = ref(db, `profiles/${userId}`);
       get(pRef)
         .then((snap) => {
-          if (snap.exists()) {
-            setPartnerProfile(snap.val());
-          }
+          if (snap.exists()) setPartnerProfile(snap.val());
         })
         .catch(console.error);
     }
   }, [userId, isEchoAi]);
 
-  // Fetch Realtime Messages
-  useEffect(() => {
-    if (!user?.uid || !userId) return;
-
-    if (isEchoAi) {
-      setMessages([
-        {
-          id: 'welcome_ai',
-          senderId: 'echo_ai_assistant',
-          text: 'Hello! I am ECHO AI. How can I assist you today?',
-          timestamp: Date.now(),
-        },
-      ]);
-      setLoadingMessages(false);
-      return;
-    }
-
-    const chatId = [user.uid, userId].sort().join('_');
-    const messagesRef = ref(db, `chats/${chatId}/messages`);
-
-    get(messagesRef)
-      .then((snapshot) => {
-        if (!snapshot.exists()) {
-          setMessages([]);
-          setLoadingMessages(false);
-        }
-      })
-      .catch(() => setLoadingMessages(false));
-
-    const unsubscribe = onValue(messagesRef, (snapshot) => {
-      const data = snapshot.val();
-      if (data) {
-        const parsed = Object.entries(data).map(([id, val]) => ({
-          id,
-          ...val,
-        }));
-        setMessages(parsed);
-      } else {
-        setMessages([]);
-      }
-      setLoadingMessages(false);
-    });
-
-    return () => unsubscribe();
-  }, [user?.uid, userId, isEchoAi]);
-
+  // ── Scroll to bottom ──
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // ── Handle sending message ──
   const handleSendMessage = async (e) => {
     e.preventDefault();
     if (!newMessage.trim() || !user?.uid || !userId) return;
@@ -138,7 +211,7 @@ const ChatView = () => {
     const textToSend = newMessage.trim();
     setNewMessage('');
 
-    // 1. ECHO AI LOGIC (LOCAL ONLY - NO FIREBASE WRITES)
+    // 1. ECHO AI (local only)
     if (isEchoAi || userId === 'echo_ai_assistant') {
       const userMsg = {
         id: Date.now().toString(),
@@ -147,7 +220,6 @@ const ChatView = () => {
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, userMsg]);
-
       setTimeout(() => {
         const aiMsg = {
           id: (Date.now() + 1).toString(),
@@ -160,30 +232,26 @@ const ChatView = () => {
       return;
     }
 
-    // 2. REGULAR CHAT LOGIC (FIREBASE WRITES)
+    // 2. Regular chat
     try {
-      const chatId = [user.uid, userId].sort().join('_');
+      const cId = [user.uid, userId].sort().join('_');
       const timestamp = Date.now();
 
-      // A. Push message to database
-      const messagesRef = ref(db, `chats/${chatId}/messages`);
+      const messagesRef = ref(db, `chats/${cId}/messages`);
       const newMsgRef = push(messagesRef);
-
       await set(newMsgRef, {
         senderId: user.uid,
+        receiverId: userId,
         text: textToSend,
         timestamp: serverTimestamp(),
+        isRead: false,
       });
 
-      // B. UPDATE MY `userChats` INDEX
+      // Update sender's userChats
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
       await set(myChatRef, {
         id: userId,
-        partnerName:
-          location.state?.userName ||
-          partnerProfile?.name ||
-          partnerProfile?.displayName ||
-          'User',
+        partnerName: location.state?.userName || partnerProfile?.name || 'User',
         partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
         lastMessage: textToSend,
         lastSenderId: user.uid,
@@ -191,23 +259,31 @@ const ChatView = () => {
         unreadCount: 0,
       });
 
-      // C. UPDATE RECIPIENT'S `userChats` INDEX
+      // Update recipient's userChats (increment unreadCount)
       const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
-      await set(recipientChatRef, {
-        id: user.uid,
-        partnerName:
-          currentUserProfile?.name ||
-          currentUserProfile?.displayName ||
-          currentUserProfile?.username ||
-          'User',
-        partnerAvatar: currentUserProfile?.avatar || '',
-        lastMessage: textToSend,
-        lastSenderId: user.uid,
-        lastUpdated: timestamp,
-        unreadCount: 1,
+      await runTransaction(recipientChatRef, (currentData) => {
+        if (currentData === null) {
+          return {
+            id: user.uid,
+            partnerName: currentUserProfile?.name || 'User',
+            partnerAvatar: currentUserProfile?.avatar || '',
+            lastMessage: textToSend,
+            lastSenderId: user.uid,
+            lastUpdated: timestamp,
+            unreadCount: 1,
+          };
+        } else {
+          currentData.unreadCount = (currentData.unreadCount || 0) + 1;
+          currentData.lastMessage = textToSend;
+          currentData.lastSenderId = user.uid;
+          currentData.lastUpdated = timestamp;
+          currentData.partnerName = currentUserProfile?.name || currentData.partnerName || 'User';
+          currentData.partnerAvatar = currentUserProfile?.avatar || currentData.partnerAvatar || '';
+          return currentData;
+        }
       });
     } catch (err) {
-      console.error('Failed to send message and update recent chats:', err);
+      console.error('Failed to send message:', err);
     }
   };
 
@@ -217,9 +293,8 @@ const ChatView = () => {
 
   return (
     <div className="chat-view">
-      {/* ── MESSAGES CONTAINER ── */}
       <div className="messages-container">
-        {loadingMessages ? (
+        {loadingMessages && messages.length === 0 ? (
           <div className="chat-skeleton-list">
             <SkeletonMessage isOwn={false} />
             <SkeletonMessage isOwn={true} />
@@ -246,7 +321,6 @@ const ChatView = () => {
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ── TYPING INPUT BAR ── */}
       <form className="chat-input-container" onSubmit={handleSendMessage}>
         <input
           type="text"
