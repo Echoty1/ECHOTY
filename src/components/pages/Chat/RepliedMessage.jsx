@@ -1,10 +1,9 @@
 // src/components/pages/Chat/RepliedMessage.jsx
 import React from 'react';
 
-const RepliedMessage = ({ replyTo }) => {
+const RepliedMessage = ({ replyTo, onTap }) => {
   if (!replyTo) return null;
 
-  // Use textSnippet from the database; if not present, fallback to text or label
   const getPreviewText = () => {
     if (replyTo.textSnippet) return replyTo.textSnippet;
     if (replyTo.type === 'media') {
@@ -15,8 +14,12 @@ const RepliedMessage = ({ replyTo }) => {
 
   const senderName = replyTo.senderName || 'Unknown';
 
+  const handleClick = () => {
+    if (onTap) onTap();
+  };
+
   return (
-    <div className="replied-message">
+    <div className="replied-message" onClick={handleClick}>
       <div className="replied-message-line" />
       <div className="replied-message-content">
         <span className="replied-message-sender">{senderName}</span>

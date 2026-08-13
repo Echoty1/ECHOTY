@@ -1352,3 +1352,13 @@
 .message-bubble.partner .replied-message-text {
   color: #d1d5db;
 }
+
+.message-bubble.highlight-flash {
+  animation: highlightPulse 1s ease;
+}
+
+@keyframes highlightPulse {
+  0% { background-color: rgba(108, 60, 225, 0.3); }
+  50% { background-color: rgba(108, 60, 225, 0.6); }
+  100% { background-color: transparent; }
+}
