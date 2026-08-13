@@ -1,27 +1,47 @@
 /* src/components/pages/Chat/ChatView.css */
 
-.chat-view {
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 60px);
-  width: 100%;
-  max-width: 100%;
-  background: #0A0A0F;
-  margin: 0 !important;
-  padding: 0 !important;
-  position: relative;
-  overflow: hidden;
+/* 
+   MATCH THESE TO YOUR ACTUAL LAYOUT:
+   - Header height: 60px (from Navbar.js)
+   - Bottom nav: bottom margin 16px, height 72px (from BottomNav.js)
+   => total offset from bottom = 16 + 72 = 88px
+*/
+:root {
+  --header-height: 60px;
+  --nav-bottom-offset: 88px;   /* 16px margin + 72px nav height */
 }
 
-/* ─── MESSAGES CONTAINER (Starts flush right below Top Navbar) ─── */
+.chat-view {
+  /* Fixed position – pinned between header and above bottom nav */
+  position: fixed;
+  top: var(--header-height);
+  bottom: var(--nav-bottom-offset);
+  left: 0;
+  right: 0;
+
+  display: flex;
+  flex-direction: column;
+  background: #0A0A0F;
+  overflow: hidden;          /* prevent whole‑container scroll */
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  z-index: 10;
+}
+
+/* ─── MESSAGES CONTAINER (the ONLY scrollable part) ─── */
 .messages-container {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px 16px 150px; /* Slight top padding right below navbar bottom line */
+  flex: 1;                   /* takes all remaining height */
+  overflow-y: auto;          /* INDEPENDENT SCROLLBAR */
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
   margin: 0 !important;
+  box-sizing: border-box;
+  -webkit-overflow-scrolling: touch; /* iOS smooth scroll */
 }
 
 .chat-skeleton-list {
@@ -67,52 +87,145 @@
   border-bottom-left-radius: 4px;
 }
 
-/* ─── TYPING BAR (Lifted above bottom navigation) ─── */
+/* ─── ENHANCED INPUT BAR ─── */
 .chat-input-container {
-  position: fixed;
-  bottom: 75px;
-  left: 0;
-  right: 0;
+  flex-shrink: 0;              /* never shrink – stays at bottom */
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  background: rgba(18, 18, 26, 0.95);
-  backdrop-filter: blur(16px);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
-  z-index: 30;
-  max-width: 100%;
+  gap: 12px;
+  padding: 12px 16px;
+  background: rgba(18, 18, 26, 0.92);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 -4px 30px rgba(0, 0, 0, 0.4);
+  box-sizing: border-box;
+  width: 100%;
+  /* Safe‑area inset for notched phones */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
 .chat-input {
   flex: 1;
-  padding: 12px 18px;
-  border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.05);
-  color: #fff;
-  font-size: 14px;
+  padding: 12px 20px;
+  border-radius: 30px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #f0f0f0;
+  font-size: 15px;
   outline: none;
+  transition: all 0.25s ease;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.chat-input::placeholder {
+  color: #777;
+  font-weight: 400;
 }
 
 .chat-input:focus {
-  border-color: #6C3CE1;
+  border-color: #8B5CF6;
+  background: rgba(255, 255, 255, 0.07);
+  box-shadow: 0 0 20px rgba(108, 60, 225, 0.15), inset 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
 .chat-send-btn {
-  width: 42px;
-  height: 42px;
+  width: 48px;
+  height: 48px;
   border-radius: 50%;
   border: none;
-  background: #6C3CE1;
+  background: linear-gradient(135deg, #7C3AED, #6C3CE1);
   color: #fff;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 15px rgba(108, 60, 225, 0.4);
+  position: relative;
+  overflow: hidden;
+}
+
+/* Send icon */
+.chat-send-btn i {
+  font-size: 18px;
+  transition: transform 0.2s ease;
+}
+
+.chat-send-btn:hover:not(:disabled) {
+  transform: scale(1.05);
+  box-shadow: 0 6px 25px rgba(108, 60, 225, 0.6);
+}
+
+.chat-send-btn:hover:not(:disabled) i {
+  transform: translateX(2px);
+}
+
+.chat-send-btn:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+/* Pulsing glow effect when active */
+.chat-send-btn:not(:disabled)::after {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: rgba(108, 60, 225, 0.2);
+  filter: blur(12px);
+  z-index: -1;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.chat-send-btn:not(:disabled):hover::after {
+  opacity: 1;
 }
 
 .chat-send-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.3;
   cursor: not-allowed;
+  box-shadow: none;
+}
+
+/* ─── Responsive tweaks ─── */
+@media (max-width: 480px) {
+  .message-bubble {
+    max-width: 85%;
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+  .chat-input-container {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .chat-input {
+    padding: 10px 16px;
+    font-size: 14px;
+  }
+  .chat-send-btn {
+    width: 42px;
+    height: 42px;
+  }
+  .chat-send-btn i {
+    font-size: 16px;
+  }
+}
+
+@media (max-height: 600px) {
+  .chat-input-container {
+    padding: 6px 12px;
+  }
+  .chat-input {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+  .chat-send-btn {
+    width: 36px;
+    height: 36px;
+  }
+  .chat-send-btn i {
+    font-size: 14px;
+  }
 }
