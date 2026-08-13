@@ -67,21 +67,37 @@ const ChatView = () => {
   const cacheKey = `messages_${user?.uid}_${userId}`;
   const isMounted = useRef(true);
 
-  // ── Helper: Mark all messages as read for this chat ──────
+  // ─── Helper: Mark all messages as read for this chat ──────
   const markMessagesAsRead = async () => {
     if (!user?.uid || !userId || isEchoAi) return;
     const cId = [user.uid, userId].sort().join('_');
 
     try {
+      // 1. Mark all messages as read
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const snapshot = await get(messagesRef);
       if (!snapshot.exists()) return;
       const data = snapshot.val();
       const updates = {};
       let hasUnread = false;
-      Object.entries(data).forEach(([key, msg]) => {
+      let latestMsg = '';
+      let latestSender = '';
+
+      const msgs = Object.entries(data).map(([key, val]) => ({ key, ...val }));
+      msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      const latest = msgs[msgs.length - 1];
+      if (latest) {
+        if (latest.type === 'media') {
+          latestMsg = latest.mediaType === 'video' ? '🎬 Video' : '📷 Image';
+        } else {
+          latestMsg = latest.text || '';
+        }
+        latestSender = latest.senderId || '';
+      }
+
+      msgs.forEach((msg) => {
         if (msg.receiverId === user.uid && msg.isRead === false) {
-          updates[`chats/${cId}/messages/${key}/isRead`] = true;
+          updates[`chats/${cId}/messages/${msg.key}/isRead`] = true;
           hasUnread = true;
         }
       });
@@ -90,17 +106,14 @@ const ChatView = () => {
 
       await update(ref(db), updates);
 
-      // Reset unreadCount in userChats
+      // 2. Reset unreadCount and update lastMessage in userChats
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-      const latestMsg = messages.length > 0 ? messages[messages.length - 1] : null;
       await set(myChatRef, {
         id: userId,
         partnerName: location.state?.userName || partnerProfile?.name || 'User',
         partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
-        lastMessage: latestMsg?.type === 'media'
-          ? (latestMsg.mediaType === 'video' ? '🎬 Video' : '📷 Image')
-          : (latestMsg?.text || ''),
-        lastSenderId: latestMsg?.senderId || '',
+        lastMessage: latestMsg,
+        lastSenderId: latestSender,
         lastUpdated: Date.now(),
         unreadCount: 0,
       });
@@ -179,13 +192,13 @@ const ChatView = () => {
     };
   }, [user?.uid, userId, cacheKey]);
 
-  // ── Mark as read on mount and when userId changes ──────────
+  // ─── Mark as read on mount and when userId changes ──────────
   useEffect(() => {
     if (!user?.uid || !userId || isEchoAi) return;
     markMessagesAsRead();
   }, [user?.uid, userId, isEchoAi]);
 
-  // ── Fetch profiles ──────────────────────────────────────────
+  // ─── Fetch profiles ──────────────────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
     const myProfileRef = ref(db, `profiles/${user.uid}`);
