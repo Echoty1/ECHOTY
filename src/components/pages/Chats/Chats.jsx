@@ -98,7 +98,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
       );
     }
 
-    // ── CORRECT: compute the composite chat ID (sorted) ──
     const compositeChatId = [user.uid, chat.id].sort().join('_');
     const latest = await fetchLatestMessage(compositeChatId);
     let rawLastMessage = latest.text;
@@ -106,14 +105,30 @@ const processChatItem = async (chat, user, onlineUsers) => {
 
     let displayMessage = rawLastMessage;
     if (displayMessage !== 'Start chatting...') {
-      const isSender = lastSenderId === user.uid;
-      if (isSender) {
-        displayMessage = `You: ${displayMessage}`;
+      // If it's a media message, use a proper icon
+      if (latest.type === 'media') {
+        const mediaIcon = latest.mediaType === 'video' ? '🎬 Video' : '📷 Image';
+        const isSender = lastSenderId === user.uid;
+        if (isSender) {
+          displayMessage = `You: ${mediaIcon}`;
+        } else {
+          displayMessage = `${partnerName}: ${mediaIcon}`;
+        }
       } else {
-        displayMessage = `${partnerName}: ${displayMessage}`;
+        const isSender = lastSenderId === user.uid;
+        if (isSender) {
+          displayMessage = `You: ${displayMessage}`;
+        } else {
+          displayMessage = `${partnerName}: ${displayMessage}`;
+        }
+        if (displayMessage.length > 30) {
+          displayMessage = displayMessage.substring(0, 30) + '...';
+        }
       }
-      if (displayMessage.length > 30) {
-        displayMessage = displayMessage.substring(0, 30) + '...';
+    } else {
+      // Fallback: if chat.lastMessage already contains a media icon (set by userChats)
+      if (chat.lastMessage === '📷 Image' || chat.lastMessage === '🎬 Video') {
+        displayMessage = `${partnerName}: ${chat.lastMessage}`;
       }
     }
 

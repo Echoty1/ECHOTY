@@ -4,10 +4,6 @@ import { db } from './firebase';
 
 const messageCache = new Map();
 
-/**
- * Fetch the latest message from a chat, with a short cache TTL (2 seconds).
- * Returns { text, senderId, timestamp }
- */
 export const fetchLatestMessage = async (chatId) => {
   const cached = messageCache.get(chatId);
   if (cached && Date.now() - cached.timestamp < 2000) {
@@ -22,6 +18,8 @@ export const fetchLatestMessage = async (chatId) => {
       const result = {
         text: msg.text || 'Start chatting...',
         senderId: msg.senderId || '',
+        type: msg.type || 'text',
+        mediaType: msg.mediaType || null,
         timestamp: Date.now(),
       };
       messageCache.set(chatId, result);
@@ -30,15 +28,11 @@ export const fetchLatestMessage = async (chatId) => {
   } catch (err) {
     console.warn(`⚠️ Could not fetch latest message for ${chatId}:`, err);
   }
-  const fallback = { text: 'Start chatting...', senderId: '', timestamp: Date.now() };
+  const fallback = { text: 'Start chatting...', senderId: '', type: 'text', mediaType: null, timestamp: Date.now() };
   messageCache.set(chatId, fallback);
   return fallback;
 };
 
-/**
- * Clear the cached latest message for a specific chat.
- * Call this whenever a new message is sent or received.
- */
 export const clearMessageCache = (chatId) => {
   if (chatId) messageCache.delete(chatId);
 };
