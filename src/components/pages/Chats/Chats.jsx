@@ -135,6 +135,9 @@ const processChatItem = async (chat, user, onlineUsers) => {
     const rawAvatar = profile.avatar || chat.partnerAvatar || '';
     if (rawAvatar) preloadMedia(rawAvatar);
 
+    // The `online` status is taken from the onlineUsers object.
+    const isOnline = !!onlineUsers[chat.id];
+
     return {
       id: chat.id,
       name: partnerName,
@@ -147,7 +150,7 @@ const processChatItem = async (chat, user, onlineUsers) => {
       lastSenderId: lastSenderId,
       unreadCount: chat.unreadCount || 0,
       isDeleted,
-      online: !!onlineUsers[chat.id],
+      online: isOnline,
     };
   } catch (err) {
     // Fallback
@@ -164,9 +167,29 @@ const processChatItem = async (chat, user, onlineUsers) => {
   }
 };
 
+// ─── Sorting function for non-AI chats ──────────────────────────
+const sortNonAIChats = (chats) => {
+  // Tier 2: Unread (unreadCount > 0) – sorted by most recent timestamp
+  const unreadChats = chats
+    .filter(c => c.unreadCount > 0)
+    .sort((a, b) => b.timestamp - a.timestamp);
+
+  // Tier 3: Online (unreadCount === 0 && online === true)
+  const onlineChats = chats
+    .filter(c => c.unreadCount === 0 && c.online === true)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  // Tier 4: Offline (unreadCount === 0 && online === false) – alphabetical
+  const offlineChats = chats
+    .filter(c => c.unreadCount === 0 && c.online === false)
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  return [...unreadChats, ...onlineChats, ...offlineChats];
+};
+
 // ─── Memoized Chat Item Component ──────────────────────────────
-const ChatItem = memo(({ chat, onlineUsers, onStartChat }) => {
-  const isOnline = onlineUsers[chat.id] || false;
+const ChatItem = memo(({ chat, onStartChat }) => {
+  const isOnline = chat.online; // Already computed in processChatItem
   const hasUnread = chat.unreadCount > 0;
   const avatarUrl = chat.avatar || '';
   const cachedAvatar = useCachedImage(avatarUrl, null);
@@ -242,7 +265,29 @@ const Chats = () => {
 
   useDeletedAccountCheck();
 
+  // ─── Presence listener ──────────────────────────────────────
+  useEffect(() => {
+    if (!user) return;
+    const presenceRef = ref(db, 'presence/online');
+    presenceUnsubRef.current = onValue(
+      presenceRef,
+      (snapshot) => {
+        const data = snapshot.val() || {};
+        setOnlineUsers(data);
+      },
+      (error) => console.error('❌ Presence error:', error)
+    );
+    return () => {
+      if (presenceUnsubRef.current) {
+        presenceUnsubRef.current();
+        presenceUnsubRef.current = null;
+      }
+    };
+  }, [user]);
+
   // ─── Stale‑while‑revalidate: load cache then listen ──────────
+  // This effect depends on `onlineUsers` so that when presence changes,
+  // the list re-processes and re-sorts.
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -274,9 +319,13 @@ const Chats = () => {
           chatList.map((chat) => processChatItem(chat, user, onlineUsers))
         );
 
-        setRecentChats(loadedItems);
+        // Apply sorting (exclude AI, which is rendered separately)
+        const nonAIChats = loadedItems.filter(c => c.id !== 'echo_ai_assistant');
+        const sortedNonAI = sortNonAIChats(nonAIChats);
+
+        setRecentChats(sortedNonAI);
         setLoadingChats(false);
-        setCache(cacheKey, loadedItems);
+        setCache(cacheKey, sortedNonAI);
       },
       (error) => {
         console.error('❌ userChats listener error:', error);
@@ -291,26 +340,6 @@ const Chats = () => {
       }
     };
   }, [user?.uid, onlineUsers, cacheKey]);
-
-  // ─── Presence listener ──────────────────────────────────────
-  useEffect(() => {
-    if (!user) return;
-    const presenceRef = ref(db, 'presence/online');
-    presenceUnsubRef.current = onValue(
-      presenceRef,
-      (snapshot) => {
-        const data = snapshot.val() || {};
-        setOnlineUsers(data);
-      },
-      (error) => console.error('❌ Presence error:', error)
-    );
-    return () => {
-      if (presenceUnsubRef.current) {
-        presenceUnsubRef.current();
-        presenceUnsubRef.current = null;
-      }
-    };
-  }, [user]);
 
   // ─── Infinite scroll ──────────────────────────────────────────
   const loadChats = useCallback(
@@ -346,16 +375,20 @@ const Chats = () => {
         const loadedItems = await Promise.all(
           chatList.map((chat) => processChatItem(chat, user, onlineUsers))
         );
+        const nonAIChats = loadedItems.filter(c => c.id !== 'echo_ai_assistant');
+        const sortedNonAI = sortNonAIChats(nonAIChats);
+
         setRecentChats((prev) => {
           const currentList = Array.isArray(prev) ? prev : [];
           if (loadMore) {
             const existingIds = new Set(currentList.map((c) => c.id));
-            const newItems = loadedItems.filter((item) => !existingIds.has(item.id));
-            return [...currentList, ...newItems];
+            const newItems = sortedNonAI.filter((item) => !existingIds.has(item.id));
+            const merged = [...currentList, ...newItems];
+            return sortNonAIChats(merged);
           }
-          return loadedItems;
+          return sortedNonAI;
         });
-        setCache(cacheKey, loadedItems);
+        setCache(cacheKey, sortedNonAI);
       } catch (error) {
         console.error('Error loading chats:', error);
       } finally {
@@ -577,7 +610,7 @@ const Chats = () => {
             <span>Recent Conversations</span>
           </div>
 
-          {/* ECHO AI Card */}
+          {/* ─── ECHO AI Card (always at top) ─────────────────── */}
           <div className="chat-item ai-item floating-ai-card" onClick={() => startChat(ECHO_AI_USER)}>
             <div className="chat-avatar">
               <img
@@ -598,7 +631,7 @@ const Chats = () => {
             <div className="chat-time">Always Active</div>
           </div>
 
-          {/* Render Recent Chats */}
+          {/* ─── Sorted Non-AI Chats ──────────────────────────── */}
           {loadingChats && safeRecentChats.length === 0 ? (
             <SkeletonChatItem />
           ) : safeRecentChats.length === 0 ? (
@@ -614,7 +647,6 @@ const Chats = () => {
               <ChatItem
                 key={chat.id}
                 chat={chat}
-                onlineUsers={onlineUsers}
                 onStartChat={startChat}
               />
             ))

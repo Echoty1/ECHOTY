@@ -19,6 +19,7 @@ import { getCache, setCache } from '../../../services/cacheService';
 import { clearMessageCache } from '../../../services/messageCache';
 import ChatMediaMessage from './ChatMediaMessage';
 import './ChatView.css';
+import { VideoAudioProvider } from '../../../contexts/VideoAudioContext';
 
 const ECHO_AI_AVATAR = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
 
@@ -117,8 +118,20 @@ const ChatView = () => {
         lastUpdated: Date.now(),
         unreadCount: 0,
       });
+
+      // 3. Also clear the cache for this chat to force re‑fetch
+      clearMessageCache(cId);
+      // Clear the chat list cache as well (optional)
+      // setCache(`chats_${user.uid}`, null); // heavy, skip
     } catch (err) {
       console.warn('markMessagesAsRead error:', err);
+    }
+  };
+
+  // ─── Scroll to bottom ──────────────────────────────────────
+  const scrollToBottom = (smooth = true) => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
     }
   };
 
@@ -131,6 +144,8 @@ const ChatView = () => {
     if (cached && Array.isArray(cached) && cached.length > 0) {
       setMessages(cached);
       setLoadingMessages(false);
+      // Scroll to bottom after cache loads
+      setTimeout(() => scrollToBottom(false), 50);
     }
 
     const cId = [user.uid, userId].sort().join('_');
@@ -150,6 +165,9 @@ const ChatView = () => {
       setLoadingMessages(false);
       setCache(cacheKey, newMessages);
       clearMessageCache(cId);
+
+      // Scroll to bottom when new messages arrive
+      setTimeout(() => scrollToBottom(true), 100);
 
       // Auto‑mark read for incoming messages if we are the receiver
       const latest = newMessages[newMessages.length - 1];
@@ -195,7 +213,10 @@ const ChatView = () => {
   // ─── Mark as read on mount and when userId changes ──────────
   useEffect(() => {
     if (!user?.uid || !userId || isEchoAi) return;
-    markMessagesAsRead();
+    markMessagesAsRead().then(() => {
+      // Scroll after marking read
+      setTimeout(() => scrollToBottom(false), 100);
+    });
   }, [user?.uid, userId, isEchoAi]);
 
   // ─── Fetch profiles ──────────────────────────────────────────
@@ -228,10 +249,6 @@ const ChatView = () => {
         .catch(console.error);
     }
   }, [userId, isEchoAi]);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
 
   // ─── File selection handler ─────────────────────────────────
   const handleFileSelect = (e) => {
@@ -306,6 +323,7 @@ const ChatView = () => {
       isUploading: true,
     };
     setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => scrollToBottom(true), 100);
 
     // ── Close preview overlay immediately ──
     setPreviewUrl(null);
@@ -341,6 +359,7 @@ const ChatView = () => {
             : m
         )
       );
+      setTimeout(() => scrollToBottom(true), 100);
 
       // Update userChats with media icon
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
@@ -414,6 +433,7 @@ const ChatView = () => {
         timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, userMsg]);
+      setTimeout(() => scrollToBottom(true), 100);
       setTimeout(() => {
         const aiMsg = {
           id: (Date.now() + 1).toString(),
@@ -422,6 +442,7 @@ const ChatView = () => {
           timestamp: Date.now(),
         };
         setMessages((prev) => [...prev, aiMsg]);
+        setTimeout(() => scrollToBottom(true), 100);
       }, 600);
       return;
     }
@@ -476,6 +497,7 @@ const ChatView = () => {
           return currentData;
         }
       });
+      setTimeout(() => scrollToBottom(true), 100);
     } catch (err) {
       console.error('Failed to send text:', err);
     }
@@ -562,6 +584,7 @@ const ChatView = () => {
 
   return (
     <div className="chat-view">
+    <VideoAudioProvider>
       <div className="messages-container">
         {loadingMessages && messages.length === 0 ? (
           <div className="chat-skeleton-list">
@@ -581,6 +604,7 @@ const ChatView = () => {
         )}
         <div ref={messagesEndRef} />
       </div>
+    </VideoAudioProvider>
 
       {/* ─── Input Bar ──────────────────────────────────────────── */}
       <form className="chat-input-container" onSubmit={handleSendText}>

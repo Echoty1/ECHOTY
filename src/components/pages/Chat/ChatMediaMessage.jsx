@@ -1,23 +1,27 @@
 // src/components/pages/Chat/ChatMediaMessage.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
+import { useVideoAudio } from '../../../contexts/VideoAudioContext';
 
 // ─── Fullscreen Video Player ─────────────────────────────────────
 const FullscreenVideoPlayer = ({ src, onClose }) => {
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
-    // Reset to start and pause (unmuted)
+    // Reset: start at 0, paused, unmuted
     video.currentTime = 0;
     video.muted = false;
     video.pause();
     setIsPlaying(false);
 
-    // Cleanup
+    video.preload = 'metadata';
+
     return () => {
       video.pause();
     };
@@ -25,62 +29,8 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
 
   const togglePlay = () => {
     const video = videoRef.current;
-    if (!video) return;
-    try {
-      if (video.paused) {
-        video.play();
-        setIsPlaying(true);
-      } else {
-        video.pause();
-        setIsPlaying(false);
-      }
-    } catch (err) {
-      console.warn('Play error:', err);
-    }
-  };
+    if (!video || error) return;
 
-  return ReactDOM.createPortal(
-    <div className="fullscreen-video-overlay" onClick={onClose}>
-      <div className="fullscreen-video-content" onClick={(e) => e.stopPropagation()}>
-        <video
-          ref={videoRef}
-          src={src}
-          playsInline
-          className="fullscreen-video"
-          onClick={togglePlay}
-        />
-        <button className="fullscreen-close-btn" onClick={onClose}>
-          <i className="fas fa-times" />
-        </button>
-        <button className="fullscreen-play-btn" onClick={togglePlay}>
-          <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`} />
-        </button>
-      </div>
-    </div>,
-    document.body
-  );
-};
-
-// ─── Custom Video Player (inline) ───────────────────────────────
-const VideoPlayer = ({ src, caption }) => {
-  const videoRef = useRef(null);
-  const [isMuted, setIsMuted] = useState(true);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
-  const [showFullscreen, setShowFullscreen] = useState(false);
-
-  // Auto-play muted on mount
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.muted = true;
-      videoRef.current.play().catch(() => {});
-      setIsMuted(true);
-    }
-  }, []);
-
-  const togglePlay = () => {
-    const video = videoRef.current;
-    if (!video) return;
     try {
       if (video.paused) {
         const promise = video.play();
@@ -101,24 +51,117 @@ const VideoPlayer = ({ src, caption }) => {
     }
   };
 
+  const handleCanPlay = () => {
+    setIsLoading(false);
+    setError(false);
+  };
+
+  const handleError = () => {
+    setError(true);
+    setIsLoading(false);
+  };
+
+  return ReactDOM.createPortal(
+    <div className="fullscreen-video-overlay" onClick={onClose}>
+      <div className="fullscreen-video-content" onClick={(e) => e.stopPropagation()}>
+        <video
+          ref={videoRef}
+          src={src}
+          playsInline
+          className="fullscreen-video"
+          onClick={togglePlay}
+          onCanPlay={handleCanPlay}
+          onError={handleError}
+          preload="metadata"
+        />
+        {isLoading && (
+          <div className="fullscreen-loading-spinner">
+            <i className="fas fa-spinner fa-spin" />
+            <span>Loading...</span>
+          </div>
+        )}
+        {error && (
+          <div className="fullscreen-error">
+            <i className="fas fa-exclamation-triangle" />
+            <span>Could not load video</span>
+            <button onClick={() => window.location.reload()}>Retry</button>
+          </div>
+        )}
+        {!isLoading && !error && (
+          <button className="fullscreen-play-btn" onClick={togglePlay}>
+            <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`} />
+          </button>
+        )}
+        <button className="fullscreen-close-btn" onClick={onClose}>
+          <i className="fas fa-times" />
+        </button>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+// ─── Inline Video Player (with global audio coordination) ──────
+const VideoPlayer = ({ videoId, src, caption }) => {
+  const videoRef = useRef(null);
+  const [isMuted, setIsMuted] = useState(true);
+  const [showFullscreen, setShowFullscreen] = useState(false);
+
+  // Get global audio context
+  const { activeUnmutedId, requestUnmute, muteAll } = useVideoAudio();
+
+  // Listen to global activeUnmutedId changes
+  useEffect(() => {
+    if (!videoRef.current) return;
+    // If there's an active unmuted video and it's not this one, force mute
+    if (activeUnmutedId !== null && activeUnmutedId !== videoId) {
+      videoRef.current.muted = true;
+      setIsMuted(true);
+    }
+    // If this video is the active one, ensure it's unmuted (if user requested unmute)
+    if (activeUnmutedId === videoId) {
+      videoRef.current.muted = false;
+      setIsMuted(false);
+    }
+  }, [activeUnmutedId, videoId]);
+
+  // Cleanup: if this component unmounts and it was the active one, clear it
+  useEffect(() => {
+    return () => {
+      if (activeUnmutedId === videoId) {
+        // We can't call requestUnmute(null) directly because it would affect other videos
+        // but we can let the global state know that this video is gone.
+        // However, the parent provider might still hold the id; we'll handle by checking if video exists.
+        // We'll just let the next interaction override it.
+      }
+    };
+  }, [activeUnmutedId, videoId]);
+
+  // Toggle mute on the inline video
   const toggleMute = (e) => {
     e.stopPropagation();
     const video = videoRef.current;
     if (!video) return;
-    video.muted = !video.muted;
-    setIsMuted(video.muted);
-    if (!video.muted && video.paused) {
-      try {
-        const promise = video.play();
-        if (promise !== undefined) {
-          promise.then(() => setIsPlaying(true)).catch(() => {});
-        }
-      } catch (err) {}
+
+    if (!isMuted) {
+      // Muting this video
+      video.muted = true;
+      setIsMuted(true);
+      if (activeUnmutedId === videoId) {
+        clearActive();
+      }
+    } else {
+      // Unmuting this video
+      video.muted = false;
+      setIsMuted(false);
+      requestUnmute(videoId);
     }
   };
 
-  const openFullscreen = (e) => {
-    e.stopPropagation();
+  // Tap the video opens fullscreen preview
+  const openFullscreen = () => {
+    // Mute all inline videos before opening preview
+    muteAll();
     setShowFullscreen(true);
   };
 
@@ -128,25 +171,19 @@ const VideoPlayer = ({ src, caption }) => {
         <video
           ref={videoRef}
           src={src}
-          loop
-          playsInline
-          muted={isMuted}
           className="chat-media-video"
-          onClick={(e) => e.stopPropagation()}
-          onLoadedData={() => setIsLoading(false)}
-          onPlay={() => setIsPlaying(true)}
-          onPause={() => setIsPlaying(false)}
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          controls={false}
         />
-        {isLoading && <div className="video-loading-spinner"><i className="fas fa-spinner fa-spin" /></div>}
-        {!isPlaying && !isLoading && (
-          <div className="video-play-icon">
-            <i className="fas fa-play-circle" />
-          </div>
-        )}
-        <div className="video-controls-overlay">
-          <button className="video-mute-btn" onClick={toggleMute}>
-            <i className={`fas ${isMuted ? 'fa-volume-mute' : 'fa-volume-up'}`} />
-          </button>
+        <button className="video-mute-btn-overlay" onClick={toggleMute}>
+          <i className={`fas ${isMuted ? 'fa-volume-mute' : 'fa-volume-up'}`} />
+        </button>
+        <div className="video-play-icon-overlay">
+          <i className="fas fa-play-circle" />
         </div>
       </div>
       {caption && <div className="chat-media-caption">{caption}</div>}
@@ -158,7 +195,7 @@ const VideoPlayer = ({ src, caption }) => {
   );
 };
 
-// ─── Image with Retry ────────────────────────────────────────────
+// ─── Image with Lightbox ─────────────────────────────────────────
 const ImageWithLightbox = ({ src, caption }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [loadError, setLoadError] = useState(false);
@@ -194,7 +231,7 @@ const ImageWithLightbox = ({ src, caption }) => {
             className="chat-media-image"
             loading="lazy"
             onError={handleImageError}
-            key={retryCount} // Force re-render on retry
+            key={retryCount}
           />
         )}
       </div>
@@ -217,10 +254,11 @@ const ImageWithLightbox = ({ src, caption }) => {
 
 // ─── Main Media Message Component ──────────────────────────────
 const ChatMediaMessage = ({ message }) => {
-  const { mediaType, mediaUrl, caption } = message;
+  const { mediaType, mediaUrl, caption, id } = message;
 
   if (mediaType === 'video') {
-    return <VideoPlayer src={mediaUrl} caption={caption} />;
+    // Pass the message id as a unique video identifier
+    return <VideoPlayer videoId={id} src={mediaUrl} caption={caption} />;
   }
 
   // image
