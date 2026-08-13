@@ -18,7 +18,6 @@ const WhatsNewPopup = ({ uid }) => {
           const currentVersion = data.version || '1.0.0';
           const storedVersion = localStorage.getItem('echo_changelog_version');
           if (storedVersion !== currentVersion) {
-            // Show popup
             setVersion(currentVersion);
             setMessageHtml(data.messageHtml || '<p>Welcome to the new version!</p>');
             setVisible(true);
@@ -26,7 +25,6 @@ const WhatsNewPopup = ({ uid }) => {
             setVisible(false);
           }
         } else {
-          // No changelog – don't show
           setVisible(false);
         }
       } catch (err) {
