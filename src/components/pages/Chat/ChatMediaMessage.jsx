@@ -2,6 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useVideoAudio } from '../../../contexts/VideoAudioContext';
+import { useCachedBlobUrl } from '../../../hooks/useCachedBlobUrl';
 
 // ─── Fullscreen Video Player ─────────────────────────────────────
 const FullscreenVideoPlayer = ({ src, onClose }) => {
@@ -11,6 +12,13 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
   const [error, setError] = useState(false);
 
   useEffect(() => {
+    document.body.classList.add('hide-bottom-nav');
+    return () => {
+      document.body.classList.remove('hide-bottom-nav');
+    };
+  }, []);
+
+  useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
 
@@ -18,7 +26,6 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
     video.muted = false;
     video.pause();
     setIsPlaying(false);
-
     video.preload = 'metadata';
 
     return () => {
@@ -72,6 +79,7 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
           onCanPlay={handleCanPlay}
           onError={handleError}
           preload="metadata"
+          crossOrigin="anonymous"
         />
         {isLoading && (
           <div className="fullscreen-loading-spinner">
@@ -100,15 +108,23 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
   );
 };
 
-// ─── Inline Video Player ──────────────────────────────────────
-const VideoPlayer = ({ videoId, src, caption }) => {
+// ─── Inline Video Player (with caching) ─────────────────────────
+const VideoPlayer = ({ videoId, src, caption, uploadProgress }) => {
   const videoRef = useRef(null);
   const [isMuted, setIsMuted] = useState(true);
   const [showFullscreen, setShowFullscreen] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const { activeUnmutedId, requestUnmute, muteAll } = useVideoAudio();
 
-  // Listen to global activeUnmutedId changes
+  // Use cached blob URL (only if it's a remote URL, not a blob)
+  const { blobUrl, isLoading: cacheLoading, error: cacheError } = useCachedBlobUrl(
+    src && !src.startsWith('blob:') ? src : null
+  );
+
+  // If it's a blob URL (upload preview), use it directly
+  const videoSrc = src && src.startsWith('blob:') ? src : (blobUrl || src);
+
   useEffect(() => {
     if (!videoRef.current) return;
     if (activeUnmutedId !== null && activeUnmutedId !== videoId) {
@@ -121,37 +137,39 @@ const VideoPlayer = ({ videoId, src, caption }) => {
     }
   }, [activeUnmutedId, videoId]);
 
-  // Toggle mute
   const toggleMute = (e) => {
     e.stopPropagation();
     const video = videoRef.current;
     if (!video) return;
 
     if (!isMuted) {
-      // Muting this video → clear global active
       video.muted = true;
       setIsMuted(true);
-      muteAll(); // clears activeUnmutedId
+      muteAll();
     } else {
-      // Unmuting this video → set as active
       video.muted = false;
       setIsMuted(false);
       requestUnmute(videoId);
     }
   };
 
-  // Tap video → fullscreen preview (mutes all inline first)
   const openFullscreen = () => {
     muteAll();
     setShowFullscreen(true);
   };
+
+  const handleLoadedMetadata = () => {
+    setIsLoading(false);
+  };
+
+  const progress = typeof uploadProgress === 'number' ? uploadProgress : null;
 
   return (
     <>
       <div className="chat-media-video-wrapper" onClick={openFullscreen}>
         <video
           ref={videoRef}
-          src={src}
+          src={videoSrc}
           className="chat-media-video"
           autoPlay
           loop
@@ -159,31 +177,61 @@ const VideoPlayer = ({ videoId, src, caption }) => {
           playsInline
           preload="metadata"
           controls={false}
+          onLoadedMetadata={handleLoadedMetadata}
+          crossOrigin="anonymous"
         />
+        {isLoading && (
+          <div className="video-loading-spinner">
+            <i className="fas fa-spinner fa-spin" />
+          </div>
+        )}
         <button className="video-mute-btn-overlay" onClick={toggleMute}>
           <i className={`fas ${isMuted ? 'fa-volume-mute' : 'fa-volume-up'}`} />
         </button>
         <div className="video-play-icon-overlay">
           <i className="fas fa-play-circle" />
         </div>
+        {progress !== null && progress < 100 && (
+          <div className="video-upload-progress">
+            <div className="progress-bar" style={{ width: `${progress}%` }} />
+            <span className="progress-text">{Math.round(progress)}%</span>
+          </div>
+        )}
       </div>
       {caption && <div className="chat-media-caption">{caption}</div>}
 
       {showFullscreen && (
-        <FullscreenVideoPlayer src={src} onClose={() => setShowFullscreen(false)} />
+        <FullscreenVideoPlayer src={videoSrc} onClose={() => setShowFullscreen(false)} />
       )}
     </>
   );
 };
 
-// ─── Image with Lightbox ─────────────────────────────────────────
+// ─── Image with Lightbox (with caching) ──────────────────────────
 const ImageWithLightbox = ({ src, caption }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
 
+  // Use cached blob URL for images too
+  const { blobUrl, isLoading: cacheLoading } = useCachedBlobUrl(
+    src && !src.startsWith('blob:') ? src : null
+  );
+  const imageSrc = src && src.startsWith('blob:') ? src : (blobUrl || src);
+
   const openLightbox = () => setLightboxOpen(true);
   const closeLightbox = () => setLightboxOpen(false);
+
+  useEffect(() => {
+    if (lightboxOpen) {
+      document.body.classList.add('hide-bottom-nav');
+    } else {
+      document.body.classList.remove('hide-bottom-nav');
+    }
+    return () => {
+      document.body.classList.remove('hide-bottom-nav');
+    };
+  }, [lightboxOpen]);
 
   const handleImageError = () => {
     setLoadError(true);
@@ -207,12 +255,13 @@ const ImageWithLightbox = ({ src, caption }) => {
           </div>
         ) : (
           <img
-            src={src}
+            src={imageSrc}
             alt={caption || 'Image'}
             className="chat-media-image"
             loading="lazy"
             onError={handleImageError}
             key={retryCount}
+            crossOrigin="anonymous"
           />
         )}
       </div>
@@ -221,7 +270,7 @@ const ImageWithLightbox = ({ src, caption }) => {
       {lightboxOpen && !loadError && (
         <div className="media-lightbox-overlay" onClick={closeLightbox}>
           <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()}>
-            <img src={src} alt={caption || 'Image'} className="media-lightbox-image" />
+            <img src={imageSrc} alt={caption || 'Image'} className="media-lightbox-image" />
             {caption && <div className="media-lightbox-caption">{caption}</div>}
             <button className="media-lightbox-close" onClick={closeLightbox}>
               <i className="fas fa-times" />
@@ -235,10 +284,10 @@ const ImageWithLightbox = ({ src, caption }) => {
 
 // ─── Main Media Message Component ──────────────────────────────
 const ChatMediaMessage = ({ message }) => {
-  const { mediaType, mediaUrl, caption, id } = message;
+  const { mediaType, mediaUrl, caption, id, uploadProgress } = message;
 
   if (mediaType === 'video') {
-    return <VideoPlayer videoId={id} src={mediaUrl} caption={caption} />;
+    return <VideoPlayer videoId={id} src={mediaUrl} caption={caption} uploadProgress={uploadProgress} />;
   }
 
   // image

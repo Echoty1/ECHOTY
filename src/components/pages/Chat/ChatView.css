@@ -36,7 +36,7 @@
   -webkit-overflow-scrolling: touch;
 }
 
-/* ─── Empty state (centered) ────────────────────────────────── */
+/* ─── Empty state ───────────────────────────────────────────── */
 .empty-chat-state {
   flex: 1;
   display: flex;
@@ -81,6 +81,7 @@
   font-size: 14px;
   line-height: 1.4;
   word-break: break-word;
+  transition: all 0.2s ease;
 }
 
 .message-bubble.own {
@@ -134,19 +135,11 @@
   margin-top: 4px;
 }
 
-/* ─── Custom video controls ────────────────────────────────── */
-.video-controls-overlay {
+/* ─── Inline video controls ────────────────────────────────── */
+.video-mute-btn-overlay {
   position: absolute;
-  bottom: 10px;
-  right: 10px;
-  display: flex;
-  gap: 8px;
-  pointer-events: none;
-}
-
-.video-controls-overlay button,
-.video-play-icon {
-  pointer-events: auto;
+  bottom: 12px;
+  right: 12px;
   background: rgba(0, 0, 0, 0.6);
   border: none;
   border-radius: 50%;
@@ -159,23 +152,29 @@
   cursor: pointer;
   font-size: 14px;
   backdrop-filter: blur(4px);
-  transition: opacity 0.2s;
+  transition: background 0.2s;
+  z-index: 2;
+  pointer-events: auto;
 }
 
-.video-play-icon {
+.video-mute-btn-overlay:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.video-play-icon-overlay {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  width: 48px;
-  height: 48px;
-  font-size: 28px;
-  opacity: 0.6;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 56px;
+  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
   pointer-events: none;
+  transition: transform 0.2s;
 }
 
-.video-controls-overlay button:hover {
-  background: rgba(255, 255, 255, 0.2);
+.chat-media-video-wrapper:hover .video-play-icon-overlay {
+  transform: translate(-50%, -50%) scale(1.05);
 }
 
 .video-loading-spinner {
@@ -185,6 +184,39 @@
   transform: translate(-50%, -50%);
   color: #fff;
   font-size: 28px;
+}
+
+/* ─── Video upload progress bar ────────────────────────────── */
+.video-upload-progress {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: rgba(255, 255, 255, 0.15);
+  overflow: hidden;
+  z-index: 3;
+}
+
+.video-upload-progress .progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #6C3CE1, #EC4899);
+  transition: width 0.3s ease;
+  border-radius: 2px;
+}
+
+.video-upload-progress .progress-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  background: rgba(0, 0, 0, 0.5);
+  padding: 2px 8px;
+  border-radius: 10px;
 }
 
 /* ─── Lightbox ────────────────────────────────────────────────── */
@@ -254,7 +286,7 @@
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.95);
-  z-index: 99999;
+  z-index: 999999; /* higher than bottom nav */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -317,11 +349,59 @@
   align-items: center;
   justify-content: center;
   backdrop-filter: blur(4px);
-  transition: transform 0.2s;
+  transition: transform 0.2s, background 0.2s;
 }
 
 .fullscreen-play-btn:hover {
   transform: translateX(-50%) scale(1.1);
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.fullscreen-loading-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #fff;
+  font-size: 18px;
+}
+
+.fullscreen-loading-spinner i {
+  font-size: 40px;
+  opacity: 0.7;
+}
+
+.fullscreen-error {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: #fff;
+  font-size: 16px;
+  text-align: center;
+}
+
+.fullscreen-error i {
+  font-size: 40px;
+  color: #ef4444;
+}
+
+.fullscreen-error button {
+  background: #6C3CE1;
+  border: none;
+  color: #fff;
+  padding: 8px 20px;
+  border-radius: 20px;
+  cursor: pointer;
+  font-weight: 600;
 }
 
 /* ─── Image Error Placeholder ────────────────────────────────── */
@@ -357,7 +437,7 @@
   background: #7C4CE1;
 }
 
-/* ─── Media Preview Overlay (portal) ────────────────────────── */
+/* ─── Media Preview Overlay (pre‑send) ────────────────────────── */
 .media-preview-overlay {
   position: fixed;
   bottom: 0;
@@ -509,7 +589,7 @@
   100% { stroke-dashoffset: -125; }
 }
 
-/* ─── Input bar with attachment button ──────────────────────── */
+/* ─── Input bar ──────────────────────────────────────────────── */
 .chat-input-container {
   flex-shrink: 0;
   display: flex;
@@ -572,7 +652,150 @@
   cursor: not-allowed;
 }
 
-/* ─── Responsive ────────────────────────────────────────────── */
+/* ─── Delete button (always visible for own messages) ────────── */
+.message-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.message-delete-btn {
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  background: rgba(0, 0, 0, 0.5);
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ef4444;
+  font-size: 12px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s, background 0.2s;
+  z-index: 5;
+  backdrop-filter: blur(4px);
+}
+
+.message-delete-btn:hover {
+  opacity: 1;
+  background: rgba(239, 68, 68, 0.2);
+}
+
+/* ─── Deletion animation ──────────────────────────────────────── */
+.message-bubble.deleting {
+  animation: deleteShrink 0.3s ease forwards;
+}
+
+@keyframes deleteShrink {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.95); }
+  100% { opacity: 0; transform: scale(0.8); max-height: 0; padding: 0; margin: 0; overflow: hidden; }
+}
+
+/* ─── Delete Confirmation Modal ────────────────────────────────── */
+.delete-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  animation: fadeIn 0.2s ease;
+}
+
+.delete-modal-content {
+  background: #1a1a24;
+  border-radius: 20px;
+  padding: 32px 28px 24px;
+  max-width: 380px;
+  width: 90%;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+  animation: modalScale 0.2s ease;
+}
+
+.delete-modal-icon {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+  font-size: 24px;
+  color: #ef4444;
+}
+
+.delete-modal-content h3 {
+  color: #fff;
+  font-size: 18px;
+  margin: 0 0 8px;
+}
+
+.delete-modal-content p {
+  color: #aaa;
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0 0 20px;
+}
+
+.delete-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.delete-modal-btn {
+  padding: 10px 24px;
+  border-radius: 30px;
+  border: none;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 100px;
+}
+
+.delete-modal-btn.cancel {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ccc;
+}
+
+.delete-modal-btn.cancel:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.delete-modal-btn.confirm {
+  background: #ef4444;
+  color: #fff;
+}
+
+.delete-modal-btn.confirm:hover {
+  background: #dc2626;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes modalScale {
+  from { transform: scale(0.95); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+/* ─── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 480px) {
   .message-bubble {
     max-width: 85%;
@@ -613,121 +836,110 @@
   .empty-chat-state p {
     font-size: 14px;
   }
+  .delete-modal-content {
+    padding: 24px 20px;
+  }
+  .delete-modal-btn {
+    min-width: 80px;
+    padding: 8px 16px;
+    font-size: 13px;
+  }
 }
 
-/* ─── Inline video: mute button overlay ───────────────────────── */
-.video-mute-btn-overlay {
-  position: absolute;
-  bottom: 12px;
-  right: 12px;
-  background: rgba(0, 0, 0, 0.6);
-  border: none;
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
+/* Touch devices: no special menu – button is always visible */
+
+/* ─── Enhanced upload animation ───────────────────────────────── */
+.media-upload-loading {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
-  cursor: pointer;
-  font-size: 14px;
-  backdrop-filter: blur(4px);
-  transition: background 0.2s;
-  z-index: 2;
-  pointer-events: auto;
+  padding: 20px;
+  min-height: 160px;
+  min-width: 160px;
+  position: relative;
 }
 
-.video-mute-btn-overlay:hover {
-  background: rgba(255, 255, 255, 0.2);
+.upload-spinner {
+  position: relative;
+  width: 80px;
+  height: 80px;
 }
 
-/* ─── Play icon overlay (inline) ──────────────────────────────── */
-.video-play-icon-overlay {
+.spinner-ring {
+  animation: spin 1s linear infinite;
+  transform-origin: center;
+}
+
+.spinner-path {
+  stroke: #6C3CE1;
+  stroke-dasharray: 150;
+  stroke-dashoffset: 150;
+  animation: dash 1.5s ease-in-out infinite;
+}
+
+.upload-progress-text {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  color: rgba(255, 255, 255, 0.85);
-  font-size: 56px;
-  text-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
-  pointer-events: none;
-  transition: transform 0.2s;
-}
-
-.chat-media-video-wrapper:hover .video-play-icon-overlay {
-  transform: translate(-50%, -50%) scale(1.05);
-}
-
-/* ─── Fullscreen video loading & error ────────────────────────── */
-.fullscreen-loading-spinner {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  color: #fff;
-  font-size: 18px;
-}
-
-.fullscreen-loading-spinner i {
-  font-size: 40px;
-  opacity: 0.7;
-}
-
-.fullscreen-error {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
   color: #fff;
   font-size: 16px;
-  text-align: center;
+  font-weight: 700;
+  text-shadow: 0 2px 8px rgba(0,0,0,0.6);
 }
 
-.fullscreen-error i {
-  font-size: 40px;
-  color: #ef4444;
-}
-
-.fullscreen-error button {
-  background: #6C3CE1;
-  border: none;
-  color: #fff;
-  padding: 8px 20px;
-  border-radius: 20px;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-/* ─── Fullscreen play button (no mute button) ─────────────────── */
-.fullscreen-play-btn {
+/* ─── Pulsing glow behind the spinner ──────────────────────────── */
+.upload-spinner::before {
+  content: '';
   position: absolute;
-  bottom: 30px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: rgba(0, 0, 0, 0.6);
-  border: none;
-  color: #fff;
-  width: 56px;
-  height: 56px;
+  inset: -10px;
   border-radius: 50%;
-  font-size: 28px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  backdrop-filter: blur(4px);
-  transition: transform 0.2s, background 0.2s;
+  background: radial-gradient(circle, rgba(108,60,225,0.2), transparent 70%);
+  animation: pulseGlow 1.5s ease-in-out infinite;
 }
 
-.fullscreen-play-btn:hover {
-  transform: translateX(-50%) scale(1.1);
-  background: rgba(255, 255, 255, 0.2);
+@keyframes pulseGlow {
+  0% { transform: scale(0.9); opacity: 0.3; }
+  50% { transform: scale(1.1); opacity: 0.8; }
+  100% { transform: scale(0.9); opacity: 0.3; }
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+@keyframes dash {
+  0% { stroke-dashoffset: 150; }
+  50% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -150; }
+}
+
+/* ─── Shimmer overlay for media while uploading ────────────────── */
+.media-upload-shimmer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(
+    120deg,
+    rgba(255,255,255,0) 30%,
+    rgba(255,255,255,0.05) 50%,
+    rgba(255,255,255,0) 70%
+  );
+  background-size: 200% 100%;
+  animation: shimmerMove 1.8s ease-in-out infinite;
+  border-radius: 12px;
+  z-index: 2;
+  pointer-events: none;
+}
+
+@keyframes shimmerMove {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ─── For media items, keep the loading spinner centered ──────── */
+.message-bubble.own .media-upload-loading {
+  background: rgba(108,60,225,0.15);
+  border-radius: 12px;
 }

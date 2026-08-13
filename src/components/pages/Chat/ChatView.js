@@ -10,6 +10,7 @@ import {
   set,
   update,
   get,
+  remove,
   serverTimestamp,
   runTransaction,
 } from 'firebase/database';
@@ -18,8 +19,9 @@ import { SkeletonMessage } from '../../common/SkeletonLoader';
 import { getCache, setCache } from '../../../services/cacheService';
 import { clearMessageCache } from '../../../services/messageCache';
 import ChatMediaMessage from './ChatMediaMessage';
-import './ChatView.css';
+import MessageMenu from './MessageMenu';
 import { VideoAudioProvider } from '../../../contexts/VideoAudioContext';
+import './ChatView.css';
 
 const ECHO_AI_AVATAR = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
 
@@ -44,6 +46,7 @@ const ChatView = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const [deletingMessageId, setDeletingMessageId] = useState(null);
 
   const isEchoAi = userId === 'echo_ai_assistant';
 
@@ -68,13 +71,12 @@ const ChatView = () => {
   const cacheKey = `messages_${user?.uid}_${userId}`;
   const isMounted = useRef(true);
 
-  // ─── Helper: Mark all messages as read for this chat ──────
+  // ─── Helper: Mark all messages as read ──────────────────────
   const markMessagesAsRead = async () => {
     if (!user?.uid || !userId || isEchoAi) return;
     const cId = [user.uid, userId].sort().join('_');
 
     try {
-      // 1. Mark all messages as read
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const snapshot = await get(messagesRef);
       if (!snapshot.exists()) return;
@@ -107,7 +109,6 @@ const ChatView = () => {
 
       await update(ref(db), updates);
 
-      // 2. Reset unreadCount and update lastMessage in userChats
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
       await set(myChatRef, {
         id: userId,
@@ -119,12 +120,77 @@ const ChatView = () => {
         unreadCount: 0,
       });
 
-      // 3. Also clear the cache for this chat to force re‑fetch
       clearMessageCache(cId);
-      // Clear the chat list cache as well (optional)
-      // setCache(`chats_${user.uid}`, null); // heavy, skip
     } catch (err) {
       console.warn('markMessagesAsRead error:', err);
+    }
+  };
+
+  // ─── Delete a message ──────────────────────────────────────
+  const handleDeleteMessage = async (messageId) => {
+    if (!user?.uid || !userId || isEchoAi) return;
+
+    // Start deletion animation
+    setDeletingMessageId(messageId);
+
+    // Wait for animation to complete (300ms)
+    await new Promise(resolve => setTimeout(resolve, 300));
+
+    // Now actually delete from database
+    const cId = [user.uid, userId].sort().join('_');
+
+    try {
+      await remove(ref(db, `chats/${cId}/messages/${messageId}`));
+
+      // Update userChats with new latest message
+      const messagesRef = ref(db, `chats/${cId}/messages`);
+      const snapshot = await get(messagesRef);
+      let latestMsg = '';
+      let latestSender = '';
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const msgs = Object.entries(data).map(([key, val]) => ({ key, ...val }));
+        msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        const latest = msgs[msgs.length - 1];
+        if (latest) {
+          if (latest.type === 'media') {
+            latestMsg = latest.mediaType === 'video' ? '🎬 Video' : '📷 Image';
+          } else {
+            latestMsg = latest.text || '';
+          }
+          latestSender = latest.senderId || '';
+        }
+      }
+
+      const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
+      await set(myChatRef, {
+        id: userId,
+        partnerName: location.state?.userName || partnerProfile?.name || 'User',
+        partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
+        lastMessage: latestMsg,
+        lastSenderId: latestSender,
+        lastUpdated: Date.now(),
+        unreadCount: 0,
+      });
+
+      const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+      const partnerSnapshot = await get(partnerChatRef);
+      if (partnerSnapshot.exists()) {
+        const partnerData = partnerSnapshot.val();
+        await set(partnerChatRef, {
+          ...partnerData,
+          lastMessage: latestMsg,
+          lastSenderId: latestSender,
+          lastUpdated: Date.now(),
+        });
+      }
+
+      clearMessageCache(cId);
+    } catch (err) {
+      console.error('Failed to delete message:', err);
+      alert('Failed to delete message. Please try again.');
+    } finally {
+      setDeletingMessageId(null);
     }
   };
 
@@ -144,7 +210,6 @@ const ChatView = () => {
     if (cached && Array.isArray(cached) && cached.length > 0) {
       setMessages(cached);
       setLoadingMessages(false);
-      // Scroll to bottom after cache loads
       setTimeout(() => scrollToBottom(false), 50);
     }
 
@@ -166,10 +231,8 @@ const ChatView = () => {
       setCache(cacheKey, newMessages);
       clearMessageCache(cId);
 
-      // Scroll to bottom when new messages arrive
       setTimeout(() => scrollToBottom(true), 100);
 
-      // Auto‑mark read for incoming messages if we are the receiver
       const latest = newMessages[newMessages.length - 1];
       if (
         latest &&
@@ -210,11 +273,10 @@ const ChatView = () => {
     };
   }, [user?.uid, userId, cacheKey]);
 
-  // ─── Mark as read on mount and when userId changes ──────────
+  // ─── Mark as read on mount ──────────────────────────────────
   useEffect(() => {
     if (!user?.uid || !userId || isEchoAi) return;
     markMessagesAsRead().then(() => {
-      // Scroll after marking read
       setTimeout(() => scrollToBottom(false), 100);
     });
   }, [user?.uid, userId, isEchoAi]);
@@ -306,37 +368,45 @@ const ChatView = () => {
     const cId = [user.uid, userId].sort().join('_');
     const timestamp = Date.now();
 
-    // ── 1. Optimistic message (local) ──
     const tempId = `temp_${Date.now()}`;
     const mediaType = selectedFile.type.startsWith('video/') ? 'video' : 'image';
     const mediaIcon = mediaType === 'video' ? '🎬 Video' : '📷 Image';
+    const blobUrl = previewUrl; // keep this for the optimistic message
+
     const optimisticMsg = {
       id: tempId,
       senderId: user.uid,
       receiverId: userId,
       type: 'media',
       mediaType,
-      mediaUrl: previewUrl,
+      mediaUrl: blobUrl, // use the blob URL
       caption: captionText.trim(),
       timestamp: Date.now(),
       isRead: false,
       isUploading: true,
+      uploadProgress: 0,
     };
     setMessages((prev) => [...prev, optimisticMsg]);
     setTimeout(() => scrollToBottom(true), 100);
 
-    // ── Close preview overlay immediately ──
+    // Close the preview overlay (but keep the blob URL)
     setPreviewUrl(null);
     setSelectedFile(null);
     setCaptionText('');
 
     try {
-      // ── 2. Upload to Cloudinary ──
+      // Upload to Cloudinary with progress
       const downloadURL = await uploadToCloudinary(selectedFile, (progress) => {
         setUploadProgress(progress);
+        // Update the optimistic message's uploadProgress
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === tempId ? { ...m, uploadProgress: progress } : m
+          )
+        );
       });
 
-      // ── 3. Write to database with real URL ──
+      // Write real message to DB
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const newMsgRef = push(messagesRef);
       const realMsg = {
@@ -351,17 +421,17 @@ const ChatView = () => {
       };
       await set(newMsgRef, realMsg);
 
-      // Update optimistic message with real data
+      // Replace optimistic with real message
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId
-            ? { ...realMsg, id: newMsgRef.key, isUploading: false }
+            ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100 }
             : m
         )
       );
       setTimeout(() => scrollToBottom(true), 100);
 
-      // Update userChats with media icon
+      // Update userChats
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
       await set(myChatRef, {
         id: userId,
@@ -396,10 +466,11 @@ const ChatView = () => {
         }
       });
 
-      // Clear cache
       clearMessageCache(cId);
       setIsUploading(false);
       setUploadProgress(0);
+      // Revoke blob URL after upload
+      URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error('Upload failed:', err);
       setIsUploading(false);
@@ -506,39 +577,47 @@ const ChatView = () => {
   const displayName = isEchoAi
     ? 'ECHO AI'
     : sanitizeName(location.state?.userName || partnerProfile?.name, userId);
-
+  
   // ─── Render message bubble ──────────────────────────────────
   const renderMessage = (msg) => {
     const isOwn = msg.senderId === user?.uid;
+    const isDeleting = msg.id === deletingMessageId;
 
     if (msg.type === 'media') {
+      const content = msg.isUploading ? (
+        <div className="media-upload-loading">
+          <div className="upload-spinner">
+            <svg className="spinner-ring" viewBox="0 0 50 50">
+              <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
+            </svg>
+            <span className="upload-progress-text">{Math.round(uploadProgress)}%</span>
+          </div>
+          <div className="media-upload-shimmer" />
+        </div>
+      ) : (
+        <ChatMediaMessage message={msg} />
+      );
+
       return (
-        <div className={`message-bubble ${isOwn ? 'own' : 'partner'}`}>
-          {msg.isUploading ? (
-            <div className="media-upload-loading">
-              <div className="upload-spinner">
-                <svg className="spinner-ring" viewBox="0 0 50 50">
-                  <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
-                </svg>
-                <span className="upload-progress-text">{Math.round(uploadProgress)}%</span>
-              </div>
-            </div>
-          ) : (
-            <ChatMediaMessage message={msg} />
-          )}
+        <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}>
+          <MessageMenu isOwn={isOwn} onDelete={() => handleDeleteMessage(msg.id)}>
+            {content}
+          </MessageMenu>
         </div>
       );
     }
 
     // text message
     return (
-      <div className={`message-bubble ${isOwn ? 'own' : 'partner'}`}>
-        <div className="message-text">{msg.text}</div>
+      <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}>
+        <MessageMenu isOwn={isOwn} onDelete={() => handleDeleteMessage(msg.id)}>
+          <div className="message-text">{msg.text}</div>
+        </MessageMenu>
       </div>
     );
   };
 
-  // ─── Media Preview Overlay (portal) ────────────────────────────
+  // ─── Media Preview Overlay ────────────────────────────────────
   const renderPreviewOverlay = () => {
     if (!previewUrl) return null;
 
@@ -584,27 +663,27 @@ const ChatView = () => {
 
   return (
     <div className="chat-view">
-    <VideoAudioProvider>
-      <div className="messages-container">
-        {loadingMessages && messages.length === 0 ? (
-          <div className="chat-skeleton-list">
-            <SkeletonMessage isOwn={false} />
-            <SkeletonMessage isOwn={true} />
-            <SkeletonMessage isOwn={false} />
-          </div>
-        ) : messages.length === 0 ? (
-          <div className="empty-chat-state">
-            <i className="fas fa-paper-plane empty-icon" />
-            <p>No messages yet. Say hello!</p>
-          </div>
-        ) : (
-          messages.map((msg) => (
-            <React.Fragment key={msg.id}>{renderMessage(msg)}</React.Fragment>
-          ))
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-    </VideoAudioProvider>
+      <VideoAudioProvider>
+        <div className="messages-container">
+          {loadingMessages && messages.length === 0 ? (
+            <div className="chat-skeleton-list">
+              <SkeletonMessage isOwn={false} />
+              <SkeletonMessage isOwn={true} />
+              <SkeletonMessage isOwn={false} />
+            </div>
+          ) : messages.length === 0 ? (
+            <div className="empty-chat-state">
+              <i className="fas fa-paper-plane empty-icon" />
+              <p>No messages yet. Say hello!</p>
+            </div>
+          ) : (
+            messages.map((msg) => (
+              <React.Fragment key={msg.id}>{renderMessage(msg)}</React.Fragment>
+            ))
+          )}
+          <div ref={messagesEndRef} />
+        </div>
+      </VideoAudioProvider>
 
       {/* ─── Input Bar ──────────────────────────────────────────── */}
       <form className="chat-input-container" onSubmit={handleSendText}>
