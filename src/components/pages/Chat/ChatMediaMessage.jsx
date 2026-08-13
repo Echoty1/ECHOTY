@@ -14,7 +14,6 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
     const video = videoRef.current;
     if (!video) return;
 
-    // Reset: start at 0, paused, unmuted
     video.currentTime = 0;
     video.muted = false;
     video.pause();
@@ -101,66 +100,48 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
   );
 };
 
-// ─── Inline Video Player (with global audio coordination) ──────
+// ─── Inline Video Player ──────────────────────────────────────
 const VideoPlayer = ({ videoId, src, caption }) => {
   const videoRef = useRef(null);
   const [isMuted, setIsMuted] = useState(true);
   const [showFullscreen, setShowFullscreen] = useState(false);
 
-  // Get global audio context
   const { activeUnmutedId, requestUnmute, muteAll } = useVideoAudio();
 
   // Listen to global activeUnmutedId changes
   useEffect(() => {
     if (!videoRef.current) return;
-    // If there's an active unmuted video and it's not this one, force mute
     if (activeUnmutedId !== null && activeUnmutedId !== videoId) {
       videoRef.current.muted = true;
       setIsMuted(true);
     }
-    // If this video is the active one, ensure it's unmuted (if user requested unmute)
     if (activeUnmutedId === videoId) {
       videoRef.current.muted = false;
       setIsMuted(false);
     }
   }, [activeUnmutedId, videoId]);
 
-  // Cleanup: if this component unmounts and it was the active one, clear it
-  useEffect(() => {
-    return () => {
-      if (activeUnmutedId === videoId) {
-        // We can't call requestUnmute(null) directly because it would affect other videos
-        // but we can let the global state know that this video is gone.
-        // However, the parent provider might still hold the id; we'll handle by checking if video exists.
-        // We'll just let the next interaction override it.
-      }
-    };
-  }, [activeUnmutedId, videoId]);
-
-  // Toggle mute on the inline video
+  // Toggle mute
   const toggleMute = (e) => {
     e.stopPropagation();
     const video = videoRef.current;
     if (!video) return;
 
     if (!isMuted) {
-      // Muting this video
+      // Muting this video → clear global active
       video.muted = true;
       setIsMuted(true);
-      if (activeUnmutedId === videoId) {
-        clearActive();
-      }
+      muteAll(); // clears activeUnmutedId
     } else {
-      // Unmuting this video
+      // Unmuting this video → set as active
       video.muted = false;
       setIsMuted(false);
       requestUnmute(videoId);
     }
   };
 
-  // Tap the video opens fullscreen preview
+  // Tap video → fullscreen preview (mutes all inline first)
   const openFullscreen = () => {
-    // Mute all inline videos before opening preview
     muteAll();
     setShowFullscreen(true);
   };
@@ -257,7 +238,6 @@ const ChatMediaMessage = ({ message }) => {
   const { mediaType, mediaUrl, caption, id } = message;
 
   if (mediaType === 'video') {
-    // Pass the message id as a unique video identifier
     return <VideoPlayer videoId={id} src={mediaUrl} caption={caption} />;
   }
 

@@ -10,16 +10,12 @@ export const VideoAudioProvider = ({ children }) => {
     setActiveUnmutedId(videoId);
   }, []);
 
-  const clearActive = useCallback(() => {
-    setActiveUnmutedId(null);
-  }, []);
-
   const muteAll = useCallback(() => {
     setActiveUnmutedId(null);
   }, []);
 
   return (
-    <VideoAudioContext.Provider value={{ activeUnmutedId, requestUnmute, clearActive, muteAll }}>
+    <VideoAudioContext.Provider value={{ activeUnmutedId, requestUnmute, muteAll }}>
       {children}
     </VideoAudioContext.Provider>
   );
