@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 
-const MessageMenu = ({ children, isOwn, onDelete }) => {
+const MessageMenu = ({ children, isOwn, onDelete, onReply }) => {
   const [showActions, setShowActions] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const containerRef = useRef(null);
@@ -25,7 +25,12 @@ const MessageMenu = ({ children, isOwn, onDelete }) => {
     };
   }, [isTouchDevice]);
 
-  if (!isOwn) {
+  // Determine which actions are available
+  const showDelete = isOwn && typeof onDelete === 'function';
+  const showReply = !isOwn && typeof onReply === 'function';
+  const hasActions = showDelete || showReply;
+
+  if (!hasActions) {
     return <>{children}</>;
   }
 
@@ -39,7 +44,11 @@ const MessageMenu = ({ children, isOwn, onDelete }) => {
   const handleMouseLeave = (e) => {
     if (!isTouchDevice) {
       const related = e.relatedTarget;
-      if (containerRef.current && !containerRef.current.contains(related)) {
+      if (related && related.nodeType === 1 && containerRef.current) {
+        if (!containerRef.current.contains(related)) {
+          setShowActions(false);
+        }
+      } else {
         setShowActions(false);
       }
     }
@@ -53,6 +62,14 @@ const MessageMenu = ({ children, isOwn, onDelete }) => {
     }
   };
 
+  const handleReplyClick = (e) => {
+    e.stopPropagation();
+    setShowActions(false);
+    if (typeof onReply === 'function') {
+      onReply();
+    }
+  };
+
   const handleDeleteClick = (e) => {
     e.stopPropagation();
     setShowActions(false);
@@ -61,7 +78,9 @@ const MessageMenu = ({ children, isOwn, onDelete }) => {
 
   const handleConfirmDelete = () => {
     setShowConfirm(false);
-    onDelete();
+    if (typeof onDelete === 'function') {
+      onDelete();
+    }
   };
 
   return (
@@ -74,9 +93,16 @@ const MessageMenu = ({ children, isOwn, onDelete }) => {
     >
       {children}
       <div className={`message-actions ${showActions ? 'visible' : ''}`}>
-        <button className="message-delete-btn" onClick={handleDeleteClick}>
-          <i className="fas fa-trash-alt" />
-        </button>
+        {showReply && (
+          <button className="message-action-btn reply" onClick={handleReplyClick}>
+            <i className="fas fa-reply" />
+          </button>
+        )}
+        {showDelete && (
+          <button className="message-action-btn delete" onClick={handleDeleteClick}>
+            <i className="fas fa-trash-alt" />
+          </button>
+        )}
       </div>
       <DeleteConfirmationModal
         isOpen={showConfirm}

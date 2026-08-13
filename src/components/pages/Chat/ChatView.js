@@ -20,12 +20,13 @@ import { getCache, setCache } from '../../../services/cacheService';
 import { clearMessageCache } from '../../../services/messageCache';
 import ChatMediaMessage from './ChatMediaMessage';
 import MessageMenu from './MessageMenu';
+import ReplyPreview from './ReplyPreview';
+import RepliedMessage from './RepliedMessage';
 import { VideoAudioProvider } from '../../../contexts/VideoAudioContext';
 import './ChatView.css';
 
 const ECHO_AI_AVATAR = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
 
-// ─── Cloudinary Configuration ────────────────────────────────────
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
 
@@ -64,12 +65,15 @@ const ChatView = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef(null);
   const captionInputRef = useRef(null);
+  const inputRef = useRef(null);
 
   const messagesEndRef = useRef(null);
   const chatId = useRef(null);
 
   const cacheKey = `messages_${user?.uid}_${userId}`;
   const isMounted = useRef(true);
+  const [replyTo, setReplyTo] = useState(null);
+  const messageRefs = useRef({});
 
   // ─── Helper: Mark all messages as read ──────────────────────
   const markMessagesAsRead = async () => {
@@ -126,23 +130,63 @@ const ChatView = () => {
     }
   };
 
+  // ─── Start a reply ──────────────────────────────────────────
+  const handleReply = (msg) => {
+    if (msg.senderId === user?.uid) return;
+
+    const senderName = partnerProfile?.name || 'User';
+    let textSnippet;
+    if (msg.type === 'media') {
+      textSnippet = msg.mediaType === 'video' ? '🎬 Video' : '📷 Image';
+    } else {
+      textSnippet = msg.text || 'Message';
+    }
+
+    setReplyTo({
+      messageId: msg.id,
+      senderName: senderName,
+      messageType: msg.type || 'text',
+      textSnippet: textSnippet,
+    });
+
+    setTimeout(() => {
+      if (inputRef.current) {
+        inputRef.current.focus();
+      }
+    }, 100);
+  };
+
+  // ─── Cancel reply ───────────────────────────────────────────
+  const cancelReply = () => {
+    setReplyTo(null);
+  };
+
+  // ─── Scroll to original message ─────────────────────────────
+  const scrollToMessage = (messageId) => {
+    const element = messageRefs.current[messageId];
+    if (element) {
+      element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      element.classList.add('highlight-flash');
+      setTimeout(() => {
+        element.classList.remove('highlight-flash');
+      }, 2000);
+    } else {
+      scrollToBottom(true);
+    }
+  };
+
   // ─── Delete a message ──────────────────────────────────────
   const handleDeleteMessage = async (messageId) => {
     if (!user?.uid || !userId || isEchoAi) return;
 
-    // Start deletion animation
     setDeletingMessageId(messageId);
-
-    // Wait for animation to complete (300ms)
     await new Promise(resolve => setTimeout(resolve, 300));
 
-    // Now actually delete from database
     const cId = [user.uid, userId].sort().join('_');
 
     try {
       await remove(ref(db, `chats/${cId}/messages/${messageId}`));
 
-      // Update userChats with new latest message
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const snapshot = await get(messagesRef);
       let latestMsg = '';
@@ -371,7 +415,7 @@ const ChatView = () => {
     const tempId = `temp_${Date.now()}`;
     const mediaType = selectedFile.type.startsWith('video/') ? 'video' : 'image';
     const mediaIcon = mediaType === 'video' ? '🎬 Video' : '📷 Image';
-    const blobUrl = previewUrl; // keep this for the optimistic message
+    const blobUrl = previewUrl;
 
     const optimisticMsg = {
       id: tempId,
@@ -379,7 +423,7 @@ const ChatView = () => {
       receiverId: userId,
       type: 'media',
       mediaType,
-      mediaUrl: blobUrl, // use the blob URL
+      mediaUrl: blobUrl,
       caption: captionText.trim(),
       timestamp: Date.now(),
       isRead: false,
@@ -389,16 +433,13 @@ const ChatView = () => {
     setMessages((prev) => [...prev, optimisticMsg]);
     setTimeout(() => scrollToBottom(true), 100);
 
-    // Close the preview overlay (but keep the blob URL)
     setPreviewUrl(null);
     setSelectedFile(null);
     setCaptionText('');
 
     try {
-      // Upload to Cloudinary with progress
       const downloadURL = await uploadToCloudinary(selectedFile, (progress) => {
         setUploadProgress(progress);
-        // Update the optimistic message's uploadProgress
         setMessages((prev) =>
           prev.map((m) =>
             m.id === tempId ? { ...m, uploadProgress: progress } : m
@@ -406,7 +447,6 @@ const ChatView = () => {
         );
       });
 
-      // Write real message to DB
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const newMsgRef = push(messagesRef);
       const realMsg = {
@@ -419,9 +459,19 @@ const ChatView = () => {
         timestamp: serverTimestamp(),
         isRead: false,
       };
+
+      if (replyTo) {
+        realMsg.replyTo = {
+          messageId: replyTo.messageId,
+          senderName: replyTo.senderName,
+          messageType: replyTo.messageType,
+          textSnippet: replyTo.textSnippet,
+        };
+        setReplyTo(null);
+      }
+
       await set(newMsgRef, realMsg);
 
-      // Replace optimistic with real message
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId
@@ -431,7 +481,6 @@ const ChatView = () => {
       );
       setTimeout(() => scrollToBottom(true), 100);
 
-      // Update userChats
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
       await set(myChatRef, {
         id: userId,
@@ -469,7 +518,6 @@ const ChatView = () => {
       clearMessageCache(cId);
       setIsUploading(false);
       setUploadProgress(0);
-      // Revoke blob URL after upload
       URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error('Upload failed:', err);
@@ -524,14 +572,28 @@ const ChatView = () => {
 
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const newMsgRef = push(messagesRef);
-      await set(newMsgRef, {
+      const msgData = {
         senderId: user.uid,
         receiverId: userId,
         type: 'text',
         text: textToSend,
         timestamp: serverTimestamp(),
         isRead: false,
-      });
+      };
+
+      const currentReply = replyTo;
+      if (currentReply) {
+        // ✅ Use the SAME textSnippet that was shown in the preview
+        msgData.replyTo = {
+          messageId: currentReply.messageId,
+          senderName: currentReply.senderName,
+          messageType: currentReply.messageType,
+          textSnippet: currentReply.textSnippet,
+        };
+        setReplyTo(null);
+      }
+
+      await set(newMsgRef, msgData);
 
       clearMessageCache(cId);
 
@@ -577,11 +639,18 @@ const ChatView = () => {
   const displayName = isEchoAi
     ? 'ECHO AI'
     : sanitizeName(location.state?.userName || partnerProfile?.name, userId);
-  
+
   // ─── Render message bubble ──────────────────────────────────
   const renderMessage = (msg) => {
     const isOwn = msg.senderId === user?.uid;
     const isDeleting = msg.id === deletingMessageId;
+
+    const replyToDisplay = msg.replyTo ? {
+      ...msg.replyTo,
+      senderName: msg.replyTo.senderName || 'User',
+    } : null;
+
+    const showReply = !isOwn && !isEchoAi;
 
     if (msg.type === 'media') {
       const content = msg.isUploading ? (
@@ -595,12 +664,27 @@ const ChatView = () => {
           <div className="media-upload-shimmer" />
         </div>
       ) : (
-        <ChatMediaMessage message={msg} />
+        <>
+          {replyToDisplay && (
+            <RepliedMessage
+              replyTo={replyToDisplay}
+              onTap={() => scrollToMessage(replyToDisplay.messageId)}
+            />
+          )}
+          <ChatMediaMessage message={msg} />
+        </>
       );
 
       return (
-        <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}>
-          <MessageMenu isOwn={isOwn} onDelete={() => handleDeleteMessage(msg.id)}>
+        <div
+          className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
+          ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
+        >
+          <MessageMenu
+            isOwn={isOwn}
+            onDelete={() => handleDeleteMessage(msg.id)}
+            onReply={showReply ? () => handleReply(msg) : null}
+          >
             {content}
           </MessageMenu>
         </div>
@@ -609,8 +693,21 @@ const ChatView = () => {
 
     // text message
     return (
-      <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}>
-        <MessageMenu isOwn={isOwn} onDelete={() => handleDeleteMessage(msg.id)}>
+      <div
+        className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
+        ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
+      >
+        <MessageMenu
+          isOwn={isOwn}
+          onDelete={() => handleDeleteMessage(msg.id)}
+          onReply={showReply ? () => handleReply(msg) : null}
+        >
+          {replyToDisplay && (
+            <RepliedMessage
+              replyTo={replyToDisplay}
+              onTap={() => scrollToMessage(replyToDisplay.messageId)}
+            />
+          )}
           <div className="message-text">{msg.text}</div>
         </MessageMenu>
       </div>
@@ -687,35 +784,45 @@ const ChatView = () => {
 
       {/* ─── Input Bar ──────────────────────────────────────────── */}
       <form className="chat-input-container" onSubmit={handleSendText}>
-        <button
-          type="button"
-          className="chat-attach-btn"
-          onClick={() => fileInputRef.current?.click()}
-          title="Attach image or video"
-        >
-          <i className="fas fa-paperclip" />
-        </button>
-        <input
-          type="text"
-          className="chat-input"
-          placeholder={`Message ${displayName}...`}
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-        />
-        <input
-          type="file"
-          ref={fileInputRef}
-          accept="image/*,video/*"
-          style={{ display: 'none' }}
-          onChange={handleFileSelect}
-        />
-        <button
-          type="submit"
-          className="chat-send-btn"
-          disabled={!newMessage.trim()}
-        >
-          <i className="fas fa-paper-plane" />
-        </button>
+        {replyTo && <ReplyPreview replyTo={replyTo} onCancel={cancelReply} />}
+        <div className="chat-input-row">
+          <button
+            type="button"
+            className="chat-attach-btn"
+            onClick={() => fileInputRef.current?.click()}
+            title="Attach image or video"
+          >
+            <i className="fas fa-paperclip" />
+          </button>
+          <input
+            ref={inputRef}
+            type="text"
+            className="chat-input"
+            placeholder={`Message ${displayName}...`}
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendText(e);
+              }
+            }}
+          />
+          <input
+            type="file"
+            ref={fileInputRef}
+            accept="image/*,video/*"
+            style={{ display: 'none' }}
+            onChange={handleFileSelect}
+          />
+          <button
+            type="submit"
+            className="chat-send-btn"
+            disabled={!newMessage.trim()}
+          >
+            <i className="fas fa-paper-plane" />
+          </button>
+        </div>
       </form>
 
       {renderPreviewOverlay()}
