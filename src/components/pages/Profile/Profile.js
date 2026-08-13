@@ -45,7 +45,6 @@ const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', 
 );
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
-const TEMPLATE_MOODS = ['happy', 'cool', 'laughing', 'excited', 'wink'];
 
 // ─── 10 Default Animated Interest Templates ─────────────────────
 const DEFAULT_INTEREST_TEMPLATES = [
@@ -74,7 +73,6 @@ const Profile = () => {
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
   const [copiedUid, setCopiedUid] = useState(false);
-  const [templateIndex, setTemplateIndex] = useState(0);
 
   // Synchronously initialize profile & skin cache
   const cachedProfile = useMemo(() => {
@@ -99,16 +97,13 @@ const Profile = () => {
     mood: 'happy',
     activeSkin: null,
     bio: '',
-    interests: [],
     country: '',
     countryCode: '',
     city: '',
   });
 
-  const [tagInput, setTagInput] = useState('');
   const imageInputRef = useRef(null);
   const gifInputRef = useRef(null);
-  const tagInputRef = useRef(null);
 
   // Synchronized fetch for both profile (mood) and userSkins (activeSkin) together
   useEffect(() => {
@@ -142,7 +137,6 @@ const Profile = () => {
           safeData = {
             ...data,
             name: data.name || data.username || data.displayName || user.displayName || 'User',
-            interests: data.interests || [],
             avatar: data.avatar || '',
             videoUrl: data.videoUrl || '',
           };
@@ -154,7 +148,6 @@ const Profile = () => {
             mood: 'happy',
             activeSkin: null,
             bio: 'New to ECHO! 🌊',
-            interests: [],
             country: '',
             countryCode: '',
             city: '',
@@ -181,18 +174,6 @@ const Profile = () => {
       unsubProfile();
     };
   }, [user?.uid, editing]);
-
-  // Rotate mood avatar when no custom avatar/skin exists
-  useEffect(() => {
-    const hasCustomAvatar = editData.videoUrl || editData.avatar || profile?.videoUrl || profile?.avatar || profile?.activeSkin || activeSkinId;
-    if (hasCustomAvatar) return;
-
-    const interval = setInterval(() => {
-      setTemplateIndex((prev) => (prev + 1) % TEMPLATE_MOODS.length);
-    }, 2500);
-
-    return () => clearInterval(interval);
-  }, [editData, profile, activeSkinId]);
 
   // Countries & Cities
   const countriesList = useMemo(() => Country.getAllCountries(), []);
@@ -345,35 +326,6 @@ const Profile = () => {
     }
   };
 
-  const handleTagInputChange = (e) => {
-    const value = e.target.value;
-    if (value.includes(',')) {
-      const parts = value.split(',').map((s) => s.trim()).filter(Boolean);
-      if (parts.length) {
-        setEditData({ ...editData, interests: [...(editData.interests || []), ...parts] });
-        setTagInput('');
-      }
-    } else {
-      setTagInput(value);
-    }
-  };
-
-  const handleTagKeyDown = (e) => {
-    if (e.key === 'Enter' && tagInput.trim()) {
-      e.preventDefault();
-      const newTag = tagInput.trim();
-      if (!(editData.interests || []).includes(newTag)) {
-        setEditData({ ...editData, interests: [...(editData.interests || []), newTag] });
-      }
-      setTagInput('');
-    }
-  };
-
-  const removeTag = (index) => {
-    const newInterests = (editData.interests || []).filter((_, i) => i !== index);
-    setEditData({ ...editData, interests: newInterests });
-  };
-
   // Instant pre-cached Skin Object lookup
   const currentSkinId = activeSkinId || profile?.activeSkin;
   const activeSkinObj = useMemo(() => (currentSkinId ? getSkinById(currentSkinId) : null), [currentSkinId]);
@@ -384,8 +336,11 @@ const Profile = () => {
 
   const isVideoFormat = activeVideoUrl && (activeVideoUrl.endsWith('.mp4') || activeVideoUrl.endsWith('.webm'));
 
-  const currentInterests = editing ? editData.interests : profile?.interests;
-  const hasInterests = currentInterests && currentInterests.length > 0;
+  // ─── Get first letter for avatar fallback ──────────────────────
+  const getInitial = () => {
+    const name = (editing ? editData.name : profile?.name) || 'User';
+    return name[0]?.toUpperCase() || 'U';
+  };
 
   return (
     <div className="profile-page">
@@ -408,8 +363,9 @@ const Profile = () => {
           ) : activeSkinObj ? (
             <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={110} />
           ) : (
-            <div style={{ transform: 'scale(1.1)', transition: 'all 0.3s ease' }}>
-              <ECHOMOJI mood={TEMPLATE_MOODS[templateIndex]} size={110} />
+            // Fallback: user initial
+            <div className="profile-avatar-initial">
+              {getInitial()}
             </div>
           )}
           {editing && <div className="avatar-overlay">Tap to change</div>}
@@ -517,68 +473,34 @@ const Profile = () => {
           profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>{profile.bio}</p>
         )}
 
-        {/* Interests Section */}
-        <div className="profile-section" style={{ marginTop: '16px', textAlign: 'left', overflow: 'hidden' }}>
-          <h4 style={{ fontSize: '14px', color: '#AAA', marginBottom: '8px' }}>Interests</h4>
-
-          {editing ? (
-            <div className="tag-input-container">
-              <div className="tags-wrapper" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-                {(editData.interests || []).map((interest, idx) => (
-                  <span key={idx} className="profile-tag" style={{ background: '#6C3CE1', color: '#FFF', padding: '4px 10px', borderRadius: '12px', fontSize: '12px' }}>
-                    {interest}
-                    <button type="button" onClick={() => removeTag(idx)} style={{ background: 'none', border: 'none', color: '#fff', marginLeft: '6px', cursor: 'pointer' }}>×</button>
-                  </span>
-                ))}
-              </div>
-              <input
-                ref={tagInputRef}
-                type="text"
-                value={tagInput}
-                onChange={handleTagInputChange}
-                onKeyDown={handleTagKeyDown}
-                placeholder="Type interest & press Enter..."
-                style={{ width: '100%', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px', fontSize: '13px' }}
-              />
-            </div>
-          ) : hasInterests ? (
-            <div className="tags-wrapper" style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-              {profile.interests.map((interest, idx) => (
-                <span key={idx} className="profile-tag" style={{ background: 'rgba(108,60,225,0.3)', color: '#FFF', padding: '4px 10px', borderRadius: '12px', fontSize: '12px' }}>
-                  {interest}
-                </span>
-              ))}
-            </div>
-          ) : (
-            <div className="moving-interests-container" style={{ width: '100%', overflow: 'hidden', padding: '6px 0' }}>
-              <div
-                className="moving-interests-track"
+        {/* ─── Interests Templates (no heading, no editing) ──── */}
+        <div className="moving-interests-container" style={{ width: '100%', overflow: 'hidden', padding: '6px 0', marginTop: '12px' }}>
+          <div
+            className="moving-interests-track"
+            style={{
+              display: 'flex',
+              gap: '8px',
+              width: 'max-content',
+              animation: 'scrollInterests 18s linear infinite',
+            }}
+          >
+            {[...DEFAULT_INTEREST_TEMPLATES, ...DEFAULT_INTEREST_TEMPLATES].map((item, idx) => (
+              <span
+                key={idx}
                 style={{
-                  display: 'flex',
-                  gap: '8px',
-                  width: 'max-content',
-                  animation: 'scrollInterests 18s linear infinite',
+                  background: 'rgba(255, 255, 255, 0.08)',
+                  color: '#AAA',
+                  border: '1px solid rgba(255, 255, 255, 0.12)',
+                  padding: '4px 12px',
+                  borderRadius: '12px',
+                  fontSize: '12px',
+                  whiteSpace: 'nowrap',
                 }}
               >
-                {[...DEFAULT_INTEREST_TEMPLATES, ...DEFAULT_INTEREST_TEMPLATES].map((item, idx) => (
-                  <span
-                    key={idx}
-                    style={{
-                      background: 'rgba(255, 255, 255, 0.08)',
-                      color: '#AAA',
-                      border: '1px solid rgba(255, 255, 255, 0.12)',
-                      padding: '4px 12px',
-                      borderRadius: '12px',
-                      fontSize: '12px',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {item}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
+                {item}
+              </span>
+            ))}
+          </div>
         </div>
 
         {/* Action Buttons */}
