@@ -1,171 +1,201 @@
 /* src/components/pages/Home/Home.css */
 .home-page {
-  display: flex;
-  align-items: center;
-  justify-content: center;
   min-height: 100vh;
   background: #0A0A0F;
-  padding: 20px;
+  padding: 16px 16px 100px;
+  display: flex;
+  justify-content: center;
 }
 
 .home-container {
   width: 100%;
   max-width: 800px;
-  display: flex;
-  flex-direction: column;
-  gap: 28px;
 }
 
-/* ─── News Section ────────────────────────────────────────────── */
-.home-news {
+/* ─── Live Section ────────────────────────────────────────────── */
+.home-section {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: 20px;
-  padding: 28px 24px;
-  backdrop-filter: blur(10px);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  padding: 24px 20px 20px;
+  backdrop-filter: blur(8px);
 }
 
-.news-header {
+.section-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 6px;
 }
 
-.news-badge {
+.section-header h3 {
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.live-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #10B981;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+
+.live-count {
+  margin-left: auto;
+  font-size: 14px;
+  color: #888;
+  font-weight: 500;
+}
+
+.live-hint {
+  font-size: 13px;
+  color: #666;
+  margin: 0 0 16px;
+  font-style: italic;
+}
+
+.live-users-scroll {
+  display: flex;
+  gap: 20px;
+  overflow-x: auto;
+  padding: 6px 0 12px;
+  scrollbar-width: thin;
+}
+
+.live-users-scroll::-webkit-scrollbar {
+  height: 4px;
+}
+.live-users-scroll::-webkit-scrollbar-thumb {
+  background: #333;
+  border-radius: 4px;
+}
+
+.live-user-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 80px;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.15s;
+  padding: 4px;
+}
+
+.live-user-card:hover {
+  transform: scale(1.05);
+}
+
+.live-avatar {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: #1a1a24;
+  border: 2px solid rgba(255, 255, 255, 0.08);
+}
+
+.live-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.live-avatar-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: linear-gradient(135deg, #6C3CE1, #EC4899);
   color: #fff;
-  font-size: 11px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  padding: 4px 12px;
-  border-radius: 20px;
-  white-space: nowrap;
+  font-size: 28px;
 }
 
-.news-header h2 {
-  color: #fff;
-  font-size: 20px;
-  font-weight: 700;
-  margin: 0;
+.online-indicator {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #10B981;
+  border: 2px solid #0A0A0F;
 }
 
-.news-content p {
-  color: #ccc;
-  font-size: 15px;
-  line-height: 1.7;
-  margin: 0;
-}
-
-.news-content strong {
-  color: #fff;
-}
-
-.news-note {
-  display: inline-block;
-  margin-top: 12px;
-  padding: 10px 14px;
-  background: rgba(239, 68, 68, 0.1);
-  border-left: 3px solid #ef4444;
-  border-radius: 6px;
-  color: #fca5a5;
+.live-username {
   font-size: 14px;
-  line-height: 1.5;
-}
-
-/* ─── Feed Section ────────────────────────────────────────────── */
-.home-feed {
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  border-radius: 20px;
-  padding: 24px;
-}
-
-.feed-header {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-
-.feed-badge {
-  background: rgba(108, 60, 225, 0.2);
-  color: #a78bfa;
-  font-size: 11px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  padding: 4px 12px;
-  border-radius: 20px;
-}
-
-.feed-header h3 {
-  color: #888;
-  font-size: 18px;
+  color: #eee;
   font-weight: 600;
-  margin: 0;
-}
-
-.feed-placeholder {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-}
-
-.feed-card {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: 16px;
-  padding: 20px 16px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 80px;
   text-align: center;
-  transition: transform 0.2s, border-color 0.2s;
 }
 
-.feed-card:hover {
-  transform: translateY(-2px);
-  border-color: rgba(108, 60, 225, 0.3);
+.live-joined {
+  font-size: 11px;
+  color: #666;
+  text-align: center;
 }
 
-.feed-card-icon {
-  font-size: 32px;
-  margin-bottom: 8px;
+.live-empty {
+  color: #666;
+  font-size: 15px;
+  text-align: center;
+  padding: 20px 0;
+}
+
+/* ─── Skeleton ────────────────────────────────────────────────── */
+.skeleton-text {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 4px;
+  animation: pulse-skeleton 1.5s infinite;
+}
+
+.skeleton-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  animation: pulse-skeleton 1.5s infinite;
+}
+
+.skeleton-card {
   opacity: 0.7;
 }
 
-.feed-card p {
-  color: #ddd;
-  font-size: 14px;
-  font-weight: 500;
-  margin: 0 0 4px;
+@keyframes pulse-skeleton {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.7; }
 }
 
-.feed-card span {
-  color: #666;
-  font-size: 12px;
-}
-
-/* ─── Responsive ────────────────────────────────────────────────── */
+/* ─── Responsive ────────────────────────────────────────────── */
 @media (max-width: 480px) {
-  .home-news {
-    padding: 20px 16px;
+  .home-section {
+    padding: 18px 14px 16px;
   }
-  .news-header h2 {
-    font-size: 17px;
+  .live-avatar {
+    width: 64px;
+    height: 64px;
   }
-  .news-content p {
-    font-size: 14px;
+  .live-user-card {
+    min-width: 70px;
   }
-  .news-note {
+  .live-username {
     font-size: 13px;
-    padding: 8px 12px;
-  }
-  .feed-placeholder {
-    grid-template-columns: 1fr;
-  }
-  .home-feed {
-    padding: 18px 14px;
+    max-width: 70px;
   }
 }
