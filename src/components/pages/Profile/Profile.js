@@ -62,8 +62,8 @@ const DEFAULT_INTEREST_TEMPLATES = [
 ];
 
 // Cloudinary Configuration
-const CLOUDINARY_CLOUD_NAME = 'rjlscgan'; // Replace with your cloud name if different
-const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads'; // Replace with your unsigned upload preset name
+const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
+const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
 
 const Profile = () => {
   const { user } = useAuth();
@@ -76,12 +76,20 @@ const Profile = () => {
   const [copiedUid, setCopiedUid] = useState(false);
   const [templateIndex, setTemplateIndex] = useState(0);
 
+  // Synchronously initialize profile & skin cache
   const cachedProfile = useMemo(() => {
     if (!user?.uid) return null;
     return getFastLocal(`profile_${user.uid}`);
   }, [user?.uid]);
 
+  const cachedUserSkins = useMemo(() => {
+    if (!user?.uid) return null;
+    return getFastLocal(`echomoji_${user.uid}`);
+  }, [user?.uid]);
+
+  // Synchronous state initialization from combined cache
   const [profile, setProfile] = useState(() => cachedProfile);
+  const [activeSkinId, setActiveSkinId] = useState(() => cachedUserSkins?.active || cachedProfile?.activeSkin || null);
   const [loading, setLoading] = useState(() => !cachedProfile);
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState(() => cachedProfile || {
@@ -102,9 +110,81 @@ const Profile = () => {
   const gifInputRef = useRef(null);
   const tagInputRef = useRef(null);
 
+  // Synchronized fetch for both profile (mood) and userSkins (activeSkin) together
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    let isMounted = true;
+    const profileCacheKey = `profile_${user.uid}`;
+    const skinCacheKey = `echomoji_${user.uid}`;
+
+    // 1. Unified User Skins Listener
+    const skinRef = ref(db, `userSkins/${user.uid}`);
+    const unsubSkin = onValue(skinRef, (snap) => {
+      if (!isMounted) return;
+      const data = snap.val() || {};
+      const newActive = data.activeSkin || data.active || null;
+      setActiveSkinId(newActive);
+
+      const existingSkinCache = getFastLocal(skinCacheKey) || {};
+      setFastLocal(skinCacheKey, { ...existingSkinCache, active: newActive });
+    });
+
+    // 2. Profile Listener
+    const profileRef = ref(db, `profiles/${user.uid}`);
+    const unsubProfile = onValue(
+      profileRef,
+      async (snapshot) => {
+        if (!isMounted) return;
+        let safeData;
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          safeData = {
+            ...data,
+            name: data.name || data.username || data.displayName || user.displayName || 'User',
+            interests: data.interests || [],
+            avatar: data.avatar || '',
+            videoUrl: data.videoUrl || '',
+          };
+        } else {
+          safeData = {
+            name: user.displayName || user.email?.split('@')[0] || 'User',
+            avatar: '',
+            videoUrl: '',
+            mood: 'happy',
+            activeSkin: null,
+            bio: 'New to ECHO! 🌊',
+            interests: [],
+            country: '',
+            countryCode: '',
+            city: '',
+            lastActive: Date.now(),
+            createdAt: Date.now(),
+          };
+          await set(profileRef, safeData);
+        }
+
+        setProfile(safeData);
+        setFastLocal(profileCacheKey, safeData);
+        if (!editing) setEditData(safeData);
+        setLoading(false);
+      },
+      (err) => {
+        console.error('Error listening to profile:', err);
+        setLoading(false);
+      }
+    );
+
+    return () => {
+      isMounted = false;
+      unsubSkin();
+      unsubProfile();
+    };
+  }, [user?.uid, editing]);
+
   // Rotate mood avatar when no custom avatar/skin exists
   useEffect(() => {
-    const hasCustomAvatar = editData.videoUrl || editData.avatar || profile?.videoUrl || profile?.avatar || profile?.activeSkin;
+    const hasCustomAvatar = editData.videoUrl || editData.avatar || profile?.videoUrl || profile?.avatar || profile?.activeSkin || activeSkinId;
     if (hasCustomAvatar) return;
 
     const interval = setInterval(() => {
@@ -112,7 +192,7 @@ const Profile = () => {
     }, 2500);
 
     return () => clearInterval(interval);
-  }, [editData, profile]);
+  }, [editData, profile, activeSkinId]);
 
   // Countries & Cities
   const countriesList = useMemo(() => Country.getAllCountries(), []);
@@ -151,58 +231,6 @@ const Profile = () => {
     setEditData({ ...editData, city: e.target.value });
   };
 
-  // Listen to user profile
-  useEffect(() => {
-    if (!user?.uid) return;
-
-    const cacheKey = `profile_${user.uid}`;
-    const profileRef = ref(db, `profiles/${user.uid}`);
-
-    const unsubscribe = onValue(
-      profileRef,
-      async (snapshot) => {
-        let safeData;
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          safeData = {
-            ...data,
-            name: data.name || data.username || data.displayName || user.displayName || 'User',
-            interests: data.interests || [],
-            avatar: data.avatar || '',
-            videoUrl: data.videoUrl || '',
-          };
-        } else {
-          safeData = {
-            name: user.displayName || user.email?.split('@')[0] || 'User',
-            avatar: '',
-            videoUrl: '',
-            mood: 'happy',
-            activeSkin: null,
-            bio: 'New to ECHO! 🌊',
-            interests: [],
-            country: '',
-            countryCode: '',
-            city: '',
-            lastActive: Date.now(),
-            createdAt: Date.now(),
-          };
-          await set(profileRef, safeData);
-        }
-
-        setProfile(safeData);
-        setFastLocal(cacheKey, safeData);
-        if (!editing) setEditData(safeData);
-        setLoading(false);
-      },
-      (err) => {
-        console.error('Error listening to profile:', err);
-        setLoading(false);
-      }
-    );
-
-    return () => unsubscribe();
-  }, [user?.uid, editing]);
-
   const handleSave = async () => {
     if (!user) return;
 
@@ -229,7 +257,6 @@ const Profile = () => {
     setTimeout(() => setCopiedUid(false), 2000);
   };
 
-  // ─── Cloudinary Upload Handler ──────────────────────────────────
   const handleUploadMedia = async (file, isGifOnly = false) => {
     if (!user) return;
 
@@ -253,7 +280,6 @@ const Profile = () => {
 
     setUploading(true);
     try {
-      // Direct Upload to Cloudinary
       const formData = new FormData();
       formData.append('file', file);
       formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
@@ -275,7 +301,7 @@ const Profile = () => {
         updateData.activeSkin = null;
       } else {
         updateData.avatar = downloadUrl;
-        updateData.videoUrl = ''; // Clear videoUrl when uploading static image!
+        updateData.videoUrl = '';
         updateData.activeSkin = null;
       }
 
@@ -348,16 +374,16 @@ const Profile = () => {
     setEditData({ ...editData, interests: newInterests });
   };
 
-  const activeSkinObj = profile?.activeSkin ? getSkinById(profile.activeSkin) : null;
-  
-  // Media priority display fix
+  // Instant pre-cached Skin Object lookup
+  const currentSkinId = activeSkinId || profile?.activeSkin;
+  const activeSkinObj = useMemo(() => (currentSkinId ? getSkinById(currentSkinId) : null), [currentSkinId]);
+
   const activeVideoUrl = editing ? editData.videoUrl : profile?.videoUrl;
   const activeAvatarUrl = editing ? editData.avatar : profile?.avatar;
   const currentMediaUrl = activeVideoUrl || activeAvatarUrl;
 
   const isVideoFormat = activeVideoUrl && (activeVideoUrl.endsWith('.mp4') || activeVideoUrl.endsWith('.webm'));
 
-  // Interest checks
   const currentInterests = editing ? editData.interests : profile?.interests;
   const hasInterests = currentInterests && currentInterests.length > 0;
 
@@ -404,6 +430,22 @@ const Profile = () => {
           </div>
         ) : (
           <div className="profile-name">{profile?.name || 'User'}</div>
+        )}
+
+        {/* Instant ECHOMOJI displaying mood + skin together */}
+        {!loading && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '6px' }}>
+            <ECHOMOJI
+              mood={profile?.mood || 'happy'}
+              skin={activeSkinObj}
+              size={36}
+              interactive={false}
+              animated={true}
+            />
+            <span style={{ fontSize: '13px', color: '#888', fontWeight: 500 }}>
+              Mood: <strong style={{ color: '#FFF', textTransform: 'capitalize' }}>{profile?.mood || 'happy'}</strong>
+            </span>
+          </div>
         )}
 
         {/* Location Dropdowns */}
@@ -475,7 +517,7 @@ const Profile = () => {
           profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>{profile.bio}</p>
         )}
 
-        {/* ── Interests Section ── */}
+        {/* Interests Section */}
         <div className="profile-section" style={{ marginTop: '16px', textAlign: 'left', overflow: 'hidden' }}>
           <h4 style={{ fontSize: '14px', color: '#AAA', marginBottom: '8px' }}>Interests</h4>
 

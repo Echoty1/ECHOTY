@@ -142,7 +142,6 @@ const ECHOMojiTab = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  // Instant local memory fetch on mount (0ms latency)
   const initialCache = useMemo(() => {
     if (!user?.uid) return null;
     return getFastLocal(`echomoji_${user.uid}`);
@@ -164,7 +163,6 @@ const ECHOMojiTab = () => {
   const showModal = (title, message, type = 'info') => setModal({ isOpen: true, title, message, type });
   const closeModal = () => setModal((prev) => ({ ...prev, isOpen: false }));
 
-  // Background Realtime Sync
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -177,7 +175,7 @@ const ECHOMojiTab = () => {
       if (!isMounted) return;
       const data = snap.val() || {};
       const newOwned = data.owned || [];
-      const newActive = data.active || null;
+      const newActive = data.activeSkin || data.active || null;
       const newCoins = typeof data.coins === 'number' ? data.coins : 350;
       const newPurchases = data.purchases || {};
 
@@ -250,6 +248,7 @@ const ECHOMojiTab = () => {
       const updates = {
         owned: newOwned,
         coins: newCoins,
+        activeSkin: skinId,
       };
 
       update(ref(db, `userSkins/${user.uid}`), updates);
@@ -273,8 +272,7 @@ const ECHOMojiTab = () => {
     (skinId) => {
       if (!user) return;
       const updates = {};
-      updates[`userSkins/${user.uid}/active`] = skinId;
-      updates[`profiles/${user.uid}/activeSkin`] = skinId;
+      updates[`userSkins/${user.uid}/activeSkin`] = skinId;
       update(ref(db), updates);
       setActiveSkin(skinId);
     },
@@ -296,7 +294,7 @@ const ECHOMojiTab = () => {
   );
 
   return (
-    <div style={{ padding: '16px', paddingTop: '70px', maxWidth: '480px', margin: '0 auto', minHeight: '100%' }}>
+    <div style={{ padding: '70px 16px 100px', maxWidth: '480px', margin: '0 auto', minHeight: '100%' }}>
       {/* EchoMoji Preview Header Card */}
       <div
         style={{

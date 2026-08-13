@@ -18,14 +18,7 @@ const AvatarPicker = ({ isOpen, onClose, onUploadImage, onUploadGif, onChooseLib
             <span className="avatar-picker-icon">📷</span>
             <span>Upload Image</span>
           </button>
-          <button 
-            className="avatar-picker-option"
-            onClick={onUploadGif}
-            disabled={uploading}
-          >
-            <span className="avatar-picker-icon">🎬</span>
-            <span>Upload GIF</span>
-          </button>
+
           <button 
             className="avatar-picker-option"
             onClick={onChooseLibrary}
