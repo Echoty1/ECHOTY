@@ -1,12 +1,9 @@
 // src/utils/mediaCache.js
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { getMediaCache, setMediaCache } from '../services/cacheService';
 
 const memoryCache = new Set();
 
-/**
- * Preloads image/GIF files safely (no CORS issues)
- */
 export const preloadMedia = (url) => {
   if (!url || typeof url !== 'string' || memoryCache.has(url)) return;
   try {
@@ -18,19 +15,13 @@ export const preloadMedia = (url) => {
   }
 };
 
-/**
- * Load an image and store as Base64 in cache.
- * Always returns a Promise that resolves with base64 string or null.
- */
 export const loadAndCacheImage = async (url) => {
   if (!url) return null;
 
   try {
-    // 1. Check cache
     const cached = getMediaCache(url);
     if (cached) return cached;
 
-    // 2. Fetch and convert to base64
     const response = await fetch(url);
     if (!response.ok) throw new Error('Network response was not ok');
     const blob = await response.blob();
@@ -50,17 +41,11 @@ export const loadAndCacheImage = async (url) => {
   }
 };
 
-/**
- * React hook to get a cached image.
- * Returns the cached Base64 if available, otherwise the original URL,
- * or the placeholder if URL is empty.
- * Background fetch updates to Base64 when ready.
- */
 export const useCachedImage = (url, placeholder = null) => {
   const [image, setImage] = React.useState(() => {
     if (!url) return placeholder;
     const cached = getMediaCache(url);
-    return cached || url; // fallback to original URL
+    return cached || url;
   });
 
   React.useEffect(() => {
@@ -71,14 +56,12 @@ export const useCachedImage = (url, placeholder = null) => {
 
     let isMounted = true;
 
-    // Check cache again (in case it was updated)
     const cached = getMediaCache(url);
     if (cached) {
       if (isMounted) setImage(cached);
       return;
     }
 
-    // Fetch and cache in background, then update
     const loadImage = async () => {
       const base64 = await loadAndCacheImage(url);
       if (isMounted && base64) setImage(base64);
@@ -91,4 +74,68 @@ export const useCachedImage = (url, placeholder = null) => {
   }, [url, placeholder]);
 
   return image;
+};
+
+// ─── YouTube‑style caching with Cache API (for videos) ─────────
+export const useCachedBlobUrl = (originalUrl) => {
+  const [blobUrl, setBlobUrl] = useState(originalUrl);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!originalUrl) {
+      setIsLoading(false);
+      return;
+    }
+
+    if (originalUrl.startsWith('blob:')) {
+      setBlobUrl(originalUrl);
+      setIsLoading(false);
+      return;
+    }
+
+    let objectUrl = null;
+    let isMounted = true;
+
+    const loadAndCache = async () => {
+      try {
+        const cache = await caches.open('echo-media-v1');
+        const cachedResponse = await cache.match(originalUrl);
+        if (cachedResponse && cachedResponse.ok) {
+          const blob = await cachedResponse.blob();
+          objectUrl = URL.createObjectURL(blob);
+          if (isMounted) {
+            setBlobUrl(objectUrl);
+            setIsLoading(false);
+            return;
+          }
+        }
+
+        const response = await fetch(originalUrl);
+        if (!response.ok) throw new Error('Network response was not ok');
+        const clonedResponse = response.clone();
+        await cache.put(originalUrl, clonedResponse);
+        const blob = await response.blob();
+        objectUrl = URL.createObjectURL(blob);
+        if (isMounted) {
+          setBlobUrl(objectUrl);
+          setIsLoading(false);
+        }
+      } catch (err) {
+        console.warn('Media caching failed, using fallback:', err);
+        setError(true);
+        setBlobUrl(originalUrl);
+        setIsLoading(false);
+      }
+    };
+
+    loadAndCache();
+
+    return () => {
+      isMounted = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [originalUrl]);
+
+  return { blobUrl, isLoading, error };
 };

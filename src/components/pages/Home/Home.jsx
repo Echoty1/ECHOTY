@@ -1,10 +1,10 @@
 // src/components/pages/Home/Home.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { db } from '../../../services/firebase';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, get } from 'firebase/database';
 import { useCachedImage } from '../../../utils/mediaCache';
 import './Home.css';
 
@@ -12,56 +12,80 @@ const Home = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { profiles, fetchProfile } = useProfile();
-  const [onlineUids, setOnlineUids] = useState([]);
+  const [onlineUsers, setOnlineUsers] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [fetching, setFetching] = useState(false);
 
-  // ─── Listen to presence updates ──────────────────────────────
+  // ─── Listen to presence and fetch profiles ──────────────────
   useEffect(() => {
     if (!user) return;
-    const presenceRef = ref(db, 'presence/online');
-    const unsubscribe = onValue(presenceRef, (snapshot) => {
-      const data = snapshot.val() || {};
-      const uids = Object.keys(data).filter(uid => data[uid] === true && uid !== user.uid);
-      setOnlineUids(uids);
-      setLoading(false);
-    });
-    return () => unsubscribe();
-  }, [user]);
 
-  // ─── Fetch profiles for online users (real-time listeners) ──
-  useEffect(() => {
-    if (onlineUids.length === 0) return;
-    onlineUids.forEach(uid => {
-      if (!profiles[uid]) {
-        fetchProfile(uid); // sets up listener, updates profiles
+    const presenceRef = ref(db, 'presence/online');
+    let isMounted = true;
+
+    const unsubscribe = onValue(presenceRef, async (snapshot) => {
+      if (!isMounted) return;
+      const data = snapshot.val() || {};
+      const onlineUids = Object.keys(data).filter(uid => data[uid] === true && uid !== user.uid);
+
+      if (onlineUids.length === 0) {
+        setOnlineUsers([]);
+        setLoading(false);
+        setFetching(false);
+        return;
+      }
+
+      setFetching(true);
+      setLoading(true);
+
+      const profilePromises = onlineUids.map(async (uid) => {
+        if (profiles[uid] && profiles[uid].name) {
+          return profiles[uid];
+        }
+        const profileRef = ref(db, `profiles/${uid}`);
+        const snapshot = await get(profileRef);
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          fetchProfile(uid);
+          return data;
+        }
+        return null;
+      });
+
+      const profileResults = await Promise.all(profilePromises);
+      const list = onlineUids.map((uid, index) => ({
+        uid,
+        ...(profileResults[index] || { name: null, avatar: '' })
+      }));
+
+      const hasAllNames = list.every(p => p.name !== null);
+      if (isMounted) {
+        setOnlineUsers(list);
+        setLoading(!hasAllNames);
+        setFetching(false);
       }
     });
-  }, [onlineUids, profiles, fetchProfile]);
 
-  // ─── Build online users list from profiles ───────────────────
-  const onlineUsers = useMemo(() => {
-    return onlineUids.map(uid => ({
-      uid,
-      ...(profiles[uid] || { name: 'User', avatar: '' })
-    }));
-  }, [onlineUids, profiles]);
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [user, profiles, fetchProfile]);
 
-  // ─── Render avatar with caching ──────────────────────────────
   const AvatarWithCache = ({ profile }) => {
     const cachedImage = useCachedImage(profile.avatar, null);
-    const name = profile.name || 'User';
+    const name = profile.name || '';
 
     if (cachedImage) {
       return <img src={cachedImage} alt={name} className="live-avatar-img" />;
     }
     return (
       <div className="live-avatar-placeholder">
-        {name[0]?.toUpperCase() || 'U'}
+        {name[0]?.toUpperCase() || '?'}
       </div>
     );
   };
 
-  // ─── Start chat ──────────────────────────────────────────────
   const startChat = (uid, name) => {
     navigate(`/chat/${uid}`, {
       state: {
@@ -71,8 +95,7 @@ const Home = () => {
     });
   };
 
-  // ─── Skeleton ─────────────────────────────────────────────────
-  if (loading) {
+  if (loading || fetching) {
     return (
       <div className="home-page">
         <div className="home-container">
@@ -110,21 +133,24 @@ const Home = () => {
             {onlineUsers.length === 0 ? (
               <p className="live-empty">No one online right now</p>
             ) : (
-              onlineUsers.map((profile) => (
-                <div
-                  key={profile.uid}
-                  className="live-user-card"
-                  onClick={() => startChat(profile.uid, profile.name)}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div className="live-avatar">
-                    <AvatarWithCache profile={profile} />
-                    <span className="online-indicator" />
+              onlineUsers.map((profile) => {
+                if (!profile.name) return null;
+                return (
+                  <div
+                    key={profile.uid}
+                    className="live-user-card"
+                    onClick={() => startChat(profile.uid, profile.name)}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="live-avatar">
+                      <AvatarWithCache profile={profile} />
+                      <span className="online-indicator" />
+                    </div>
+                    <span className="live-username">{profile.name}</span>
                   </div>
-                  <span className="live-username">{profile.name || 'User'}</span>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>

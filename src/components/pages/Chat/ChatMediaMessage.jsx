@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useVideoAudio } from '../../../contexts/VideoAudioContext';
-import { useCachedImage } from '../../../utils/mediaCache';
+import { useCachedBlobUrl, useCachedImage } from '../../../utils/mediaCache';
 
 // ─── Fullscreen Video Player ─────────────────────────────────────
 const FullscreenVideoPlayer = ({ src, onClose }) => {
@@ -93,6 +93,9 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
 
 // ─── Inline Video Player ──────────────────────────────────────
 const VideoPlayer = ({ videoId, src, caption, uploadProgress, isMediaReady }) => {
+  const { blobUrl, isLoading: cacheLoading, error: cacheError } = useCachedBlobUrl(src);
+  const videoSrc = blobUrl || src;
+
   const videoRef = useRef(null);
   const [isMuted, setIsMuted] = useState(true);
   const [showFullscreen, setShowFullscreen] = useState(false);
@@ -101,8 +104,7 @@ const VideoPlayer = ({ videoId, src, caption, uploadProgress, isMediaReady }) =>
 
   const { activeUnmutedId, requestUnmute, muteAll } = useVideoAudio();
 
-  // Use the parent's isMediaReady flag to show/hide overlay
-  const isReady = isMediaReady || localReady;
+  const isReady = isMediaReady || localReady || (!cacheLoading && !cacheError);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -116,7 +118,7 @@ const VideoPlayer = ({ videoId, src, caption, uploadProgress, isMediaReady }) =>
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('error', onError);
     };
-  }, [src]);
+  }, [videoSrc]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -158,7 +160,7 @@ const VideoPlayer = ({ videoId, src, caption, uploadProgress, isMediaReady }) =>
       <div className="chat-media-video-wrapper" onClick={openFullscreen}>
         <video
           ref={videoRef}
-          src={src}
+          src={videoSrc}
           className="chat-media-video"
           autoPlay
           loop
@@ -200,7 +202,7 @@ const VideoPlayer = ({ videoId, src, caption, uploadProgress, isMediaReady }) =>
       </div>
       {caption && <div className="chat-media-caption">{caption}</div>}
       {showFullscreen && (
-        <FullscreenVideoPlayer src={src} onClose={() => setShowFullscreen(false)} />
+        <FullscreenVideoPlayer src={videoSrc} onClose={() => setShowFullscreen(false)} />
       )}
     </>
   );
@@ -218,7 +220,6 @@ const ImageWithLightbox = ({ src, caption, uploadProgress, isMediaReady }) => {
 
   const isReady = isMediaReady || imageLoaded;
 
-  // Preload image
   useEffect(() => {
     if (!src) return;
     const img = new Image();
