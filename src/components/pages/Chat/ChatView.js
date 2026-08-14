@@ -79,6 +79,7 @@ const ChatView = () => {
   const isMounted = useRef(true);
   const [replyTo, setReplyTo] = useState(null);
   const messageRefs = useRef({});
+  const markReadTimeout = useRef(null);
 
   // ─── Helper: Mark all messages as read ──────────────────────
   const markMessagesAsRead = async () => {
@@ -94,17 +95,20 @@ const ChatView = () => {
       let hasUnread = false;
       let latestMsg = '';
       let latestSender = '';
+      let latestTimestamp = Date.now();
 
       const msgs = Object.entries(data).map(([key, val]) => ({ key, ...val }));
       msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
       const latest = msgs[msgs.length - 1];
       if (latest) {
         if (latest.type === 'media') {
-          latestMsg = latest.mediaType === 'video' ? '🎬 Video' : '📷 Image';
+          latestMsg = latest.mediaType === 'video' ? '🎬 Video' : 
+                      latest.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
         } else {
           latestMsg = latest.text || '';
         }
         latestSender = latest.senderId || '';
+        latestTimestamp = latest.timestamp || Date.now();
       }
 
       msgs.forEach((msg) => {
@@ -118,14 +122,15 @@ const ChatView = () => {
 
       await update(ref(db), updates);
 
+      // Update the current user's chat entry
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
       await set(myChatRef, {
         id: userId,
-        partnerName: location.state?.userName || partnerProfile?.name || 'User',
+        partnerName: partnerProfile?.name || location.state?.userName || 'User',
         partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
         lastMessage: latestMsg,
         lastSenderId: latestSender,
-        lastUpdated: Date.now(),
+        lastUpdated: latestTimestamp,
         unreadCount: 0,
       });
 
@@ -159,7 +164,6 @@ const ChatView = () => {
       textSnippet: textSnippet,
     });
 
-    // Clear text input when replying (user will type or record)
     setNewMessage('');
 
     setTimeout(() => {
@@ -204,6 +208,7 @@ const ChatView = () => {
       const snapshot = await get(messagesRef);
       let latestMsg = '';
       let latestSender = '';
+      let latestTimestamp = Date.now();
       if (snapshot.exists()) {
         const data = snapshot.val();
         const msgs = Object.entries(data).map(([key, val]) => ({ key, ...val }));
@@ -211,11 +216,13 @@ const ChatView = () => {
         const latest = msgs[msgs.length - 1];
         if (latest) {
           if (latest.type === 'media') {
-            latestMsg = latest.mediaType === 'video' ? '🎬 Video' : '📷 Image';
+            latestMsg = latest.mediaType === 'video' ? '🎬 Video' : 
+                        latest.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
           } else {
             latestMsg = latest.text || '';
           }
           latestSender = latest.senderId || '';
+          latestTimestamp = latest.timestamp || Date.now();
         }
       }
 
@@ -226,7 +233,7 @@ const ChatView = () => {
         partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
         lastMessage: latestMsg,
         lastSenderId: latestSender,
-        lastUpdated: Date.now(),
+        lastUpdated: latestTimestamp,
         unreadCount: 0,
       });
 
@@ -238,7 +245,7 @@ const ChatView = () => {
           ...partnerData,
           lastMessage: latestMsg,
           lastSenderId: latestSender,
-          lastUpdated: Date.now(),
+          lastUpdated: latestTimestamp,
         });
       }
 
@@ -285,7 +292,6 @@ const ChatView = () => {
       }
       setMessages(newMessages);
       setLoadingMessages(false);
-      // Silently cache – ignore quota errors
       try {
         setCache(cacheKey, newMessages);
       } catch (e) {
@@ -295,43 +301,38 @@ const ChatView = () => {
 
       setTimeout(() => scrollToBottom(true), 100);
 
-      const latest = newMessages[newMessages.length - 1];
-      if (
-        latest &&
-        latest.receiverId === user.uid &&
-        latest.isRead === false
-      ) {
-        const msgRef = ref(db, `chats/${cId}/messages/${latest.id}`);
-        try {
-          const promise = set(msgRef, { ...latest, isRead: true });
-          if (promise && typeof promise.then === 'function') {
-            promise
-              .then(() => {
-                const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-                const mediaIcon = latest.type === 'media'
-                  ? (latest.mediaType === 'video' ? '🎬 Video' : '📷 Image')
-                  : latest.text || '';
-                return set(myChatRef, {
-                  id: userId,
-                  partnerName: location.state?.userName || partnerProfile?.name || 'User',
-                  partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
-                  lastMessage: mediaIcon,
-                  lastSenderId: latest.senderId,
-                  lastUpdated: Date.now(),
-                  unreadCount: 0,
-                });
-              })
-              .catch((err) => console.warn('Auto‑mark read error:', err));
+      // ─── Mark unread messages as read ──────────────────────
+      const hasUnread = newMessages.some(
+        msg => msg.receiverId === user.uid && msg.isRead === false
+      );
+      if (hasUnread) {
+        // Debounce the mark-read call to avoid multiple rapid calls
+        if (markReadTimeout.current) clearTimeout(markReadTimeout.current);
+        markReadTimeout.current = setTimeout(() => {
+          if (isMounted.current) {
+            markMessagesAsRead();
           }
-        } catch (err) {
-          console.warn('Auto‑mark read exception:', err);
-        }
+        }, 100);
       }
     });
 
     return () => {
       isMounted.current = false;
+      if (markReadTimeout.current) clearTimeout(markReadTimeout.current);
       unsubscribe();
+      // Final sync: mark any remaining unread messages as read
+      // but only if we were actually mounted (i.e., the user did not
+      // immediately navigate away before the listener fired)
+      // Use a short delay to allow any in-flight updates to settle.
+      setTimeout(() => {
+        if (!isMounted.current) {
+          // Component is unmounting, but we still want to clean up.
+          // However, we can't rely on isMounted because it's already false.
+          // We'll call it anyway, but guard against state updates by checking
+          // if the component is still in the DOM (optional).
+          markMessagesAsRead();
+        }
+      }, 200);
     };
   }, [user?.uid, userId, cacheKey]);
 
@@ -448,10 +449,9 @@ const ChatView = () => {
       isRead: false,
       isUploading: true,
       uploadProgress: 0,
-      isMediaReady: false,
+      isMediaReady: true,
     };
 
-    // ── If replying, include reply metadata ──────────────────
     const currentReply = replyTo;
     if (currentReply) {
       optimisticMsg.replyTo = {
@@ -460,7 +460,6 @@ const ChatView = () => {
         messageType: currentReply.messageType,
         textSnippet: currentReply.textSnippet,
       };
-      // Clear reply immediately
       setReplyTo(null);
     }
 
@@ -481,7 +480,6 @@ const ChatView = () => {
         );
       });
 
-      // Preload the real media
       let realMediaLoaded = false;
       if (mediaType === 'image') {
         const img = new Image();
@@ -503,7 +501,6 @@ const ChatView = () => {
         });
       }
 
-      // Write to database
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const newMsgRef = push(messagesRef);
       const realMsg = {
@@ -526,18 +523,15 @@ const ChatView = () => {
       }
       await set(newMsgRef, realMsg);
 
-      // Update optimistic
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId
             ? {
-                ...m,
-                realUrl: downloadURL,
-                mediaUrl: downloadURL,
+                ...realMsg,
+                id: newMsgRef.key,
                 isUploading: false,
                 uploadProgress: 100,
                 isMediaReady: true,
-                id: newMsgRef.key,
               }
             : m
         )
@@ -546,7 +540,6 @@ const ChatView = () => {
 
       URL.revokeObjectURL(blobUrl);
 
-      // Update userChats
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
       await set(myChatRef, {
         id: userId,
@@ -586,6 +579,7 @@ const ChatView = () => {
       console.error('Upload failed:', err);
       setIsUploading(false);
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      URL.revokeObjectURL(blobUrl);
       alert('Upload failed: ' + (err.message || 'Please try again.'));
     }
   };
@@ -613,7 +607,6 @@ const ChatView = () => {
       isMediaReady: false,
     };
 
-    // ── If replying, include reply metadata ──────────────────
     const currentReply = replyTo;
     if (currentReply) {
       optimisticMsg.replyTo = {
@@ -622,7 +615,6 @@ const ChatView = () => {
         messageType: currentReply.messageType,
         textSnippet: currentReply.textSnippet,
       };
-      // Clear reply immediately
       setReplyTo(null);
     }
 
@@ -663,7 +655,6 @@ const ChatView = () => {
 
       const downloadURL = await uploadPromise;
 
-      // Write to database
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const newMsgRef = push(messagesRef);
       const realMsg = {
@@ -693,8 +684,10 @@ const ChatView = () => {
             : m
         )
       );
+      setTimeout(() => scrollToBottom(true), 100);
 
-      // Update userChats
+      URL.revokeObjectURL(blobUrl);
+
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
       await set(myChatRef, {
         id: userId,
@@ -728,10 +721,10 @@ const ChatView = () => {
       });
 
       clearMessageCache(cId);
-      URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error('Voice upload failed:', err);
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      URL.revokeObjectURL(blobUrl);
       alert('Voice note upload failed. Please try again.');
     }
   };
@@ -861,7 +854,6 @@ const ChatView = () => {
     if (msg.type === 'media') {
       let content;
 
-      // For audio messages, use AudioPlayer (with upload spinner if uploading)
       if (msg.mediaType === 'audio') {
         if (msg.isUploading) {
           content = (
@@ -877,7 +869,6 @@ const ChatView = () => {
           content = <AudioPlayer src={msg.mediaUrl} />;
         }
       } else {
-        // For images and videos, use ChatMediaMessage (handles upload state internally)
         content = <ChatMediaMessage message={msg} isUploading={msg.isUploading} uploadProgress={msg.uploadProgress} />;
       }
 
@@ -903,7 +894,6 @@ const ChatView = () => {
       );
     }
 
-    // text message
     return (
       <div
         className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}

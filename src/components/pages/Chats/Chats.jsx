@@ -76,7 +76,7 @@ const loadPartnerData = async (partnerId) => {
   return null;
 };
 
-// ─── Process a single chat item ─────────────────────────────────
+// ─── Process a single chat item, with forced read flag ──────────
 const processChatItem = async (chat, user, onlineUsers) => {
   try {
     const profile = (await loadPartnerData(chat.id)) || {};
@@ -142,6 +142,14 @@ const processChatItem = async (chat, user, onlineUsers) => {
 
     const isOnline = !!onlineUsers[chat.id];
 
+    // ─── Force unread to 0 if this chat was marked as read ──────
+    let unreadCount = chat.unreadCount || 0;
+    const readFlagKey = `chat_read_${chat.id}`;
+    if (sessionStorage.getItem(readFlagKey) === 'true') {
+      unreadCount = 0;
+      sessionStorage.removeItem(readFlagKey);
+    }
+
     return {
       id: chat.id,
       name: partnerName,
@@ -152,18 +160,26 @@ const processChatItem = async (chat, user, onlineUsers) => {
       lastMessage: displayMessage,
       timestamp: chat.lastUpdated || chat.timestamp || Date.now(),
       lastSenderId: lastSenderId,
-      unreadCount: chat.unreadCount || 0,
+      unreadCount: unreadCount,
       isDeleted,
       online: isOnline,
     };
   } catch (err) {
+    // Fallback – also check flag
+    let unreadCount = chat.unreadCount || 0;
+    const readFlagKey = `chat_read_${chat.id}`;
+    if (sessionStorage.getItem(readFlagKey) === 'true') {
+      unreadCount = 0;
+      sessionStorage.removeItem(readFlagKey);
+    }
+
     return {
       id: chat.id,
       name: sanitizeName(chat.partnerName || chat.name, chat.id),
       lastMessage: chat.lastMessage || 'Start chatting...',
       timestamp: chat.lastUpdated || Date.now(),
       lastSenderId: chat.lastSenderId || '',
-      unreadCount: chat.unreadCount || 0,
+      unreadCount: unreadCount,
       isDeleted: false,
       online: !!onlineUsers[chat.id],
     };
@@ -190,7 +206,6 @@ const ChatItem = memo(({ chat, onStartChat }) => {
   const avatarUrl = chat.avatar || '';
   const cachedAvatar = useCachedImage(avatarUrl, null);
 
-  // Use real-time profile data for mood & skin
   const mood = profile.mood || chat.mood || 'neutral';
   const skinId = profile.activeSkin || chat.activeSkin || null;
   const skin = skinId ? getSkinById(skinId) : null;
@@ -277,6 +292,8 @@ const Chats = () => {
   useEffect(() => {
     const handleChatRead = (event) => {
       const { userId } = event.detail;
+      // Also set a session flag so that if the component mounts later, it still clears
+      sessionStorage.setItem(`chat_read_${userId}`, 'true');
       setRecentChats((prev) =>
         prev.map((chat) =>
           chat.id === userId ? { ...chat, unreadCount: 0 } : chat
@@ -313,7 +330,16 @@ const Chats = () => {
 
     const cached = getCache(cacheKey);
     if (cached && Array.isArray(cached) && cached.length > 0) {
-      setRecentChats(cached);
+      // Apply any pending read flags on cached data
+      const updatedCached = cached.map(chat => {
+        const key = `chat_read_${chat.id}`;
+        if (sessionStorage.getItem(key) === 'true') {
+          sessionStorage.removeItem(key);
+          return { ...chat, unreadCount: 0 };
+        }
+        return chat;
+      });
+      setRecentChats(updatedCached);
       setLoadingChats(false);
     }
 

@@ -2,8 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 const AudioPlayer = ({ src }) => {
-  // Guard: invalid or blob URL
-  if (!src || src.startsWith('blob:')) {
+  if (!src) {
     return (
       <div className="audio-placeholder">
         <i className="fas fa-music" />
@@ -16,12 +15,11 @@ const AudioPlayer = ({ src }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [isLoaded, setIsLoaded] = useState(false);
+  const [isLoaded, setIsLoaded] = useState(src?.startsWith('blob:') || false); // ✅ blob = instantly loaded
   const [error, setError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const barRefs = useRef([]);
   const animationRef = useRef(null);
-  const playPromiseRef = useRef(null);
 
   const animateWaveform = () => {
     if (!isPlaying) return;
@@ -49,7 +47,6 @@ const AudioPlayer = ({ src }) => {
     };
   }, [isPlaying]);
 
-  // ─── Audio events ──────────────────────────────────────────────
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -61,15 +58,12 @@ const AudioPlayer = ({ src }) => {
     };
 
     const onLoadedData = () => {
-      // Safe to play now – data is loaded
       setIsLoaded(true);
       setError(false);
-      // If we should be playing, start playback
       if (isPlaying) {
         const promise = audio.play();
         if (promise !== undefined) {
           promise.catch((err) => {
-            // Ignore AbortError – it's fine
             if (err.name !== 'AbortError') {
               console.warn('Play error:', err);
               setError(true);
@@ -98,8 +92,6 @@ const AudioPlayer = ({ src }) => {
     audio.preload = 'auto';
     audio.crossOrigin = 'anonymous';
 
-    // No explicit load() – it will load automatically
-
     return () => {
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
       audio.removeEventListener('loadeddata', onLoadedData);
@@ -109,7 +101,6 @@ const AudioPlayer = ({ src }) => {
     };
   }, [src, duration, isPlaying]);
 
-  // ─── Controls ──────────────────────────────────────────────────
   const togglePlay = () => {
     const audio = audioRef.current;
     if (!audio || error) return;
@@ -125,7 +116,6 @@ const AudioPlayer = ({ src }) => {
             setIsPlaying(true);
           })
           .catch((err) => {
-            // Ignore AbortError – it's fine
             if (err.name !== 'AbortError') {
               console.warn('Play error:', err);
               setError(true);
@@ -149,8 +139,8 @@ const AudioPlayer = ({ src }) => {
     setRetryCount(prev => prev + 1);
     const audio = audioRef.current;
     if (audio) {
-      // Just reload the src – no explicit load()
       audio.src = src;
+      audio.load();
     }
   };
 

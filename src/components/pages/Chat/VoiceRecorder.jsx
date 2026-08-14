@@ -12,6 +12,15 @@ const VoiceRecorder = ({ onSend, onCancel }) => {
   const streamRef = useRef(null);
   const isMounted = useRef(true);
 
+  // Determine supported MIME type
+  const getSupportedMimeType = () => {
+    const types = ['audio/webm', 'audio/mp4', 'audio/ogg'];
+    for (const type of types) {
+      if (MediaRecorder.isTypeSupported(type)) return type;
+    }
+    return 'audio/webm'; // fallback
+  };
+
   useEffect(() => {
     return () => {
       isMounted.current = false;
@@ -26,7 +35,8 @@ const VoiceRecorder = ({ onSend, onCancel }) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-      const mediaRecorder = new MediaRecorder(stream);
+      const mimeType = getSupportedMimeType();
+      const mediaRecorder = new MediaRecorder(stream, { mimeType });
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -34,7 +44,13 @@ const VoiceRecorder = ({ onSend, onCancel }) => {
         if (e.data.size > 0) chunksRef.current.push(e.data);
       };
       mediaRecorder.onstop = () => {
-        const blob = new Blob(chunksRef.current, { type: 'audio/mp4' });
+        const blob = new Blob(chunksRef.current, { type: mimeType });
+        // Validate blob size
+        if (blob.size === 0) {
+          alert('Recording was empty. Please try again.');
+          handleCancel();
+          return;
+        }
         const url = URL.createObjectURL(blob);
         if (isMounted.current) {
           setAudioBlob(blob);

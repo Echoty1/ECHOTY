@@ -17,15 +17,12 @@ export const preloadMedia = (url) => {
 
 export const loadAndCacheImage = async (url) => {
   if (!url) return null;
-
   try {
     const cached = getMediaCache(url);
     if (cached) return cached;
-
     const response = await fetch(url);
     if (!response.ok) throw new Error('Network response was not ok');
     const blob = await response.blob();
-
     return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onloadend = () => {
@@ -42,20 +39,26 @@ export const loadAndCacheImage = async (url) => {
 };
 
 export const useCachedImage = (url, placeholder = null) => {
-  const [image, setImage] = React.useState(() => {
+  const [image, setImage] = useState(() => {
     if (!url) return placeholder;
+    // ✅ If it's a blob URL, return it immediately
+    if (url.startsWith('blob:')) return url;
     const cached = getMediaCache(url);
     return cached || url;
   });
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!url) {
       setImage(placeholder);
       return;
     }
+    // ✅ If blob URL, just set it and skip caching
+    if (url.startsWith('blob:')) {
+      setImage(url);
+      return;
+    }
 
     let isMounted = true;
-
     const cached = getMediaCache(url);
     if (cached) {
       if (isMounted) setImage(cached);
@@ -87,7 +90,6 @@ export const useCachedBlobUrl = (originalUrl) => {
       setIsLoading(false);
       return;
     }
-
     if (originalUrl.startsWith('blob:')) {
       setBlobUrl(originalUrl);
       setIsLoading(false);
@@ -110,7 +112,6 @@ export const useCachedBlobUrl = (originalUrl) => {
             return;
           }
         }
-
         const response = await fetch(originalUrl);
         if (!response.ok) throw new Error('Network response was not ok');
         const clonedResponse = response.clone();

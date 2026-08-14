@@ -114,7 +114,6 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
 
 // ─── Inline Video Player ──────────────────────────────────────
 const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
-  // ─── If uploading (sender): show video with upload overlay ──
   if (isUploading) {
     return (
       <div className="chat-media-video-wrapper" style={{ position: 'relative', minHeight: '200px', background: '#000' }}>
@@ -133,7 +132,6 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
     );
   }
 
-  // ─── Check if src is valid ──────────────────────────────────
   if (!src || src.startsWith('blob:')) {
     return <InvalidMediaPlaceholder />;
   }
@@ -234,9 +232,9 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
   );
 };
 
-// ─── Image with loading state ──────────────────────────────────
+// ─── Image with Lightbox ──────────────────────────────────────
 const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
-  // ─── If uploading (sender): show image with upload overlay ──
+  // If uploading, show overlay with spinner
   if (isUploading) {
     return (
       <div className="chat-media-image-wrapper" style={{ position: 'relative', minHeight: '200px', background: '#0A0A0F' }}>
@@ -251,23 +249,26 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
     );
   }
 
-  // ─── Check if src is valid ──────────────────────────────────
-  if (!src || src.startsWith('blob:')) {
+  // If src is invalid, show placeholder
+  if (!src) {
     return <InvalidMediaPlaceholder />;
   }
 
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [loadError, setLoadError] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
   const [imageLoaded, setImageLoaded] = useState(false);
 
+  // Use cached image (for blob URLs, it returns the URL directly)
   const cachedImage = useCachedImage(src, null);
   const imageSrc = cachedImage || src;
 
-  const isReady = isMediaReady || imageLoaded;
+  // Determine if we need to show loading state
+  // For blob URLs, we consider it loaded immediately
+  const isBlob = src.startsWith('blob:');
+  const isReady = isMediaReady || imageLoaded || isBlob;
 
   useEffect(() => {
-    if (!src) return;
+    if (!src || isBlob) return;
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.src = src;
@@ -278,7 +279,7 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
       img.onload = null;
       img.onerror = null;
     };
-  }, [src]);
+  }, [src, isBlob]);
 
   const openLightbox = () => setLightboxOpen(true);
   const closeLightbox = () => setLightboxOpen(false);
@@ -287,7 +288,6 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
     e.stopPropagation();
     setLoadError(false);
     setImageLoaded(false);
-    setRetryCount(prev => prev + 1);
     const img = new Image();
     img.src = src;
     img.onload = () => { setImageLoaded(true); setLoadError(false); };
@@ -301,6 +301,30 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
     return () => document.body.classList.remove('hide-bottom-nav');
   }, [lightboxOpen]);
 
+  // If it's a blob, we don't show error or loading spinner
+  if (isBlob) {
+    return (
+      <>
+        <div className="chat-media-image-wrapper" onClick={openLightbox}>
+          <img src={imageSrc} alt={caption || 'Image'} className="chat-media-image" loading="lazy" />
+        </div>
+        {caption && <div className="chat-media-caption">{caption}</div>}
+        {lightboxOpen && (
+          <div className="media-lightbox-overlay" onClick={closeLightbox}>
+            <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()}>
+              <img src={imageSrc} alt={caption || 'Image'} className="media-lightbox-image" />
+              {caption && <div className="media-lightbox-caption">{caption}</div>}
+              <button className="media-lightbox-close" onClick={closeLightbox}>
+                <i className="fas fa-times" />
+              </button>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  // For non-blob URLs
   return (
     <>
       <div className="chat-media-image-wrapper" onClick={loadError ? undefined : openLightbox}>
@@ -317,7 +341,6 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
               className="chat-media-image"
               loading="lazy"
               style={{ opacity: isReady ? 1 : 0, transition: 'opacity 0.3s ease' }}
-              key={retryCount}
               crossOrigin="anonymous"
             />
             {!isReady && <LoadingSpinner />}
@@ -325,7 +348,6 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
         )}
       </div>
       {caption && <div className="chat-media-caption">{caption}</div>}
-
       {lightboxOpen && !loadError && (
         <div className="media-lightbox-overlay" onClick={closeLightbox}>
           <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()}>

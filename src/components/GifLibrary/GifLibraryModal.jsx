@@ -1,5 +1,5 @@
 // src/components/GifLibrary/GifLibraryModal.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { fetchGifLibrary } from '../../services/gifLibraryService';
 import { useAuth } from '../../hooks/useAuth';
 import { db } from '../../services/firebase';
@@ -14,6 +14,96 @@ const parseUnlockedGifs = (data) => {
   return [];
 };
 
+// ─── Individual GIF item with lazy loading ──────────────────
+const GifItem = ({ gif, isUnlocked, onSelect }) => {
+  const [isVisible, setIsVisible] = useState(false);
+  const itemRef = useRef(null);
+
+  // IntersectionObserver to trigger loading only when visible
+  useEffect(() => {
+    if (!itemRef.current) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px' } // start loading a bit before it enters the screen
+    );
+    observer.observe(itemRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const { blobUrl, isLoading, error } = useCachedBlobUrl(
+    isVisible ? gif.url : null // only fetch if visible
+  );
+
+  const isLocked = gif.isPremium && !isUnlocked;
+
+  // Determine which image source to display
+  const imageSrc = blobUrl || (isVisible ? gif.url : null);
+
+  const handleClick = () => {
+    if (isLocked) {
+      // show purchase modal handled by parent
+      onSelect(gif);
+    } else {
+      onSelect(gif);
+    }
+  };
+
+  return (
+    <div
+      className={`gif-item ${isLocked ? 'premium' : ''}`}
+      onClick={handleClick}
+      ref={itemRef}
+    >
+      {isVisible ? (
+        <>
+          {isLoading && !error && (
+            <div className="gif-loading-spinner">
+              <i className="fas fa-spinner fa-spin" />
+            </div>
+          )}
+          {error ? (
+            <div className="gif-error">⚠️</div>
+          ) : (
+            <img
+              src={imageSrc}
+              alt={gif.title}
+              className="gif-thumb"
+              loading="lazy"
+              style={{ display: isLoading ? 'none' : 'block' }}
+              onError={(e) => {
+                // fallback if image fails
+                e.target.style.display = 'none';
+              }}
+            />
+          )}
+          {isLoading && <div className="gif-skeleton" />}
+        </>
+      ) : (
+        // Placeholder when not yet in viewport
+        <div className="gif-skeleton" />
+      )}
+
+      {/* Overlay with title and price/unlocked status */}
+      <div className="gif-overlay">
+        <span className="gif-title">{gif.title}</span>
+        {isLocked ? (
+          <span className="gif-price">🪙 {gif.price}</span>
+        ) : gif.isPremium ? (
+          <span className="gif-unlocked" style={{ fontSize: '11px', color: '#10B981' }}>
+            ✓ Unlocked
+          </span>
+        ) : null}
+      </div>
+    </div>
+  );
+};
+
+// ─── Main Modal ──────────────────────────────────────────────
 const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
   const { user } = useAuth();
   const [library, setLibrary] = useState([]);
@@ -24,7 +114,7 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
   const [userCoins, setUserCoins] = useState(0);
   const [unlockedGifs, setUnlockedGifs] = useState([]);
 
-  // ─── Load GIF library & user data ──────────────────────
+  // ─── Load GIF library & user data ──────────────────────────
   useEffect(() => {
     if (!isOpen || !user) return;
 
@@ -63,7 +153,7 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
     return () => unsubscribe();
   }, [isOpen, user]);
 
-  // ─── Direct Search Filtering ────────────────────────────
+  // ─── Filtered list ──────────────────────────────────────────
   const filteredGifs = useMemo(() => {
     if (!searchTerm.trim()) return library;
     const term = searchTerm.toLowerCase();
@@ -77,37 +167,7 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
     return Array.isArray(unlockedGifs) && unlockedGifs.includes(gifId);
   };
 
-  // ─── Render cached GIF item ─────────────────────────────
-  const GifItem = ({ gif }) => {
-    const { blobUrl, isLoading, error } = useCachedBlobUrl(gif.url);
-    const unlocked = isGifUnlocked(gif.id);
-    const isLocked = gif.isPremium && !unlocked;
-
-    return (
-      <div
-        className={`gif-item ${isLocked ? 'premium' : ''}`}
-        onClick={() => handleSelect(gif)}
-      >
-        {isLoading ? (
-          <div className="gif-loading-spinner"><i className="fas fa-spinner fa-spin" /></div>
-        ) : error ? (
-          <div className="gif-error">⚠️</div>
-        ) : (
-          <img src={blobUrl || gif.url} alt={gif.title} className="gif-thumb" loading="lazy" />
-        )}
-        <div className="gif-overlay">
-          <span className="gif-title">{gif.title}</span>
-          {isLocked ? (
-            <span className="gif-price">🪙 {gif.price}</span>
-          ) : gif.isPremium ? (
-            <span className="gif-unlocked" style={{ fontSize: '11px', color: '#10B981' }}>✓ Unlocked</span>
-          ) : null}
-        </div>
-      </div>
-    );
-  };
-
-  // ─── Selection & Purchase logic ──────────────────────────
+  // ─── Selection & Purchase logic ────────────────────────────
   const handleSelect = async (gif) => {
     const unlocked = isGifUnlocked(gif.id);
     if (!gif.isPremium || unlocked) {
@@ -137,11 +197,14 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
       const newCoins = currentCoins - selectedGif.price;
       const updatedUnlocked = Array.from(new Set([...currentUnlocked, selectedGif.id]));
 
-      await update(userSkinsRef, { 
+      await update(userSkinsRef, {
         coins: newCoins,
-        unlockedGifs: updatedUnlocked
+        unlockedGifs: updatedUnlocked,
       });
 
+      // Update local state
+      setUserCoins(newCoins);
+      setUnlockedGifs(updatedUnlocked);
       const gifToUse = selectedGif;
       setSelectedGif(null);
       onSelect(gifToUse);
@@ -181,7 +244,7 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
               borderRadius: '12px',
               color: '#FFF',
               outline: 'none',
-              boxSizing: 'border-box'
+              boxSizing: 'border-box',
             }}
           />
         </div>
@@ -194,7 +257,12 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
           ) : (
             <div className="gif-grid">
               {filteredGifs.map((gif) => (
-                <GifItem key={gif.id} gif={gif} />
+                <GifItem
+                  key={gif.id}
+                  gif={gif}
+                  isUnlocked={isGifUnlocked(gif.id)}
+                  onSelect={handleSelect}
+                />
               ))}
             </div>
           )}
@@ -207,7 +275,10 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
               <p>"{selectedGif.title}" costs 🪙 {selectedGif.price} coins.</p>
               <p>You have 🪙 {userCoins} coins.</p>
               <div className="gif-purchase-actions">
-                <button onClick={handlePurchase} disabled={purchasing || userCoins < selectedGif.price}>
+                <button
+                  onClick={handlePurchase}
+                  disabled={purchasing || userCoins < selectedGif.price}
+                >
                   {purchasing ? 'Processing...' : 'Buy & Use'}
                 </button>
                 <button onClick={() => setSelectedGif(null)}>Cancel</button>

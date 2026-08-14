@@ -7,3 +7,5 @@ backend/.env
 backend/scripts/
 *.log
 gifLibrary.json
+firebasedetails.txt
+repomix-output.xml
