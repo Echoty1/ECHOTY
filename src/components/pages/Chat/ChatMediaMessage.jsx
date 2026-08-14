@@ -92,13 +92,31 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
 };
 
 // ─── Inline Video Player ──────────────────────────────────────
-const VideoPlayer = ({ videoId, src, caption, uploadProgress }) => {
+const VideoPlayer = ({ videoId, src, caption, uploadProgress, isMediaReady }) => {
   const videoRef = useRef(null);
   const [isMuted, setIsMuted] = useState(true);
   const [showFullscreen, setShowFullscreen] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+  const [localReady, setLocalReady] = useState(false);
+  const [loadError, setLoadError] = useState(false);
 
   const { activeUnmutedId, requestUnmute, muteAll } = useVideoAudio();
+
+  // Use the parent's isMediaReady flag to show/hide overlay
+  const isReady = isMediaReady || localReady;
+
+  useEffect(() => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+    const onCanPlay = () => { setLocalReady(true); setLoadError(false); };
+    const onError = () => { setLoadError(true); setLocalReady(true); };
+    video.addEventListener('canplay', onCanPlay);
+    video.addEventListener('error', onError);
+    if (video.readyState >= 3) setLocalReady(true);
+    return () => {
+      video.removeEventListener('canplay', onCanPlay);
+      video.removeEventListener('error', onError);
+    };
+  }, [src]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -132,9 +150,8 @@ const VideoPlayer = ({ videoId, src, caption, uploadProgress }) => {
     setShowFullscreen(true);
   };
 
-  const handleLoadedMetadata = () => { setIsLoading(false); };
-
   const progress = typeof uploadProgress === 'number' ? uploadProgress : null;
+  const showOverlay = !isReady || (progress !== null && progress < 100);
 
   return (
     <>
@@ -149,26 +166,37 @@ const VideoPlayer = ({ videoId, src, caption, uploadProgress }) => {
           playsInline
           preload="metadata"
           controls={false}
-          onLoadedMetadata={handleLoadedMetadata}
           crossOrigin="anonymous"
+          style={{ opacity: isReady ? 1 : 0, transition: 'opacity 0.3s ease' }}
         />
-        {isLoading && (
-          <div className="video-loading-spinner">
-            <i className="fas fa-spinner fa-spin" />
+        {showOverlay && !loadError && (
+          <div className="image-upload-overlay">
+            <div className="upload-spinner">
+              <svg className="spinner-ring" viewBox="0 0 50 50">
+                <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
+              </svg>
+              <span className="upload-progress-text">
+                {progress !== null && progress < 100 ? Math.round(progress) : 100}%
+              </span>
+            </div>
           </div>
         )}
-        <button className="video-mute-btn-overlay" onClick={toggleMute}>
-          <i className={`fas ${isMuted ? 'fa-volume-mute' : 'fa-volume-up'}`} />
-        </button>
+        {loadError && (
+          <div className="image-error-placeholder" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)' }}>
+            <i className="fas fa-image" style={{ fontSize: '32px', opacity: 0.3 }} />
+            <button className="image-retry-btn" onClick={() => { setLoadError(false); setLocalReady(false); videoRef.current?.load(); }}>
+              <i className="fas fa-redo" /> Retry
+            </button>
+          </div>
+        )}
+        {isReady && !loadError && (
+          <button className="video-mute-btn-overlay" onClick={toggleMute}>
+            <i className={`fas ${isMuted ? 'fa-volume-mute' : 'fa-volume-up'}`} />
+          </button>
+        )}
         <div className="video-play-icon-overlay">
           <i className="fas fa-play-circle" />
         </div>
-        {progress !== null && progress < 100 && (
-          <div className="video-upload-progress">
-            <div className="progress-bar" style={{ width: `${progress}%` }} />
-            <span className="progress-text">{Math.round(progress)}%</span>
-          </div>
-        )}
       </div>
       {caption && <div className="chat-media-caption">{caption}</div>}
       {showFullscreen && (
@@ -178,26 +206,46 @@ const VideoPlayer = ({ videoId, src, caption, uploadProgress }) => {
   );
 };
 
-// ─── Image with upload progress overlay (stays until image loads) ──
-const ImageWithLightbox = ({ src, caption, uploadProgress, isUploading }) => {
+// ─── Image with unified loader ──────────────────────────────────
+const ImageWithLightbox = ({ src, caption, uploadProgress, isMediaReady }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
   const [imageLoaded, setImageLoaded] = useState(false);
-  
+
   const cachedImage = useCachedImage(src, null);
   const imageSrc = cachedImage || src;
+
+  const isReady = isMediaReady || imageLoaded;
+
+  // Preload image
+  useEffect(() => {
+    if (!src) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = src;
+    img.onload = () => { setImageLoaded(true); setLoadError(false); };
+    img.onerror = () => { setLoadError(true); setImageLoaded(true); };
+    if (img.complete) setImageLoaded(true);
+    return () => {
+      img.onload = null;
+      img.onerror = null;
+    };
+  }, [src]);
 
   const openLightbox = () => setLightboxOpen(true);
   const closeLightbox = () => setLightboxOpen(false);
 
-  const handleImageLoad = () => setImageLoaded(true);
-  const handleImageError = () => setLoadError(true);
   const handleRetry = (e) => {
     e.stopPropagation();
     setLoadError(false);
     setImageLoaded(false);
     setRetryCount(prev => prev + 1);
+    const img = new Image();
+    img.src = src;
+    img.onload = () => { setImageLoaded(true); setLoadError(false); };
+    img.onerror = () => { setLoadError(true); setImageLoaded(true); };
+    if (img.complete) setImageLoaded(true);
   };
 
   useEffect(() => {
@@ -209,8 +257,8 @@ const ImageWithLightbox = ({ src, caption, uploadProgress, isUploading }) => {
     return () => document.body.classList.remove('hide-bottom-nav');
   }, [lightboxOpen]);
 
-  // Show progress overlay if: still uploading OR (not uploading but image not loaded yet)
-  const showProgress = isUploading || (!isUploading && !imageLoaded && !loadError);
+  const progress = typeof uploadProgress === 'number' ? uploadProgress : null;
+  const showOverlay = !isReady || (progress !== null && progress < 100);
 
   return (
     <>
@@ -229,19 +277,18 @@ const ImageWithLightbox = ({ src, caption, uploadProgress, isUploading }) => {
               alt={caption || 'Image'}
               className="chat-media-image"
               loading="lazy"
-              onError={handleImageError}
-              onLoad={handleImageLoad}
+              style={{ opacity: isReady ? 1 : 0, transition: 'opacity 0.3s ease' }}
               key={retryCount}
               crossOrigin="anonymous"
             />
-            {showProgress && (
+            {showOverlay && (
               <div className="image-upload-overlay">
                 <div className="upload-spinner">
                   <svg className="spinner-ring" viewBox="0 0 50 50">
                     <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
                   </svg>
                   <span className="upload-progress-text">
-                    {isUploading ? Math.round(uploadProgress) : 100}%
+                    {progress !== null && progress < 100 ? Math.round(progress) : 100}%
                   </span>
                 </div>
               </div>
@@ -267,15 +314,15 @@ const ImageWithLightbox = ({ src, caption, uploadProgress, isUploading }) => {
 };
 
 // ─── Main Media Message ──────────────────────────────────────────
-const ChatMediaMessage = ({ message, isUploading, uploadProgress }) => {
-  const { mediaType, mediaUrl, caption, id } = message;
+const ChatMediaMessage = ({ message }) => {
+  const { mediaType, mediaUrl, caption, id, uploadProgress, isMediaReady } = message;
 
   if (mediaType === 'video') {
-    return <VideoPlayer videoId={id} src={mediaUrl} caption={caption} uploadProgress={uploadProgress} />;
+    return <VideoPlayer videoId={id} src={mediaUrl} caption={caption} uploadProgress={uploadProgress} isMediaReady={isMediaReady} />;
   }
 
   // image
-  return <ImageWithLightbox src={mediaUrl} caption={caption} uploadProgress={uploadProgress} isUploading={isUploading} />;
+  return <ImageWithLightbox src={mediaUrl} caption={caption} uploadProgress={uploadProgress} isMediaReady={isMediaReady} />;
 };
 
 export default ChatMediaMessage;

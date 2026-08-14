@@ -27,7 +27,7 @@
 .messages-container {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 16px;
+  padding: 16px 16px 12px !important;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -140,6 +140,7 @@
   object-fit: contain;
   display: block;
   background: #0A0A0F;
+  transition: opacity 0.3s ease;
 }
 
 .chat-media-caption {
@@ -176,6 +177,12 @@
 }
 .video-mute-btn-overlay:hover {
   background: rgba(255, 255, 255, 0.2);
+}
+
+/* Partner messages: mute button on the left */
+.message-bubble.partner .video-mute-btn-overlay {
+  right: auto;
+  left: 12px;
 }
 
 .video-play-icon-overlay {
@@ -236,7 +243,7 @@
 /* ─── Lightbox ────────────────────────────────────────────────── */
 .media-lightbox-overlay {
   position: fixed;
-  top: 0;
+  top: 0 !important;
   left: 0;
   right: 0;
   bottom: 0;
@@ -244,7 +251,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 99999;
+  z-index: 999999 !important;
   padding: 20px;
   backdrop-filter: blur(8px);
 }
@@ -291,12 +298,12 @@
 /* ─── Fullscreen Video Player ────────────────────────────────── */
 .fullscreen-video-overlay {
   position: fixed;
-  top: 0;
+  top: 0 !important;
   left: 0;
   right: 0;
   bottom: 0;
   background: rgba(0, 0, 0, 0.95);
-  z-index: 999999;
+  z-index: 999999 !important;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -562,6 +569,7 @@
   font-size: 16px;
   font-weight: 700;
   text-shadow: 0 2px 8px rgba(0,0,0,0.6);
+  white-space: nowrap;
 }
 .upload-spinner::before {
   content: '';
@@ -947,6 +955,52 @@
   to { transform: scale(1); opacity: 1; }
 }
 
+/* ─── GIF message ────────────────────────────────────────────── */
+.gif-message-container {
+  max-width: 100%;
+  border-radius: 12px;
+  overflow: hidden;
+  background: transparent;
+}
+.gif-message-img {
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  display: block;
+  border-radius: 12px;
+}
+.gif-message-caption {
+  padding: 6px 8px 4px;
+  color: #ddd;
+  font-size: 13px;
+  text-align: center;
+  opacity: 0.8;
+}
+
+/* ─── Typing indicator ────────────────────────────────────────── */
+.typing-indicator {
+  display: flex;
+  gap: 6px;
+  padding: 4px 0;
+}
+.typing-indicator span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #888;
+  animation: typingBounce 1.2s infinite ease-in-out;
+}
+.typing-indicator span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.typing-indicator span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+@keyframes typingBounce {
+  0%, 60%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-10px); }
+}
+
 /* ─── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 480px) {
   .message-bubble {
@@ -1009,96 +1063,4 @@
     padding: 6px 12px;
     margin: 0 8px;
   }
-}
-
-/* ─── GIF message ────────────────────────────────────────────── */
-.gif-message-container {
-  max-width: 100%;
-  border-radius: 12px;
-  overflow: hidden;
-  background: transparent;
-}
-
-.gif-message-img {
-  width: 100%;
-  max-height: 300px;
-  object-fit: contain;
-  display: block;
-  border-radius: 12px;
-}
-
-.gif-message-caption {
-  padding: 6px 8px 4px;
-  color: #ddd;
-  font-size: 13px;
-  text-align: center;
-  opacity: 0.8;
-}
-
-/* ─── Typing indicator ────────────────────────────────────────── */
-.typing-indicator {
-  display: flex;
-  gap: 6px;
-  padding: 4px 0;
-}
-
-.typing-indicator span {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #888;
-  animation: typingBounce 1.2s infinite ease-in-out;
-}
-
-.typing-indicator span:nth-child(2) {
-  animation-delay: 0.2s;
-}
-.typing-indicator span:nth-child(3) {
-  animation-delay: 0.4s;
-}
-
-@keyframes typingBounce {
-  0%, 60%, 100% { transform: translateY(0); }
-  30% { transform: translateY(-10px); }
-}
-
-/* ─── Mute button position ────────────────────────────────────── */
-.video-mute-btn-overlay {
-  /* default: right side */
-  right: 12px;
-  left: auto;
-}
-
-/* For own messages, move to left */
-.message-bubble.own .video-mute-btn-overlay {
-  right: auto;
-  left: 12px;
-}
-
-/* ─── Mute button: partner videos on left, own videos on right ─ */
-.message-bubble.partner .video-mute-btn-overlay {
-  right: auto;
-  left: 12px;
-}
-
-/* ─── Inline video controls ────────────────────────────────── */
-.video-mute-btn-overlay {
-  position: absolute;
-  bottom: 12px;
-  right: 12px; /* default: own messages (right) */
-  background: rgba(0, 0, 0, 0.6);
-  border: none;
-  border-radius: 50%;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  cursor: pointer;
-  font-size: 14px;
-  backdrop-filter: blur(4px);
-  transition: background 0.2s;
-  z-index: 2;
-  pointer-events: auto;
 }

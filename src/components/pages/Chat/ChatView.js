@@ -403,6 +403,7 @@ const ChatView = () => {
   };
 
   // ─── Send media message ─────────────────────────────────────
+  // ─── Send media message ─────────────────────────────────────
   const sendMediaMessage = async () => {
     if (!selectedFile || !user?.uid || !userId) return;
 
@@ -415,29 +416,34 @@ const ChatView = () => {
     const tempId = `temp_${Date.now()}`;
     const mediaType = selectedFile.type.startsWith('video/') ? 'video' : 'image';
     const mediaIcon = mediaType === 'video' ? '🎬 Video' : '📷 Image';
-    const blobUrl = previewUrl;
+    const blobUrl = URL.createObjectURL(selectedFile);
 
+    // ── 1. Optimistic message with blob URL ──
     const optimisticMsg = {
       id: tempId,
       senderId: user.uid,
       receiverId: userId,
       type: 'media',
       mediaType,
-      mediaUrl: blobUrl,
+      mediaUrl: blobUrl, // blob URL for instant preview
+      realUrl: null, // will be set after upload
       caption: captionText.trim(),
       timestamp: Date.now(),
       isRead: false,
       isUploading: true,
       uploadProgress: 0,
+      isMediaReady: false, // indicates real media is loaded
     };
     setMessages((prev) => [...prev, optimisticMsg]);
     setTimeout(() => scrollToBottom(true), 100);
 
+    // Close preview overlay
     setPreviewUrl(null);
     setSelectedFile(null);
     setCaptionText('');
 
     try {
+      // ── 2. Upload to Cloudinary ──
       const downloadURL = await uploadToCloudinary(selectedFile, (progress) => {
         setUploadProgress(progress);
         setMessages((prev) =>
@@ -447,6 +453,32 @@ const ChatView = () => {
         );
       });
 
+      // ── 3. Preload the real media in the background ──
+      // For images, create an Image object; for videos, preload with video element.
+      let realMediaLoaded = false;
+      if (mediaType === 'image') {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = downloadURL;
+        await new Promise((resolve) => {
+          img.onload = () => { realMediaLoaded = true; resolve(); };
+          img.onerror = () => { realMediaLoaded = false; resolve(); };
+          if (img.complete) { realMediaLoaded = true; resolve(); }
+        });
+      } else {
+        // video
+        const video = document.createElement('video');
+        video.preload = 'metadata';
+        video.src = downloadURL;
+        await new Promise((resolve) => {
+          video.onloadedmetadata = () => { realMediaLoaded = true; resolve(); };
+          video.onerror = () => { realMediaLoaded = false; resolve(); };
+          // Check if already loaded
+          if (video.readyState >= 1) { realMediaLoaded = true; resolve(); }
+        });
+      }
+
+      // ── 4. Write real message to database ──
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const newMsgRef = push(messagesRef);
       const realMsg = {
@@ -459,28 +491,30 @@ const ChatView = () => {
         timestamp: serverTimestamp(),
         isRead: false,
       };
-
-      if (replyTo) {
-        realMsg.replyTo = {
-          messageId: replyTo.messageId,
-          senderName: replyTo.senderName,
-          messageType: replyTo.messageType,
-          textSnippet: replyTo.textSnippet,
-        };
-        setReplyTo(null);
-      }
-
       await set(newMsgRef, realMsg);
 
+      // ── 5. Update optimistic message with real data ──
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId
-            ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100 }
+            ? {
+                ...m,
+                realUrl: downloadURL,
+                mediaUrl: downloadURL, // swap to real URL
+                isUploading: false,
+                uploadProgress: 100,
+                isMediaReady: true, // we've preloaded it
+                id: newMsgRef.key, // use real Firebase key
+              }
             : m
         )
       );
       setTimeout(() => scrollToBottom(true), 100);
 
+      // Revoke blob URL after swap
+      URL.revokeObjectURL(blobUrl);
+
+      // ── 6. Update userChats ──
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
       await set(myChatRef, {
         id: userId,
@@ -509,8 +543,6 @@ const ChatView = () => {
           currentData.lastMessage = mediaIcon;
           currentData.lastSenderId = user.uid;
           currentData.lastUpdated = Date.now();
-          currentData.partnerName = currentUserProfile?.name || currentData.partnerName || 'User';
-          currentData.partnerAvatar = currentUserProfile?.avatar || currentData.partnerAvatar || '';
           return currentData;
         }
       });
@@ -518,7 +550,6 @@ const ChatView = () => {
       clearMessageCache(cId);
       setIsUploading(false);
       setUploadProgress(0);
-      URL.revokeObjectURL(blobUrl);
     } catch (err) {
       console.error('Upload failed:', err);
       setIsUploading(false);
@@ -668,11 +699,7 @@ const ChatView = () => {
                 onTap={() => scrollToMessage(replyToDisplay.messageId)}
               />
             )}
-            <ChatMediaMessage 
-              message={msg} 
-              isUploading={msg.isUploading} 
-              uploadProgress={msg.uploadProgress} 
-            />
+            <ChatMediaMessage message={msg} />
           </MessageMenu>
         </div>
       );
