@@ -178,22 +178,25 @@ const VideoPlayer = ({ videoId, src, caption, uploadProgress }) => {
   );
 };
 
-// ─── Image with upload progress overlay ──────────────────────
+// ─── Image with upload progress overlay (stays until image loads) ──
 const ImageWithLightbox = ({ src, caption, uploadProgress, isUploading }) => {
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [imageLoaded, setImageLoaded] = useState(false);
+  
   const cachedImage = useCachedImage(src, null);
   const imageSrc = cachedImage || src;
-  const progress = typeof uploadProgress === 'number' ? uploadProgress : 0;
 
   const openLightbox = () => setLightboxOpen(true);
   const closeLightbox = () => setLightboxOpen(false);
 
+  const handleImageLoad = () => setImageLoaded(true);
   const handleImageError = () => setLoadError(true);
   const handleRetry = (e) => {
     e.stopPropagation();
     setLoadError(false);
+    setImageLoaded(false);
     setRetryCount(prev => prev + 1);
   };
 
@@ -205,6 +208,9 @@ const ImageWithLightbox = ({ src, caption, uploadProgress, isUploading }) => {
     }
     return () => document.body.classList.remove('hide-bottom-nav');
   }, [lightboxOpen]);
+
+  // Show progress overlay if: still uploading OR (not uploading but image not loaded yet)
+  const showProgress = isUploading || (!isUploading && !imageLoaded && !loadError);
 
   return (
     <>
@@ -224,16 +230,19 @@ const ImageWithLightbox = ({ src, caption, uploadProgress, isUploading }) => {
               className="chat-media-image"
               loading="lazy"
               onError={handleImageError}
+              onLoad={handleImageLoad}
               key={retryCount}
               crossOrigin="anonymous"
             />
-            {isUploading && (
+            {showProgress && (
               <div className="image-upload-overlay">
                 <div className="upload-spinner">
                   <svg className="spinner-ring" viewBox="0 0 50 50">
                     <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
                   </svg>
-                  <span className="upload-progress-text">{Math.round(progress)}%</span>
+                  <span className="upload-progress-text">
+                    {isUploading ? Math.round(uploadProgress) : 100}%
+                  </span>
                 </div>
               </div>
             )}
