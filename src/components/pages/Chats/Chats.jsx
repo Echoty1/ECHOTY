@@ -104,12 +104,11 @@ const processChatItem = async (chat, user, onlineUsers) => {
 
     let displayMessage = rawLastMessage;
     if (displayMessage !== 'Start chatting...') {
-      // ── NEW: Handle media types ──
       if (latest.type === 'media') {
         let mediaLabel = '📷 Image';
         if (latest.mediaType === 'video') mediaLabel = '🎬 Video';
         else if (latest.mediaType === 'audio') mediaLabel = '🎤 Voice note';
-        
+
         const isSender = lastSenderId === user.uid;
         if (isSender) {
           displayMessage = `You: ${mediaLabel}`;
@@ -128,9 +127,13 @@ const processChatItem = async (chat, user, onlineUsers) => {
         }
       }
     } else {
-      // Fallback: if chat.lastMessage already contains a media icon
       if (chat.lastMessage === '📷 Image' || chat.lastMessage === '🎬 Video' || chat.lastMessage === '🎤 Voice note') {
-        displayMessage = `${partnerName}: ${chat.lastMessage}`;
+        const isSender = lastSenderId === user.uid;
+        if (isSender) {
+          displayMessage = `You: ${chat.lastMessage}`;
+        } else {
+          displayMessage = `${partnerName}: ${chat.lastMessage}`;
+        }
       }
     }
 
@@ -172,23 +175,27 @@ const sortNonAIChats = (chats) => {
   const online = chats.filter(c => c.online === true);
   const offline = chats.filter(c => c.online === false);
 
-  // Sort each group by timestamp descending (most recent first)
   const onlineSorted = online.sort((a, b) => b.timestamp - a.timestamp);
   const offlineSorted = offline.sort((a, b) => b.timestamp - a.timestamp);
 
   return [...onlineSorted, ...offlineSorted];
 };
 
-// ─── Memoized Chat Item ──────────────────────────────────────────
+// ─── Chat Item ──────────────────────────────────────────────────
 const ChatItem = memo(({ chat, onStartChat }) => {
+  const { profiles } = useProfile();
+  const profile = profiles[chat.id] || {};
   const isOnline = chat.online;
   const hasUnread = chat.unreadCount > 0;
   const avatarUrl = chat.avatar || '';
   const cachedAvatar = useCachedImage(avatarUrl, null);
-  const { profiles } = useProfile();
-  const isProfileLoaded = profiles[chat.id] !== undefined;
 
-  // Show skeleton if name is "User" and profile not loaded
+  // Use real-time profile data for mood & skin
+  const mood = profile.mood || chat.mood || 'neutral';
+  const skinId = profile.activeSkin || chat.activeSkin || null;
+  const skin = skinId ? getSkinById(skinId) : null;
+
+  const isProfileLoaded = profile.name !== undefined;
   const showSkeleton = chat.name === 'User' && !isProfileLoaded;
 
   return (
@@ -220,8 +227,8 @@ const ChatItem = memo(({ chat, onStartChat }) => {
       </div>
       <div className="chat-echomoji-middle">
         <ECHOMOJI
-          mood={chat.mood || 'neutral'}
-          skin={chat.activeSkin ? getSkinById(chat.activeSkin) : null}
+          mood={mood}
+          skin={skin}
           size={38}
           interactive={false}
         />
@@ -265,6 +272,20 @@ const Chats = () => {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useDeletedAccountCheck();
+
+  // ─── Listen for chat-read events to instantly clear unread ──
+  useEffect(() => {
+    const handleChatRead = (event) => {
+      const { userId } = event.detail;
+      setRecentChats((prev) =>
+        prev.map((chat) =>
+          chat.id === userId ? { ...chat, unreadCount: 0 } : chat
+        )
+      );
+    };
+    window.addEventListener('chat-read', handleChatRead);
+    return () => window.removeEventListener('chat-read', handleChatRead);
+  }, []);
 
   // ─── Presence listener ──────────────────────────────────────
   useEffect(() => {

@@ -1,5 +1,5 @@
 // src/components/Layout/Navbar.js
-import React, { useEffect, memo, useState, useRef } from 'react';
+import React, { useEffect, memo, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useProfile } from '../../contexts/ProfileContext';
@@ -100,6 +100,11 @@ const Navbar = memo(() => {
     ? '#10B981'
     : '#6B7280';
 
+  // ── Partner ECHOMOJI ──
+  const partnerMood = targetProfile?.mood || 'happy';
+  const partnerSkinId = targetProfile?.activeSkin || null;
+  const partnerSkin = partnerSkinId ? getSkinById(partnerSkinId) : null;
+
   const ownSkin = ownProfile?.activeSkin ? getSkinById(ownProfile.activeSkin) : null;
   const ownName = sanitizeName(ownProfile?.name || ownProfile?.displayName || 'User', user?.uid);
 
@@ -167,11 +172,12 @@ const Navbar = memo(() => {
                 justifyContent: 'center',
                 border: '1px solid rgba(255,255,255,0.15)',
                 flexShrink: 0,
+                position: 'relative',
               }}
             >
               {avatarToShow && !imgError ? (
                 <img
-                  key={chatAvatar} // Re-mount when avatar changes
+                  key={chatAvatar}
                   src={avatarToShow}
                   alt={chatName}
                   onError={() => setImgError(true)}
@@ -186,6 +192,31 @@ const Navbar = memo(() => {
                 <span style={{ color: '#fff', fontWeight: 700, fontSize: '15px' }}>
                   {chatName[0]?.toUpperCase() || 'E'}
                 </span>
+              )}
+              {partnerSkin && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: -6,
+                    right: -6,
+                    width: 22,
+                    height: 22,
+                    borderRadius: '50%',
+                    background: '#0A0A0F',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid #0A0A0F',
+                  }}
+                >
+                  <ECHOMOJI
+                    mood={partnerMood}
+                    skin={partnerSkin}
+                    size={18}
+                    interactive={false}
+                    animated={false}
+                  />
+                </div>
               )}
             </div>
 

@@ -75,7 +75,7 @@
 
 /* ─── Chat bubbles ──────────────────────────────────────────── */
 .message-bubble {
-  max-width: 75%;
+  max-width: 85%;
   padding: 10px 14px;
   border-radius: 16px;
   font-size: 14px;
@@ -116,7 +116,7 @@
   100% { background-color: transparent; }
 }
 
-/* ─── Media message styles ──────────────────────────────────── */
+/* ─── Media wrappers ──────────────────────────────────────────── */
 .chat-media-video-wrapper,
 .chat-media-image-wrapper {
   position: relative;
@@ -124,6 +124,7 @@
   overflow: hidden;
   background: #000;
   cursor: pointer;
+  width: 100%;
   max-width: 100%;
 }
 
@@ -152,6 +153,49 @@
   word-break: break-word;
   border-top: 1px solid rgba(255, 255, 255, 0.06);
   margin-top: 4px;
+}
+
+/* ─── Upload overlay (spinner only) ──────────────────────────── */
+.media-upload-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  z-index: 3;
+}
+
+.upload-spinner {
+  position: relative;
+  width: 50px;
+  height: 50px;
+}
+
+.spinner-ring {
+  animation: spin 1s linear infinite;
+  transform-origin: center;
+}
+
+.spinner-path {
+  stroke: #6C3CE1;
+  stroke-dasharray: 125;
+  stroke-dashoffset: 125;
+  animation: dash 1.5s ease-in-out infinite;
+}
+
+@keyframes spin {
+  100% { transform: rotate(360deg); }
+}
+@keyframes dash {
+  0% { stroke-dashoffset: 125; }
+  50% { stroke-dashoffset: 0; }
+  100% { stroke-dashoffset: -125; }
 }
 
 /* ─── Inline video controls ────────────────────────────────── */
@@ -207,37 +251,6 @@
   transform: translate(-50%, -50%);
   color: #fff;
   font-size: 28px;
-}
-
-/* ─── Video upload progress bar ────────────────────────────── */
-.video-upload-progress {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 4px;
-  background: rgba(255, 255, 255, 0.15);
-  overflow: hidden;
-  z-index: 3;
-}
-.video-upload-progress .progress-bar {
-  height: 100%;
-  background: linear-gradient(90deg, #6C3CE1, #EC4899);
-  transition: width 0.3s ease;
-  border-radius: 2px;
-}
-.video-upload-progress .progress-text {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #fff;
-  font-size: 12px;
-  font-weight: 600;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
-  background: rgba(0, 0, 0, 0.5);
-  padding: 2px 8px;
-  border-radius: 10px;
 }
 
 /* ─── Lightbox ────────────────────────────────────────────────── */
@@ -533,100 +546,6 @@
 .media-preview-send:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-/* ─── Upload loading overlay ────────────────────────────────── */
-.media-upload-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  min-height: 160px;
-  min-width: 160px;
-  position: relative;
-}
-.upload-spinner {
-  position: relative;
-  width: 80px;
-  height: 80px;
-}
-.spinner-ring {
-  animation: spin 1s linear infinite;
-  transform-origin: center;
-}
-.spinner-path {
-  stroke: #6C3CE1;
-  stroke-dasharray: 150;
-  stroke-dashoffset: 150;
-  animation: dash 1.5s ease-in-out infinite;
-}
-.upload-progress-text {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-  text-shadow: 0 2px 8px rgba(0,0,0,0.6);
-  white-space: nowrap;
-}
-.upload-spinner::before {
-  content: '';
-  position: absolute;
-  inset: -10px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(108,60,225,0.2), transparent 70%);
-  animation: pulseGlow 1.5s ease-in-out infinite;
-}
-@keyframes pulseGlow {
-  0% { transform: scale(0.9); opacity: 0.3; }
-  50% { transform: scale(1.1); opacity: 0.8; }
-  100% { transform: scale(0.9); opacity: 0.3; }
-}
-@keyframes spin { 100% { transform: rotate(360deg); } }
-@keyframes dash {
-  0% { stroke-dashoffset: 150; }
-  50% { stroke-dashoffset: 0; }
-  100% { stroke-dashoffset: -150; }
-}
-
-.media-upload-shimmer {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(120deg, rgba(255,255,255,0) 30%, rgba(255,255,255,0.05) 50%, rgba(255,255,255,0) 70%);
-  background-size: 200% 100%;
-  animation: shimmerMove 1.8s ease-in-out infinite;
-  border-radius: 12px;
-  z-index: 2;
-  pointer-events: none;
-}
-@keyframes shimmerMove {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
-}
-.message-bubble.own .media-upload-loading {
-  background: rgba(108,60,225,0.15);
-  border-radius: 12px;
-}
-
-/* ─── Image upload overlay ────────────────────────────────────── */
-.image-upload-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0,0,0,0.5);
-  backdrop-filter: blur(4px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12px;
-  z-index: 3;
 }
 
 /* ─── Input bar ──────────────────────────────────────────────── */
@@ -1163,25 +1082,20 @@
 /* ─── Audio Player inside message bubble ────────────────────── */
 .message-bubble .audio-player {
   width: 100%;
-  max-width: 300px;
+  max-width: 100%;
   margin: 0;
   padding: 8px 12px;
   border-radius: 30px;
   display: flex;
   align-items: center;
   gap: 12px;
-}
-
-/* Partner messages – subtle */
-.message-bubble.partner .audio-player {
+  box-sizing: border-box;
   background: rgba(255, 255, 255, 0.06);
 }
 
-/* Own messages – purple gradient glow */
 .message-bubble.own .audio-player {
   background: rgba(108, 60, 225, 0.2);
   border: 1px solid rgba(108, 60, 225, 0.3);
-  box-shadow: 0 0 20px rgba(108, 60, 225, 0.1);
 }
 
 .audio-play-btn {
@@ -1238,13 +1152,16 @@
 
 /* ─── Slider ───────────────────────────────────────────────────── */
 .audio-slider {
-  width: 100%;
+  width: 100% !important;
   height: 3px;
   -webkit-appearance: none;
   background: rgba(255, 255, 255, 0.15);
   border-radius: 2px;
   outline: none;
   transition: background 0.2s;
+  margin: 0 !important;
+  padding: 0 !important;
+  box-sizing: border-box;
 }
 .message-bubble.own .audio-slider {
   background: rgba(108, 60, 225, 0.3);
@@ -1281,7 +1198,7 @@
 /* ─── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 480px) {
   .message-bubble {
-    max-width: 85%;
+    max-width: 90%;
     font-size: 13px;
     padding: 8px 12px;
   }
@@ -1346,4 +1263,65 @@
     padding: 16px 20px;
     bottom: 80px;
   }
+  .message-bubble .audio-player {
+    padding: 6px 10px;
+  }
+}
+
+/* ─── Invalid media placeholder ────────────────────────────── */
+.media-error-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 20px;
+  min-height: 120px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  color: #888;
+}
+.media-error-placeholder i {
+  font-size: 28px;
+  opacity: 0.4;
+}
+.media-error-placeholder button {
+  background: #6C3CE1;
+  border: none;
+  color: #fff;
+  padding: 4px 16px;
+  border-radius: 16px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.audio-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  color: #888;
+  font-size: 13px;
+}
+.audio-placeholder i {
+  font-size: 18px;
+  opacity: 0.5;
+}
+
+.audio-error-placeholder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  color: #ef4444;
+  font-size: 13px;
+}
+.audio-error-placeholder button {
+  background: #6C3CE1;
+  border: none;
+  color: #fff;
+  padding: 2px 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  font-weight: 600;
 }

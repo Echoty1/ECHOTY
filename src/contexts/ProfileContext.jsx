@@ -107,7 +107,7 @@ export const ProfileProvider = ({ children }) => {
       if (timeoutId) clearTimeout(timeoutId);
     };
 
-    // Presence listener
+    // ─── Presence listener (real-time sync) ──────────────────
     const presenceRef = ref(db, `presence/online/${uid}`);
     const unsubPresence = onValue(presenceRef, (snapshot) => {
       const online = snapshot.val() === true;

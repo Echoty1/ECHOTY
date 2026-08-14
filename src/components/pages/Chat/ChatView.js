@@ -129,6 +129,9 @@ const ChatView = () => {
         unreadCount: 0,
       });
 
+      // Dispatch event to instantly clear unread badge in Chats list
+      window.dispatchEvent(new CustomEvent('chat-read', { detail: { userId } }));
+
       clearMessageCache(cId);
     } catch (err) {
       console.warn('markMessagesAsRead error:', err);
@@ -142,7 +145,9 @@ const ChatView = () => {
     const senderName = partnerProfile?.name || 'User';
     let textSnippet;
     if (msg.type === 'media') {
-      textSnippet = msg.mediaType === 'video' ? '🎬 Video' : '📷 Image';
+      if (msg.mediaType === 'video') textSnippet = '🎬 Video';
+      else if (msg.mediaType === 'audio') textSnippet = '🎤 Voice note';
+      else textSnippet = '📷 Image';
     } else {
       textSnippet = msg.text || 'Message';
     }
@@ -153,6 +158,9 @@ const ChatView = () => {
       messageType: msg.type || 'text',
       textSnippet: textSnippet,
     });
+
+    // Clear text input when replying (user will type or record)
+    setNewMessage('');
 
     setTimeout(() => {
       if (inputRef.current) {
@@ -277,7 +285,12 @@ const ChatView = () => {
       }
       setMessages(newMessages);
       setLoadingMessages(false);
-      setCache(cacheKey, newMessages);
+      // Silently cache – ignore quota errors
+      try {
+        setCache(cacheKey, newMessages);
+      } catch (e) {
+        // ignore
+      }
       clearMessageCache(cId);
 
       setTimeout(() => scrollToBottom(true), 100);
@@ -437,6 +450,20 @@ const ChatView = () => {
       uploadProgress: 0,
       isMediaReady: false,
     };
+
+    // ── If replying, include reply metadata ──────────────────
+    const currentReply = replyTo;
+    if (currentReply) {
+      optimisticMsg.replyTo = {
+        messageId: currentReply.messageId,
+        senderName: currentReply.senderName,
+        messageType: currentReply.messageType,
+        textSnippet: currentReply.textSnippet,
+      };
+      // Clear reply immediately
+      setReplyTo(null);
+    }
+
     setMessages((prev) => [...prev, optimisticMsg]);
     setTimeout(() => scrollToBottom(true), 100);
 
@@ -489,6 +516,14 @@ const ChatView = () => {
         timestamp: serverTimestamp(),
         isRead: false,
       };
+      if (currentReply) {
+        realMsg.replyTo = {
+          messageId: currentReply.messageId,
+          senderName: currentReply.senderName,
+          messageType: currentReply.messageType,
+          textSnippet: currentReply.textSnippet,
+        };
+      }
       await set(newMsgRef, realMsg);
 
       // Update optimistic
@@ -577,6 +612,20 @@ const ChatView = () => {
       uploadProgress: 0,
       isMediaReady: false,
     };
+
+    // ── If replying, include reply metadata ──────────────────
+    const currentReply = replyTo;
+    if (currentReply) {
+      optimisticMsg.replyTo = {
+        messageId: currentReply.messageId,
+        senderName: currentReply.senderName,
+        messageType: currentReply.messageType,
+        textSnippet: currentReply.textSnippet,
+      };
+      // Clear reply immediately
+      setReplyTo(null);
+    }
+
     setMessages((prev) => [...prev, optimisticMsg]);
     setTimeout(() => scrollToBottom(true), 100);
 
@@ -627,6 +676,14 @@ const ChatView = () => {
         timestamp: serverTimestamp(),
         isRead: false,
       };
+      if (currentReply) {
+        realMsg.replyTo = {
+          messageId: currentReply.messageId,
+          senderName: currentReply.senderName,
+          messageType: currentReply.messageType,
+          textSnippet: currentReply.textSnippet,
+        };
+      }
       await set(newMsgRef, realMsg);
 
       setMessages((prev) =>
@@ -804,24 +861,24 @@ const ChatView = () => {
     if (msg.type === 'media') {
       let content;
 
-      if (msg.isUploading) {
-        content = (
-          <div className="media-upload-loading">
-            <div className="upload-spinner">
-              <svg className="spinner-ring" viewBox="0 0 50 50">
-                <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
-              </svg>
-              <span className="upload-progress-text">
-                {Math.round(msg.uploadProgress || 0)}%
-              </span>
+      // For audio messages, use AudioPlayer (with upload spinner if uploading)
+      if (msg.mediaType === 'audio') {
+        if (msg.isUploading) {
+          content = (
+            <div className="media-upload-overlay">
+              <div className="upload-spinner">
+                <svg className="spinner-ring" viewBox="0 0 50 50">
+                  <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
+                </svg>
+              </div>
             </div>
-            <div className="media-upload-shimmer" />
-          </div>
-        );
-      } else if (msg.mediaType === 'audio') {
-        content = <AudioPlayer src={msg.mediaUrl} />;
+          );
+        } else {
+          content = <AudioPlayer src={msg.mediaUrl} />;
+        }
       } else {
-        content = <ChatMediaMessage message={msg} />;
+        // For images and videos, use ChatMediaMessage (handles upload state internally)
+        content = <ChatMediaMessage message={msg} isUploading={msg.isUploading} uploadProgress={msg.uploadProgress} />;
       }
 
       return (
@@ -941,7 +998,6 @@ const ChatView = () => {
       <form className="chat-input-container" onSubmit={handleSendText}>
         {replyTo && <ReplyPreview replyTo={replyTo} onCancel={cancelReply} />}
         <div className="chat-input-row">
-          {/* Paperclip button */}
           <button
             type="button"
             className="chat-attach-btn"
@@ -950,7 +1006,6 @@ const ChatView = () => {
           >
             <i className="fas fa-paperclip" />
           </button>
-          {/* Voice button */}
           <button
             type="button"
             className="chat-voice-btn"
@@ -959,7 +1014,6 @@ const ChatView = () => {
           >
             <i className="fas fa-microphone" />
           </button>
-          {/* Input field */}
           <input
             ref={inputRef}
             type="text"
@@ -974,7 +1028,6 @@ const ChatView = () => {
               }
             }}
           />
-          {/* Hidden file input */}
           <input
             type="file"
             ref={fileInputRef}
@@ -982,7 +1035,6 @@ const ChatView = () => {
             style={{ display: 'none' }}
             onChange={handleFileSelect}
           />
-          {/* Send button */}
           <button
             type="submit"
             className="chat-send-btn"

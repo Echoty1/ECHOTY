@@ -2,7 +2,33 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useVideoAudio } from '../../../contexts/VideoAudioContext';
-import { useCachedBlobUrl, useCachedImage } from '../../../utils/mediaCache';
+import { useCachedImage } from '../../../utils/mediaCache';
+
+// ─── Simple loading spinner ────────────────────────────────────
+const LoadingSpinner = () => (
+  <div className="media-loading-spinner">
+    <div className="upload-spinner">
+      <svg className="spinner-ring" viewBox="0 0 50 50">
+        <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
+      </svg>
+    </div>
+  </div>
+);
+
+// ─── Upload overlay (for sender) ──────────────────────────────
+const UploadOverlay = () => (
+  <div className="media-upload-overlay">
+    <LoadingSpinner />
+  </div>
+);
+
+// ─── Invalid URL placeholder ──────────────────────────────────
+const InvalidMediaPlaceholder = () => (
+  <div className="media-error-placeholder">
+    <i className="fas fa-exclamation-triangle" />
+    <span>Media unavailable</span>
+  </div>
+);
 
 // ─── Fullscreen Video Player ─────────────────────────────────────
 const FullscreenVideoPlayer = ({ src, onClose }) => {
@@ -13,9 +39,7 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
 
   useEffect(() => {
     document.body.classList.add('hide-bottom-nav');
-    return () => {
-      document.body.classList.remove('hide-bottom-nav');
-    };
+    return () => document.body.classList.remove('hide-bottom-nav');
   }, []);
 
   useEffect(() => {
@@ -64,17 +88,14 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
           preload="metadata"
           crossOrigin="anonymous"
         />
-        {isLoading && (
-          <div className="fullscreen-loading-spinner">
-            <i className="fas fa-spinner fa-spin" />
-            <span>Loading...</span>
-          </div>
-        )}
+        {isLoading && <LoadingSpinner />}
         {error && (
           <div className="fullscreen-error">
             <i className="fas fa-exclamation-triangle" />
             <span>Could not load video</span>
-            <button onClick={() => window.location.reload()}>Retry</button>
+            <button onClick={() => { setError(false); setIsLoading(true); videoRef.current?.load(); }}>
+              Retry
+            </button>
           </div>
         )}
         {!isLoading && !error && (
@@ -92,33 +113,52 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
 };
 
 // ─── Inline Video Player ──────────────────────────────────────
-const VideoPlayer = ({ videoId, src, caption, uploadProgress, isMediaReady }) => {
-  const { blobUrl, isLoading: cacheLoading, error: cacheError } = useCachedBlobUrl(src);
-  const videoSrc = blobUrl || src;
+const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
+  // ─── If uploading (sender): show video with upload overlay ──
+  if (isUploading) {
+    return (
+      <div className="chat-media-video-wrapper" style={{ position: 'relative', minHeight: '200px', background: '#000' }}>
+        <video
+          src={src}
+          className="chat-media-video"
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          style={{ opacity: 0.3 }}
+        />
+        <UploadOverlay />
+      </div>
+    );
+  }
+
+  // ─── Check if src is valid ──────────────────────────────────
+  if (!src || src.startsWith('blob:')) {
+    return <InvalidMediaPlaceholder />;
+  }
 
   const videoRef = useRef(null);
   const [isMuted, setIsMuted] = useState(true);
   const [showFullscreen, setShowFullscreen] = useState(false);
-  const [localReady, setLocalReady] = useState(false);
+  const [isReady, setIsReady] = useState(false);
   const [loadError, setLoadError] = useState(false);
 
   const { activeUnmutedId, requestUnmute, muteAll } = useVideoAudio();
 
-  const isReady = isMediaReady || localReady || (!cacheLoading && !cacheError);
-
   useEffect(() => {
     if (!videoRef.current) return;
     const video = videoRef.current;
-    const onCanPlay = () => { setLocalReady(true); setLoadError(false); };
-    const onError = () => { setLoadError(true); setLocalReady(true); };
+    const onCanPlay = () => { setIsReady(true); setLoadError(false); };
+    const onError = () => { setLoadError(true); setIsReady(true); };
     video.addEventListener('canplay', onCanPlay);
     video.addEventListener('error', onError);
-    if (video.readyState >= 3) setLocalReady(true);
+    if (video.readyState >= 3) setIsReady(true);
     return () => {
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('error', onError);
     };
-  }, [videoSrc]);
+  }, [src]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -152,15 +192,12 @@ const VideoPlayer = ({ videoId, src, caption, uploadProgress, isMediaReady }) =>
     setShowFullscreen(true);
   };
 
-  const progress = typeof uploadProgress === 'number' ? uploadProgress : null;
-  const showOverlay = !isReady || (progress !== null && progress < 100);
-
   return (
     <>
       <div className="chat-media-video-wrapper" onClick={openFullscreen}>
         <video
           ref={videoRef}
-          src={videoSrc}
+          src={src}
           className="chat-media-video"
           autoPlay
           loop
@@ -169,25 +206,14 @@ const VideoPlayer = ({ videoId, src, caption, uploadProgress, isMediaReady }) =>
           preload="metadata"
           controls={false}
           crossOrigin="anonymous"
-          style={{ opacity: isReady ? 1 : 0, transition: 'opacity 0.3s ease' }}
+          style={{ opacity: isReady ? 1 : 0 }}
         />
-        {showOverlay && !loadError && (
-          <div className="image-upload-overlay">
-            <div className="upload-spinner">
-              <svg className="spinner-ring" viewBox="0 0 50 50">
-                <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
-              </svg>
-              <span className="upload-progress-text">
-                {progress !== null && progress < 100 ? Math.round(progress) : 100}%
-              </span>
-            </div>
-          </div>
-        )}
+        {!isReady && !loadError && <LoadingSpinner />}
         {loadError && (
-          <div className="image-error-placeholder" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)' }}>
-            <i className="fas fa-image" style={{ fontSize: '32px', opacity: 0.3 }} />
-            <button className="image-retry-btn" onClick={() => { setLoadError(false); setLocalReady(false); videoRef.current?.load(); }}>
-              <i className="fas fa-redo" /> Retry
+          <div className="media-error-placeholder" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)' }}>
+            <i className="fas fa-exclamation-triangle" />
+            <button onClick={() => { setLoadError(false); setIsReady(false); videoRef.current?.load(); }}>
+              Retry
             </button>
           </div>
         )}
@@ -202,14 +228,34 @@ const VideoPlayer = ({ videoId, src, caption, uploadProgress, isMediaReady }) =>
       </div>
       {caption && <div className="chat-media-caption">{caption}</div>}
       {showFullscreen && (
-        <FullscreenVideoPlayer src={videoSrc} onClose={() => setShowFullscreen(false)} />
+        <FullscreenVideoPlayer src={src} onClose={() => setShowFullscreen(false)} />
       )}
     </>
   );
 };
 
-// ─── Image with unified loader ──────────────────────────────────
-const ImageWithLightbox = ({ src, caption, uploadProgress, isMediaReady }) => {
+// ─── Image with loading state ──────────────────────────────────
+const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
+  // ─── If uploading (sender): show image with upload overlay ──
+  if (isUploading) {
+    return (
+      <div className="chat-media-image-wrapper" style={{ position: 'relative', minHeight: '200px', background: '#0A0A0F' }}>
+        <img
+          src={src}
+          alt={caption || 'Uploading...'}
+          className="chat-media-image"
+          style={{ opacity: 0.3 }}
+        />
+        <UploadOverlay />
+      </div>
+    );
+  }
+
+  // ─── Check if src is valid ──────────────────────────────────
+  if (!src || src.startsWith('blob:')) {
+    return <InvalidMediaPlaceholder />;
+  }
+
   const [lightboxOpen, setLightboxOpen] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
@@ -250,26 +296,18 @@ const ImageWithLightbox = ({ src, caption, uploadProgress, isMediaReady }) => {
   };
 
   useEffect(() => {
-    if (lightboxOpen) {
-      document.body.classList.add('hide-bottom-nav');
-    } else {
-      document.body.classList.remove('hide-bottom-nav');
-    }
+    if (lightboxOpen) document.body.classList.add('hide-bottom-nav');
+    else document.body.classList.remove('hide-bottom-nav');
     return () => document.body.classList.remove('hide-bottom-nav');
   }, [lightboxOpen]);
-
-  const progress = typeof uploadProgress === 'number' ? uploadProgress : null;
-  const showOverlay = !isReady || (progress !== null && progress < 100);
 
   return (
     <>
       <div className="chat-media-image-wrapper" onClick={loadError ? undefined : openLightbox}>
         {loadError ? (
-          <div className="image-error-placeholder">
-            <i className="fas fa-image" style={{ fontSize: '32px', opacity: 0.3 }} />
-            <button className="image-retry-btn" onClick={handleRetry}>
-              <i className="fas fa-redo" /> Retry
-            </button>
+          <div className="media-error-placeholder">
+            <i className="fas fa-exclamation-triangle" />
+            <button onClick={handleRetry}>Retry</button>
           </div>
         ) : (
           <>
@@ -282,18 +320,7 @@ const ImageWithLightbox = ({ src, caption, uploadProgress, isMediaReady }) => {
               key={retryCount}
               crossOrigin="anonymous"
             />
-            {showOverlay && (
-              <div className="image-upload-overlay">
-                <div className="upload-spinner">
-                  <svg className="spinner-ring" viewBox="0 0 50 50">
-                    <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
-                  </svg>
-                  <span className="upload-progress-text">
-                    {progress !== null && progress < 100 ? Math.round(progress) : 100}%
-                  </span>
-                </div>
-              </div>
-            )}
+            {!isReady && <LoadingSpinner />}
           </>
         )}
       </div>
@@ -315,15 +342,14 @@ const ImageWithLightbox = ({ src, caption, uploadProgress, isMediaReady }) => {
 };
 
 // ─── Main Media Message ──────────────────────────────────────────
-const ChatMediaMessage = ({ message }) => {
-  const { mediaType, mediaUrl, caption, id, uploadProgress, isMediaReady } = message;
+const ChatMediaMessage = ({ message, isUploading = false, uploadProgress }) => {
+  const { mediaType, mediaUrl, caption, id, isMediaReady } = message;
 
   if (mediaType === 'video') {
-    return <VideoPlayer videoId={id} src={mediaUrl} caption={caption} uploadProgress={uploadProgress} isMediaReady={isMediaReady} />;
+    return <VideoPlayer videoId={id} src={mediaUrl} caption={caption} isMediaReady={isMediaReady} isUploading={isUploading} />;
   }
 
-  // image
-  return <ImageWithLightbox src={mediaUrl} caption={caption} uploadProgress={uploadProgress} isMediaReady={isMediaReady} />;
+  return <ImageWithLightbox src={mediaUrl} caption={caption} isMediaReady={isMediaReady} isUploading={isUploading} />;
 };
 
 export default ChatMediaMessage;

@@ -2,15 +2,27 @@
 import React, { useState, useRef, useEffect } from 'react';
 
 const AudioPlayer = ({ src }) => {
+  // Guard: invalid or blob URL
+  if (!src || src.startsWith('blob:')) {
+    return (
+      <div className="audio-placeholder">
+        <i className="fas fa-music" />
+        <span>Audio unavailable</span>
+      </div>
+    );
+  }
+
   const audioRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [error, setError] = useState(false);
+  const [retryCount, setRetryCount] = useState(0);
   const barRefs = useRef([]);
   const animationRef = useRef(null);
+  const playPromiseRef = useRef(null);
 
-  // ─── Waveform animation loop ────────────────────────────────
   const animateWaveform = () => {
     if (!isPlaying) return;
     const heights = barRefs.current.map(() => Math.floor(Math.random() * 30) + 8);
@@ -28,20 +40,16 @@ const AudioPlayer = ({ src }) => {
         cancelAnimationFrame(animationRef.current);
         animationRef.current = null;
       }
-      // Reset bars to resting height when paused
       barRefs.current.forEach((bar) => {
         if (bar) bar.style.height = '12px';
       });
     }
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-        animationRef.current = null;
-      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
   }, [isPlaying]);
 
-  // ─── Audio event listeners ──────────────────────────────────
+  // ─── Audio events ──────────────────────────────────────────────
   useEffect(() => {
     const audio = audioRef.current;
     if (!audio) return;
@@ -49,31 +57,82 @@ const AudioPlayer = ({ src }) => {
     const onLoadedMetadata = () => {
       setDuration(audio.duration);
       setIsLoaded(true);
+      setError(false);
     };
+
+    const onLoadedData = () => {
+      // Safe to play now – data is loaded
+      setIsLoaded(true);
+      setError(false);
+      // If we should be playing, start playback
+      if (isPlaying) {
+        const promise = audio.play();
+        if (promise !== undefined) {
+          promise.catch((err) => {
+            // Ignore AbortError – it's fine
+            if (err.name !== 'AbortError') {
+              console.warn('Play error:', err);
+              setError(true);
+            }
+          });
+        }
+      }
+    };
+
     const onTimeUpdate = () => setCurrentTime(audio.currentTime);
-    const onEnded = () => setIsPlaying(false);
+    const onEnded = () => {
+      setIsPlaying(false);
+      setCurrentTime(duration);
+    };
+    const onError = () => {
+      setError(true);
+      setIsLoaded(false);
+    };
 
     audio.addEventListener('loadedmetadata', onLoadedMetadata);
+    audio.addEventListener('loadeddata', onLoadedData);
     audio.addEventListener('timeupdate', onTimeUpdate);
     audio.addEventListener('ended', onEnded);
+    audio.addEventListener('error', onError);
+
+    audio.preload = 'auto';
+    audio.crossOrigin = 'anonymous';
+
+    // No explicit load() – it will load automatically
 
     return () => {
       audio.removeEventListener('loadedmetadata', onLoadedMetadata);
+      audio.removeEventListener('loadeddata', onLoadedData);
       audio.removeEventListener('timeupdate', onTimeUpdate);
       audio.removeEventListener('ended', onEnded);
+      audio.removeEventListener('error', onError);
     };
-  }, [src]);
+  }, [src, duration, isPlaying]);
 
   // ─── Controls ──────────────────────────────────────────────────
   const togglePlay = () => {
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio || error) return;
+
     if (isPlaying) {
       audio.pause();
+      setIsPlaying(false);
     } else {
-      audio.play();
+      const promise = audio.play();
+      if (promise !== undefined) {
+        promise
+          .then(() => {
+            setIsPlaying(true);
+          })
+          .catch((err) => {
+            // Ignore AbortError – it's fine
+            if (err.name !== 'AbortError') {
+              console.warn('Play error:', err);
+              setError(true);
+            }
+          });
+      }
     }
-    setIsPlaying(!isPlaying);
   };
 
   const handleSeek = (e) => {
@@ -84,6 +143,17 @@ const AudioPlayer = ({ src }) => {
     setCurrentTime(newTime);
   };
 
+  const handleRetry = () => {
+    setError(false);
+    setIsLoaded(false);
+    setRetryCount(prev => prev + 1);
+    const audio = audioRef.current;
+    if (audio) {
+      // Just reload the src – no explicit load()
+      audio.src = src;
+    }
+  };
+
   const formatTime = (seconds) => {
     if (!seconds || isNaN(seconds)) return '0:00';
     const mins = Math.floor(seconds / 60);
@@ -91,7 +161,6 @@ const AudioPlayer = ({ src }) => {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // ─── Render bars ──────────────────────────────────────────────
   const bars = Array.from({ length: 24 }, (_, i) => (
     <div
       key={i}
@@ -101,9 +170,19 @@ const AudioPlayer = ({ src }) => {
     />
   ));
 
+  if (error) {
+    return (
+      <div className="audio-error-placeholder">
+        <i className="fas fa-exclamation-triangle" />
+        <span>Audio unavailable</span>
+        <button onClick={handleRetry}>Retry</button>
+      </div>
+    );
+  }
+
   return (
     <div className="audio-player">
-      <audio ref={audioRef} src={src} preload="metadata" />
+      <audio ref={audioRef} src={src} preload="auto" crossOrigin="anonymous" key={retryCount} />
       <button className="audio-play-btn" onClick={togglePlay}>
         <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`} />
       </button>

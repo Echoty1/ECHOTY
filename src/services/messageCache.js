@@ -6,7 +6,7 @@ const messageCache = new Map();
 
 export const fetchLatestMessage = async (chatId) => {
   const cached = messageCache.get(chatId);
-  if (cached && Date.now() - cached.timestamp < 2000) {
+  if (cached && Date.now() - cached.timestamp < 500) {
     return cached;
   }
   try {
