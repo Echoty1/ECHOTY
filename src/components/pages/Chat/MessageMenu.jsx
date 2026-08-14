@@ -124,4 +124,4 @@ const MessageMenu = ({ children, isOwn, onDelete, onReply, onEdit }) => {
   );
 };
 
-export default MessageMenu;c
+export default MessageMenu;
