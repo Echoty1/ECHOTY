@@ -24,6 +24,8 @@ import VoiceRecorder from './VoiceRecorder';
 import MessageMenu from './MessageMenu';
 import ReplyPreview from './ReplyPreview';
 import RepliedMessage from './RepliedMessage';
+import EditMessageModal from './EditMessageModal';
+import EditMediaCaptionModal from './EditMediaCaptionModal';
 import { VideoAudioProvider } from '../../../contexts/VideoAudioContext';
 import './ChatView.css';
 
@@ -71,6 +73,10 @@ const ChatView = () => {
 
   // ── Voice recorder state ────────────────────────────────────
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+
+  // ── Edit message state ──────────────────────────────────────
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [editingMediaMessage, setEditingMediaMessage] = useState(null);
 
   const messagesEndRef = useRef(null);
   const chatId = useRef(null);
@@ -122,7 +128,6 @@ const ChatView = () => {
 
       await update(ref(db), updates);
 
-      // Update the current user's chat entry
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
       await set(myChatRef, {
         id: userId,
@@ -134,9 +139,7 @@ const ChatView = () => {
         unreadCount: 0,
       });
 
-      // Dispatch event to instantly clear unread badge in Chats list
       window.dispatchEvent(new CustomEvent('chat-read', { detail: { userId } }));
-
       clearMessageCache(cId);
     } catch (err) {
       console.warn('markMessagesAsRead error:', err);
@@ -165,7 +168,6 @@ const ChatView = () => {
     });
 
     setNewMessage('');
-
     setTimeout(() => {
       if (inputRef.current) {
         inputRef.current.focus();
@@ -258,6 +260,135 @@ const ChatView = () => {
     }
   };
 
+  // ─── Edit a message ──────────────────────────────────────
+  const handleEditMessage = (msg) => {
+    if (msg.senderId !== user?.uid) return;
+
+    // ❌ Audio messages cannot be edited
+    if (msg.type === 'media' && msg.mediaType === 'audio') {
+      return;
+    }
+
+    if (msg.type === 'media') {
+      // Open media caption editor for images/videos
+      setEditingMediaMessage(msg);
+      return;
+    }
+
+    // Text message editing
+    setEditingMessage(msg);
+  };
+
+  const saveEditedMessage = async (newText) => {
+    if (!editingMessage || !user?.uid || !userId) return;
+    const cId = [user.uid, userId].sort().join('_');
+    const messageId = editingMessage.id;
+
+    try {
+      await update(ref(db, `chats/${cId}/messages/${messageId}`), {
+        text: newText,
+        isEdited: true,
+        lastEditedAt: serverTimestamp(),
+      });
+
+      const messagesRef = ref(db, `chats/${cId}/messages`);
+      const snapshot = await get(messagesRef);
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const msgs = Object.entries(data).map(([key, val]) => ({ key, ...val }));
+        msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        const latest = msgs[msgs.length - 1];
+        if (latest && latest.key === messageId) {
+          const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
+          await set(myChatRef, {
+            id: userId,
+            partnerName: partnerProfile?.name || location.state?.userName || 'User',
+            partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
+            lastMessage: newText,
+            lastSenderId: user.uid,
+            lastUpdated: Date.now(),
+            unreadCount: 0,
+          });
+
+          const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+          const partnerSnapshot = await get(partnerChatRef);
+          if (partnerSnapshot.exists()) {
+            const partnerData = partnerSnapshot.val();
+            await set(partnerChatRef, {
+              ...partnerData,
+              lastMessage: newText,
+              lastSenderId: user.uid,
+              lastUpdated: Date.now(),
+            });
+          }
+        }
+      }
+
+      clearMessageCache(cId);
+      setEditingMessage(null);
+    } catch (err) {
+      console.error('Failed to edit message:', err);
+      alert('Failed to edit message. Please try again.');
+    }
+  };
+
+  const saveMediaCaption = async (newCaption) => {
+    if (!editingMediaMessage || !user?.uid || !userId) return;
+    const cId = [user.uid, userId].sort().join('_');
+    const messageId = editingMediaMessage.id;
+
+    try {
+      await update(ref(db, `chats/${cId}/messages/${messageId}`), {
+        caption: newCaption,
+        isEdited: true,
+        lastEditedAt: serverTimestamp(),
+      });
+
+      // Update userChats if it's the latest message
+      const messagesRef = ref(db, `chats/${cId}/messages`);
+      const snapshot = await get(messagesRef);
+      if (snapshot.exists()) {
+        const data = snapshot.val();
+        const msgs = Object.entries(data).map(([key, val]) => ({ key, ...val }));
+        msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        const latest = msgs[msgs.length - 1];
+        if (latest && latest.key === messageId) {
+          const mediaIcon = editingMediaMessage.mediaType === 'video' ? '🎬 Video' : '📷 Image';
+          const displayText = newCaption ? `${mediaIcon}: ${newCaption}` : mediaIcon;
+
+          const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
+          await set(myChatRef, {
+            id: userId,
+            partnerName: partnerProfile?.name || location.state?.userName || 'User',
+            partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
+            lastMessage: displayText,
+            lastSenderId: user.uid,
+            lastUpdated: Date.now(),
+            unreadCount: 0,
+          });
+
+          const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+          const partnerSnapshot = await get(partnerChatRef);
+          if (partnerSnapshot.exists()) {
+            const partnerData = partnerSnapshot.val();
+            await set(partnerChatRef, {
+              ...partnerData,
+              lastMessage: displayText,
+              lastSenderId: user.uid,
+              lastUpdated: Date.now(),
+            });
+          }
+        }
+      }
+
+      clearMessageCache(cId);
+      setEditingMediaMessage(null);
+    } catch (err) {
+      console.error('Failed to edit media caption:', err);
+      alert('Failed to edit caption. Please try again.');
+    }
+  };
+
   // ─── Scroll to bottom ──────────────────────────────────────
   const scrollToBottom = (smooth = true) => {
     if (messagesEndRef.current) {
@@ -294,19 +425,14 @@ const ChatView = () => {
       setLoadingMessages(false);
       try {
         setCache(cacheKey, newMessages);
-      } catch (e) {
-        // ignore
-      }
+      } catch (e) { /* ignore */ }
       clearMessageCache(cId);
-
       setTimeout(() => scrollToBottom(true), 100);
 
-      // ─── Mark unread messages as read ──────────────────────
       const hasUnread = newMessages.some(
         msg => msg.receiverId === user.uid && msg.isRead === false
       );
       if (hasUnread) {
-        // Debounce the mark-read call to avoid multiple rapid calls
         if (markReadTimeout.current) clearTimeout(markReadTimeout.current);
         markReadTimeout.current = setTimeout(() => {
           if (isMounted.current) {
@@ -320,16 +446,8 @@ const ChatView = () => {
       isMounted.current = false;
       if (markReadTimeout.current) clearTimeout(markReadTimeout.current);
       unsubscribe();
-      // Final sync: mark any remaining unread messages as read
-      // but only if we were actually mounted (i.e., the user did not
-      // immediately navigate away before the listener fired)
-      // Use a short delay to allow any in-flight updates to settle.
       setTimeout(() => {
         if (!isMounted.current) {
-          // Component is unmounting, but we still want to clean up.
-          // However, we can't rely on isMounted because it's already false.
-          // We'll call it anyway, but guard against state updates by checking
-          // if the component is still in the DOM (optional).
           markMessagesAsRead();
         }
       }, 200);
@@ -851,6 +969,19 @@ const ChatView = () => {
 
     const showReply = !isOwn && !isEchoAi;
 
+    // Determine if edit is allowed:
+    // - Only for own messages
+    // - For text messages, always allowed
+    // - For media: allow if it's NOT audio (i.e., image or video)
+    let allowEdit = false;
+    if (isOwn) {
+      if (msg.type === 'text') {
+        allowEdit = true;
+      } else if (msg.type === 'media' && msg.mediaType !== 'audio') {
+        allowEdit = true;
+      }
+    }
+
     if (msg.type === 'media') {
       let content;
 
@@ -881,6 +1012,7 @@ const ChatView = () => {
             isOwn={isOwn}
             onDelete={() => handleDeleteMessage(msg.id)}
             onReply={showReply ? () => handleReply(msg) : null}
+            onEdit={allowEdit ? () => handleEditMessage(msg) : null}
           >
             {replyToDisplay && (
               <RepliedMessage
@@ -894,6 +1026,7 @@ const ChatView = () => {
       );
     }
 
+    // text message
     return (
       <div
         className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
@@ -903,6 +1036,7 @@ const ChatView = () => {
           isOwn={isOwn}
           onDelete={() => handleDeleteMessage(msg.id)}
           onReply={showReply ? () => handleReply(msg) : null}
+          onEdit={allowEdit ? () => handleEditMessage(msg) : null}
         >
           {replyToDisplay && (
             <RepliedMessage
@@ -910,7 +1044,10 @@ const ChatView = () => {
               onTap={() => scrollToMessage(replyToDisplay.messageId)}
             />
           )}
-          <div className="message-text">{msg.text}</div>
+          <div className="message-text">
+            {msg.text}
+            {msg.isEdited && <span className="message-edited-badge">(edited)</span>}
+          </div>
         </MessageMenu>
       </div>
     );
@@ -1044,6 +1181,23 @@ const ChatView = () => {
       )}
 
       {renderPreviewOverlay()}
+
+      {/* ─── Edit Message Modal ────────────────────────────────── */}
+      <EditMessageModal
+        isOpen={!!editingMessage}
+        onClose={() => setEditingMessage(null)}
+        messageText={editingMessage?.text || ''}
+        onSave={saveEditedMessage}
+      />
+
+      {/* ─── Edit Media Caption Modal ──────────────────────────── */}
+      <EditMediaCaptionModal
+        isOpen={!!editingMediaMessage}
+        onClose={() => setEditingMediaMessage(null)}
+        currentCaption={editingMediaMessage?.caption || ''}
+        mediaType={editingMediaMessage?.mediaType}
+        onSave={saveMediaCaption}
+      />
     </div>
   );
 };

@@ -2,13 +2,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 
-const MessageMenu = ({ children, isOwn, onDelete, onReply }) => {
+const MessageMenu = ({ children, isOwn, onDelete, onReply, onEdit }) => {
   const [showActions, setShowActions] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const containerRef = useRef(null);
   const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 
-  // Close actions on outside tap (mobile)
+  // Close actions on outside tap
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
@@ -26,8 +26,9 @@ const MessageMenu = ({ children, isOwn, onDelete, onReply }) => {
   }, [isTouchDevice]);
 
   const showDelete = isOwn && typeof onDelete === 'function';
+  const showEdit = isOwn && typeof onEdit === 'function';
   const showReply = !isOwn && typeof onReply === 'function';
-  const hasActions = showDelete || showReply;
+  const hasActions = showDelete || showEdit || showReply;
 
   if (!hasActions) {
     return <>{children}</>;
@@ -67,6 +68,14 @@ const MessageMenu = ({ children, isOwn, onDelete, onReply }) => {
     }
   };
 
+  const handleEditClick = (e) => {
+    e.stopPropagation();
+    setShowActions(false);
+    if (typeof onEdit === 'function') {
+      onEdit();
+    }
+  };
+
   const handleDeleteClick = (e) => {
     e.stopPropagation();
     setShowActions(false);
@@ -95,6 +104,11 @@ const MessageMenu = ({ children, isOwn, onDelete, onReply }) => {
             <i className="fas fa-reply" />
           </button>
         )}
+        {showEdit && (
+          <button className="message-action-btn edit" onClick={handleEditClick}>
+            <i className="fas fa-pen" />
+          </button>
+        )}
         {showDelete && (
           <button className="message-action-btn delete" onClick={handleDeleteClick}>
             <i className="fas fa-trash-alt" />
@@ -110,4 +124,4 @@ const MessageMenu = ({ children, isOwn, onDelete, onReply }) => {
   );
 };
 
-export default MessageMenu;
+export default MessageMenu;c

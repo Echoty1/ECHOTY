@@ -1325,3 +1325,144 @@
   cursor: pointer;
   font-weight: 600;
 }
+
+/* ─── Edit Button in Message Actions ───────────────────────── */
+.message-action-btn.edit {
+  color: #60A5FA;
+}
+.message-action-btn.edit:hover {
+  background: rgba(96, 165, 250, 0.2);
+}
+
+/* ─── Edit Message Modal ───────────────────────────────────── */
+.edit-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  animation: fadeIn 0.2s ease;
+}
+
+.edit-modal-content {
+  background: #1a1a24;
+  border-radius: 20px;
+  padding: 24px 28px 20px;
+  max-width: 420px;
+  width: 90%;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+  animation: modalScale 0.2s ease;
+}
+
+.edit-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.edit-modal-header h3 {
+  color: #fff;
+  font-size: 18px;
+  margin: 0;
+}
+
+.edit-modal-close {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 50%;
+  transition: background 0.2s;
+}
+
+.edit-modal-close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+}
+
+.edit-modal-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 15px;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+  min-height: 80px;
+}
+
+.edit-modal-textarea:focus {
+  border-color: #6C3CE1;
+}
+
+.edit-modal-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+
+.edit-modal-btn {
+  padding: 10px 24px;
+  border-radius: 30px;
+  border: none;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.edit-modal-btn.cancel {
+  background: rgba(255, 255, 255, 0.08);
+  color: #ccc;
+}
+
+.edit-modal-btn.cancel:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.edit-modal-btn.save {
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+}
+
+.edit-modal-btn.save:hover:not(:disabled) {
+  transform: scale(1.02);
+  box-shadow: 0 4px 20px rgba(108, 60, 225, 0.3);
+}
+
+.edit-modal-btn.save:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ─── "Edited" badge on message ───────────────────────────── */
+.message-edited-badge {
+  font-size: 10px;
+  color: #888;
+  margin-left: 6px;
+  font-weight: 400;
+  letter-spacing: 0.3px;
+}
+
+/* ─── Also update message-actions positioning for edit button ─ */
+.message-action-btn.edit {
+  color: #60A5FA;
+}
+.message-action-btn.edit:hover {
+  background: rgba(96, 165, 250, 0.2);
+}
