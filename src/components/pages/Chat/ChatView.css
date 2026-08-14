@@ -660,6 +660,19 @@
 .chat-attach-btn:hover {
   color: #a78bfa;
 }
+.chat-voice-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+.chat-voice-btn:hover {
+  color: #a78bfa;
+}
 .chat-input {
   flex: 1;
   padding: 12px 18px;
@@ -1001,6 +1014,270 @@
   30% { transform: translateY(-10px); }
 }
 
+/* ─── Voice Recorder (mobile‑optimized bottom sheet) ───────── */
+.voice-recorder-overlay {
+  position: fixed;
+  bottom: 88px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 92%;
+  max-width: 420px;
+  background: rgba(18, 18, 26, 0.97);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 16px;
+  padding: 10px 16px;
+  z-index: 99999;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6);
+  animation: voiceSlideUp 0.25s ease-out;
+}
+
+@keyframes voiceSlideUp {
+  from {
+    transform: translateX(-50%) translateY(20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
+.voice-recorder-content {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.voice-recorder-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+.recording-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ef4444;
+  animation: pulse-dot 1s infinite;
+}
+.recording-time {
+  font-size: 16px;
+  font-weight: 600;
+  color: #fff;
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-recorder-preview {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+.audio-waveform {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 30px;
+  flex: 1;
+}
+.audio-waveform .waveform-bar {
+  width: 3px;
+  border-radius: 2px;
+  background: #a78bfa;
+  animation: none;
+  height: 10px;
+}
+.audio-duration {
+  font-size: 14px;
+  color: #aaa;
+  font-variant-numeric: tabular-nums;
+}
+
+.voice-recorder-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-shrink: 0;
+}
+.recorder-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.15s, background 0.2s;
+}
+.recorder-btn:hover {
+  transform: scale(1.05);
+}
+.recorder-btn.start {
+  background: #6C3CE1;
+  color: #fff;
+}
+.recorder-btn.stop {
+  background: #ef4444;
+  color: #fff;
+}
+.recorder-btn.send {
+  background: #10B981;
+  color: #fff;
+}
+.recorder-btn.cancel {
+  background: rgba(255, 255, 255, 0.08);
+  color: #888;
+}
+.recorder-btn.cancel:hover {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+/* ─── Responsive for smaller screens ────────────────────────── */
+@media (max-width: 480px) {
+  .voice-recorder-overlay {
+    bottom: 76px;
+    width: 94%;
+    padding: 8px 12px;
+  }
+  .recorder-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+  .recording-time {
+    font-size: 14px;
+  }
+  .audio-duration {
+    font-size: 12px;
+  }
+  .audio-waveform .waveform-bar {
+    width: 2px;
+  }
+}
+
+/* ─── Audio Player inside message bubble ────────────────────── */
+.message-bubble .audio-player {
+  width: 100%;
+  max-width: 300px;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+/* Partner messages – subtle */
+.message-bubble.partner .audio-player {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* Own messages – purple gradient glow */
+.message-bubble.own .audio-player {
+  background: rgba(108, 60, 225, 0.2);
+  border: 1px solid rgba(108, 60, 225, 0.3);
+  box-shadow: 0 0 20px rgba(108, 60, 225, 0.1);
+}
+
+.audio-play-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background 0.2s, transform 0.15s;
+}
+.audio-play-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: scale(1.05);
+}
+.message-bubble.own .audio-play-btn {
+  background: rgba(108, 60, 225, 0.5);
+}
+.message-bubble.own .audio-play-btn:hover {
+  background: rgba(108, 60, 225, 0.7);
+}
+
+.audio-progress {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+/* ─── Waveform bars ────────────────────────────────────────────── */
+.audio-waveform-bars {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: 28px;
+}
+.audio-waveform-bars .waveform-bar {
+  width: 3px;
+  border-radius: 2px;
+  background: #a78bfa;
+  transition: height 0.15s ease;
+  will-change: height;
+}
+.message-bubble.own .audio-waveform-bars .waveform-bar {
+  background: #c4b5fd;
+}
+
+/* ─── Slider ───────────────────────────────────────────────────── */
+.audio-slider {
+  width: 100%;
+  height: 3px;
+  -webkit-appearance: none;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+  outline: none;
+  transition: background 0.2s;
+}
+.message-bubble.own .audio-slider {
+  background: rgba(108, 60, 225, 0.3);
+}
+.audio-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #6C3CE1;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(108, 60, 225, 0.3);
+}
+.audio-slider::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #6C3CE1;
+  cursor: pointer;
+  box-shadow: 0 0 10px rgba(108, 60, 225, 0.3);
+}
+
+.audio-time {
+  display: flex;
+  justify-content: space-between;
+  font-size: 10px;
+  color: #888;
+  letter-spacing: 0.3px;
+}
+.message-bubble.own .audio-time {
+  color: #c4b5fd;
+}
+
 /* ─── Responsive ──────────────────────────────────────────────── */
 @media (max-width: 480px) {
   .message-bubble {
@@ -1019,7 +1296,8 @@
     width: 36px;
     height: 36px;
   }
-  .chat-attach-btn {
+  .chat-attach-btn,
+  .chat-voice-btn {
     font-size: 18px;
     padding: 2px 6px;
   }
@@ -1062,5 +1340,10 @@
   .reply-preview {
     padding: 6px 12px;
     margin: 0 8px;
+  }
+  .voice-recorder-overlay {
+    min-width: 260px;
+    padding: 16px 20px;
+    bottom: 80px;
   }
 }

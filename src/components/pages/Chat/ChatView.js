@@ -19,6 +19,8 @@ import { SkeletonMessage } from '../../common/SkeletonLoader';
 import { getCache, setCache } from '../../../services/cacheService';
 import { clearMessageCache } from '../../../services/messageCache';
 import ChatMediaMessage from './ChatMediaMessage';
+import AudioPlayer from './AudioPlayer';
+import VoiceRecorder from './VoiceRecorder';
 import MessageMenu from './MessageMenu';
 import ReplyPreview from './ReplyPreview';
 import RepliedMessage from './RepliedMessage';
@@ -66,6 +68,9 @@ const ChatView = () => {
   const fileInputRef = useRef(null);
   const captionInputRef = useRef(null);
   const inputRef = useRef(null);
+
+  // ── Voice recorder state ────────────────────────────────────
+  const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
 
   const messagesEndRef = useRef(null);
   const chatId = useRef(null);
@@ -403,7 +408,6 @@ const ChatView = () => {
   };
 
   // ─── Send media message ─────────────────────────────────────
-  // ─── Send media message ─────────────────────────────────────
   const sendMediaMessage = async () => {
     if (!selectedFile || !user?.uid || !userId) return;
 
@@ -418,32 +422,29 @@ const ChatView = () => {
     const mediaIcon = mediaType === 'video' ? '🎬 Video' : '📷 Image';
     const blobUrl = URL.createObjectURL(selectedFile);
 
-    // ── 1. Optimistic message with blob URL ──
     const optimisticMsg = {
       id: tempId,
       senderId: user.uid,
       receiverId: userId,
       type: 'media',
       mediaType,
-      mediaUrl: blobUrl, // blob URL for instant preview
-      realUrl: null, // will be set after upload
+      mediaUrl: blobUrl,
+      realUrl: null,
       caption: captionText.trim(),
       timestamp: Date.now(),
       isRead: false,
       isUploading: true,
       uploadProgress: 0,
-      isMediaReady: false, // indicates real media is loaded
+      isMediaReady: false,
     };
     setMessages((prev) => [...prev, optimisticMsg]);
     setTimeout(() => scrollToBottom(true), 100);
 
-    // Close preview overlay
     setPreviewUrl(null);
     setSelectedFile(null);
     setCaptionText('');
 
     try {
-      // ── 2. Upload to Cloudinary ──
       const downloadURL = await uploadToCloudinary(selectedFile, (progress) => {
         setUploadProgress(progress);
         setMessages((prev) =>
@@ -453,8 +454,7 @@ const ChatView = () => {
         );
       });
 
-      // ── 3. Preload the real media in the background ──
-      // For images, create an Image object; for videos, preload with video element.
+      // Preload the real media
       let realMediaLoaded = false;
       if (mediaType === 'image') {
         const img = new Image();
@@ -466,19 +466,17 @@ const ChatView = () => {
           if (img.complete) { realMediaLoaded = true; resolve(); }
         });
       } else {
-        // video
         const video = document.createElement('video');
         video.preload = 'metadata';
         video.src = downloadURL;
         await new Promise((resolve) => {
           video.onloadedmetadata = () => { realMediaLoaded = true; resolve(); };
           video.onerror = () => { realMediaLoaded = false; resolve(); };
-          // Check if already loaded
           if (video.readyState >= 1) { realMediaLoaded = true; resolve(); }
         });
       }
 
-      // ── 4. Write real message to database ──
+      // Write to database
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const newMsgRef = push(messagesRef);
       const realMsg = {
@@ -493,28 +491,27 @@ const ChatView = () => {
       };
       await set(newMsgRef, realMsg);
 
-      // ── 5. Update optimistic message with real data ──
+      // Update optimistic
       setMessages((prev) =>
         prev.map((m) =>
           m.id === tempId
             ? {
                 ...m,
                 realUrl: downloadURL,
-                mediaUrl: downloadURL, // swap to real URL
+                mediaUrl: downloadURL,
                 isUploading: false,
                 uploadProgress: 100,
-                isMediaReady: true, // we've preloaded it
-                id: newMsgRef.key, // use real Firebase key
+                isMediaReady: true,
+                id: newMsgRef.key,
               }
             : m
         )
       );
       setTimeout(() => scrollToBottom(true), 100);
 
-      // Revoke blob URL after swap
       URL.revokeObjectURL(blobUrl);
 
-      // ── 6. Update userChats ──
+      // Update userChats
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
       await set(myChatRef, {
         id: userId,
@@ -555,6 +552,130 @@ const ChatView = () => {
       setIsUploading(false);
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       alert('Upload failed: ' + (err.message || 'Please try again.'));
+    }
+  };
+
+  // ─── Send voice note ────────────────────────────────────────
+  const handleVoiceSend = async (audioBlob, duration) => {
+    setShowVoiceRecorder(false);
+
+    const cId = [user.uid, userId].sort().join('_');
+    const tempId = `temp_${Date.now()}`;
+    const blobUrl = URL.createObjectURL(audioBlob);
+
+    const optimisticMsg = {
+      id: tempId,
+      senderId: user.uid,
+      receiverId: userId,
+      type: 'media',
+      mediaType: 'audio',
+      mediaUrl: blobUrl,
+      duration: duration,
+      timestamp: Date.now(),
+      isRead: false,
+      isUploading: true,
+      uploadProgress: 0,
+      isMediaReady: false,
+    };
+    setMessages((prev) => [...prev, optimisticMsg]);
+    setTimeout(() => scrollToBottom(true), 100);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', audioBlob);
+      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, true);
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const progress = Math.round((e.loaded / e.total) * 100);
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === tempId ? { ...m, uploadProgress: progress } : m
+            )
+          );
+        }
+      };
+      const uploadPromise = new Promise((resolve, reject) => {
+        xhr.onload = () => {
+          if (xhr.status === 200) {
+            try {
+              const data = JSON.parse(xhr.responseText);
+              resolve(data.secure_url);
+            } catch (e) { reject(e); }
+          } else {
+            reject(new Error('Upload failed'));
+          }
+        };
+        xhr.onerror = () => reject(new Error('Network error'));
+      });
+      xhr.send(formData);
+
+      const downloadURL = await uploadPromise;
+
+      // Write to database
+      const messagesRef = ref(db, `chats/${cId}/messages`);
+      const newMsgRef = push(messagesRef);
+      const realMsg = {
+        senderId: user.uid,
+        receiverId: userId,
+        type: 'media',
+        mediaType: 'audio',
+        mediaUrl: downloadURL,
+        duration: duration,
+        timestamp: serverTimestamp(),
+        isRead: false,
+      };
+      await set(newMsgRef, realMsg);
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempId
+            ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true }
+            : m
+        )
+      );
+
+      // Update userChats
+      const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
+      await set(myChatRef, {
+        id: userId,
+        partnerName: location.state?.userName || partnerProfile?.name || 'User',
+        partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
+        lastMessage: '🎤 Voice note',
+        lastSenderId: user.uid,
+        lastUpdated: Date.now(),
+        unreadCount: 0,
+      });
+
+      const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+      await runTransaction(recipientChatRef, (currentData) => {
+        if (currentData === null) {
+          return {
+            id: user.uid,
+            partnerName: currentUserProfile?.name || 'User',
+            partnerAvatar: currentUserProfile?.avatar || '',
+            lastMessage: '🎤 Voice note',
+            lastSenderId: user.uid,
+            lastUpdated: Date.now(),
+            unreadCount: 1,
+          };
+        } else {
+          currentData.unreadCount = (currentData.unreadCount || 0) + 1;
+          currentData.lastMessage = '🎤 Voice note';
+          currentData.lastSenderId = user.uid;
+          currentData.lastUpdated = Date.now();
+          return currentData;
+        }
+      });
+
+      clearMessageCache(cId);
+      URL.revokeObjectURL(blobUrl);
+    } catch (err) {
+      console.error('Voice upload failed:', err);
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      alert('Voice note upload failed. Please try again.');
     }
   };
 
@@ -655,8 +776,6 @@ const ChatView = () => {
           currentData.lastMessage = textToSend;
           currentData.lastSenderId = user.uid;
           currentData.lastUpdated = timestamp;
-          currentData.partnerName = currentUserProfile?.name || currentData.partnerName || 'User';
-          currentData.partnerAvatar = currentUserProfile?.avatar || currentData.partnerAvatar || '';
           return currentData;
         }
       });
@@ -683,6 +802,28 @@ const ChatView = () => {
     const showReply = !isOwn && !isEchoAi;
 
     if (msg.type === 'media') {
+      let content;
+
+      if (msg.isUploading) {
+        content = (
+          <div className="media-upload-loading">
+            <div className="upload-spinner">
+              <svg className="spinner-ring" viewBox="0 0 50 50">
+                <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
+              </svg>
+              <span className="upload-progress-text">
+                {Math.round(msg.uploadProgress || 0)}%
+              </span>
+            </div>
+            <div className="media-upload-shimmer" />
+          </div>
+        );
+      } else if (msg.mediaType === 'audio') {
+        content = <AudioPlayer src={msg.mediaUrl} />;
+      } else {
+        content = <ChatMediaMessage message={msg} />;
+      }
+
       return (
         <div
           className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
@@ -699,7 +840,7 @@ const ChatView = () => {
                 onTap={() => scrollToMessage(replyToDisplay.messageId)}
               />
             )}
-            <ChatMediaMessage message={msg} />
+            {content}
           </MessageMenu>
         </div>
       );
@@ -800,6 +941,7 @@ const ChatView = () => {
       <form className="chat-input-container" onSubmit={handleSendText}>
         {replyTo && <ReplyPreview replyTo={replyTo} onCancel={cancelReply} />}
         <div className="chat-input-row">
+          {/* Paperclip button */}
           <button
             type="button"
             className="chat-attach-btn"
@@ -808,6 +950,16 @@ const ChatView = () => {
           >
             <i className="fas fa-paperclip" />
           </button>
+          {/* Voice button */}
+          <button
+            type="button"
+            className="chat-voice-btn"
+            onClick={() => setShowVoiceRecorder(true)}
+            title="Voice note"
+          >
+            <i className="fas fa-microphone" />
+          </button>
+          {/* Input field */}
           <input
             ref={inputRef}
             type="text"
@@ -822,6 +974,7 @@ const ChatView = () => {
               }
             }}
           />
+          {/* Hidden file input */}
           <input
             type="file"
             ref={fileInputRef}
@@ -829,6 +982,7 @@ const ChatView = () => {
             style={{ display: 'none' }}
             onChange={handleFileSelect}
           />
+          {/* Send button */}
           <button
             type="submit"
             className="chat-send-btn"
@@ -838,6 +992,14 @@ const ChatView = () => {
           </button>
         </div>
       </form>
+
+      {/* ─── Voice Recorder Overlay ─────────────────────────────── */}
+      {showVoiceRecorder && (
+        <VoiceRecorder
+          onSend={handleVoiceSend}
+          onCancel={() => setShowVoiceRecorder(false)}
+        />
+      )}
 
       {renderPreviewOverlay()}
     </div>

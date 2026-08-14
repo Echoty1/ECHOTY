@@ -104,13 +104,17 @@ const processChatItem = async (chat, user, onlineUsers) => {
 
     let displayMessage = rawLastMessage;
     if (displayMessage !== 'Start chatting...') {
+      // ── NEW: Handle media types ──
       if (latest.type === 'media') {
-        const mediaIcon = latest.mediaType === 'video' ? '🎬 Video' : '📷 Image';
+        let mediaLabel = '📷 Image';
+        if (latest.mediaType === 'video') mediaLabel = '🎬 Video';
+        else if (latest.mediaType === 'audio') mediaLabel = '🎤 Voice note';
+        
         const isSender = lastSenderId === user.uid;
         if (isSender) {
-          displayMessage = `You: ${mediaIcon}`;
+          displayMessage = `You: ${mediaLabel}`;
         } else {
-          displayMessage = `${partnerName}: ${mediaIcon}`;
+          displayMessage = `${partnerName}: ${mediaLabel}`;
         }
       } else {
         const isSender = lastSenderId === user.uid;
@@ -124,7 +128,8 @@ const processChatItem = async (chat, user, onlineUsers) => {
         }
       }
     } else {
-      if (chat.lastMessage === '📷 Image' || chat.lastMessage === '🎬 Video') {
+      // Fallback: if chat.lastMessage already contains a media icon
+      if (chat.lastMessage === '📷 Image' || chat.lastMessage === '🎬 Video' || chat.lastMessage === '🎤 Voice note') {
         displayMessage = `${partnerName}: ${chat.lastMessage}`;
       }
     }
