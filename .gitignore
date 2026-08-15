@@ -1,12 +1,9 @@
 node_modules/
 build/
 .env
-.DS_Store
 backend/node_modules/
 backend/.env
 backend/scripts/
-*.log
-gifLibrary.json
-firebasedetails.txt
 repomix-output.xml
 gifLibrary.json
+aicontinuation.md
