@@ -1,12 +1,17 @@
 // src/components/Layout/BottomNav.js
 import React, { useState, useRef, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
+import { db } from '../../services/firebase';
+import { ref, onValue } from 'firebase/database';
 
 const BottomNav = () => {
+  const { user } = useAuth();
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const startPos = useRef({ x: 0, y: 0 });
   const startOffset = useRef({ x: 0, y: 0 });
+  const [unreadChatsCount, setUnreadChatsCount] = useState(0);
 
   const tabs = [
     { to: '/', label: 'Home', icon: 'fa-house' },
@@ -16,6 +21,35 @@ const BottomNav = () => {
     { to: '/other', label: 'Other', icon: 'fa-ellipsis-h' },
   ];
 
+  // ─── Real‑time unread contacts count ──────────────────────────
+  useEffect(() => {
+    if (!user?.uid) {
+      setUnreadChatsCount(0);
+      return;
+    }
+
+    const userChatsRef = ref(db, `userChats/${user.uid}`);
+    const unsubscribe = onValue(userChatsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
+        setUnreadChatsCount(0);
+        return;
+      }
+
+      // Count partners with unreadCount > 0
+      let count = 0;
+      Object.values(data).forEach((chat) => {
+        if (chat.unreadCount && chat.unreadCount > 0) {
+          count++;
+        }
+      });
+      setUnreadChatsCount(count);
+    });
+
+    return () => unsubscribe();
+  }, [user?.uid]);
+
+  // ─── Dragging handlers (unchanged) ─────────────────────────────
   const handleStart = (e) => {
     const touch = e.touches ? e.touches[0] : e;
     startPos.current = { x: touch.clientX, y: touch.clientY };
@@ -86,7 +120,7 @@ const BottomNav = () => {
         transition: isDragging ? 'none' : 'all 0.2s cubic-bezier(0.22, 1, 0.36, 1)',
         userSelect: 'none',
         willChange: 'transform',
-        overflow: 'hidden', // ✅ Prevent horizontal scroll
+        overflow: 'hidden',
       }}
       onMouseDown={handleStart}
       onTouchStart={handleStart}
@@ -104,30 +138,61 @@ const BottomNav = () => {
           pointerEvents: 'none',
         }}
       />
-      {tabs.map((tab) => (
-        <NavLink
-          key={tab.to}
-          to={tab.to}
-          style={({ isActive }) => ({
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: isActive ? 'white' : '#555',
-            fontSize: '10px',
-            padding: '4px 8px',
-            borderRadius: '16px',
-            cursor: 'pointer',
-            background: isActive ? 'rgba(108,60,225,0.2)' : 'transparent',
-            textDecoration: 'none',
-            minWidth: '44px',
-            transition: 'all 0.15s ease',
-          })}
-        >
-          <i className={`fas ${tab.icon}`} style={{ fontSize: '22px', marginBottom: '2px' }} />
-          <span style={{ fontSize: '9px', opacity: 0.8, fontWeight: 500 }}>{tab.label}</span>
-        </NavLink>
-      ))}
+      {tabs.map((tab) => {
+        const isChatTab = tab.to === '/chats';
+        return (
+          <NavLink
+            key={tab.to}
+            to={tab.to}
+            style={({ isActive }) => ({
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: isActive ? 'white' : '#555',
+              fontSize: '10px',
+              padding: '4px 8px',
+              borderRadius: '16px',
+              cursor: 'pointer',
+              background: isActive ? 'rgba(108,60,225,0.2)' : 'transparent',
+              textDecoration: 'none',
+              minWidth: '44px',
+              transition: 'all 0.15s ease',
+              position: 'relative',
+            })}
+          >
+            <div style={{ position: 'relative', display: 'inline-flex' }}>
+              <i className={`fas ${tab.icon}`} style={{ fontSize: '22px', marginBottom: '2px' }} />
+              {isChatTab && unreadChatsCount > 0 && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-6px',
+                    right: '-10px',
+                    minWidth: '18px',
+                    height: '18px',
+                    borderRadius: '50%',
+                    backgroundColor: '#EF4444',
+                    color: '#fff',
+                    fontSize: '10px',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    padding: '0 4px',
+                    border: '2px solid rgba(10,10,15,0.92)',
+                    boxShadow: '0 0 8px rgba(239,68,68,0.3)',
+                    lineHeight: 1,
+                  }}
+                >
+                  {unreadChatsCount > 9 ? '9+' : unreadChatsCount}
+                </span>
+              )}
+            </div>
+            <span style={{ fontSize: '9px', opacity: 0.8, fontWeight: 500 }}>{tab.label}</span>
+          </NavLink>
+        );
+      })}
     </div>
   );
 };
