@@ -86,16 +86,38 @@ const ChatView = () => {
   const [replyTo, setReplyTo] = useState(null);
   const messageRefs = useRef({});
   const markReadTimeout = useRef(null);
+  const hasMarkedRead = useRef(false);
 
-  // ─── Helper: Mark all messages as read ──────────────────────
+  // ─── WHATSAPP-STYLE UNREAD LOGIC ─────────────────────────────
+  // ─── Step 1: INSTANT local reset when entering chat ──────────
+  const clearUnreadInstantly = () => {
+    if (!userId) return;
+    // 1. Set session flag for the chat list to read
+    sessionStorage.setItem(`chat_read_${userId}`, 'true');
+    // 2. Dispatch event to instantly clear badge in Chats list
+    window.dispatchEvent(new CustomEvent('chat-read', { detail: { userId } }));
+    hasMarkedRead.current = true;
+    console.log(`✅ [Unread] Instant clear for ${userId}`);
+  };
+
+  // ─── Step 2: DATABASE sync (background) ──────────────────────
   const markMessagesAsRead = async () => {
     if (!user?.uid || !userId || isEchoAi) return;
+    if (hasMarkedRead.current) {
+      // Already cleared, but we can still sync to be safe
+      console.log(`🔄 [Unread] Background sync for ${userId}`);
+    }
+
     const cId = [user.uid, userId].sort().join('_');
 
     try {
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const snapshot = await get(messagesRef);
-      if (!snapshot.exists()) return;
+      if (!snapshot.exists()) {
+        console.log(`ℹ️ [Unread] No messages for ${userId}`);
+        return;
+      }
+
       const data = snapshot.val();
       const updates = {};
       let hasUnread = false;
@@ -108,7 +130,7 @@ const ChatView = () => {
       const latest = msgs[msgs.length - 1];
       if (latest) {
         if (latest.type === 'media') {
-          latestMsg = latest.mediaType === 'video' ? '🎬 Video' : 
+          latestMsg = latest.mediaType === 'video' ? '🎬 Video' :
                       latest.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
         } else {
           latestMsg = latest.text || '';
@@ -117,6 +139,7 @@ const ChatView = () => {
         latestTimestamp = latest.timestamp || Date.now();
       }
 
+      // Mark ALL unread messages as read
       msgs.forEach((msg) => {
         if (msg.receiverId === user.uid && msg.isRead === false) {
           updates[`chats/${cId}/messages/${msg.key}/isRead`] = true;
@@ -124,10 +147,15 @@ const ChatView = () => {
         }
       });
 
-      if (!hasUnread) return;
+      if (!hasUnread) {
+        console.log(`ℹ️ [Unread] No unread messages for ${userId}`);
+        return;
+      }
 
+      // Batch update all message isRead flags
       await update(ref(db), updates);
 
+      // Update the current user's chat entry (set unreadCount to 0)
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
       await set(myChatRef, {
         id: userId,
@@ -139,14 +167,35 @@ const ChatView = () => {
         unreadCount: 0,
       });
 
-      window.dispatchEvent(new CustomEvent('chat-read', { detail: { userId } }));
       clearMessageCache(cId);
+      console.log(`✅ [Unread] Database sync complete for ${userId}`);
     } catch (err) {
-      console.warn('markMessagesAsRead error:', err);
+      console.warn('⚠️ [Unread] markMessagesAsRead error:', err);
     }
   };
 
-  // ─── Start a reply ──────────────────────────────────────────
+  // ─── Step 3: On mount – INSTANT clear + background sync ──────
+  useEffect(() => {
+    if (!user?.uid || !userId || isEchoAi) return;
+
+    // 🔥 INSTANT: Clear the badge immediately (UI only)
+    clearUnreadInstantly();
+
+    // 🔄 BACKGROUND: Sync the database (doesn't block UI)
+    // Use a small delay to let the UI render first
+    const syncTimer = setTimeout(() => {
+      if (isMounted.current) {
+        markMessagesAsRead();
+      }
+    }, 100);
+
+    return () => clearTimeout(syncTimer);
+  }, [user?.uid, userId, isEchoAi]);
+
+  // ─── Step 4: On new messages – auto-mark as read ─────────────
+  // This runs inside the real-time listener below
+
+  // ─── Helper: Start a reply ──────────────────────────────────
   const handleReply = (msg) => {
     if (msg.senderId === user?.uid) return;
 
@@ -218,7 +267,7 @@ const ChatView = () => {
         const latest = msgs[msgs.length - 1];
         if (latest) {
           if (latest.type === 'media') {
-            latestMsg = latest.mediaType === 'video' ? '🎬 Video' : 
+            latestMsg = latest.mediaType === 'video' ? '🎬 Video' :
                         latest.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
           } else {
             latestMsg = latest.text || '';
@@ -270,12 +319,10 @@ const ChatView = () => {
     }
 
     if (msg.type === 'media') {
-      // Open media caption editor for images/videos
       setEditingMediaMessage(msg);
       return;
     }
 
-    // Text message editing
     setEditingMessage(msg);
   };
 
@@ -344,7 +391,6 @@ const ChatView = () => {
         lastEditedAt: serverTimestamp(),
       });
 
-      // Update userChats if it's the latest message
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const snapshot = await get(messagesRef);
       if (snapshot.exists()) {
@@ -429,16 +475,20 @@ const ChatView = () => {
       clearMessageCache(cId);
       setTimeout(() => scrollToBottom(true), 100);
 
+      // ─── Step 4: Auto-mark NEW unread messages as read ──────
       const hasUnread = newMessages.some(
         msg => msg.receiverId === user.uid && msg.isRead === false
       );
-      if (hasUnread) {
+      if (hasUnread && isMounted.current) {
+        // Clear instantly (UI)
+        clearUnreadInstantly();
+        // Sync to database (background, debounced)
         if (markReadTimeout.current) clearTimeout(markReadTimeout.current);
         markReadTimeout.current = setTimeout(() => {
           if (isMounted.current) {
             markMessagesAsRead();
           }
-        }, 100);
+        }, 300);
       }
     });
 
@@ -446,52 +496,17 @@ const ChatView = () => {
       isMounted.current = false;
       if (markReadTimeout.current) clearTimeout(markReadTimeout.current);
       unsubscribe();
+
+      // ─── Step 5: On unmount – final sync ─────────────────────
+      // If there were any messages that arrived in the last moment,
+      // mark them as read so the badge doesn't reappear.
       setTimeout(() => {
         if (!isMounted.current) {
           markMessagesAsRead();
         }
-      }, 200);
+      }, 300);
     };
   }, [user?.uid, userId, cacheKey]);
-
-  // ─── Mark as read on mount ──────────────────────────────────
-  useEffect(() => {
-    if (!user?.uid || !userId || isEchoAi) return;
-    markMessagesAsRead().then(() => {
-      setTimeout(() => scrollToBottom(false), 100);
-    });
-  }, [user?.uid, userId, isEchoAi]);
-
-  // ─── Fetch profiles ──────────────────────────────────────────
-  useEffect(() => {
-    if (!user?.uid) return;
-    const myProfileRef = ref(db, `profiles/${user.uid}`);
-    get(myProfileRef)
-      .then((snap) => {
-        if (snap.exists()) setCurrentUserProfile(snap.val());
-      })
-      .catch(console.error);
-  }, [user?.uid]);
-
-  useEffect(() => {
-    if (isEchoAi) {
-      setPartnerProfile({
-        name: 'ECHO AI',
-        avatar: ECHO_AI_AVATAR,
-        mood: 'happy',
-        isAi: true,
-      });
-      return;
-    }
-    if (userId) {
-      const pRef = ref(db, `profiles/${userId}`);
-      get(pRef)
-        .then((snap) => {
-          if (snap.exists()) setPartnerProfile(snap.val());
-        })
-        .catch(console.error);
-    }
-  }, [userId, isEchoAi]);
 
   // ─── File selection handler ─────────────────────────────────
   const handleFileSelect = (e) => {
@@ -969,10 +984,6 @@ const ChatView = () => {
 
     const showReply = !isOwn && !isEchoAi;
 
-    // Determine if edit is allowed:
-    // - Only for own messages
-    // - For text messages, always allowed
-    // - For media: allow if it's NOT audio (i.e., image or video)
     let allowEdit = false;
     if (isOwn) {
       if (msg.type === 'text') {
@@ -1026,7 +1037,6 @@ const ChatView = () => {
       );
     }
 
-    // text message
     return (
       <div
         className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
