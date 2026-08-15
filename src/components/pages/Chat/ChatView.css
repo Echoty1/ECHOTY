@@ -1481,3 +1481,40 @@
   width: 28px;
   height: 28px;
 }
+
+/* ─── Ensure actions are above content ───────────────────────── */
+.message-actions {
+  display: flex;
+  gap: 6px;
+  position: absolute;
+  bottom: 4px;
+  right: 4px;
+  z-index: 10;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.2s ease, transform 0.2s ease;
+  pointer-events: none;
+}
+
+/* For partner messages, place actions on the left */
+.message-bubble.partner .message-actions {
+  right: auto;
+  left: 4px;
+}
+
+.message-actions.visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+/* ─── Copy button ──────────────────────────────────────────────── */
+.message-action-btn.copy {
+  color: #60A5FA;
+}
+.message-action-btn.copy:hover {
+  background: rgba(96, 165, 250, 0.2);
+}
+.message-action-btn.copy .fa-check {
+  color: #10B981;
+}

@@ -993,9 +993,14 @@ const ChatView = () => {
       }
     }
 
+    // ✅ Copy only for text messages
+    let copyText = null;
+    if (msg.type === 'text' && msg.text) {
+      copyText = msg.text;
+    }
+
     if (msg.type === 'media') {
       let content;
-
       if (msg.mediaType === 'audio') {
         if (msg.isUploading) {
           content = (
@@ -1024,6 +1029,7 @@ const ChatView = () => {
             onDelete={() => handleDeleteMessage(msg.id)}
             onReply={showReply ? () => handleReply(msg) : null}
             onEdit={allowEdit ? () => handleEditMessage(msg) : null}
+            copyText={null}   // ❌ No copy for media
           >
             {replyToDisplay && (
               <RepliedMessage
@@ -1037,6 +1043,7 @@ const ChatView = () => {
       );
     }
 
+    // text message
     return (
       <div
         className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
@@ -1047,6 +1054,7 @@ const ChatView = () => {
           onDelete={() => handleDeleteMessage(msg.id)}
           onReply={showReply ? () => handleReply(msg) : null}
           onEdit={allowEdit ? () => handleEditMessage(msg) : null}
+          copyText={copyText}   // ✅ Only text messages get copy
         >
           {replyToDisplay && (
             <RepliedMessage
