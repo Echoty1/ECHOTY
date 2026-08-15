@@ -67,21 +67,34 @@ jobs:
           cd android
           ./gradlew assembleRelease
 
-      - name: List output files (debug)
+      - name: List output files
         run: |
-          ls -la android/app/build/outputs/apk/release/ || echo "Release folder not found"
-          ls -la android/app/build/outputs/apk/ || echo "APK folder not found"
+          echo "=== Workspace root ==="
+          ls -la
+          echo "=== APK release folder ==="
+          ls -la android/app/build/outputs/apk/release/ || echo "Folder not found"
+          echo "=== APK debug folder ==="
+          ls -la android/app/build/outputs/apk/debug/ || echo "Folder not found"
+          echo "=== APK folder ==="
+          ls -la android/app/build/outputs/apk/ || echo "Folder not found"
 
       - name: Upload release APK
         uses: actions/upload-artifact@v4
         with:
           name: app-release
           path: android/app/build/outputs/apk/release/app-release.apk
-        continue-on-error: true
+        if: success()
 
-      - name: Upload debug APK (fallback)
+      - name: Upload debug APK
         uses: actions/upload-artifact@v4
         with:
           name: app-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
-        continue-on-error: true
+        if: success()
+
+      - name: Upload entire APK folder (fallback)
+        uses: actions/upload-artifact@v4
+        with:
+          name: apk-folder
+          path: android/app/build/outputs/apk/
+        if: always()
