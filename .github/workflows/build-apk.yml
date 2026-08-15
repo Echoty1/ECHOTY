@@ -49,11 +49,13 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
 
-      - name: Decode keystore
+      - name: Decode keystore (release only)
+        if: github.ref == 'refs/heads/main'
         run: |
           echo "${{ secrets.STORE_FILE_B64 }}" | base64 -d > android/app/echo-release.keystore
 
-      - name: Create keystore.properties
+      - name: Create keystore.properties (release only)
+        if: github.ref == 'refs/heads/main'
         run: |
           cat > android/keystore.properties << EOF
           storeFile=app/echo-release.keystore
@@ -62,39 +64,24 @@ jobs:
           keyPassword=${{ secrets.KEY_PASSWORD }}
           EOF
 
-      - name: Build signed release APK
+      - name: Build APK
         run: |
           cd android
-          ./gradlew assembleRelease
+          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
+            ./gradlew assembleRelease
+          else
+            ./gradlew assembleDebug
+          fi
 
-      - name: List output files
+      - name: List APK directory contents (debug)
         run: |
-          echo "=== Workspace root ==="
-          ls -la
-          echo "=== APK release folder ==="
-          ls -la android/app/build/outputs/apk/release/ || echo "Folder not found"
-          echo "=== APK debug folder ==="
-          ls -la android/app/build/outputs/apk/debug/ || echo "Folder not found"
-          echo "=== APK folder ==="
-          ls -la android/app/build/outputs/apk/ || echo "Folder not found"
+          echo "=== APK files found ==="
+          find android -name "*.apk" -type f || echo "No APK found"
+          echo "=== Full output directory ==="
+          ls -R android/app/build/outputs/ || echo "Outputs directory not found"
 
-      - name: Upload release APK
+      - name: Upload APKs
         uses: actions/upload-artifact@v4
         with:
-          name: app-release
-          path: android/app/build/outputs/apk/release/app-release.apk
-        if: success()
-
-      - name: Upload debug APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-        if: success()
-
-      - name: Upload entire APK folder (fallback)
-        uses: actions/upload-artifact@v4
-        with:
-          name: apk-folder
+          name: apks
           path: android/app/build/outputs/apk/
-        if: always()
