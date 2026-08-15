@@ -4,6 +4,6 @@ build/
 backend/node_modules/
 backend/.env
 backend/scripts/
+aicontinuation.md
 repomix-output.xml
 gifLibrary.json
-aicontinuation.md
