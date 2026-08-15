@@ -16,13 +16,17 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22   # ✅ Capacitor requires >=22
+          node-version: 22
 
       - name: Install dependencies
         run: npm install
 
       - name: Build React app
         run: npm run build
+
+      - name: Create capacitor.config.json
+        run: |
+          echo '{"appId":"com.echo.app","appName":"ECHO","webDir":"build"}' > capacitor.config.json
 
       - name: Install Capacitor CLI
         run: npm install -g @capacitor/cli
