@@ -2,7 +2,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import ReactDOM from 'react-dom';
 import { useVideoAudio } from '../../../contexts/VideoAudioContext';
-import { useCachedImage } from '../../../utils/mediaCache';
+import { useCachedImage, useCachedBlobUrl } from '../../../utils/mediaCache';
 
 // ─── Simple loading spinner ────────────────────────────────────
 const LoadingSpinner = () => (
@@ -112,8 +112,12 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
   );
 };
 
-// ─── Inline Video Player ──────────────────────────────────────
+// ─── Inline Video Player (with caching) ──────────────────────────
 const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
+  // ─── Use cached blob URL ──────────────────────────────────────
+  const { blobUrl, isLoading: cacheLoading, error: cacheError } = useCachedBlobUrl(src);
+
+  // ─── If uploading, show upload overlay ──────────────────────
   if (isUploading) {
     return (
       <div className="chat-media-video-wrapper" style={{ position: 'relative', minHeight: '200px', background: '#000' }}>
@@ -132,6 +136,7 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
     );
   }
 
+  // ─── Invalid source ──────────────────────────────────────────
   if (!src || src.startsWith('blob:')) {
     return <InvalidMediaPlaceholder />;
   }
@@ -143,6 +148,14 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
   const [loadError, setLoadError] = useState(false);
 
   const { activeUnmutedId, requestUnmute, muteAll } = useVideoAudio();
+
+  // ─── When blobUrl is ready, we consider the video loaded ──
+  useEffect(() => {
+    if (blobUrl && !cacheLoading && !cacheError) {
+      setIsReady(true);
+      setLoadError(false);
+    }
+  }, [blobUrl, cacheLoading, cacheError]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -156,7 +169,7 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('error', onError);
     };
-  }, [src]);
+  }, [blobUrl]); // re-run when blobUrl changes
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -190,12 +203,14 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
     setShowFullscreen(true);
   };
 
+  const displaySrc = blobUrl || src;
+
   return (
     <>
       <div className="chat-media-video-wrapper" onClick={openFullscreen}>
         <video
           ref={videoRef}
-          src={src}
+          src={displaySrc}
           className="chat-media-video"
           autoPlay
           loop
@@ -204,9 +219,9 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
           preload="metadata"
           controls={false}
           crossOrigin="anonymous"
-          style={{ opacity: isReady ? 1 : 0 }}
+          style={{ opacity: (isReady && !cacheLoading) ? 1 : 0 }}
         />
-        {!isReady && !loadError && <LoadingSpinner />}
+        {(cacheLoading || !isReady) && !loadError && <LoadingSpinner />}
         {loadError && (
           <div className="media-error-placeholder" style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.7)' }}>
             <i className="fas fa-exclamation-triangle" />
@@ -226,15 +241,19 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
       </div>
       {caption && <div className="chat-media-caption">{caption}</div>}
       {showFullscreen && (
-        <FullscreenVideoPlayer src={src} onClose={() => setShowFullscreen(false)} />
+        <FullscreenVideoPlayer src={displaySrc} onClose={() => setShowFullscreen(false)} />
       )}
     </>
   );
 };
 
-// ─── Image with Lightbox ──────────────────────────────────────
+// ─── Image with Lightbox (uses cached image) ──────────────────────
 const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
-  // If uploading, show overlay with spinner
+  // ─── Use cached image (returns Base64 or original URL) ────
+  const cachedImage = useCachedImage(src, null);
+  const imageSrc = cachedImage || src;
+
+  // If uploading, show overlay
   if (isUploading) {
     return (
       <div className="chat-media-image-wrapper" style={{ position: 'relative', minHeight: '200px', background: '#0A0A0F' }}>
@@ -258,17 +277,12 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
   const [loadError, setLoadError] = useState(false);
   const [imageLoaded, setImageLoaded] = useState(false);
 
-  // Use cached image (for blob URLs, it returns the URL directly)
-  const cachedImage = useCachedImage(src, null);
-  const imageSrc = cachedImage || src;
-
-  // Determine if we need to show loading state
   // For blob URLs, we consider it loaded immediately
   const isBlob = src.startsWith('blob:');
-  const isReady = isMediaReady || imageLoaded || isBlob;
+  const isReady = isMediaReady || imageLoaded || isBlob || (cachedImage !== null && cachedImage !== src);
 
   useEffect(() => {
-    if (!src || isBlob) return;
+    if (!src || isBlob || cachedImage) return;
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.src = src;
@@ -279,7 +293,7 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
       img.onload = null;
       img.onerror = null;
     };
-  }, [src, isBlob]);
+  }, [src, isBlob, cachedImage]);
 
   const openLightbox = () => setLightboxOpen(true);
   const closeLightbox = () => setLightboxOpen(false);
