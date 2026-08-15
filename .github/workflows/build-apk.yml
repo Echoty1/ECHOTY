@@ -19,7 +19,7 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: npm ci
+        run: npm install   # ✅ uses package.json, no lockfile needed
 
       - name: Build React app
         run: npm run build
@@ -55,20 +55,3 @@ jobs:
         with:
           name: app-debug
           path: android/app/build/outputs/apk/debug/app-debug.apk
-
-      # Optional: Build release APK if you add secrets
-      # - name: Build release APK
-      #   run: |
-      #     cd android
-      #     ./gradlew assembleRelease
-      #   env:
-      #     STORE_FILE: ${{ secrets.STORE_FILE }}
-      #     STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-      #     KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-      #     KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-      #
-      # - name: Upload release APK
-      #   uses: actions/upload-artifact@v4
-      #   with:
-      #     name: app-release
-      #     path: android/app/build/outputs/apk/release/app-release.apk
