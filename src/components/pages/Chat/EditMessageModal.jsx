@@ -70,4 +70,4 @@ const EditMessageModal = ({ isOpen, onClose, messageText, onSave }) => {
   );
 };
 
-export default EditMessageModal;c
+export default EditMessageModal;

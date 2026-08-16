@@ -11,6 +11,7 @@ import GifLibraryModal from '../../GifLibrary/GifLibraryModal';
 import AvatarPicker from '../../AvatarPicker/AvatarPicker';
 import Toast from '../../Toast/Toast';
 import { useCachedImage } from '../../../utils/mediaCache';
+import ChatEmojiPicker from '../Chat/ChatEmojiPicker';
 import './Profile.css';
 
 const STORAGE_PREFIX = 'echo_cache_';
@@ -47,7 +48,6 @@ const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', 
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
-// ─── 10 Default Animated Interest Templates ─────────────────────
 const DEFAULT_INTEREST_TEMPLATES = [
   '🎮 Gaming',
   '🎵 Music',
@@ -61,7 +61,6 @@ const DEFAULT_INTEREST_TEMPLATES = [
   '🚀 Coding',
 ];
 
-// Cloudinary Configuration
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
 
@@ -75,7 +74,15 @@ const Profile = () => {
   const [toast, setToast] = useState(null);
   const [copiedUid, setCopiedUid] = useState(false);
 
-  // Synchronously initialize profile & skin cache
+  const NAME_MAX_LENGTH = 25;
+  const BIO_MAX_LENGTH = 130;
+
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [activeField, setActiveField] = useState(null);
+  const nameInputRef = useRef(null);
+  const bioInputRef = useRef(null);
+  const editingContainerRef = useRef(null);
+
   const cachedProfile = useMemo(() => {
     if (!user?.uid) return null;
     return getFastLocal(`profile_${user.uid}`);
@@ -105,7 +112,6 @@ const Profile = () => {
   const imageInputRef = useRef(null);
   const gifInputRef = useRef(null);
 
-  // Synchronized fetch for both profile (mood) and userSkins (activeSkin) together
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -119,7 +125,6 @@ const Profile = () => {
       const data = snap.val() || {};
       const newActive = data.activeSkin || data.active || null;
       setActiveSkinId(newActive);
-
       const existingSkinCache = getFastLocal(skinCacheKey) || {};
       setFastLocal(skinCacheKey, { ...existingSkinCache, active: newActive });
     });
@@ -173,7 +178,6 @@ const Profile = () => {
     };
   }, [user?.uid, editing]);
 
-  // Countries & Cities
   const countriesList = useMemo(() => Country.getAllCountries(), []);
 
   const matchedCountryCode = useMemo(() => {
@@ -213,13 +217,29 @@ const Profile = () => {
   const handleSave = async () => {
     if (!user) return;
 
+    const name = editData.name?.trim() || '';
+    if (name.length > NAME_MAX_LENGTH) {
+      setToast({ message: `Name must be ${NAME_MAX_LENGTH} characters or less.`, type: 'error' });
+      return;
+    }
+    if (name.length === 0) {
+      setToast({ message: 'Name is required.', type: 'error' });
+      return;
+    }
+
+    const bio = editData.bio?.trim() || '';
+    if (bio.length > BIO_MAX_LENGTH) {
+      setToast({ message: `Bio must be ${BIO_MAX_LENGTH} characters or less.`, type: 'error' });
+      return;
+    }
+
     try {
       const cacheKey = `profile_${user.uid}`;
       const profileRef = ref(db, `profiles/${user.uid}`);
-
-      await update(profileRef, editData);
-      setFastLocal(cacheKey, editData);
-      setProfile(editData);
+      const updates = { ...editData, name, bio };
+      await update(profileRef, updates);
+      setFastLocal(cacheKey, updates);
+      setProfile(updates);
       await refreshProfile(user.uid);
       setEditing(false);
       setToast({ message: 'Profile saved successfully!', type: 'success' });
@@ -284,7 +304,6 @@ const Profile = () => {
         updateData.activeSkin = null;
       }
 
-      // ─── Optimistic update ──────────────────────────────
       setProfile((prev) => ({ ...prev, ...updateData }));
       setEditData((prev) => ({ ...prev, ...updateData }));
 
@@ -314,7 +333,6 @@ const Profile = () => {
   const handleGifSelect = async (gif) => {
     try {
       const updateData = { videoUrl: gif.url, avatar: gif.url, activeSkin: null };
-      // ─── Optimistic update ──────────────────────────────
       setProfile((prev) => ({ ...prev, ...updateData }));
       setEditData((prev) => ({ ...prev, ...updateData }));
 
@@ -328,12 +346,48 @@ const Profile = () => {
     }
   };
 
+  // ─── Emoji picker handlers ────────────────────────────────────
+  const handleEmojiSelect = (emoji) => {
+    if (!activeField) return;
+
+    const field = activeField;
+    const currentValue = field === 'name' ? editData.name : editData.bio;
+    const maxLength = field === 'name' ? NAME_MAX_LENGTH : BIO_MAX_LENGTH;
+
+    if ((currentValue || '').length + emoji.length > maxLength) {
+      setToast({ message: `Cannot add emoji – ${field} limit reached.`, type: 'error' });
+      return;
+    }
+
+    const newValue = (currentValue || '') + emoji;
+    if (field === 'name') {
+      setEditData({ ...editData, name: newValue });
+    } else {
+      setEditData({ ...editData, bio: newValue });
+    }
+  };
+
+  const openEmojiPicker = (field) => {
+    setActiveField(field);
+    setShowEmojiPicker(true);
+    setTimeout(() => {
+      if (field === 'name' && nameInputRef.current) {
+        nameInputRef.current.focus();
+      } else if (field === 'bio' && bioInputRef.current) {
+        bioInputRef.current.focus();
+      }
+    }, 50);
+  };
+
+  const closeEmojiPicker = () => {
+    setShowEmojiPicker(false);
+    setActiveField(null);
+  };
+
   // ─── Cached avatar ──────────────────────────────────────────
   const currentMediaUrl = (editing ? editData.videoUrl : profile?.videoUrl) || 
                           (editing ? editData.avatar : profile?.avatar);
-  // Use useCachedImage to get cached version (returns the cached URL or null)
   const cachedMediaUrl = useCachedImage(currentMediaUrl, null);
-  // If cachedMediaUrl is not null, use it; otherwise fallback to original URL
   const displayMediaUrl = cachedMediaUrl || currentMediaUrl;
 
   const isVideoFormat = (editing ? editData.videoUrl : profile?.videoUrl) && 
@@ -354,7 +408,6 @@ const Profile = () => {
       <input type="file" ref={gifInputRef} accept="image/gif" style={{ display: 'none' }} onChange={handleGifFile} />
 
       <div className="profile-card">
-        {/* Avatar */}
         <div
           className="profile-avatar"
           onClick={() => editing && setShowAvatarPicker(true)}
@@ -374,97 +427,186 @@ const Profile = () => {
           {editing && <div className="avatar-overlay">Tap to change</div>}
         </div>
 
-        {/* Name */}
+        {/* ─── Name Input ────────────────────────────────────────── */}
         {editing ? (
-          <input
-            type="text"
-            className="profile-name-input"
-            value={editData.name || ''}
-            onChange={(e) => setEditData({ ...editData, name: e.target.value })}
-            placeholder="Your name"
-          />
+          <div ref={editingContainerRef} style={{ position: 'relative', width: '100%' }}>
+            <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+              <input
+                ref={nameInputRef}
+                type="text"
+                className="profile-name-input"
+                value={editData.name || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val.length <= NAME_MAX_LENGTH) {
+                    setEditData({ ...editData, name: val });
+                  }
+                }}
+                placeholder="Your name"
+                maxLength={NAME_MAX_LENGTH}
+                style={{ flex: 1, paddingLeft: '40px', paddingRight: '50px' }}
+              />
+              {/* Emoji button on the left */}
+              <button
+                type="button"
+                onClick={() => openEmojiPicker('name')}
+                style={{
+                  position: 'absolute',
+                  left: '8px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: '#888',
+                  fontSize: '18px',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  zIndex: 2,
+                }}
+                title="Insert emoji"
+              >
+                <i className="fas fa-smile" />
+              </button>
+              {/* Counter on the right */}
+              <span style={{
+                position: 'absolute',
+                right: '12px',
+                bottom: '6px',
+                fontSize: '11px',
+                color: (editData.name?.length || 0) >= NAME_MAX_LENGTH ? '#EF4444' : '#666',
+                pointerEvents: 'none',
+              }}>
+                {editData.name?.length || 0}/{NAME_MAX_LENGTH}
+              </span>
+            </div>
+
+            {/* ─── Location ──────────────────────────────────────────── */}
+            <div className="profile-location-inputs" style={{ display: 'flex', gap: '8px', margin: '12px 0' }}>
+              <select
+                value={matchedCountryCode}
+                onChange={handleCountrySelect}
+                style={{
+                  flex: 1,
+                  background: '#1E1E2A',
+                  color: '#FFFFFF',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: '8px',
+                  padding: '8px',
+                  fontSize: '13px',
+                }}
+              >
+                <option value="">Select Country</option>
+                {countriesList.map((c) => (
+                  <option key={c.isoCode} value={c.isoCode}>{c.name}</option>
+                ))}
+              </select>
+              <select
+                value={editData.city || ''}
+                onChange={handleCitySelect}
+                disabled={!matchedCountryCode}
+                style={{
+                  flex: 1,
+                  background: '#1E1E2A',
+                  color: '#FFFFFF',
+                  border: '1px solid rgba(255,255,255,0.15)',
+                  borderRadius: '8px',
+                  padding: '8px',
+                  fontSize: '13px',
+                  opacity: matchedCountryCode ? 1 : 0.5,
+                }}
+              >
+                <option value="">Select City</option>
+                {citiesList.map((ct, idx) => (
+                  <option key={`${ct.name}-${idx}`} value={ct.name}>{ct.name}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* ─── Bio Textarea ──────────────────────────────────────── */}
+            <div style={{ position: 'relative', width: '100%', marginTop: '12px' }}>
+              <div style={{ position: 'relative' }}>
+                <textarea
+                  ref={bioInputRef}
+                  className="profile-bio-input"
+                  value={editData.bio || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val.length <= BIO_MAX_LENGTH) {
+                      setEditData({ ...editData, bio: val });
+                    }
+                  }}
+                  placeholder="Write a short bio..."
+                  rows={3}
+                  maxLength={BIO_MAX_LENGTH}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(255,255,255,0.05)',
+                    color: '#fff',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '8px',
+                    padding: '8px 60px 8px 40px',
+                    resize: 'vertical',
+                  }}
+                />
+                {/* Emoji button on the left, aligned to top-left */}
+                <button
+                  type="button"
+                  onClick={() => openEmojiPicker('bio')}
+                  style={{
+                    position: 'absolute',
+                    left: '8px',
+                    top: '8px',
+                    background: 'none',
+                    border: 'none',
+                    color: '#888',
+                    fontSize: '18px',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    zIndex: 2,
+                  }}
+                  title="Insert emoji"
+                >
+                  <i className="fas fa-smile" />
+                </button>
+                {/* Counter on the right */}
+                <span style={{
+                  position: 'absolute',
+                  right: '12px',
+                  bottom: '6px',
+                  fontSize: '11px',
+                  color: (editData.bio?.length || 0) >= BIO_MAX_LENGTH ? '#EF4444' : '#666',
+                  pointerEvents: 'none',
+                }}>
+                  {editData.bio?.length || 0}/{BIO_MAX_LENGTH}
+                </span>
+              </div>
+            </div>
+          </div>
         ) : loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
             <SkeletonBlock width="140px" height="22px" />
           </div>
         ) : (
-          <div className="profile-name">{profile?.name || 'User'}</div>
+          <>
+            <div className="profile-name">{profile?.name || 'User'}</div>
+            {!loading && (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '6px' }}>
+                <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={36} interactive={false} animated={true} />
+                <span style={{ fontSize: '13px', color: '#888', fontWeight: 500 }}>
+                  Mood: <strong style={{ color: '#FFF', textTransform: 'capitalize' }}>{profile?.mood || 'happy'}</strong>
+                </span>
+              </div>
+            )}
+            {(profile?.city || profile?.country) && (
+              <div className="profile-location" style={{ fontSize: '13px', color: '#888', marginTop: '4px' }}>
+                📍 {[profile.city, profile.country].filter(Boolean).join(', ')}
+              </div>
+            )}
+            {profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>{profile.bio}</p>}
+          </>
         )}
 
-        {!loading && (
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '6px' }}>
-            <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={36} interactive={false} animated={true} />
-            <span style={{ fontSize: '13px', color: '#888', fontWeight: 500 }}>
-              Mood: <strong style={{ color: '#FFF', textTransform: 'capitalize' }}>{profile?.mood || 'happy'}</strong>
-            </span>
-          </div>
-        )}
-
-        {/* Location */}
-        {editing ? (
-          <div className="profile-location-inputs" style={{ display: 'flex', gap: '8px', margin: '12px 0' }}>
-            <select
-              value={matchedCountryCode}
-              onChange={handleCountrySelect}
-              style={{
-                flex: 1,
-                background: '#1E1E2A',
-                color: '#FFFFFF',
-                border: '1px solid rgba(255,255,255,0.15)',
-                borderRadius: '8px',
-                padding: '8px',
-                fontSize: '13px',
-              }}
-            >
-              <option value="">Select Country</option>
-              {countriesList.map((c) => (
-                <option key={c.isoCode} value={c.isoCode}>{c.name}</option>
-              ))}
-            </select>
-            <select
-              value={editData.city || ''}
-              onChange={handleCitySelect}
-              disabled={!matchedCountryCode}
-              style={{
-                flex: 1,
-                background: '#1E1E2A',
-                color: '#FFFFFF',
-                border: '1px solid rgba(255,255,255,0.15)',
-                borderRadius: '8px',
-                padding: '8px',
-                fontSize: '13px',
-                opacity: matchedCountryCode ? 1 : 0.5,
-              }}
-            >
-              <option value="">Select City</option>
-              {citiesList.map((ct, idx) => (
-                <option key={`${ct.name}-${idx}`} value={ct.name}>{ct.name}</option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          (profile?.city || profile?.country) && (
-            <div className="profile-location" style={{ fontSize: '13px', color: '#888', marginTop: '4px' }}>
-              📍 {[profile.city, profile.country].filter(Boolean).join(', ')}
-            </div>
-          )
-        )}
-
-        {/* Bio */}
-        {editing ? (
-          <textarea
-            className="profile-bio-input"
-            value={editData.bio || ''}
-            onChange={(e) => setEditData({ ...editData, bio: e.target.value })}
-            placeholder="Write a short bio..."
-            rows={3}
-            style={{ width: '100%', marginTop: '12px', background: 'rgba(255,255,255,0.05)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '8px', padding: '8px' }}
-          />
-        ) : (
-          profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>{profile.bio}</p>
-        )}
-
-        {/* Moving Interests Templates */}
+        {/* ─── Interests ─────────────────────────────────────────── */}
         <div className="moving-interests-container" style={{ width: '100%', overflow: 'hidden', padding: '6px 0', marginTop: '12px' }}>
           <div
             className="moving-interests-track"
@@ -494,7 +636,7 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* Actions */}
+        {/* ─── Actions ───────────────────────────────────────────── */}
         <div className="profile-actions" style={{ marginTop: '24px', display: 'flex', gap: '12px', justifyContent: 'center' }}>
           {editing ? (
             <>
@@ -513,7 +655,7 @@ const Profile = () => {
         </div>
       </div>
 
-      {/* Account Details */}
+      {/* ─── Account Details ────────────────────────────────────── */}
       <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: '16px', border: '1px solid rgba(255,255,255,0.08)', marginTop: '16px' }}>
         <div style={{ fontSize: '12px', color: '#888', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>Account Details</div>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
@@ -531,6 +673,7 @@ const Profile = () => {
         </div>
       </div>
 
+      {/* ─── Modals ───────────────────────────────────────────────── */}
       <AvatarPicker
         isOpen={showAvatarPicker}
         onClose={() => setShowAvatarPicker(false)}
@@ -542,6 +685,23 @@ const Profile = () => {
 
       <GifLibraryModal isOpen={showGifLibrary} onClose={() => setShowGifLibrary(false)} onSelect={handleGifSelect} />
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+
+      {/* ─── Emoji Picker ───────────────────────────────────────── */}
+      {showEmojiPicker && (
+        <ChatEmojiPicker
+          onClose={closeEmojiPicker}
+          onSelect={handleEmojiSelect}
+          excludeRef={editingContainerRef}
+          style={{
+            position: 'fixed',
+            left: '20px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: '320px',
+            maxHeight: '70vh',
+          }}
+        />
+      )}
     </div>
   );
 };

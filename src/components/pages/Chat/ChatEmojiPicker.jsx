@@ -29,16 +29,15 @@ const EMOJIS = [
   '🪳', '🪴', '🪵', '🪶', '🪷', '🪸', '🪹', '🪺', '🪻', '🪼', '🪽', '🪾', '🪿', '🫀', '🫁', '🫂',
 ];
 
-const ChatEmojiPicker = ({ onClose, onSelect }) => {
+const ChatEmojiPicker = ({ onClose, onSelect, excludeRef, style = {} }) => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
-  const dragRef = useRef(null);
   const startPos = useRef({ x: 0, y: 0 });
   const startOffset = useRef({ x: 0, y: 0 });
 
   const pickerRef = useRef(null);
 
-  // ─── Set initial position (centered) ────────────────────────────
+  // ─── Set initial position ──────────────────────────────────────
   useEffect(() => {
     if (pickerRef.current) {
       const rect = pickerRef.current.getBoundingClientRect();
@@ -50,12 +49,11 @@ const ChatEmojiPicker = ({ onClose, onSelect }) => {
     }
   }, []);
 
-  // ─── Click outside (but NOT on input bar) ──────────────────────
+  // ─── Click outside (respect excludeRef) ────────────────────────
   useEffect(() => {
     const handleClickOutside = (e) => {
-      // If click is on the input bar, ignore (keep open)
-      const inputBar = document.querySelector('.chat-input-container');
-      if (inputBar && inputBar.contains(e.target)) {
+      // ✅ If the click is inside the excluded ref, ignore it
+      if (excludeRef && excludeRef.current && excludeRef.current.contains(e.target)) {
         return;
       }
       // If click is outside the picker panel, close
@@ -69,7 +67,7 @@ const ChatEmojiPicker = ({ onClose, onSelect }) => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
     };
-  }, [onClose]);
+  }, [onClose, excludeRef]);
 
   // ─── Drag handlers ──────────────────────────────────────────────
   const handleDragStart = (e) => {
@@ -87,7 +85,6 @@ const ChatEmojiPicker = ({ onClose, onSelect }) => {
     let newX = startOffset.current.x + dx;
     let newY = startOffset.current.y + dy;
 
-    // Keep within viewport
     const panel = pickerRef.current;
     if (panel) {
       const rect = panel.getBoundingClientRect();
@@ -137,6 +134,7 @@ const ChatEmojiPicker = ({ onClose, onSelect }) => {
           transform: `translate(${position.x}px, ${position.y}px)`,
           cursor: isDragging ? 'grabbing' : 'default',
           transition: isDragging ? 'none' : 'opacity 0.2s ease',
+          ...style,
         }}
         onClick={(e) => e.stopPropagation()}
       >
