@@ -17,7 +17,7 @@ import {
 import { useAuth } from '../../../hooks/useAuth';
 import { SkeletonMessage } from '../../common/SkeletonLoader';
 import { getCache, setCache } from '../../../services/cacheService';
-import { clearMessageCache } from '../../../services/messageCache';
+import { clearMessageCache, storeMessageInCache } from '../../../services/messageCache';
 import ChatMediaMessage from './ChatMediaMessage';
 import AudioPlayer from './AudioPlayer';
 import VoiceRecorder from './VoiceRecorder';
@@ -56,8 +56,6 @@ const ChatView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [deletingMessageId, setDeletingMessageId] = useState(null);
-
-  const activeSkinId = user?.activeSkin || null;
 
   const isEchoAi = userId === 'echo_ai_assistant';
 
@@ -197,13 +195,6 @@ const ChatView = () => {
     }, 100);
     return () => clearTimeout(syncTimer);
   }, [user?.uid, userId, isEchoAi]);
-
-  // ─── Scroll to bottom when emoji picker opens ────────────────
-  useEffect(() => {
-    if (showEmojiPicker) {
-      setTimeout(() => scrollToBottom(true), 150);
-    }
-  }, [showEmojiPicker]);
 
   // ─── Helper: Start a reply ──────────────────────────────────
   const handleReply = (msg) => {
@@ -488,6 +479,13 @@ const ChatView = () => {
       } catch (e) { /* ignore */ }
       clearMessageCache(cId);
       setTimeout(() => scrollToBottom(true), 100);
+
+      // ─── Store messages in IndexedDB for offline use ──────────
+      newMessages.forEach(msg => {
+        if (msg.senderId && (msg.text || msg.type === 'media' || msg.type === 'echomoji')) {
+          storeMessageInCache(cId, msg);
+        }
+      });
 
       const hasUnread = newMessages.some(
         msg => msg.receiverId === user.uid && msg.isRead === false
@@ -957,8 +955,6 @@ const ChatView = () => {
       // ─── Check if it's an ECHOMOJI code (for existing messages only) ──
       const mood = parseEchoMood(textToSend);
       if (mood) {
-        // This path is kept for backward compatibility; new ECHOMOJI are not inserted.
-        // Send as echomoji message
         const messagesRef = ref(db, `chats/${cId}/messages`);
         const newMsgRef = push(messagesRef);
         const msgData = {
@@ -1284,8 +1280,20 @@ const ChatView = () => {
     );
   };
 
+  // ─── Handle emoji selection (from picker) ──────────────────
+  const handleEmojiSelect = (emoji) => {
+    const active = document.activeElement;
+    if (captionInputRef.current && active === captionInputRef.current) {
+      setCaptionText(prev => prev + emoji);
+      captionInputRef.current?.focus();
+    } else {
+      setNewMessage(prev => prev + emoji);
+      inputRef.current?.focus();
+    }
+  };
+
   return (
-    <div className={`chat-view ${showEmojiPicker ? 'emoji-open' : ''}`}>
+    <div className="chat-view">
       <VideoAudioProvider>
         <div className="messages-container">
           {loadingMessages && messages.length === 0 ? (
@@ -1312,10 +1320,7 @@ const ChatView = () => {
       {showEmojiPicker && (
         <ChatEmojiPicker
           onClose={() => setShowEmojiPicker(false)}
-          onSelect={(emoji) => {
-            setNewMessage((prev) => prev + emoji);
-            inputRef.current?.focus();
-          }}
+          onSelect={handleEmojiSelect}
         />
       )}
 

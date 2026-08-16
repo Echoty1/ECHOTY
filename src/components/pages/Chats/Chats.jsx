@@ -16,13 +16,14 @@ import {
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import './Chats.css';
-import { getCache, setCache } from '../../../services/cacheService';
+import { getCache, setCache, getProfile as getCachedProfile } from '../../../services/cacheService';
 import { searchProfiles } from '../../../services/searchService';
 import { useInfiniteScroll } from '../../../hooks/useInfiniteScroll';
 import { SkeletonChatItem } from '../../common/SkeletonLoader';
 import { preloadMedia, useCachedImage } from '../../../utils/mediaCache';
 import { fetchLatestMessage } from '../../../services/messageCache';
 import { useProfile } from '../../../contexts/ProfileContext';
+import { getChatList, storeChatList } from '../../../services/indexedDBService';
 
 const CHAT_CHUNK_SIZE = 20;
 
@@ -76,10 +77,16 @@ const loadPartnerData = async (partnerId) => {
   return null;
 };
 
-// ─── Process a single chat item, with forced read flag ──────────
+// ─── Process a single chat item ─────────────────────────────────
 const processChatItem = async (chat, user, onlineUsers) => {
   try {
-    const profile = (await loadPartnerData(chat.id)) || {};
+    // 1. Try to get cached profile from IndexedDB first (fast)
+    let profile = getCachedProfile(chat.id);
+    if (!profile) {
+      // 2. If not cached, fetch from Firebase
+      profile = (await loadPartnerData(chat.id)) || {};
+    }
+
     let partnerName;
     let isDeleted = false;
 
@@ -107,7 +114,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
 
     // ─── Handle different message types ──────────────────────────
     if (latest.type === 'echomoji') {
-      // ECHOMOJI message preview
       const moodLabel = latest.mood || 'neutral';
       displayMessage = `😊 ECHOMOJI (${moodLabel})`;
     } else if (latest.type === 'media') {
@@ -116,9 +122,8 @@ const processChatItem = async (chat, user, onlineUsers) => {
       else if (latest.mediaType === 'audio') mediaLabel = '🎤 Voice note';
       displayMessage = isSender ? `You: ${mediaLabel}` : `${partnerName}: ${mediaLabel}`;
     } else {
-      // Text message (or fallback)
       if (displayMessage === 'Start chatting...') {
-        displayMessage = displayMessage; // keep as is
+        // keep as is
       } else {
         displayMessage = isSender ? `You: ${displayMessage}` : `${partnerName}: ${displayMessage}`;
         if (displayMessage.length > 30) {
@@ -136,6 +141,7 @@ const processChatItem = async (chat, user, onlineUsers) => {
     }
 
     const rawAvatar = profile.avatar || chat.partnerAvatar || '';
+    // Preload avatar image immediately (caches in browser and IndexedDB)
     if (rawAvatar) preloadMedia(rawAvatar);
 
     const isOnline = !!onlineUsers[chat.id];
@@ -155,7 +161,7 @@ const processChatItem = async (chat, user, onlineUsers) => {
       online: isOnline,
     };
   } catch (err) {
-    // Fallback – also check flag
+    // Fallback
     let unreadCount = chat.unreadCount || 0;
     const readFlagKey = `chat_read_${chat.id}`;
     if (sessionStorage.getItem(readFlagKey) === 'true') {
@@ -262,6 +268,7 @@ const Chats = () => {
   const [isSearching, setIsSearching] = useState(() => initialQuery().trim().length > 0);
   const [onlineUsers, setOnlineUsers] = useState({});
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
+  const [loadingChats, setLoadingChats] = useState(true);
 
   const inputRef = useRef(null);
   const searchTimeout = useRef(null);
@@ -269,20 +276,35 @@ const Chats = () => {
   const userChatsUnsubRef = useRef(null);
 
   const cacheKey = `chats_${user?.uid}`;
-
   const [recentChats, setRecentChats] = useState([]);
-  const [loadingChats, setLoadingChats] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [lastChatKey, setLastChatKey] = useState(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
 
   useDeletedAccountCheck();
 
+  // ─── Load cached chat list from IndexedDB on mount ────────────
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const loadCached = async () => {
+      try {
+        const cached = await getChatList(user.uid);
+        if (cached && Array.isArray(cached) && cached.length > 0) {
+          setRecentChats(cached);
+          setLoadingChats(false);
+        }
+      } catch (err) {
+        console.warn('Failed to load cached chats:', err);
+      }
+    };
+    loadCached();
+  }, [user?.uid]);
+
   // ─── Listen for chat-read events to instantly clear unread ──
   useEffect(() => {
     const handleChatRead = (event) => {
       const { userId } = event.detail;
-      // Also set a session flag so that if the component mounts later, it still clears
       sessionStorage.setItem(`chat_read_${userId}`, 'true');
       setRecentChats((prev) =>
         prev.map((chat) =>
@@ -314,24 +336,9 @@ const Chats = () => {
     };
   }, [user]);
 
-  // ─── Stale‑while‑revalidate: load cache then listen ──────────
+  // ─── Firebase listener for userChats ──────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
-
-    const cached = getCache(cacheKey);
-    if (cached && Array.isArray(cached) && cached.length > 0) {
-      // Apply any pending read flags on cached data
-      const updatedCached = cached.map(chat => {
-        const key = `chat_read_${chat.id}`;
-        if (sessionStorage.getItem(key) === 'true') {
-          sessionStorage.removeItem(key);
-          return { ...chat, unreadCount: 0 };
-        }
-        return chat;
-      });
-      setRecentChats(updatedCached);
-      setLoadingChats(false);
-    }
 
     const userChatsRef = ref(db, `userChats/${user.uid}`);
     userChatsUnsubRef.current = onValue(
@@ -341,7 +348,7 @@ const Chats = () => {
         if (!data) {
           setRecentChats([]);
           setLoadingChats(false);
-          setCache(cacheKey, []);
+          storeChatList(user.uid, []).catch(() => {});
           return;
         }
 
@@ -358,6 +365,9 @@ const Chats = () => {
 
         setRecentChats(sortedNonAI);
         setLoadingChats(false);
+        // Store in IndexedDB for offline use
+        storeChatList(user.uid, sortedNonAI).catch(() => {});
+        // Also store in localStorage (optional)
         setCache(cacheKey, sortedNonAI);
       },
       (error) => {

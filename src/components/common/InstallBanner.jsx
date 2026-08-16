@@ -2,22 +2,36 @@
 import React, { useState, useEffect } from 'react';
 import { isAndroid, isIOS } from 'react-device-detect';
 
-const InstallBanner = () => {
+const InstallBanner = ({ playStoreUrl }) => {
   const [dismissed, setDismissed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
+  // ✅ Hooks must be called unconditionally at the top
   useEffect(() => {
-    // Check if it's mobile (Android or iOS)
     setIsMobile(isAndroid || isIOS);
+
+    // Check if dismissed recently (5 days)
+    const dismissedUntil = localStorage.getItem('install_banner_dismissed_until');
+    if (dismissedUntil && Date.now() < parseInt(dismissedUntil, 10)) {
+      setDismissed(true);
+    }
   }, []);
 
+  // ✅ Now we can conditionally return after hooks
+  if (!playStoreUrl) return null;
   if (dismissed || !isMobile) return null;
+
+  const handleDismiss = () => {
+    const until = Date.now() + 5 * 24 * 60 * 60 * 1000;
+    localStorage.setItem('install_banner_dismissed_until', String(until));
+    setDismissed(true);
+  };
 
   let message, action, buttonText;
 
   if (isAndroid) {
     message = '🚀 Get the best experience with the ECHO app!';
-    action = 'https://play.google.com/store/apps/details?id=com.yourcompany.echo'; // Replace with your Play Store link
+    action = playStoreUrl;
     buttonText = 'Install on Google Play';
   } else if (isIOS) {
     message = '📱 Add ECHO to your Home Screen for a faster experience.';
@@ -84,7 +98,7 @@ const InstallBanner = () => {
           </span>
         )}
         <button
-          onClick={() => setDismissed(true)}
+          onClick={handleDismiss}
           style={{
             background: 'transparent',
             border: 'none',

@@ -1,9 +1,7 @@
 name: Build APK
 
 on:
-  push:
-    branches: [ main ]
-  workflow_dispatch:
+  workflow_dispatch:   # only manual – no push trigger
 
 jobs:
   build:
@@ -20,6 +18,21 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Fetch version from Firebase
+        id: version
+        run: |
+          # Replace <YOUR-PROJECT> with your Firebase project ID
+          VERSION_DATA=$(curl -s "https://<YOUR-PROJECT>.firebaseio.com/appConfig/version.json")
+          VERSION_CODE=$(echo $VERSION_DATA | jq -r '.versionCode')
+          VERSION_NAME=$(echo $VERSION_DATA | jq -r '.versionName')
+          echo "versionCode=$VERSION_CODE" >> $GITHUB_OUTPUT
+          echo "versionName=$VERSION_NAME" >> $GITHUB_OUTPUT
+
+      - name: Set version environment variables
+        run: |
+          echo "REACT_APP_VERSION=${{ steps.version.outputs.versionName }}" >> $GITHUB_ENV
+          echo "REACT_APP_VERSION_CODE=${{ steps.version.outputs.versionCode }}" >> $GITHUB_ENV
 
       - name: Build React app
         run: npm run build
@@ -49,13 +62,17 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x android/gradlew
 
+      - name: Set Android version numbers
+        run: |
+          cd android
+          sed -i "s/versionCode [0-9]*/versionCode ${{ steps.version.outputs.versionCode }}/" app/build.gradle
+          sed -i "s/versionName \".*\"/versionName \"${{ steps.version.outputs.versionName }}\"/" app/build.gradle
+
       - name: Decode keystore (release only)
-        if: github.ref == 'refs/heads/main'
         run: |
           echo "${{ secrets.STORE_FILE_B64 }}" | base64 -d > android/app/echo-release.keystore
 
-      - name: Create keystore.properties (release only)
-        if: github.ref == 'refs/heads/main'
+      - name: Create keystore.properties
         run: |
           cat > android/keystore.properties << EOF
           storeFile=app/echo-release.keystore
@@ -64,24 +81,19 @@ jobs:
           keyPassword=${{ secrets.KEY_PASSWORD }}
           EOF
 
-      - name: Build APK
+      - name: Build release APK
         run: |
           cd android
-          if [ "${{ github.ref }}" == "refs/heads/main" ]; then
-            ./gradlew assembleRelease
-          else
-            ./gradlew assembleDebug
-          fi
+          ./gradlew assembleRelease
 
-      - name: List APK directory contents (debug)
+      - name: Rename APK with version
         run: |
-          echo "=== APK files found ==="
-          find android -name "*.apk" -type f || echo "No APK found"
-          echo "=== Full output directory ==="
-          ls -R android/app/build/outputs/ || echo "Outputs directory not found"
+          VERSION_NAME="${{ steps.version.outputs.versionName }}"
+          VERSION_CODE="${{ steps.version.outputs.versionCode }}"
+          mv android/app/build/outputs/apk/release/app-release.apk "ECHO-v${VERSION_NAME}-code${VERSION_CODE}.apk"
 
-      - name: Upload APKs
+      - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: apks
-          path: android/app/build/outputs/apk/
+          name: ECHO-APK
+          path: ./*.apk

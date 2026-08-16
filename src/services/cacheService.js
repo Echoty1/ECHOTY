@@ -1,20 +1,58 @@
 // src/services/cacheService.js
+import {
+  storeProfile,
+  getProfile as getProfileFromDB,
+  getAllProfiles,
+  clearProfiles,
+} from './indexedDBService';
+import { getItem, setItem, removeItem } from './storageService';
+
+// ─── Constants ────────────────────────────────────────────────────
 const CACHE_PREFIX = 'echocache_';
 const CACHE_VERSION = 'v2';
 const DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
 
-// ─── In‑memory cache (fastest) ────────────────────────────────
-const memoryCache = new Map();
+// ─── In‑memory cache for profiles ──────────────────────────────
+let memoryCache = new Map();
+let cacheLoaded = false;
 
+// ─── Profile cache ──────────────────────────────────────────────
+export const loadCache = async () => {
+  if (cacheLoaded) return memoryCache;
+  try {
+    const profiles = await getAllProfiles();
+    profiles.forEach(p => memoryCache.set(p.uid, p));
+    cacheLoaded = true;
+  } catch (err) {
+    console.warn('Failed to load profiles into cache:', err);
+  }
+  return memoryCache;
+};
+
+export const getProfile = (uid) => {
+  if (!uid) return null;
+  return memoryCache.get(uid) || null;
+};
+
+export const setProfile = async (uid, data) => {
+  if (!uid || !data) return;
+  memoryCache.set(uid, data);
+  await storeProfile(uid, data);
+};
+
+export const getAllProfilesFromCache = () => Array.from(memoryCache.values());
+
+export const clearCache = async () => {
+  memoryCache.clear();
+  cacheLoaded = false;
+  await clearProfiles();
+};
+
+// ─── Generic cache helpers (localStorage) ──────────────────────
 const getFullKey = (key) => `${CACHE_PREFIX}${CACHE_VERSION}_${key}`;
 
-/**
- * Get cached data (memory first, then localStorage)
- */
 export const getCache = (key) => {
   const fullKey = getFullKey(key);
-
-  // 1. Check memory cache
   if (memoryCache.has(fullKey)) {
     const entry = memoryCache.get(fullKey);
     if (Date.now() < entry.expires) {
@@ -23,17 +61,12 @@ export const getCache = (key) => {
       memoryCache.delete(fullKey);
     }
   }
-
-  // 2. Check localStorage
   try {
     const raw = localStorage.getItem(fullKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (parsed.expiry && Date.now() < parsed.expiry) {
-      memoryCache.set(fullKey, {
-        data: parsed.data,
-        expires: parsed.expiry,
-      });
+      memoryCache.set(fullKey, { data: parsed.data, expires: parsed.expiry });
       return parsed.data;
     } else {
       localStorage.removeItem(fullKey);
@@ -45,31 +78,32 @@ export const getCache = (key) => {
   }
 };
 
-/**
- * Store data in cache
- */
 export const setCache = (key, data, ttlSeconds = 300) => {
   const fullKey = getFullKey(key);
   const expiry = Date.now() + (ttlSeconds * 1000);
-
   memoryCache.set(fullKey, { data, expires: expiry });
-
   try {
-    const cacheData = {
-      data,
-      expiry,
-      version: CACHE_VERSION,
-    };
-    localStorage.setItem(fullKey, JSON.stringify(cacheData));
+    localStorage.setItem(fullKey, JSON.stringify({ data, expiry, version: CACHE_VERSION }));
   } catch (error) {
-    console.warn('Cache set error:', error);
+    if (error.name === 'QuotaExceededError' || error.code === 22) {
+      console.warn('⚠️ Cache quota exceeded. Cleaning up old cache entries...');
+      try {
+        const keys = Object.keys(localStorage)
+          .filter(k => k.startsWith(CACHE_PREFIX))
+          .sort();
+        const toRemove = keys.slice(0, Math.floor(keys.length / 2) || keys.length);
+        toRemove.forEach(k => localStorage.removeItem(k));
+        localStorage.setItem(fullKey, JSON.stringify({ data, expiry, version: CACHE_VERSION }));
+      } catch (retryError) {
+        console.error('Failed to store cache after cleanup:', retryError);
+      }
+    } else {
+      console.warn('Cache set error:', error);
+    }
   }
 };
 
-/**
- * Remove a specific cache entry
- */
-export const clearCache = (key) => {
+export const clearCacheEntry = (key) => {
   const fullKey = getFullKey(key);
   memoryCache.delete(fullKey);
   try {
@@ -79,11 +113,12 @@ export const clearCache = (key) => {
   }
 };
 
-/**
- * Clear all echo cache
- */
 export const clearAllCache = () => {
-  memoryCache.clear();
+  const keysToDelete = [];
+  memoryCache.forEach((_, key) => {
+    if (key.startsWith(CACHE_PREFIX)) keysToDelete.push(key);
+  });
+  keysToDelete.forEach(key => memoryCache.delete(key));
   try {
     const keys = Object.keys(localStorage);
     for (const key of keys) {
@@ -96,34 +131,5 @@ export const clearAllCache = () => {
   }
 };
 
-// ─── Media cache (Base64) ──────────────────────────────────────
-const MEDIA_PREFIX = 'echomedia_';
-
-/**
- * Get cached media (Base64 string)
- */
-export const getMediaCache = (url) => {
-  if (!url) return null;
-  try {
-    const key = `${MEDIA_PREFIX}${url}`;
-    const raw = localStorage.getItem(key);
-    if (!raw) return null;
-    const item = JSON.parse(raw);
-    return item.data || null;
-  } catch (e) {
-    return null;
-  }
-};
-
-/**
- * Store media as Base64 in cache
- */
-export const setMediaCache = (url, base64) => {
-  if (!url || !base64) return;
-  try {
-    const key = `${MEDIA_PREFIX}${url}`;
-    localStorage.setItem(key, JSON.stringify({ data: base64 }));
-  } catch (e) {
-    console.warn('Media cache error:', e);
-  }
-};
+// Re‑export media cache functions from indexedDBService
+export { getMedia, storeMedia, clearMediaCache } from './indexedDBService';
