@@ -1,3 +1,4 @@
+// src/constants/echomoji.js
 export const EXPRESSIONS = {
   neutral: {
     eyes: ['M12 18 L18 18', 'M30 18 L36 18'],
@@ -23,6 +24,22 @@ export const EXPRESSIONS = {
     eyes: ['M12 18 L20 18', 'M28 18 L36 18'],
     mouth: 'M18 30 Q24 38 30 30',
   },
+  love: {
+    eyes: ['M14 18 A4 4 0 1 1 14 18', 'M30 18 A4 4 0 1 1 30 18'],
+    mouth: 'M18 26 Q24 34 30 26',
+  },
+  sleepy: {
+    eyes: ['M12 20 L18 20', 'M30 20 L36 20'],
+    mouth: 'M20 30 L28 30',
+  },
+  cool: {
+    eyes: ['M12 18 L20 18', 'M28 18 L36 18'],
+    mouth: 'M14 28 Q24 34 34 28',
+  },
+  cry: {
+    eyes: ['M14 18 Q18 22 22 18', 'M26 18 Q30 22 34 18'],
+    mouth: 'M12 34 Q24 24 36 34',
+  },
 };
 
 export const MOOD_THEMES = {
@@ -32,21 +49,14 @@ export const MOOD_THEMES = {
   angry:   { bgStart: '#2A0A0A', bgEnd: '#EF4444', ledColor: '#EF4444', glowColor: '#EF4444' },
   shocked: { bgStart: '#0A0A2A', bgEnd: '#8B5CF6', ledColor: '#FFFFFF', glowColor: '#8B5CF6' },
   excited: { bgStart: '#2A1A0A', bgEnd: '#F59E0B', ledColor: '#F59E0B', glowColor: '#F59E0B' },
+  love:    { bgStart: '#1A0A1A', bgEnd: '#EC4899', ledColor: '#FFFFFF', glowColor: '#EC4899' },
+  sleepy:  { bgStart: '#0A0A1A', bgEnd: '#3B82F6', ledColor: '#93C5FD', glowColor: '#3B82F6' },
+  cool:    { bgStart: '#0A0A1A', bgEnd: '#8B5CF6', ledColor: '#FDE047', glowColor: '#8B5CF6' },
+  cry:     { bgStart: '#1A0A0A', bgEnd: '#6366F1', ledColor: '#93C5FD', glowColor: '#6366F1' },
 };
-
-export const ACCESSORIES = {
-  happy: { emoji: '❤️', size: 14, top: -10, right: -10 },
-  excited: { emoji: '⭐', size: 16, top: -12, right: -12 },
-  sad: { emoji: '💧', size: 12, top: -8, right: -8 },
-  angry: { emoji: '⚡', size: 14, top: -12, right: -12 },
-  shocked: { emoji: '❗', size: 16, top: -14, right: -14 },
-  neutral: null,
-};
-
-// ─── All Skins (removed the 5 biggest) ─────────────────────────────
 
 export const SKINS = [
-  // ─── Free Skins (0 Coins) ──────────────────────────────────────
+  // ─── Free Skins ──────────────────────────────────────────────
   {
     id: 'ocean',
     name: 'Ocean Deep',
@@ -67,8 +77,7 @@ export const SKINS = [
     isLimited: false,
     price: 0,
   },
-
-  // ─── Tier 1: 50 - 100 Coins ────────────────────────────────────
+  // ─── Tier 1 ──────────────────────────────────────────────────
   {
     id: 'neon',
     name: 'Neon Dreams',
@@ -89,8 +98,7 @@ export const SKINS = [
     isLimited: false,
     price: 75,
   },
-
-  // ─── Tier 2: 120 - 200 Coins ───────────────────────────────────
+  // ─── Tier 2 ──────────────────────────────────────────────────
   {
     id: 'pastel',
     name: 'Pastel Dream',
@@ -111,8 +119,7 @@ export const SKINS = [
     isLimited: false,
     price: 150,
   },
-
-  // ─── Premium / Limited Skins (250+ Coins) ──────────────────────
+  // ─── Premium / Limited ──────────────────────────────────────
   {
     id: 'midnight',
     name: 'Midnight Pulse',

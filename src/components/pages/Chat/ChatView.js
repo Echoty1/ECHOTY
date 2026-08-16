@@ -26,7 +26,11 @@ import ReplyPreview from './ReplyPreview';
 import RepliedMessage from './RepliedMessage';
 import EditMessageModal from './EditMessageModal';
 import EditMediaCaptionModal from './EditMediaCaptionModal';
+import ChatEmojiPicker from './ChatEmojiPicker';
 import { VideoAudioProvider } from '../../../contexts/VideoAudioContext';
+import { useProfile } from '../../../contexts/ProfileContext';
+import ECHOMOJI from '../../UI/ECHOMOJI';
+import { getSkinById } from '../../../constants/echomoji';
 import './ChatView.css';
 
 const ECHO_AI_AVATAR = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
@@ -53,6 +57,8 @@ const ChatView = () => {
   const location = useLocation();
   const [deletingMessageId, setDeletingMessageId] = useState(null);
 
+  const activeSkinId = user?.activeSkin || null;
+
   const isEchoAi = userId === 'echo_ai_assistant';
 
   const [partnerProfile, setPartnerProfile] = useState(null);
@@ -60,6 +66,7 @@ const ChatView = () => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loadingMessages, setLoadingMessages] = useState(true);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
 
   // ── Media attachment state ──────────────────────────────────
   const [selectedFile, setSelectedFile] = useState(null);
@@ -70,9 +77,20 @@ const ChatView = () => {
   const fileInputRef = useRef(null);
   const captionInputRef = useRef(null);
   const inputRef = useRef(null);
+  const inputContainerRef = useRef(null);
+
+  // ── Helper to detect ECHOMOJI pattern (kept for backward compatibility) ──
+  const parseEchoMood = (text) => {
+    const match = text.match(/^\{echo:([a-z]+)\}$/);
+    if (match) return match[1];
+    return null;
+  };
 
   // ── Voice recorder state ────────────────────────────────────
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+
+  // ── Profile context ──────────────────────────────────────────
+  const { getProfile, fetchProfile } = useProfile();
 
   // ── Edit message state ──────────────────────────────────────
   const [editingMessage, setEditingMessage] = useState(null);
@@ -89,22 +107,17 @@ const ChatView = () => {
   const hasMarkedRead = useRef(false);
 
   // ─── WHATSAPP-STYLE UNREAD LOGIC ─────────────────────────────
-  // ─── Step 1: INSTANT local reset when entering chat ──────────
   const clearUnreadInstantly = () => {
     if (!userId) return;
-    // 1. Set session flag for the chat list to read
     sessionStorage.setItem(`chat_read_${userId}`, 'true');
-    // 2. Dispatch event to instantly clear badge in Chats list
     window.dispatchEvent(new CustomEvent('chat-read', { detail: { userId } }));
     hasMarkedRead.current = true;
     console.log(`✅ [Unread] Instant clear for ${userId}`);
   };
 
-  // ─── Step 2: DATABASE sync (background) ──────────────────────
   const markMessagesAsRead = async () => {
     if (!user?.uid || !userId || isEchoAi) return;
     if (hasMarkedRead.current) {
-      // Already cleared, but we can still sync to be safe
       console.log(`🔄 [Unread] Background sync for ${userId}`);
     }
 
@@ -132,6 +145,8 @@ const ChatView = () => {
         if (latest.type === 'media') {
           latestMsg = latest.mediaType === 'video' ? '🎬 Video' :
                       latest.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
+        } else if (latest.type === 'echomoji') {
+          latestMsg = `😊 ECHOMOJI (${latest.mood || 'neutral'})`;
         } else {
           latestMsg = latest.text || '';
         }
@@ -139,7 +154,6 @@ const ChatView = () => {
         latestTimestamp = latest.timestamp || Date.now();
       }
 
-      // Mark ALL unread messages as read
       msgs.forEach((msg) => {
         if (msg.receiverId === user.uid && msg.isRead === false) {
           updates[`chats/${cId}/messages/${msg.key}/isRead`] = true;
@@ -152,10 +166,8 @@ const ChatView = () => {
         return;
       }
 
-      // Batch update all message isRead flags
       await update(ref(db), updates);
 
-      // Update the current user's chat entry (set unreadCount to 0)
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
       await set(myChatRef, {
         id: userId,
@@ -174,37 +186,38 @@ const ChatView = () => {
     }
   };
 
-  // ─── Step 3: On mount – INSTANT clear + background sync ──────
+  // ─── On mount – instant clear + background sync ─────────────
   useEffect(() => {
     if (!user?.uid || !userId || isEchoAi) return;
-
-    // 🔥 INSTANT: Clear the badge immediately (UI only)
     clearUnreadInstantly();
-
-    // 🔄 BACKGROUND: Sync the database (doesn't block UI)
-    // Use a small delay to let the UI render first
     const syncTimer = setTimeout(() => {
       if (isMounted.current) {
         markMessagesAsRead();
       }
     }, 100);
-
     return () => clearTimeout(syncTimer);
   }, [user?.uid, userId, isEchoAi]);
 
-  // ─── Step 4: On new messages – auto-mark as read ─────────────
-  // This runs inside the real-time listener below
+  // ─── Scroll to bottom when emoji picker opens ────────────────
+  useEffect(() => {
+    if (showEmojiPicker) {
+      setTimeout(() => scrollToBottom(true), 150);
+    }
+  }, [showEmojiPicker]);
 
   // ─── Helper: Start a reply ──────────────────────────────────
   const handleReply = (msg) => {
     if (msg.senderId === user?.uid) return;
 
-    const senderName = partnerProfile?.name || 'User';
+    const senderName = partnerProfile?.name || location.state?.userName || 'User';
+
     let textSnippet;
     if (msg.type === 'media') {
       if (msg.mediaType === 'video') textSnippet = '🎬 Video';
       else if (msg.mediaType === 'audio') textSnippet = '🎤 Voice note';
       else textSnippet = '📷 Image';
+    } else if (msg.type === 'echomoji') {
+      textSnippet = `😊 ECHOMOJI (${msg.mood || 'neutral'})`;
     } else {
       textSnippet = msg.text || 'Message';
     }
@@ -269,6 +282,8 @@ const ChatView = () => {
           if (latest.type === 'media') {
             latestMsg = latest.mediaType === 'video' ? '🎬 Video' :
                         latest.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
+          } else if (latest.type === 'echomoji') {
+            latestMsg = `😊 ECHOMOJI (${latest.mood || 'neutral'})`;
           } else {
             latestMsg = latest.text || '';
           }
@@ -313,7 +328,6 @@ const ChatView = () => {
   const handleEditMessage = (msg) => {
     if (msg.senderId !== user?.uid) return;
 
-    // ❌ Audio messages cannot be edited
     if (msg.type === 'media' && msg.mediaType === 'audio') {
       return;
     }
@@ -475,14 +489,11 @@ const ChatView = () => {
       clearMessageCache(cId);
       setTimeout(() => scrollToBottom(true), 100);
 
-      // ─── Step 4: Auto-mark NEW unread messages as read ──────
       const hasUnread = newMessages.some(
         msg => msg.receiverId === user.uid && msg.isRead === false
       );
       if (hasUnread && isMounted.current) {
-        // Clear instantly (UI)
         clearUnreadInstantly();
-        // Sync to database (background, debounced)
         if (markReadTimeout.current) clearTimeout(markReadTimeout.current);
         markReadTimeout.current = setTimeout(() => {
           if (isMounted.current) {
@@ -497,9 +508,6 @@ const ChatView = () => {
       if (markReadTimeout.current) clearTimeout(markReadTimeout.current);
       unsubscribe();
 
-      // ─── Step 5: On unmount – final sync ─────────────────────
-      // If there were any messages that arrived in the last moment,
-      // mark them as read so the badge doesn't reappear.
       setTimeout(() => {
         if (!isMounted.current) {
           markMessagesAsRead();
@@ -507,6 +515,47 @@ const ChatView = () => {
       }, 300);
     };
   }, [user?.uid, userId, cacheKey]);
+
+  // ─── Partner profile loading ──────────────────────────────────
+  useEffect(() => {
+    if (isEchoAi) {
+      setPartnerProfile({
+        name: 'ECHO AI',
+        avatar: ECHO_AI_AVATAR,
+        mood: 'happy',
+        isAi: true,
+      });
+      return;
+    }
+    if (!userId) return;
+
+    const cached = getProfile(userId);
+    if (cached) {
+      setPartnerProfile(cached);
+    } else {
+      fetchProfile(userId);
+    }
+
+    const pRef = ref(db, `profiles/${userId}`);
+    const unsub = onValue(pRef, (snap) => {
+      if (snap.exists()) {
+        setPartnerProfile(snap.val());
+      }
+    });
+
+    return () => unsub();
+  }, [userId, isEchoAi, getProfile, fetchProfile]);
+
+  // ─── Fetch current user profile ──────────────────────────────
+  useEffect(() => {
+    if (!user?.uid) return;
+    const myProfileRef = ref(db, `profiles/${user.uid}`);
+    get(myProfileRef)
+      .then((snap) => {
+        if (snap.exists()) setCurrentUserProfile(snap.val());
+      })
+      .catch(console.error);
+  }, [user?.uid]);
 
   // ─── File selection handler ─────────────────────────────────
   const handleFileSelect = (e) => {
@@ -905,6 +954,76 @@ const ChatView = () => {
       const cId = [user.uid, userId].sort().join('_');
       const timestamp = Date.now();
 
+      // ─── Check if it's an ECHOMOJI code (for existing messages only) ──
+      const mood = parseEchoMood(textToSend);
+      if (mood) {
+        // This path is kept for backward compatibility; new ECHOMOJI are not inserted.
+        // Send as echomoji message
+        const messagesRef = ref(db, `chats/${cId}/messages`);
+        const newMsgRef = push(messagesRef);
+        const msgData = {
+          senderId: user.uid,
+          receiverId: userId,
+          type: 'echomoji',
+          mood: mood,
+          skinId: user?.activeSkin || null,
+          timestamp: serverTimestamp(),
+          isRead: false,
+        };
+
+        const currentReply = replyTo;
+        if (currentReply) {
+          msgData.replyTo = {
+            messageId: currentReply.messageId,
+            senderName: currentReply.senderName,
+            messageType: currentReply.messageType,
+            textSnippet: currentReply.textSnippet,
+          };
+          setReplyTo(null);
+        }
+
+        await set(newMsgRef, msgData);
+
+        clearMessageCache(cId);
+
+        const displayMessage = `😊 ECHOMOJI (${mood})`;
+
+        const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
+        await set(myChatRef, {
+          id: userId,
+          partnerName: location.state?.userName || partnerProfile?.name || 'User',
+          partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
+          lastMessage: displayMessage,
+          lastSenderId: user.uid,
+          lastUpdated: timestamp,
+          unreadCount: 0,
+        });
+
+        const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+        await runTransaction(recipientChatRef, (currentData) => {
+          if (currentData === null) {
+            return {
+              id: user.uid,
+              partnerName: currentUserProfile?.name || 'User',
+              partnerAvatar: currentUserProfile?.avatar || '',
+              lastMessage: displayMessage,
+              lastSenderId: user.uid,
+              lastUpdated: timestamp,
+              unreadCount: 1,
+            };
+          } else {
+            currentData.unreadCount = (currentData.unreadCount || 0) + 1;
+            currentData.lastMessage = displayMessage;
+            currentData.lastSenderId = user.uid;
+            currentData.lastUpdated = timestamp;
+            return currentData;
+          }
+        });
+        setTimeout(() => scrollToBottom(true), 100);
+        return;
+      }
+
+      // ─── Normal text message ──────────────────────────────────
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const newMsgRef = push(messagesRef);
       const msgData = {
@@ -993,12 +1112,45 @@ const ChatView = () => {
       }
     }
 
-    // ✅ Copy only for text messages
     let copyText = null;
     if (msg.type === 'text' && msg.text) {
       copyText = msg.text;
     }
 
+    // ─── ECHOMOJI message ──────────────────────────────────────
+    if (msg.type === 'echomoji') {
+      const skinObj = msg.skinId ? getSkinById(msg.skinId) : null;
+      return (
+        <div
+          className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
+          ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
+        >
+          <MessageMenu
+            isOwn={isOwn}
+            onDelete={() => handleDeleteMessage(msg.id)}
+            onReply={showReply ? () => handleReply(msg) : null}
+            onEdit={null}
+            copyText={null}
+          >
+            {replyToDisplay && (
+              <RepliedMessage
+                replyTo={replyToDisplay}
+                onTap={() => scrollToMessage(replyToDisplay.messageId)}
+              />
+            )}
+            <ECHOMOJI
+              mood={msg.mood || 'neutral'}
+              skin={skinObj}
+              size={56}
+              interactive={false}
+              animated={true}
+            />
+          </MessageMenu>
+        </div>
+      );
+    }
+
+    // ─── Media message ─────────────────────────────────────────
     if (msg.type === 'media') {
       let content;
       if (msg.mediaType === 'audio') {
@@ -1029,7 +1181,7 @@ const ChatView = () => {
             onDelete={() => handleDeleteMessage(msg.id)}
             onReply={showReply ? () => handleReply(msg) : null}
             onEdit={allowEdit ? () => handleEditMessage(msg) : null}
-            copyText={null}   // ❌ No copy for media
+            copyText={null}
           >
             {replyToDisplay && (
               <RepliedMessage
@@ -1043,7 +1195,7 @@ const ChatView = () => {
       );
     }
 
-    // text message
+    // ─── Text message ─────────────────────────────────────────
     return (
       <div
         className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
@@ -1054,7 +1206,7 @@ const ChatView = () => {
           onDelete={() => handleDeleteMessage(msg.id)}
           onReply={showReply ? () => handleReply(msg) : null}
           onEdit={allowEdit ? () => handleEditMessage(msg) : null}
-          copyText={copyText}   // ✅ Only text messages get copy
+          copyText={copyText}
         >
           {replyToDisplay && (
             <RepliedMessage
@@ -1088,20 +1240,37 @@ const ChatView = () => {
               <img src={previewUrl} alt="Preview" className="media-preview-image" />
             )}
           </div>
-          <input
-            ref={captionInputRef}
-            type="text"
-            className="media-preview-caption"
-            placeholder="Add a caption..."
-            value={captionText}
-            onChange={(e) => setCaptionText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                sendMediaMessage();
-              }
-            }}
-          />
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%' }}>
+            <input
+              ref={captionInputRef}
+              type="text"
+              className="media-preview-caption"
+              placeholder="Add a caption..."
+              value={captionText}
+              onChange={(e) => setCaptionText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  sendMediaMessage();
+                }
+              }}
+              style={{ flex: 1 }}
+            />
+            <button
+              type="button"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#888',
+                fontSize: '22px',
+                cursor: 'pointer',
+                padding: '4px 8px',
+              }}
+            >
+              <i className="fas fa-smile" />
+            </button>
+          </div>
           <button
             className="media-preview-send"
             onClick={sendMediaMessage}
@@ -1116,7 +1285,7 @@ const ChatView = () => {
   };
 
   return (
-    <div className="chat-view">
+    <div className={`chat-view ${showEmojiPicker ? 'emoji-open' : ''}`}>
       <VideoAudioProvider>
         <div className="messages-container">
           {loadingMessages && messages.length === 0 ? (
@@ -1139,8 +1308,19 @@ const ChatView = () => {
         </div>
       </VideoAudioProvider>
 
+      {/* ─── Emoji Picker ───────────────────────────────────────── */}
+      {showEmojiPicker && (
+        <ChatEmojiPicker
+          onClose={() => setShowEmojiPicker(false)}
+          onSelect={(emoji) => {
+            setNewMessage((prev) => prev + emoji);
+            inputRef.current?.focus();
+          }}
+        />
+      )}
+
       {/* ─── Input Bar ──────────────────────────────────────────── */}
-      <form className="chat-input-container" onSubmit={handleSendText}>
+      <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
         {replyTo && <ReplyPreview replyTo={replyTo} onCancel={cancelReply} />}
         <div className="chat-input-row">
           <button
@@ -1150,6 +1330,14 @@ const ChatView = () => {
             title="Attach image or video"
           >
             <i className="fas fa-paperclip" />
+          </button>
+          <button
+            type="button"
+            className="chat-emoji-btn"
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            title="Emojis"
+          >
+            <i className="fas fa-smile" />
           </button>
           <button
             type="button"

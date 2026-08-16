@@ -1,6 +1,6 @@
 // src/components/UI/ECHOMOJI.js
 import React, { useState, useEffect } from 'react';
-import { EXPRESSIONS, MOOD_THEMES, ACCESSORIES } from '../../constants/echomoji';
+import { EXPRESSIONS, MOOD_THEMES } from '../../constants/echomoji';
 
 const ECHOMOJI = ({
   mood = 'neutral',
@@ -8,7 +8,7 @@ const ECHOMOJI = ({
   size = 48,
   pulse = false,
   interactive = true,
-  animated = true, // YouTube-style toggle: false for static grid thumbnails
+  animated = true,
   skin = null,
   onMoodChange = null,
   onDoubleClick = null,
@@ -19,7 +19,6 @@ const ECHOMOJI = ({
 
   const theme = skin || MOOD_THEMES[mood] || MOOD_THEMES.neutral;
   const expr = expression || mood;
-  const accessory = ACCESSORIES[mood] || null;
 
   // External pulse trigger
   useEffect(() => {
@@ -34,7 +33,6 @@ const ECHOMOJI = ({
     if (interactive && onMoodChange) {
       onMoodChange();
     }
-    // Add ripple on click if interactive
     if (interactive) {
       const rect = e.currentTarget.getBoundingClientRect();
       const x = e.clientX - rect.left - size / 4;
@@ -140,21 +138,7 @@ const ECHOMOJI = ({
         />
       </svg>
 
-      {/* Accessory */}
-      {accessory && (
-        <div
-          className="accessory"
-          style={{
-            position: 'absolute',
-            top: accessory.top || -8,
-            right: accessory.right || -8,
-            fontSize: accessory.size || 14,
-            pointerEvents: 'none',
-          }}
-        >
-          {accessory.emoji}
-        </div>
-      )}
+      {/* ─── Removed accessory rendering ─────────────────────────── */}
 
       {/* Skin badge */}
       {skin && (

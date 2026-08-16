@@ -101,46 +101,31 @@ const processChatItem = async (chat, user, onlineUsers) => {
     const latest = await fetchLatestMessage(compositeChatId);
     let rawLastMessage = latest.text;
     let lastSenderId = latest.senderId;
+    const isSender = lastSenderId === user.uid;
 
     let displayMessage = rawLastMessage;
-    if (displayMessage !== 'Start chatting...') {
-      if (latest.type === 'media') {
-        let mediaLabel = '📷 Image';
-        if (latest.mediaType === 'video') mediaLabel = '🎬 Video';
-        else if (latest.mediaType === 'audio') mediaLabel = '🎤 Voice note';
 
-        const isSender = lastSenderId === user.uid;
-        if (isSender) {
-          displayMessage = `You: ${mediaLabel}`;
-        } else {
-          displayMessage = `${partnerName}: ${mediaLabel}`;
-        }
+    // ─── Handle different message types ──────────────────────────
+    if (latest.type === 'echomoji') {
+      // ECHOMOJI message preview
+      const moodLabel = latest.mood || 'neutral';
+      displayMessage = `😊 ECHOMOJI (${moodLabel})`;
+    } else if (latest.type === 'media') {
+      let mediaLabel = '📷 Image';
+      if (latest.mediaType === 'video') mediaLabel = '🎬 Video';
+      else if (latest.mediaType === 'audio') mediaLabel = '🎤 Voice note';
+      displayMessage = isSender ? `You: ${mediaLabel}` : `${partnerName}: ${mediaLabel}`;
+    } else {
+      // Text message (or fallback)
+      if (displayMessage === 'Start chatting...') {
+        displayMessage = displayMessage; // keep as is
       } else {
-        const isSender = lastSenderId === user.uid;
-        if (isSender) {
-          displayMessage = `You: ${displayMessage}`;
-        } else {
-          displayMessage = `${partnerName}: ${displayMessage}`;
-        }
+        displayMessage = isSender ? `You: ${displayMessage}` : `${partnerName}: ${displayMessage}`;
         if (displayMessage.length > 30) {
           displayMessage = displayMessage.substring(0, 30) + '...';
         }
       }
-    } else {
-      if (chat.lastMessage === '📷 Image' || chat.lastMessage === '🎬 Video' || chat.lastMessage === '🎤 Voice note') {
-        const isSender = lastSenderId === user.uid;
-        if (isSender) {
-          displayMessage = `You: ${chat.lastMessage}`;
-        } else {
-          displayMessage = `${partnerName}: ${chat.lastMessage}`;
-        }
-      }
     }
-
-    const rawAvatar = profile.avatar || chat.partnerAvatar || '';
-    if (rawAvatar) preloadMedia(rawAvatar);
-
-    const isOnline = !!onlineUsers[chat.id];
 
     // ─── Force unread to 0 if this chat was marked as read ──────
     let unreadCount = chat.unreadCount || 0;
@@ -149,6 +134,11 @@ const processChatItem = async (chat, user, onlineUsers) => {
       unreadCount = 0;
       sessionStorage.removeItem(readFlagKey);
     }
+
+    const rawAvatar = profile.avatar || chat.partnerAvatar || '';
+    if (rawAvatar) preloadMedia(rawAvatar);
+
+    const isOnline = !!onlineUsers[chat.id];
 
     return {
       id: chat.id,
