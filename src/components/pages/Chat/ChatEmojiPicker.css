@@ -1,5 +1,6 @@
 /* src/components/pages/Chat/ChatEmojiPicker.css */
 
+/* ─── Overlay ─────────────────────────────────────────────────── */
 .emoji-picker-overlay {
   position: fixed;
   top: 0;
@@ -7,9 +8,10 @@
   right: 0;
   bottom: 0;
   z-index: 99999;
-  pointer-events: none; /* let clicks pass through to underlying elements */
+  pointer-events: none;
 }
 
+/* ─── Panel ────────────────────────────────────────────────────── */
 .emoji-picker-panel {
   position: absolute;
   top: 0;
@@ -42,6 +44,11 @@
   background: #1a1a24;
   border-radius: 20px 20px 0 0;
   user-select: none;
+  cursor: grab;
+}
+
+.emoji-picker-header:active {
+  cursor: grabbing;
 }
 
 .emoji-picker-header span {
@@ -108,17 +115,70 @@
   background: rgba(255, 255, 255, 0.08);
 }
 
+/* ─── Mobile: full‑width, top‑aligned, 3 rows + horizontal scroll ── */
 @media (max-width: 480px) {
+  .emoji-picker-overlay {
+    pointer-events: none;
+  }
+
   .emoji-picker-panel {
-    width: 92%;
-    max-width: 400px;
-    max-height: 380px;
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: none !important;
+    width: 100% !important;
+    height: 30vh !important;          /* shorter */
+    max-height: 30vh !important;
+    border-radius: 0 0 16px 16px !important;
+    margin: 0 !important;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.6) !important;
   }
+
+  .emoji-picker-header {
+    border-radius: 0 !important;
+    padding: 8px 12px;
+  }
+  .emoji-picker-header span {
+    font-size: 14px;
+  }
+
+  .emoji-picker-content {
+    max-height: calc(30vh - 44px) !important;
+    padding: 6px 4px;
+    /* horizontal scroll with 3 rows */
+    display: flex !important;
+    flex-direction: column;
+    flex-wrap: wrap;
+    align-content: flex-start;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: thin;
+  }
+  .emoji-picker-content::-webkit-scrollbar {
+    height: 4px;
+    width: 0;
+  }
+  .emoji-picker-content::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 4px;
+  }
+
   .emoji-grid {
-    grid-template-columns: repeat(6, 1fr);
+    display: flex !important;
+    flex-wrap: wrap;
+    gap: 4px;
+    /* height determines number of rows – we want 3 rows */
+    height: calc(3 * (36px + 4px) + 4px); /* 3 rows of 36px emoji + gaps */
+    align-content: flex-start;
   }
+
   .emoji-item {
-    font-size: 24px;
-    padding: 4px;
+    font-size: 24px !important;
+    padding: 4px !important;
+    width: 36px;
+    height: 36px;
+    flex: 0 0 auto;
+    border-radius: 6px;
   }
 }
