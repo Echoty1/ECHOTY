@@ -346,6 +346,34 @@ const Profile = () => {
     }
   };
 
+  // ─── Insert text at cursor position ──────────────────────────
+  const insertTextAtCursor = (field, text) => {
+    const el = field === 'name' ? nameInputRef.current : bioInputRef.current;
+    if (!el) return;
+
+    const start = el.selectionStart;
+    const end = el.selectionEnd;
+    const value = el.value;
+    const newValue = value.substring(0, start) + text + value.substring(end);
+    const newCursor = start + text.length;
+
+    // Update state
+    if (field === 'name') {
+      setEditData({ ...editData, name: newValue });
+      // Set cursor after update
+      setTimeout(() => {
+        el.focus();
+        el.setSelectionRange(newCursor, newCursor);
+      }, 0);
+    } else {
+      setEditData({ ...editData, bio: newValue });
+      setTimeout(() => {
+        el.focus();
+        el.setSelectionRange(newCursor, newCursor);
+      }, 0);
+    }
+  };
+
   // ─── Emoji picker handlers ────────────────────────────────────
   const handleEmojiSelect = (emoji) => {
     if (!activeField) return;
@@ -359,12 +387,8 @@ const Profile = () => {
       return;
     }
 
-    const newValue = (currentValue || '') + emoji;
-    if (field === 'name') {
-      setEditData({ ...editData, name: newValue });
-    } else {
-      setEditData({ ...editData, bio: newValue });
-    }
+    // Insert at cursor position
+    insertTextAtCursor(field, emoji);
   };
 
   const openEmojiPicker = (field) => {
@@ -382,6 +406,23 @@ const Profile = () => {
   const closeEmojiPicker = () => {
     setShowEmojiPicker(false);
     setActiveField(null);
+  };
+
+  // ─── Handle input focus to set active field ──────────────────
+  const handleInputFocus = (field) => {
+    if (showEmojiPicker) {
+      setActiveField(field);
+    }
+  };
+
+  // ─── Stop propagation to prevent picker from closing ─────────
+  const handleInputMouseDown = (e) => {
+    e.stopPropagation();
+    // Also set active field if picker is open
+    const field = e.target === nameInputRef.current ? 'name' : 'bio';
+    if (showEmojiPicker) {
+      setActiveField(field);
+    }
   };
 
   // ─── Cached avatar ──────────────────────────────────────────
@@ -445,6 +486,9 @@ const Profile = () => {
                 placeholder="Your name"
                 maxLength={NAME_MAX_LENGTH}
                 style={{ flex: 1, paddingLeft: '40px', paddingRight: '50px' }}
+                onFocus={() => handleInputFocus('name')}
+                onMouseDown={handleInputMouseDown}
+                onTouchStart={handleInputMouseDown}
               />
               {/* Emoji button on the left */}
               <button
@@ -479,108 +523,6 @@ const Profile = () => {
                 {editData.name?.length || 0}/{NAME_MAX_LENGTH}
               </span>
             </div>
-
-            {/* ─── Location ──────────────────────────────────────────── */}
-            <div className="profile-location-inputs" style={{ display: 'flex', gap: '8px', margin: '12px 0' }}>
-              <select
-                value={matchedCountryCode}
-                onChange={handleCountrySelect}
-                style={{
-                  flex: 1,
-                  background: '#1E1E2A',
-                  color: '#FFFFFF',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  borderRadius: '8px',
-                  padding: '8px',
-                  fontSize: '13px',
-                }}
-              >
-                <option value="">Select Country</option>
-                {countriesList.map((c) => (
-                  <option key={c.isoCode} value={c.isoCode}>{c.name}</option>
-                ))}
-              </select>
-              <select
-                value={editData.city || ''}
-                onChange={handleCitySelect}
-                disabled={!matchedCountryCode}
-                style={{
-                  flex: 1,
-                  background: '#1E1E2A',
-                  color: '#FFFFFF',
-                  border: '1px solid rgba(255,255,255,0.15)',
-                  borderRadius: '8px',
-                  padding: '8px',
-                  fontSize: '13px',
-                  opacity: matchedCountryCode ? 1 : 0.5,
-                }}
-              >
-                <option value="">Select City</option>
-                {citiesList.map((ct, idx) => (
-                  <option key={`${ct.name}-${idx}`} value={ct.name}>{ct.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* ─── Bio Textarea ──────────────────────────────────────── */}
-            <div style={{ position: 'relative', width: '100%', marginTop: '12px' }}>
-              <div style={{ position: 'relative' }}>
-                <textarea
-                  ref={bioInputRef}
-                  className="profile-bio-input"
-                  value={editData.bio || ''}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val.length <= BIO_MAX_LENGTH) {
-                      setEditData({ ...editData, bio: val });
-                    }
-                  }}
-                  placeholder="Write a short bio..."
-                  rows={3}
-                  maxLength={BIO_MAX_LENGTH}
-                  style={{
-                    width: '100%',
-                    background: 'rgba(255,255,255,0.05)',
-                    color: '#fff',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '8px',
-                    padding: '8px 60px 8px 40px',
-                    resize: 'vertical',
-                  }}
-                />
-                {/* Emoji button on the left, aligned to top-left */}
-                <button
-                  type="button"
-                  onClick={() => openEmojiPicker('bio')}
-                  style={{
-                    position: 'absolute',
-                    left: '8px',
-                    top: '8px',
-                    background: 'none',
-                    border: 'none',
-                    color: '#888',
-                    fontSize: '18px',
-                    cursor: 'pointer',
-                    padding: '4px',
-                    zIndex: 2,
-                  }}
-                  title="Insert emoji"
-                >
-                  <i className="fas fa-smile" />
-                </button>
-                {/* Counter on the right */}
-                <span style={{
-                  position: 'absolute',
-                  right: '12px',
-                  bottom: '6px',
-                  fontSize: '11px',
-                  color: (editData.bio?.length || 0) >= BIO_MAX_LENGTH ? '#EF4444' : '#666',
-                  pointerEvents: 'none',
-                }}>
-                  {editData.bio?.length || 0}/{BIO_MAX_LENGTH}
-                </span>
-              </div>
-            </div>
           </div>
         ) : loading ? (
           <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
@@ -597,13 +539,80 @@ const Profile = () => {
                 </span>
               </div>
             )}
-            {(profile?.city || profile?.country) && (
-              <div className="profile-location" style={{ fontSize: '13px', color: '#888', marginTop: '4px' }}>
-                📍 {[profile.city, profile.country].filter(Boolean).join(', ')}
-              </div>
-            )}
-            {profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>{profile.bio}</p>}
           </>
+        )}
+
+        {!loading && !editing && (profile?.city || profile?.country) && (
+          <div className="profile-location" style={{ fontSize: '13px', color: '#888', marginTop: '4px' }}>
+            📍 {[profile.city, profile.country].filter(Boolean).join(', ')}
+          </div>
+        )}
+
+        {/* ─── Bio Textarea ──────────────────────────────────────── */}
+        {editing ? (
+          <div style={{ position: 'relative', width: '100%', marginTop: '12px' }}>
+            <div style={{ position: 'relative' }}>
+              <textarea
+                ref={bioInputRef}
+                className="profile-bio-input"
+                value={editData.bio || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val.length <= BIO_MAX_LENGTH) {
+                    setEditData({ ...editData, bio: val });
+                  }
+                }}
+                placeholder="Write a short bio..."
+                rows={3}
+                maxLength={BIO_MAX_LENGTH}
+                style={{
+                  width: '100%',
+                  background: 'rgba(255,255,255,0.05)',
+                  color: '#fff',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: '8px',
+                  padding: '8px 60px 8px 40px',
+                  resize: 'vertical',
+                }}
+                onFocus={() => handleInputFocus('bio')}
+                onMouseDown={handleInputMouseDown}
+                onTouchStart={handleInputMouseDown}
+              />
+              {/* Emoji button on the left, aligned to top-left */}
+              <button
+                type="button"
+                onClick={() => openEmojiPicker('bio')}
+                style={{
+                  position: 'absolute',
+                  left: '8px',
+                  top: '8px',
+                  background: 'none',
+                  border: 'none',
+                  color: '#888',
+                  fontSize: '18px',
+                  cursor: 'pointer',
+                  padding: '4px',
+                  zIndex: 2,
+                }}
+                title="Insert emoji"
+              >
+                <i className="fas fa-smile" />
+              </button>
+              {/* Counter on the right */}
+              <span style={{
+                position: 'absolute',
+                right: '12px',
+                bottom: '6px',
+                fontSize: '11px',
+                color: (editData.bio?.length || 0) >= BIO_MAX_LENGTH ? '#EF4444' : '#666',
+                pointerEvents: 'none',
+              }}>
+                {editData.bio?.length || 0}/{BIO_MAX_LENGTH}
+              </span>
+            </div>
+          </div>
+        ) : (
+          profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>{profile.bio}</p>
         )}
 
         {/* ─── Interests ─────────────────────────────────────────── */}
