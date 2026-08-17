@@ -80,6 +80,9 @@ const ChatView = () => {
   const inputContainerRef = useRef(null);
   const captionPreviewRef = useRef(null);
 
+  // ── Track which input was last focused ──────────────────────
+  const focusedField = useRef('main'); // 'main' or 'caption'
+
   // ── Helper to detect ECHOMOJI pattern ──────────────────────
   const parseEchoMood = (text) => {
     const match = text.match(/^\{echo:([a-z]+)\}$/);
@@ -1287,6 +1290,8 @@ const ChatView = () => {
                 }
               }}
               style={{ flex: 1 }}
+              onFocus={() => { focusedField.current = 'caption'; }}
+              onBlur={() => { /* keep last known focus */ }}
             />
             <button
               type="button"
@@ -1317,12 +1322,11 @@ const ChatView = () => {
   };
 
   // ─── Handle emoji selection (with cursor insertion) ──────────
-  // ─── Handle emoji selection (with cursor insertion) ──────────
   const handleEmojiSelect = (emoji) => {
-    const active = document.activeElement;
+    // Use the ref to determine which input was last focused
+    const target = focusedField.current;
 
-    // Check if the caption input is active (including when inside portal)
-    if (captionInputRef.current && active === captionInputRef.current) {
+    if (target === 'caption' && captionInputRef.current) {
       const input = captionInputRef.current;
       const start = input.selectionStart;
       const end = input.selectionEnd;
@@ -1337,8 +1341,8 @@ const ChatView = () => {
       return;
     }
 
-    // Otherwise, use the main input
-    if (inputRef.current && active === inputRef.current) {
+    // Default to main input
+    if (inputRef.current) {
       const input = inputRef.current;
       const start = input.selectionStart;
       const end = input.selectionEnd;
@@ -1351,7 +1355,7 @@ const ChatView = () => {
         input.setSelectionRange(newCursor, newCursor);
       }, 0);
     } else {
-      // Fallback: append to main input if no focus
+      // Fallback: append
       setNewMessage(prev => prev + emoji);
       setTimeout(() => inputRef.current?.focus(), 0);
     }
@@ -1431,6 +1435,8 @@ const ChatView = () => {
                 handleSendText(e);
               }
             }}
+            onFocus={() => { focusedField.current = 'main'; }}
+            onBlur={() => { /* keep last known focus */ }}
           />
           <input
             type="file"
