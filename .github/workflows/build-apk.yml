@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APK V1
 
 on:
   workflow_dispatch:   # only manual – no push trigger
@@ -39,7 +39,7 @@ jobs:
 
       - name: Create capacitor.config.json
         run: |
-          echo '{"appId":"com.echo.app","appName":"ECHO","webDir":"build"}' > capacitor.config.json
+          echo '{"appId":"com.echoty.app","appName":"ECHO","webDir":"build"}' > capacitor.config.json
 
       - name: Install Capacitor CLI
         run: npm install -g @capacitor/cli
