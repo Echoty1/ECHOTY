@@ -84,7 +84,7 @@ jobs:
       - name: Build release APK
         run: |
           cd android
-          ./gradlew assembleRelease
+          ./gradlew bundleRelease
 
       - name: Rename APK with version
         run: |
