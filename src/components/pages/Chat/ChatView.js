@@ -78,7 +78,7 @@ const ChatView = () => {
   const captionInputRef = useRef(null);
   const inputRef = useRef(null);
   const inputContainerRef = useRef(null);
-  const captionPreviewRef = useRef(null); // ref for caption preview container
+  const captionPreviewRef = useRef(null);
 
   // ── Helper to detect ECHOMOJI pattern ──────────────────────
   const parseEchoMood = (text) => {
@@ -1316,15 +1316,44 @@ const ChatView = () => {
     );
   };
 
-  // ─── Handle emoji selection (from picker) ──────────────────
+  // ─── Handle emoji selection (with cursor insertion) ──────────
+  // ─── Handle emoji selection (with cursor insertion) ──────────
   const handleEmojiSelect = (emoji) => {
     const active = document.activeElement;
+
+    // Check if the caption input is active (including when inside portal)
     if (captionInputRef.current && active === captionInputRef.current) {
-      setCaptionText(prev => prev + emoji);
-      captionInputRef.current?.focus();
+      const input = captionInputRef.current;
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+      const current = captionText;
+      const newText = current.substring(0, start) + emoji + current.substring(end);
+      setCaptionText(newText);
+      const newCursor = start + emoji.length;
+      setTimeout(() => {
+        input.focus();
+        input.setSelectionRange(newCursor, newCursor);
+      }, 0);
+      return;
+    }
+
+    // Otherwise, use the main input
+    if (inputRef.current && active === inputRef.current) {
+      const input = inputRef.current;
+      const start = input.selectionStart;
+      const end = input.selectionEnd;
+      const current = newMessage;
+      const newText = current.substring(0, start) + emoji + current.substring(end);
+      setNewMessage(newText);
+      const newCursor = start + emoji.length;
+      setTimeout(() => {
+        input.focus();
+        input.setSelectionRange(newCursor, newCursor);
+      }, 0);
     } else {
+      // Fallback: append to main input if no focus
       setNewMessage(prev => prev + emoji);
-      inputRef.current?.focus();
+      setTimeout(() => inputRef.current?.focus(), 0);
     }
   };
 
@@ -1358,14 +1387,6 @@ const ChatView = () => {
           onClose={() => setShowEmojiPicker(false)}
           onSelect={handleEmojiSelect}
           excludeRefs={[inputContainerRef, captionPreviewRef]}
-          style={{
-            position: 'fixed',
-            left: '20px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: '320px',
-            maxHeight: '70vh',
-          }}
         />
       )}
 

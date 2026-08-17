@@ -29,7 +29,7 @@ const EMOJIS = [
   '🪳', '🪴', '🪵', '🪶', '🪷', '🪸', '🪹', '🪺', '🪻', '🪼', '🪽', '🪾', '🪿', '🫀', '🫁', '🫂',
 ];
 
-const ChatEmojiPicker = ({ onClose, onSelect, excludeRefs = [], style = {} }) => {
+const ChatEmojiPicker = ({ onClose, onSelect, excludeRefs = [] }) => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const startPos = useRef({ x: 0, y: 0 });
@@ -43,19 +43,27 @@ const ChatEmojiPicker = ({ onClose, onSelect, excludeRefs = [], style = {} }) =>
       const rect = pickerRef.current.getBoundingClientRect();
       const viewportWidth = window.innerWidth;
       const viewportHeight = window.innerHeight;
-      const x = (viewportWidth - rect.width) / 2;
-      const y = Math.max(20, (viewportHeight - rect.height) / 2 - 50);
-      setPosition({ x, y });
+      // Desktop: left side, vertically centered
+      // If viewport is narrow (mobile), we let CSS handle it differently
+      if (viewportWidth > 480) {
+        const x = 20; // left margin
+        const y = (viewportHeight - rect.height) / 2;
+        setPosition({ x, y });
+      } else {
+        // Mobile: top center (override later via CSS)
+        const x = (viewportWidth - rect.width) / 2;
+        const y = 10;
+        setPosition({ x, y });
+      }
     }
   }, []);
 
-  // ─── Click outside (respect excludeRefs) ────────────────────────
+  // ─── Click outside ──────────────────────────────────────────────
   useEffect(() => {
     const handleClickOutside = (e) => {
-      // Check if click is inside any excluded ref
       for (const ref of excludeRefs) {
         if (ref && ref.current && ref.current.contains(e.target)) {
-          return; // ignore
+          return;
         }
       }
       if (pickerRef.current && !pickerRef.current.contains(e.target)) {
@@ -123,7 +131,7 @@ const ChatEmojiPicker = ({ onClose, onSelect, excludeRefs = [], style = {} }) =>
 
   const handleEmojiSelect = (emoji) => {
     onSelect(emoji);
-    // Keep picker open
+    // keep picker open
   };
 
   return ReactDOM.createPortal(
@@ -135,7 +143,6 @@ const ChatEmojiPicker = ({ onClose, onSelect, excludeRefs = [], style = {} }) =>
           transform: `translate(${position.x}px, ${position.y}px)`,
           cursor: isDragging ? 'grabbing' : 'default',
           transition: isDragging ? 'none' : 'opacity 0.2s ease',
-          ...style,
         }}
         onClick={(e) => e.stopPropagation()}
       >
