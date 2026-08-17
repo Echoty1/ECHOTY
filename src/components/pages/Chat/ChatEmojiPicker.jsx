@@ -29,7 +29,7 @@ const EMOJIS = [
   '🪳', '🪴', '🪵', '🪶', '🪷', '🪸', '🪹', '🪺', '🪻', '🪼', '🪽', '🪾', '🪿', '🫀', '🫁', '🫂',
 ];
 
-const ChatEmojiPicker = ({ onClose, onSelect, excludeRef, style = {} }) => {
+const ChatEmojiPicker = ({ onClose, onSelect, excludeRefs = [], style = {} }) => {
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const startPos = useRef({ x: 0, y: 0 });
@@ -49,14 +49,15 @@ const ChatEmojiPicker = ({ onClose, onSelect, excludeRef, style = {} }) => {
     }
   }, []);
 
-  // ─── Click outside (respect excludeRef) ────────────────────────
+  // ─── Click outside (respect excludeRefs) ────────────────────────
   useEffect(() => {
     const handleClickOutside = (e) => {
-      // ✅ If the click is inside the excluded ref, ignore it
-      if (excludeRef && excludeRef.current && excludeRef.current.contains(e.target)) {
-        return;
+      // Check if click is inside any excluded ref
+      for (const ref of excludeRefs) {
+        if (ref && ref.current && ref.current.contains(e.target)) {
+          return; // ignore
+        }
       }
-      // If click is outside the picker panel, close
       if (pickerRef.current && !pickerRef.current.contains(e.target)) {
         onClose();
       }
@@ -67,7 +68,7 @@ const ChatEmojiPicker = ({ onClose, onSelect, excludeRef, style = {} }) => {
       document.removeEventListener('mousedown', handleClickOutside);
       document.removeEventListener('touchstart', handleClickOutside);
     };
-  }, [onClose, excludeRef]);
+  }, [onClose, excludeRefs]);
 
   // ─── Drag handlers ──────────────────────────────────────────────
   const handleDragStart = (e) => {

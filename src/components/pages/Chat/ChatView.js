@@ -31,6 +31,8 @@ import { VideoAudioProvider } from '../../../contexts/VideoAudioContext';
 import { useProfile } from '../../../contexts/ProfileContext';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
+import { loadMessagesFromCache, upsertMessageInCache, deleteMessageFromCache } from '../../../services/messageStorage';
+import { cacheMedia } from '../../../utils/mediaCache';
 import './ChatView.css';
 
 const ECHO_AI_AVATAR = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
@@ -76,8 +78,9 @@ const ChatView = () => {
   const captionInputRef = useRef(null);
   const inputRef = useRef(null);
   const inputContainerRef = useRef(null);
+  const captionPreviewRef = useRef(null); // ref for caption preview container
 
-  // ── Helper to detect ECHOMOJI pattern (kept for backward compatibility) ──
+  // ── Helper to detect ECHOMOJI pattern ──────────────────────
   const parseEchoMood = (text) => {
     const match = text.match(/^\{echo:([a-z]+)\}$/);
     if (match) return match[1];
@@ -259,6 +262,9 @@ const ChatView = () => {
     try {
       await remove(ref(db, `chats/${cId}/messages/${messageId}`));
 
+      // Delete from IndexedDB cache
+      await deleteMessageFromCache(cId, messageId);
+
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const snapshot = await get(messagesRef);
       let latestMsg = '';
@@ -343,6 +349,10 @@ const ChatView = () => {
         lastEditedAt: serverTimestamp(),
       });
 
+      // Update IndexedDB cache
+      const updatedMsg = { ...editingMessage, text: newText, isEdited: true };
+      await upsertMessageInCache(cId, updatedMsg);
+
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const snapshot = await get(messagesRef);
       if (snapshot.exists()) {
@@ -395,6 +405,10 @@ const ChatView = () => {
         isEdited: true,
         lastEditedAt: serverTimestamp(),
       });
+
+      // Update IndexedDB cache
+      const updatedMsg = { ...editingMediaMessage, caption: newCaption, isEdited: true };
+      await upsertMessageInCache(cId, updatedMsg);
 
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const snapshot = await get(messagesRef);
@@ -452,6 +466,19 @@ const ChatView = () => {
     if (!user?.uid || !userId) return;
     isMounted.current = true;
 
+    const cId = [user.uid, userId].sort().join('_');
+    chatId.current = cId;
+
+    // 1. Load from IndexedDB immediately (offline first)
+    loadMessagesFromCache(cId).then(cachedMessages => {
+      if (isMounted.current && cachedMessages.length > 0) {
+        setMessages(cachedMessages);
+        setLoadingMessages(false);
+        setTimeout(() => scrollToBottom(false), 50);
+      }
+    });
+
+    // 2. Also try localStorage cache (for backward compatibility)
     const cached = getCache(cacheKey);
     if (cached && Array.isArray(cached) && cached.length > 0) {
       setMessages(cached);
@@ -459,11 +486,9 @@ const ChatView = () => {
       setTimeout(() => scrollToBottom(false), 50);
     }
 
-    const cId = [user.uid, userId].sort().join('_');
-    chatId.current = cId;
     const messagesRef = ref(db, `chats/${cId}/messages`);
 
-    const unsubscribe = onValue(messagesRef, (snapshot) => {
+    const unsubscribe = onValue(messagesRef, async (snapshot) => {
       if (!isMounted.current) return;
       const data = snapshot.val();
       let newMessages = [];
@@ -472,21 +497,31 @@ const ChatView = () => {
           .map(([id, val]) => ({ id, ...val }))
           .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
       }
+
+      // Update state
       setMessages(newMessages);
       setLoadingMessages(false);
+      setTimeout(() => scrollToBottom(true), 100);
+
+      // 3. Store messages in IndexedDB
+      for (const msg of newMessages) {
+        await upsertMessageInCache(cId, msg);
+      }
+
+      // 4. Pre‑cache media files
+      for (const msg of newMessages) {
+        if (msg.type === 'media' && msg.mediaUrl && msg.mediaUrl.startsWith('http')) {
+          cacheMedia(msg.mediaUrl);
+        }
+      }
+
+      // Also store in localStorage cache (legacy)
       try {
         setCache(cacheKey, newMessages);
       } catch (e) { /* ignore */ }
       clearMessageCache(cId);
-      setTimeout(() => scrollToBottom(true), 100);
 
-      // ─── Store messages in IndexedDB for offline use ──────────
-      newMessages.forEach(msg => {
-        if (msg.senderId && (msg.text || msg.type === 'media' || msg.type === 'echomoji')) {
-          storeMessageInCache(cId, msg);
-        }
-      });
-
+      // ─── Unread marking (unchanged) ──────────────────────────
       const hasUnread = newMessages.some(
         msg => msg.receiverId === user.uid && msg.isRead === false
       );
@@ -952,7 +987,7 @@ const ChatView = () => {
       const cId = [user.uid, userId].sort().join('_');
       const timestamp = Date.now();
 
-      // ─── Check if it's an ECHOMOJI code (for existing messages only) ──
+      // ─── Check if it's an ECHOMOJI code ──────────────────────
       const mood = parseEchoMood(textToSend);
       if (mood) {
         const messagesRef = ref(db, `chats/${cId}/messages`);
@@ -1236,7 +1271,8 @@ const ChatView = () => {
               <img src={previewUrl} alt="Preview" className="media-preview-image" />
             )}
           </div>
-          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%' }}>
+          {/* ─── Caption input with emoji button ────────────────── */}
+          <div ref={captionPreviewRef} style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%' }}>
             <input
               ref={captionInputRef}
               type="text"
@@ -1321,6 +1357,15 @@ const ChatView = () => {
         <ChatEmojiPicker
           onClose={() => setShowEmojiPicker(false)}
           onSelect={handleEmojiSelect}
+          excludeRefs={[inputContainerRef, captionPreviewRef]}
+          style={{
+            position: 'fixed',
+            left: '20px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: '320px',
+            maxHeight: '70vh',
+          }}
         />
       )}
 

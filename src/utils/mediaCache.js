@@ -82,3 +82,26 @@ export const useCachedImage = (url, placeholder = null) => {
   if (error) return url;
   return blobUrl;
 };
+
+/**
+ * Background‑cache a media URL (image, video, audio) in IndexedDB
+ * @param {string} url - The media URL to fetch and store
+ * @returns {Promise<void>}
+ */
+export const cacheMedia = async (url) => {
+  if (!url || !url.startsWith('http')) return; // skip blob: or invalid
+  try {
+    // Check if already cached
+    const existing = await getMedia(url);
+    if (existing) return; // already cached
+
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Failed to fetch ${url}`);
+    const blob = await response.blob();
+    await storeMedia(url, blob);
+    console.log(`✅ Cached media: ${url.substring(0, 60)}...`);
+  } catch (err) {
+    // Silently fail – media will load from network when needed
+    console.debug(`⚠️ Could not pre‑cache media: ${err.message}`);
+  }
+};

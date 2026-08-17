@@ -4,6 +4,7 @@ import { db } from '../services/firebase';
 import { ref, onValue, get, set, update } from 'firebase/database';
 import { useAuth } from '../hooks/useAuth';
 import { loadCache, getProfile, setProfile, clearCache } from '../services/cacheService';
+import { cacheMedia } from '../utils/mediaCache';
 
 const ProfileContext = createContext();
 
@@ -25,8 +26,6 @@ export const ProfileProvider = ({ children }) => {
     const initCache = async () => {
       try {
         await loadCache();
-        // Populate profiles from memory cache
-        // We don't set all profiles here; we'll fetch on demand
         setLoading(false);
       } catch (err) {
         console.warn('Failed to load cache:', err);
@@ -81,6 +80,14 @@ export const ProfileProvider = ({ children }) => {
           finalData.name = 'User';
         }
 
+        // Cache avatar/GIF in IndexedDB
+        if (finalData.avatar) {
+          cacheMedia(finalData.avatar);
+        }
+        if (finalData.videoUrl) {
+          cacheMedia(finalData.videoUrl);
+        }
+
         // Update both context state and IndexedDB cache
         setProfile(uid, finalData);
         setProfiles((prev) => ({ ...prev, [uid]: finalData }));
@@ -108,6 +115,9 @@ export const ProfileProvider = ({ children }) => {
           data.name = isOwn ? targetUid : 'User';
           await update(profileRef, { name: data.name });
         }
+        // Cache avatar/GIF
+        if (data.avatar) cacheMedia(data.avatar);
+        if (data.videoUrl) cacheMedia(data.videoUrl);
         await setProfile(targetUid, data);
         setProfiles((prev) => ({ ...prev, [targetUid]: data }));
       } catch (err) {
@@ -173,6 +183,9 @@ export const ProfileProvider = ({ children }) => {
       const updatedProfile = { ...(profiles[uid] || {}), ...updates };
       await setProfile(uid, updatedProfile);
       setProfiles((prev) => ({ ...prev, [uid]: updatedProfile }));
+      // Cache new avatar if present
+      if (updates.avatar) cacheMedia(updates.avatar);
+      if (updates.videoUrl) cacheMedia(updates.videoUrl);
     } catch (error) {
       console.error('❌ Failed to update profile:', error);
       throw error;
