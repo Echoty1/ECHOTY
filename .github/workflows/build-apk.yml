@@ -1,7 +1,7 @@
 name: Build APK & AAB V1
 
 on:
-  workflow_dispatch:   # only manual – no push trigger
+  workflow_dispatch:
 
 jobs:
   build:
@@ -49,6 +49,18 @@ jobs:
       - name: Sync Capacitor
         run: npx cap sync android
 
+      # ─── Inject signing config into build.gradle ──────────────
+      - name: Inject signing config into build.gradle
+        run: |
+          cd android/app
+          # Insert signingConfigs block after "android {"
+          sed -i '/android {/a \    signingConfigs {\n        release {\n            def keystorePropertiesFile = rootProject.file("keystore.properties")\n            def keystoreProperties = new Properties()\n            if (keystorePropertiesFile.exists()) {\n                keystoreProperties.load(new FileInputStream(keystorePropertiesFile))\n            }\n            storeFile file(keystoreProperties.getProperty('\''storeFile'\'', '\''app/echo-release.keystore'\''))\n            storePassword keystoreProperties.getProperty('\''storePassword'\'')\n            keyAlias keystoreProperties.getProperty('\''keyAlias'\'')\n            keyPassword keystoreProperties.getProperty('\''keyPassword'\'')\n        }\n    }\n' build.gradle
+
+          # Add signingConfig to the release buildType
+          sed -i '/buildTypes {/,/}/ s/release {/release {\n            signingConfig signingConfigs.release/' build.gradle
+
+          echo "✅ Signing config injected successfully."
+
       - name: Setup Java
         uses: actions/setup-java@v5
         with:
@@ -80,20 +92,38 @@ jobs:
           keyPassword=${{ secrets.KEY_PASSWORD }}
           EOF
 
-      - name: Build release APK and AAB
+      - name: Build APK (Release) with signing
         run: |
           cd android
-          ./gradlew assembleRelease  # produces APK
-          ./gradlew bundleRelease    # produces AAB
+          ./gradlew assembleRelease
 
-      - name: Rename artifacts with version
+      - name: Build AAB (Release Bundle) with signing
+        run: |
+          cd android
+          ./gradlew bundleRelease
+
+      - name: Rename APK
         run: |
           VERSION_NAME="${{ steps.version.outputs.versionName }}"
           VERSION_CODE="${{ steps.version.outputs.versionCode }}"
-          # Rename APK
-          mv android/app/build/outputs/apk/release/app-release.apk "ECHO-v${VERSION_NAME}-code${VERSION_CODE}.apk" || echo "APK not found"
-          # Rename AAB
-          mv android/app/build/outputs/bundle/release/app-release.aab "ECHO-v${VERSION_NAME}-code${VERSION_CODE}.aab" || echo "AAB not found"
+          if [ -f android/app/build/outputs/apk/release/app-release.apk ]; then
+            mv android/app/build/outputs/apk/release/app-release.apk "ECHO-v${VERSION_NAME}-code${VERSION_CODE}.apk"
+            echo "APK renamed successfully."
+          else
+            echo "Warning: APK not found. Skipping APK."
+          fi
+
+      - name: Rename AAB
+        run: |
+          VERSION_NAME="${{ steps.version.outputs.versionName }}"
+          VERSION_CODE="${{ steps.version.outputs.versionCode }}"
+          if [ -f android/app/build/outputs/bundle/release/app-release.aab ]; then
+            mv android/app/build/outputs/bundle/release/app-release.aab "ECHO-v${VERSION_NAME}-code${VERSION_CODE}.aab"
+            echo "AAB renamed successfully."
+          else
+            echo "Error: AAB not found. Failing build."
+            exit 1
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
