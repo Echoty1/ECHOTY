@@ -369,6 +369,7 @@ const ECHOMojiTab = () => {
             )}
             <button
               onClick={() => navigate('/coins')}
+              className="echomoji-coin-btn"  // <-- add this class
               style={{
                 padding: '4px 12px',
                 borderRadius: '50px',

@@ -28,8 +28,11 @@ import UpdatePopup from './components/UpdatePopup/UpdatePopup';
 import InstallPopup from './components/InstallPopup/InstallPopup';
 import InstallBanner from './components/common/InstallBanner';
 import { cleanAllCachedMessages } from './services/messageCleanup';
+import { getChatList } from './services/indexedDBService';
 import { db } from './services/firebase';
 import { clearAllIndexedDB } from './services/indexedDBService';
+
+const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 // ─── ScrollToTop ──────────────────────────────────────────────────
 function ScrollToTop() {
@@ -201,23 +204,41 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, []);
 
-
-
-  // ─── Clean up old localStorage cache (except essential small keys) ──
+  // ─── Clean up ALL cache keys from localStorage (silent) ──────
   const cleanLocalStorage = () => {
     try {
       const keys = Object.keys(localStorage);
-      const toRemove = keys.filter(key =>
-        key.startsWith('echo_cache_') &&
-        key !== 'echo_has_recovered_' + user?.uid &&
-        key !== 'echo_app_version' &&
-        key !== 'echo_changelog_version' &&
-        key !== 'echo_install_popup_dismissed_until' &&
-        key !== 'echo_update_shown'
-      );
+      const toRemove = keys.filter(key => {
+        // Remove all known cache patterns
+        return (
+          key.startsWith('echo_cache_') ||
+          key.startsWith('echo_small_') ||
+          key.startsWith('echo_cache_v2_') ||
+          key.startsWith('echo_small_v2_') ||
+          key.startsWith('echocache_v2_') ||    // the pattern we found
+          key.startsWith('echo_cache_echomoji_') || // included in above but keep explicit
+          key.startsWith('echo_cache_profile_')    // included
+        );
+      }).filter(key => {
+        // Keep essential keys
+        const essential = [
+          'echo_has_recovered_',
+          'echo_app_version',
+          'echo_changelog_version',
+          'echo_install_popup_dismissed_until',
+          'echo_update_shown',
+          'echo_walkthrough_completed', // if any
+          'firebase:host', // Firebase internal – we can keep
+        ];
+        for (const e of essential) {
+          if (key.startsWith(e)) return false;
+        }
+        return true;
+      });
+
       toRemove.forEach(key => localStorage.removeItem(key));
       if (toRemove.length > 0) {
-        console.log(`🧹 Cleaned ${toRemove.length} localStorage cache entries`);
+        console.log(`🧹 Cleaned ${toRemove.length} cache entries from localStorage`);
       }
     } catch (e) {
       console.warn('LocalStorage cleanup failed:', e);
@@ -231,7 +252,7 @@ function AppContent() {
     }
   }, [user]);
 
-  // ─── Fetch Play Store URL (always) ──────────────────────────
+  // ─── Fetch Play Store URL ──────────────────────────────────────
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -309,22 +330,13 @@ function AppContent() {
     checkForUpdate();
   }, [user, appVersion]);
 
-  // ─── Fetch profile when user logs in ─────────────────────────
-  useEffect(() => {
-    if (user?.uid) {
-      fetchProfile(user.uid);
-    }
-  }, [user?.uid, fetchProfile]);
-
-  // Inside AppContent, after the profile fetch:
+  // ─── Fetch profile and clean messages ─────────────────────────
   useEffect(() => {
     if (user?.uid) {
       fetchProfile(user.uid);
 
-      // ─── Clean up stale cached messages ──────────────────────
       const cleanup = async () => {
         try {
-          // Get the chat list (either from context or from IndexedDB)
           const chatList = await getChatList(user.uid);
           if (chatList && chatList.length > 0) {
             const removed = await cleanAllCachedMessages(user.uid, chatList);
@@ -411,11 +423,12 @@ function App() {
       const keysToKeep = [
         'echo_install_popup_dismissed_until',
         'echo_update_shown',
-        'echo_changelog_version'
+        'echo_changelog_version',
+        'firebase:host',
       ];
       const allKeys = Object.keys(localStorage);
       for (const key of allKeys) {
-        if (!keysToKeep.includes(key)) {
+        if (!keysToKeep.includes(key) && !key.startsWith('echo_has_recovered_')) {
           localStorage.removeItem(key);
         }
       }

@@ -7,19 +7,22 @@ import {
   storeChatList,
   getChatList,
   clearChatList,
+  getCacheItem,
+  setCacheItem,
+  deleteCacheItem,
+  clearCacheStore,
 } from './indexedDBService';
 import { getItem, setItem, removeItem } from './storageService';
 
 // ─── Constants ────────────────────────────────────────────────────
-const CACHE_PREFIX = 'echo_small_';
-const CACHE_VERSION = 'v2';
+const CACHE_PREFIX = 'echo_cache_'; // Only used for memory cache keys
 const DEFAULT_TTL = 5 * 60 * 1000; // 5 minutes
 
 // ─── In‑memory cache for speed ──────────────────────────────────
 let memoryCache = new Map();
 let cacheLoaded = false;
 
-// ─── Profile cache ──────────────────────────────────────────────
+// ─── Profile cache (IndexedDB) ──────────────────────────────────
 export const loadCache = async () => {
   if (cacheLoaded) return memoryCache;
   try {
@@ -67,11 +70,10 @@ export const clearChatListCache = async (uid) => {
   await clearChatList(uid);
 };
 
-// ─── Small cache helpers (localStorage) ──────────────────────
-const getSmallKey = (key) => `${CACHE_PREFIX}${CACHE_VERSION}_${key}`;
-
-export const getCache = (key) => {
-  const fullKey = getSmallKey(key);
+// ─── Generic cache (IndexedDB) for search, etc. ──────────────
+export const getCache = async (key) => {
+  const fullKey = `${CACHE_PREFIX}${key}`;
+  // Check memory cache first
   if (memoryCache.has(fullKey)) {
     const entry = memoryCache.get(fullKey);
     if (Date.now() < entry.expires) {
@@ -80,73 +82,55 @@ export const getCache = (key) => {
       memoryCache.delete(fullKey);
     }
   }
+  // Check IndexedDB
   try {
-    const raw = localStorage.getItem(fullKey);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw);
-    if (parsed.expiry && Date.now() < parsed.expiry) {
-      memoryCache.set(fullKey, { data: parsed.data, expires: parsed.expiry });
-      return parsed.data;
-    } else {
-      localStorage.removeItem(fullKey);
+    const cached = await getCacheItem(fullKey);
+    if (cached && cached.expiry && Date.now() < cached.expiry) {
+      memoryCache.set(fullKey, { data: cached.value, expires: cached.expiry });
+      return cached.value;
+    } else if (cached) {
+      // Expired, remove
+      await deleteCacheItem(fullKey);
       return null;
     }
   } catch (error) {
-    console.warn('Small cache get error:', error);
+    console.warn('Cache get error:', error);
     return null;
   }
+  return null;
 };
 
-export const setCache = (key, data, ttlSeconds = 300) => {
-  const fullKey = getSmallKey(key);
+export const setCache = async (key, data, ttlSeconds = 300) => {
+  const fullKey = `${CACHE_PREFIX}${key}`;
   const expiry = Date.now() + (ttlSeconds * 1000);
   memoryCache.set(fullKey, { data, expires: expiry });
   try {
-    localStorage.setItem(fullKey, JSON.stringify({ data, expiry, version: CACHE_VERSION }));
+    await setCacheItem(fullKey, data, expiry);
   } catch (error) {
-    if (error.name === 'QuotaExceededError' || error.code === 22) {
-      console.warn('⚠️ Small cache quota exceeded. Cleaning up...');
-      try {
-        const keys = Object.keys(localStorage)
-          .filter(k => k.startsWith(CACHE_PREFIX))
-          .sort();
-        const toRemove = keys.slice(0, Math.floor(keys.length / 2) || keys.length);
-        toRemove.forEach(k => localStorage.removeItem(k));
-        localStorage.setItem(fullKey, JSON.stringify({ data, expiry, version: CACHE_VERSION }));
-      } catch (retryError) {
-        console.error('Failed to store small cache after cleanup:', retryError);
-      }
-    } else {
-      console.warn('Small cache set error:', error);
-    }
+    console.warn('Cache set error:', error);
   }
 };
 
-export const clearCacheEntry = (key) => {
-  const fullKey = getSmallKey(key);
+export const clearCacheEntry = async (key) => {
+  const fullKey = `${CACHE_PREFIX}${key}`;
   memoryCache.delete(fullKey);
   try {
-    localStorage.removeItem(fullKey);
+    await deleteCacheItem(fullKey);
   } catch (error) {
-    console.warn('Clear small cache error:', error);
+    console.warn('Clear cache error:', error);
   }
 };
 
-export const clearAllCache = () => {
+export const clearAllCache = async () => {
   const keysToDelete = [];
   memoryCache.forEach((_, key) => {
     if (key.startsWith(CACHE_PREFIX)) keysToDelete.push(key);
   });
   keysToDelete.forEach(key => memoryCache.delete(key));
   try {
-    const keys = Object.keys(localStorage);
-    for (const key of keys) {
-      if (key.startsWith(CACHE_PREFIX)) {
-        localStorage.removeItem(key);
-      }
-    }
+    await clearCacheStore();
   } catch (error) {
-    console.warn('Clear all small cache error:', error);
+    console.warn('Clear all cache error:', error);
   }
 };
 

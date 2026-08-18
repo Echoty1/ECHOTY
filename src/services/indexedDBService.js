@@ -2,7 +2,7 @@
 import { openDB } from 'idb';
 
 const DB_NAME = 'echo-db';
-const DB_VERSION = 2; // Incremented from 1 to add 'chatList' store
+const DB_VERSION = 3; // Increment from 2 to add 'cacheStore'
 
 let dbPromise = null;
 
@@ -26,9 +26,13 @@ export const getDB = () => {
         if (!db.objectStoreNames.contains('messageCache')) {
           db.createObjectStore('messageCache', { keyPath: 'id' });
         }
-        // ✅ New store for chat list (per user)
+        // Chat list store (per user)
         if (!db.objectStoreNames.contains('chatList')) {
           db.createObjectStore('chatList', { keyPath: 'uid' });
+        }
+        // ─── New: Generic cache store for search, etc. ────────
+        if (!db.objectStoreNames.contains('cacheStore')) {
+          db.createObjectStore('cacheStore', { keyPath: 'key' });
         }
       },
     });
@@ -36,7 +40,37 @@ export const getDB = () => {
   return dbPromise;
 };
 
-// ─── Profiles ────────────────────────────────────────────────────
+// ─── Generic cache store ──────────────────────────────────────────
+export const getCacheItem = async (key) => {
+  const db = await getDB();
+  const tx = db.transaction('cacheStore', 'readonly');
+  const item = await tx.store.get(key);
+  await tx.done;
+  return item ? item.value : null;
+};
+
+export const setCacheItem = async (key, value, expiry) => {
+  const db = await getDB();
+  const tx = db.transaction('cacheStore', 'readwrite');
+  await tx.store.put({ key, value, expiry });
+  await tx.done;
+};
+
+export const deleteCacheItem = async (key) => {
+  const db = await getDB();
+  const tx = db.transaction('cacheStore', 'readwrite');
+  await tx.store.delete(key);
+  await tx.done;
+};
+
+export const clearCacheStore = async () => {
+  const db = await getDB();
+  const tx = db.transaction('cacheStore', 'readwrite');
+  await tx.store.clear();
+  await tx.done;
+};
+
+// ─── Existing functions (unchanged) ──────────────────────────────
 export const storeProfile = async (uid, profile) => {
   const db = await getDB();
   const tx = db.transaction('profiles', 'readwrite');
@@ -67,7 +101,6 @@ export const clearProfiles = async () => {
   await tx.done;
 };
 
-// ─── Chat Messages (full chat history) ──────────────────────────
 export const storeChatMessages = async (chatId, messages) => {
   const db = await getDB();
   const tx = db.transaction('chatMessages', 'readwrite');
@@ -83,7 +116,6 @@ export const getChatMessages = async (chatId) => {
   return entry ? entry.messages : [];
 };
 
-// ─── Individual Message Cache ──────────────────────────────────
 export const storeMessage = async (message) => {
   const db = await getDB();
   const tx = db.transaction('messageCache', 'readwrite');
@@ -111,7 +143,6 @@ export const clearMessagesForChat = async (chatId) => {
   await tx.done;
 };
 
-// ─── Media Cache ─────────────────────────────────────────────────
 export const storeMedia = async (url, blob) => {
   const db = await getDB();
   const tx = db.transaction('mediaCache', 'readwrite');
@@ -134,7 +165,6 @@ export const clearMediaCache = async () => {
   await tx.done;
 };
 
-// ─── Chat List (for each user) ──────────────────────────────────
 export const storeChatList = async (uid, chatList) => {
   const db = await getDB();
   const tx = db.transaction('chatList', 'readwrite');
@@ -157,10 +187,9 @@ export const clearChatList = async (uid) => {
   await tx.done;
 };
 
-// ─── Clear everything ────────────────────────────────────────────
 export const clearAllIndexedDB = async () => {
   const db = await getDB();
-  const stores = ['profiles', 'chatMessages', 'mediaCache', 'messageCache', 'chatList'];
+  const stores = ['profiles', 'chatMessages', 'mediaCache', 'messageCache', 'chatList', 'cacheStore'];
   const tx = db.transaction(stores, 'readwrite');
   for (const storeName of stores) {
     await tx.objectStore(storeName).clear();

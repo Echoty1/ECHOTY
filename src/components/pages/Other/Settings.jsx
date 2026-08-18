@@ -156,6 +156,7 @@ const Settings = () => {
       </div>
 
       <div className="settings-content">
+        {/* ─── Danger Zone ────────────────────────────────────── */}
         <div className="settings-card danger-zone">
           <h2><i className="fas fa-exclamation-triangle" /> Danger Zone</h2>
           <p>This action is irreversible. Deleting your account will permanently remove all your data, including messages, profile, and Echoes.</p>
