@@ -112,6 +112,58 @@ chatsRef.on('child_added', (chatSnapshot) => {
 });
 console.log('🔔 Push notification listener active');
 
+// ─── Admin: Delete user account ─────────────────────────────────
+app.post('/api/admin/delete-user', async (req, res) => {
+  try {
+    const { targetUid } = req.body;
+    if (!targetUid) {
+      return res.status(400).json({ error: 'Missing targetUid' });
+    }
+
+    // Verify the requesting user is the support account
+    const token = req.headers.authorization?.split('Bearer ')[1];
+    if (!token) {
+      return res.status(401).json({ error: 'Unauthorized' });
+    }
+    const decoded = await admin.auth().verifyIdToken(token);
+    const requesterUid = decoded.uid;
+    if (requesterUid !== 'hD7tJzPVI1VSorhok8GToBC6VDy1') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    // 1. Delete the user's Firebase Auth account
+    await admin.auth().deleteUser(targetUid);
+
+    // 2. Delete database nodes
+    const nodesToDelete = ['profiles', 'userSkins', 'userChats'];
+    await Promise.all(nodesToDelete.map(node => db.ref(`${node}/${targetUid}`).remove()));
+
+    // 3. Remove from accounts
+    await db.ref(`accounts/${targetUid}`).remove();
+
+    // 4. Remove all references to this user in other userChats
+    const profilesSnap = await db.ref('profiles').once('value');
+    const allUids = profilesSnap.val() ? Object.keys(profilesSnap.val()) : [];
+    const updates = {};
+    for (const uid of allUids) {
+      if (uid === targetUid) continue;
+      updates[`userChats/${uid}/${targetUid}`] = null;
+    }
+    if (Object.keys(updates).length > 0) {
+      await db.ref().update(updates);
+    }
+
+    // 5. Also delete the chat messages (optional but clean)
+    // Find all chat nodes containing this UID
+    // For simplicity, we'll leave that; the messages will be orphaned but not accessible.
+
+    res.json({ success: true, message: `User ${targetUid} deleted successfully` });
+  } catch (err) {
+    console.error('Delete user error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Start ──────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

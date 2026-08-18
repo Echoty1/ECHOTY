@@ -31,6 +31,8 @@ import { cleanAllCachedMessages } from './services/messageCleanup';
 import { getChatList } from './services/indexedDBService';
 import { db } from './services/firebase';
 import { clearAllIndexedDB } from './services/indexedDBService';
+import AdminPanel from './components/pages/Admin/AdminPanel';
+import BanScreen from './components/BanScreen/BanScreen';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
@@ -190,7 +192,7 @@ function LoadingScreen() {
 
 // ─── AppContent ─────────────────────────────────────────────────
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, loading, banInfo } = useAuth(); // ✅ Destructure banInfo
   const { fetchProfile } = useProfile();
   const [minTimePassed, setMinTimePassed] = useState(false);
   const [showUpdatePopup, setShowUpdatePopup] = useState(false);
@@ -204,31 +206,26 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, []);
 
-  // ─── Clean up ALL cache keys from localStorage (silent) ──────
+  // ─── Clean up ALL cache keys from localStorage ──────────────
   const cleanLocalStorage = () => {
     try {
       const keys = Object.keys(localStorage);
       const toRemove = keys.filter(key => {
-        // Remove all known cache patterns
         return (
           key.startsWith('echo_cache_') ||
           key.startsWith('echo_small_') ||
           key.startsWith('echo_cache_v2_') ||
           key.startsWith('echo_small_v2_') ||
-          key.startsWith('echocache_v2_') ||    // the pattern we found
-          key.startsWith('echo_cache_echomoji_') || // included in above but keep explicit
-          key.startsWith('echo_cache_profile_')    // included
+          key.startsWith('echocache_v2_')
         );
       }).filter(key => {
-        // Keep essential keys
         const essential = [
           'echo_has_recovered_',
           'echo_app_version',
           'echo_changelog_version',
           'echo_install_popup_dismissed_until',
           'echo_update_shown',
-          'echo_walkthrough_completed', // if any
-          'firebase:host', // Firebase internal – we can keep
+          'firebase:host',
         ];
         for (const e of essential) {
           if (key.startsWith(e)) return false;
@@ -245,7 +242,6 @@ function AppContent() {
     }
   };
 
-  // ─── Run cleanup after user loads ─────────────────────────────
   useEffect(() => {
     if (user) {
       cleanLocalStorage();
@@ -352,6 +348,11 @@ function AppContent() {
 
   const showLoading = loading || !minTimePassed;
 
+  // ─── Show BanScreen if user is banned ──────────────────────
+  if (!showLoading && user && banInfo.isBanned) {
+    return <BanScreen />;
+  }
+
   if (showLoading) return <LoadingScreen />;
   if (!user) return <Login />;
 
@@ -384,6 +385,7 @@ function AppContent() {
           <Route path="/settings" element={<Settings />} />
           <Route path="/coins" element={<CoinPurchase />} />
           <Route path="/about" element={<About />} />
+          <Route path="/control" element={<AdminPanel />} />
           <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </div>
@@ -419,7 +421,6 @@ function App() {
     const storedVersion = localStorage.getItem('echo_app_version');
 
     if (storedVersion !== CURRENT_VERSION) {
-      // Clear localStorage (keep only essential keys)
       const keysToKeep = [
         'echo_install_popup_dismissed_until',
         'echo_update_shown',
@@ -432,7 +433,6 @@ function App() {
           localStorage.removeItem(key);
         }
       }
-      // Clear IndexedDB to avoid old data
       clearAllIndexedDB().catch(() => {});
       localStorage.setItem('echo_app_version', CURRENT_VERSION);
       console.log('🧹 Cleared localStorage and IndexedDB for new version');

@@ -1,8 +1,8 @@
 // src/contexts/AuthContext.js
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { auth, db } from '../services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { ref, set, onDisconnect, update, onValue } from 'firebase/database';
+import { ref, set, onDisconnect, update, onValue, remove } from 'firebase/database';
 import { initPresence } from '../services/presenceService';
 
 export const AuthContext = createContext();
@@ -10,15 +10,31 @@ export const AuthContext = createContext();
 export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
-  const presenceCleanupRef = React.useRef(null);
+  const [banInfo, setBanInfo] = useState({ isBanned: false, reason: '', bannedAt: null });
+  const presenceCleanupRef = useRef(null);
+  const accountCleanupRef = useRef(null);
+  const profileUnsubRef = useRef(null);
+
+  // Clean up all listeners on unmount or logout
+  const cleanupAll = () => {
+    if (presenceCleanupRef.current) {
+      presenceCleanupRef.current();
+      presenceCleanupRef.current = null;
+    }
+    if (accountCleanupRef.current) {
+      accountCleanupRef.current();
+      accountCleanupRef.current = null;
+    }
+    if (profileUnsubRef.current) {
+      profileUnsubRef.current();
+      profileUnsubRef.current = null;
+    }
+  };
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      // Clean up previous presence if any
-      if (presenceCleanupRef.current) {
-        presenceCleanupRef.current();
-        presenceCleanupRef.current = null;
-      }
+      // Clean up previous listeners
+      cleanupAll();
 
       if (firebaseUser) {
         try {
@@ -27,7 +43,7 @@ export const AuthProvider = ({ children }) => {
 
           setLoading(false);
 
-          // ✅ Initialize presence (robust)
+          // Initialize presence
           presenceCleanupRef.current = initPresence(uid);
 
           // ─── Set a basic user object immediately ──────────
@@ -54,7 +70,7 @@ export const AuthProvider = ({ children }) => {
           const profileRef = ref(db, `profiles/${uid}`);
 
           // ─── Load profile in the background ──────────────
-          const unsubscribe = onValue(
+          const unsubscribeProfile = onValue(
             profileRef,
             (snapshot) => {
               if (snapshot.exists()) {
@@ -149,31 +165,54 @@ export const AuthProvider = ({ children }) => {
               console.error('❌ Profile listener error:', error);
             }
           );
+          profileUnsubRef.current = unsubscribeProfile;
 
-          return () => unsubscribe();
+          // ─── Accounts listener (force logout + ban) ──────
+          const accountRef = ref(db, `accounts/${uid}`);
+          const unsubAccount = onValue(accountRef, (snap) => {
+            const data = snap.val();
+            // Force logout
+            if (data?.forceLogout === true) {
+              console.log(`🔴 Force logout for ${uid}`);
+              // Sign out the user
+              signOut(auth).catch(() => {});
+              // Clear the flag so they can log in again
+              remove(ref(db, `accounts/${uid}/forceLogout`)).catch(() => {});
+            }
+            // Ban
+            if (data?.banned === true) {
+              setBanInfo({
+                isBanned: true,
+                reason: data.banReason || 'Banned by admin',
+                bannedAt: data.bannedAt || Date.now(),
+              });
+            } else {
+              setBanInfo({ isBanned: false, reason: '', bannedAt: null });
+            }
+          });
+          accountCleanupRef.current = unsubAccount;
+
         } catch (err) {
           console.error('❌ Auth error:', err);
           setLoading(false);
         }
       } else {
         console.log('🔴 User signed out');
-        if (presenceCleanupRef.current) {
-          presenceCleanupRef.current();
-          presenceCleanupRef.current = null;
-        }
+        cleanupAll();
         setUser(null);
+        setBanInfo({ isBanned: false, reason: '', bannedAt: null });
         setLoading(false);
       }
     });
 
-    return () => unsub();
+    return () => {
+      unsub();
+      cleanupAll();
+    };
   }, []);
 
   const handleLogout = async () => {
-    if (presenceCleanupRef.current) {
-      presenceCleanupRef.current();
-      presenceCleanupRef.current = null;
-    }
+    cleanupAll();
     if (user) {
       try {
         await set(ref(db, `presence/online/${user.uid}`), false);
@@ -182,7 +221,7 @@ export const AuthProvider = ({ children }) => {
     await signOut(auth);
   };
 
-  const value = { user, loading, logout: handleLogout };
+  const value = { user, loading, logout: handleLogout, banInfo };
 
   return (
     <AuthContext.Provider value={value}>

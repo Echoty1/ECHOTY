@@ -1,0 +1,65 @@
+/* src/components/BanScreen/BanScreen.css */
+.ban-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: #0A0A0F;
+  padding: 20px;
+}
+
+.ban-card {
+  background: #1a1a24;
+  border-radius: 24px;
+  padding: 40px 32px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.8);
+}
+
+.ban-icon {
+  font-size: 56px;
+  color: #EF4444;
+  margin-bottom: 16px;
+}
+
+.ban-card h1 {
+  color: #fff;
+  font-size: 24px;
+  font-weight: 700;
+  margin: 0 0 12px;
+}
+
+.ban-reason {
+  color: #f59e0b;
+  font-size: 14px;
+  margin: 0 0 8px;
+}
+
+.ban-message {
+  color: #aaa;
+  font-size: 14px;
+  line-height: 1.6;
+  margin: 8px 0 24px;
+}
+
+.ban-logout-btn {
+  padding: 12px 32px;
+  border-radius: 30px;
+  border: none;
+  background: #EF4444;
+  color: #fff;
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  transition: transform 0.2s;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ban-logout-btn:hover {
+  transform: scale(1.02);
+}

@@ -5,6 +5,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { db } from '../../services/firebase';
 import { ref, onValue } from 'firebase/database';
 
+const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
+
 const BottomNav = () => {
   const { user } = useAuth();
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -13,10 +15,14 @@ const BottomNav = () => {
   const startOffset = useRef({ x: 0, y: 0 });
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
 
+  const isSupport = user?.uid === SUPPORT_UID;
+
   const tabs = [
     { to: '/', label: 'Home', icon: 'fa-house' },
     { to: '/chats', label: 'Chats', icon: 'fa-comment-dots' },
-    { to: '/echomoji', label: 'ECHOMOJI', icon: 'fa-face-smile' },
+    isSupport
+      ? { to: '/control', label: 'CONTROL', icon: 'fa-sliders-h' }
+      : { to: '/echomoji', label: 'ECHOMOJI', icon: 'fa-face-smile' },
     { to: '/profile', label: 'Profile', icon: 'fa-user' },
     { to: '/other', label: 'Other', icon: 'fa-ellipsis-h' },
   ];
@@ -36,7 +42,6 @@ const BottomNav = () => {
         return;
       }
 
-      // Count partners with unreadCount > 0
       let count = 0;
       Object.values(data).forEach((chat) => {
         if (chat.unreadCount && chat.unreadCount > 0) {
@@ -49,7 +54,7 @@ const BottomNav = () => {
     return () => unsubscribe();
   }, [user?.uid]);
 
-  // ─── Dragging handlers (unchanged) ─────────────────────────────
+  // ─── Dragging handlers ─────────────────────────────────────────
   const handleStart = (e) => {
     const touch = e.touches ? e.touches[0] : e;
     startPos.current = { x: touch.clientX, y: touch.clientY };

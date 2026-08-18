@@ -196,3 +196,19 @@ export const clearAllIndexedDB = async () => {
   }
   await tx.done;
 };
+
+// ─── Admin User List Cache ──────────────────────────────────────
+export const getAdminUserList = async () => {
+  const db = await getDB();
+  const tx = db.transaction('cacheStore', 'readonly');
+  const item = await tx.store.get('admin_user_list');
+  await tx.done;
+  return item ? item.value : null;
+};
+
+export const setAdminUserList = async (users, expiry) => {
+  const db = await getDB();
+  const tx = db.transaction('cacheStore', 'readwrite');
+  await tx.store.put({ key: 'admin_user_list', value: users, expiry: expiry || Date.now() + 5 * 60 * 1000 });
+  await tx.done;
+};
