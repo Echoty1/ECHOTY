@@ -23,7 +23,7 @@ jobs:
         id: version
         run: |
           # Replace <YOUR-PROJECT> with your Firebase project ID
-          VERSION_DATA=$(curl -s "https://<YOUR-PROJECT>.firebaseio.com/appConfig/version.json")
+          VERSION_DATA=$(curl -s "https://echoty-fa3ca-default-rtdb.firebaseio.com/appConfig/version.json")
           VERSION_CODE=$(echo $VERSION_DATA | jq -r '.versionCode')
           VERSION_NAME=$(echo $VERSION_DATA | jq -r '.versionName')
           echo "versionCode=$VERSION_CODE" >> $GITHUB_OUTPUT
