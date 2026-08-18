@@ -1,4 +1,4 @@
-name: Build APK V1
+name: Build APK & AAB V1
 
 on:
   workflow_dispatch:   # only manual – no push trigger
@@ -22,7 +22,6 @@ jobs:
       - name: Fetch version from Firebase
         id: version
         run: |
-          # Replace <YOUR-PROJECT> with your Firebase project ID
           VERSION_DATA=$(curl -s "https://echoty-fa3ca-default-rtdb.firebaseio.com/appConfig/version.json")
           VERSION_CODE=$(echo $VERSION_DATA | jq -r '.versionCode')
           VERSION_NAME=$(echo $VERSION_DATA | jq -r '.versionName')
@@ -81,19 +80,25 @@ jobs:
           keyPassword=${{ secrets.KEY_PASSWORD }}
           EOF
 
-      - name: Build release APK
+      - name: Build release APK and AAB
         run: |
           cd android
-          ./gradlew bundleRelease
+          ./gradlew assembleRelease  # produces APK
+          ./gradlew bundleRelease    # produces AAB
 
-      - name: Rename APK with version
+      - name: Rename artifacts with version
         run: |
           VERSION_NAME="${{ steps.version.outputs.versionName }}"
           VERSION_CODE="${{ steps.version.outputs.versionCode }}"
-          mv android/app/build/outputs/apk/release/app-release.apk "ECHO-v${VERSION_NAME}-code${VERSION_CODE}.apk"
+          # Rename APK
+          mv android/app/build/outputs/apk/release/app-release.apk "ECHO-v${VERSION_NAME}-code${VERSION_CODE}.apk" || echo "APK not found"
+          # Rename AAB
+          mv android/app/build/outputs/bundle/release/app-release.aab "ECHO-v${VERSION_NAME}-code${VERSION_CODE}.aab" || echo "AAB not found"
 
-      - name: Upload APK
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ECHO-APK
-          path: ./*.apk
+          name: ECHO-Builds
+          path: |
+            *.apk
+            *.aab
