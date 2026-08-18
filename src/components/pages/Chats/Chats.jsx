@@ -27,6 +27,10 @@ import { getChatList, storeChatList } from '../../../services/indexedDBService';
 
 const CHAT_CHUNK_SIZE = 20;
 
+// ─── Demo constants ────────────────────────────────────────────
+const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
+const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
+
 const ECHO_AI_USER = {
   id: 'echo_ai_assistant',
   name: 'ECHO AI',
@@ -80,10 +84,8 @@ const loadPartnerData = async (partnerId) => {
 // ─── Process a single chat item ─────────────────────────────────
 const processChatItem = async (chat, user, onlineUsers) => {
   try {
-    // 1. Try to get cached profile from IndexedDB first (fast)
     let profile = getCachedProfile(chat.id);
     if (!profile) {
-      // 2. If not cached, fetch from Firebase
       profile = (await loadPartnerData(chat.id)) || {};
     }
 
@@ -112,7 +114,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
 
     let displayMessage = rawLastMessage;
 
-    // ─── Handle different message types ──────────────────────────
     if (latest.type === 'echomoji') {
       const moodLabel = latest.mood || 'neutral';
       displayMessage = `😊 ECHOMOJI (${moodLabel})`;
@@ -132,7 +133,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
       }
     }
 
-    // ─── Force unread to 0 if this chat was marked as read ──────
     let unreadCount = chat.unreadCount || 0;
     const readFlagKey = `chat_read_${chat.id}`;
     if (sessionStorage.getItem(readFlagKey) === 'true') {
@@ -141,7 +141,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
     }
 
     const rawAvatar = profile.avatar || chat.partnerAvatar || '';
-    // Preload avatar image immediately (caches in browser and IndexedDB)
     if (rawAvatar) preloadMedia(rawAvatar);
 
     const isOnline = !!onlineUsers[chat.id];
@@ -161,7 +160,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
       online: isOnline,
     };
   } catch (err) {
-    // Fallback
     let unreadCount = chat.unreadCount || 0;
     const readFlagKey = `chat_read_${chat.id}`;
     if (sessionStorage.getItem(readFlagKey) === 'true') {
@@ -186,10 +184,8 @@ const processChatItem = async (chat, user, onlineUsers) => {
 const sortNonAIChats = (chats) => {
   const online = chats.filter(c => c.online === true);
   const offline = chats.filter(c => c.online === false);
-
   const onlineSorted = online.sort((a, b) => b.timestamp - a.timestamp);
   const offlineSorted = offline.sort((a, b) => b.timestamp - a.timestamp);
-
   return [...onlineSorted, ...offlineSorted];
 };
 
@@ -283,6 +279,9 @@ const Chats = () => {
 
   useDeletedAccountCheck();
 
+  const isDemoUser = user?.uid === DEMO_UID;
+  const isSupportUser = user?.uid === SUPPORT_UID;
+
   // ─── Load cached chat list from IndexedDB on mount ────────────
   useEffect(() => {
     if (!user?.uid) return;
@@ -291,7 +290,16 @@ const Chats = () => {
       try {
         const cached = await getChatList(user.uid);
         if (cached && Array.isArray(cached) && cached.length > 0) {
-          setRecentChats(cached);
+          let filtered = cached;
+          if (isDemoUser) {
+            filtered = cached.filter(c => c.id === SUPPORT_UID);
+          } else {
+            filtered = cached.filter(c => {
+              if (c.id === DEMO_UID && !isSupportUser) return false;
+              return true;
+            });
+          }
+          setRecentChats(filtered);
           setLoadingChats(false);
         }
       } catch (err) {
@@ -299,7 +307,7 @@ const Chats = () => {
       }
     };
     loadCached();
-  }, [user?.uid]);
+  }, [user?.uid, isDemoUser, isSupportUser]);
 
   // ─── Listen for chat-read events to instantly clear unread ──
   useEffect(() => {
@@ -314,6 +322,21 @@ const Chats = () => {
     };
     window.addEventListener('chat-read', handleChatRead);
     return () => window.removeEventListener('chat-read', handleChatRead);
+  }, []);
+
+  // ─── Listen for instant unread clear from ChatView ──────────
+  // Already present in Chats.jsx
+  useEffect(() => {
+    const handleUnreadCleared = (event) => {
+      const { partnerId } = event.detail;
+      setRecentChats((prev) =>
+        prev.map((chat) =>
+          chat.id === partnerId ? { ...chat, unreadCount: 0 } : chat
+        )
+      );
+    };
+    window.addEventListener('chat-unread-cleared', handleUnreadCleared);
+    return () => window.removeEventListener('chat-unread-cleared', handleUnreadCleared);
   }, []);
 
   // ─── Presence listener ──────────────────────────────────────
@@ -352,9 +375,18 @@ const Chats = () => {
           return;
         }
 
-        const chatList = Object.entries(data)
+        let chatList = Object.entries(data)
           .map(([partnerId, chat]) => ({ id: partnerId, ...chat }))
           .sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+
+        if (isDemoUser) {
+          chatList = chatList.filter(c => c.id === SUPPORT_UID);
+        } else {
+          chatList = chatList.filter(c => {
+            if (c.id === DEMO_UID && !isSupportUser) return false;
+            return true;
+          });
+        }
 
         const loadedItems = await Promise.all(
           chatList.map((chat) => processChatItem(chat, user, onlineUsers))
@@ -365,9 +397,7 @@ const Chats = () => {
 
         setRecentChats(sortedNonAI);
         setLoadingChats(false);
-        // Store in IndexedDB for offline use
         storeChatList(user.uid, sortedNonAI).catch(() => {});
-        // Also store in localStorage (optional)
         setCache(cacheKey, sortedNonAI);
       },
       (error) => {
@@ -382,7 +412,7 @@ const Chats = () => {
         userChatsUnsubRef.current = null;
       }
     };
-  }, [user?.uid, onlineUsers, cacheKey]);
+  }, [user?.uid, onlineUsers, cacheKey, isDemoUser, isSupportUser]);
 
   // ─── Infinite scroll ──────────────────────────────────────────
   const loadChats = useCallback(
@@ -410,11 +440,22 @@ const Chats = () => {
           setIsLoadingMore(false);
           return;
         }
-        const chatList = Object.entries(data)
+        let chatList = Object.entries(data)
           .map(([partnerId, chat]) => ({ id: partnerId, ...chat }))
           .sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
+
+        if (isDemoUser) {
+          chatList = chatList.filter(c => c.id === SUPPORT_UID);
+        } else {
+          chatList = chatList.filter(c => {
+            if (c.id === DEMO_UID && !isSupportUser) return false;
+            return true;
+          });
+        }
+
         if (chatList.length < CHAT_CHUNK_SIZE) setHasMore(false);
         if (chatList.length > 0) setLastChatKey(chatList[chatList.length - 1].id);
+
         const loadedItems = await Promise.all(
           chatList.map((chat) => processChatItem(chat, user, onlineUsers))
         );
@@ -439,7 +480,7 @@ const Chats = () => {
         setIsLoadingMore(false);
       }
     },
-    [user, lastChatKey, isLoadingMore, onlineUsers, cacheKey]
+    [user, lastChatKey, isLoadingMore, onlineUsers, cacheKey, isDemoUser, isSupportUser]
   );
 
   const handleLoadMore = useCallback(async () => {
@@ -504,7 +545,13 @@ const Chats = () => {
       });
       const resolved = await Promise.all(livePromises);
       const updatedResults = resolved.filter(Boolean);
-      setResults(updatedResults);
+      // Final filter: for demo, only keep support (already handled by search service)
+      // but we also filter out demo from non-support
+      const finalResults = updatedResults.filter(u => {
+        if (u.id === DEMO_UID && !isSupportUser) return false;
+        return true;
+      });
+      setResults(finalResults);
     } catch (err) {
       console.error('❌ [Search] Search failed:', err);
       setResults([]);
@@ -529,7 +576,7 @@ const Chats = () => {
     return () => {
       if (searchTimeout.current) clearTimeout(searchTimeout.current);
     };
-  }, [searchQuery, onlineUsers]);
+  }, [searchQuery, onlineUsers, isSupportUser]);
 
   const startChat = (selectedUser) => {
     if (!selectedUser) return;
@@ -632,6 +679,17 @@ const Chats = () => {
                 </div>
               );
             })
+          ) : isDemoUser ? (
+            // ─── Demo specific empty state ─────────────────────────
+            <div className="demo-search-empty">
+              <div className="demo-search-icon">
+                <i className="fas fa-user-plus" />
+              </div>
+              <p className="demo-search-title">Create an account to connect with others</p>
+              <span className="demo-search-subtitle">
+                Sign up to chat with people around the world
+              </span>
+            </div>
           ) : (
             <div className="no-chats-premium">
               <div className="no-chats-icon-wrapper"><i className="fas fa-user-slash" /></div>

@@ -64,6 +64,9 @@ const DEFAULT_INTEREST_TEMPLATES = [
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
 
+// ─── Demo constants ────────────────────────────────────────────
+const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
+
 const Profile = () => {
   const { user } = useAuth();
   const { refreshProfile } = useProfile();
@@ -82,6 +85,8 @@ const Profile = () => {
   const nameInputRef = useRef(null);
   const bioInputRef = useRef(null);
   const editingContainerRef = useRef(null);
+
+  const isDemoUser = user?.uid === DEMO_UID;
 
   const cachedProfile = useMemo(() => {
     if (!user?.uid) return null;
@@ -109,8 +114,8 @@ const Profile = () => {
     city: '',
   });
 
+  // Only keep image input ref (GIF upload removed)
   const imageInputRef = useRef(null);
-  const gifInputRef = useRef(null);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -256,7 +261,8 @@ const Profile = () => {
     setTimeout(() => setCopiedUid(false), 2000);
   };
 
-  const handleUploadMedia = async (file, isGifOnly = false) => {
+  // Only image upload remains – GIF upload removed
+  const handleUploadImage = async (file) => {
     if (!user) return;
 
     if (file.size > MAX_FILE_SIZE) {
@@ -264,17 +270,10 @@ const Profile = () => {
       return;
     }
 
-    if (isGifOnly) {
-      if (file.type !== 'image/gif') {
-        setToast({ message: 'Only GIF files (.gif) are allowed.', type: 'error' });
-        return;
-      }
-    } else {
-      const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
-      if (!validTypes.includes(file.type)) {
-        setToast({ message: 'Please upload a valid image (PNG, JPEG, WEBP).', type: 'error' });
-        return;
-      }
+    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
+    if (!validTypes.includes(file.type)) {
+      setToast({ message: 'Please upload a valid image (PNG, JPEG, WEBP).', type: 'error' });
+      return;
     }
 
     setUploading(true);
@@ -293,16 +292,11 @@ const Profile = () => {
 
       const downloadUrl = data.secure_url;
 
-      const updateData = {};
-      if (file.type === 'image/gif') {
-        updateData.videoUrl = downloadUrl;
-        updateData.avatar = downloadUrl;
-        updateData.activeSkin = null;
-      } else {
-        updateData.avatar = downloadUrl;
-        updateData.videoUrl = '';
-        updateData.activeSkin = null;
-      }
+      const updateData = {
+        avatar: downloadUrl,
+        videoUrl: '',
+        activeSkin: null,
+      };
 
       setProfile((prev) => ({ ...prev, ...updateData }));
       setEditData((prev) => ({ ...prev, ...updateData }));
@@ -310,7 +304,7 @@ const Profile = () => {
       await update(ref(db, `profiles/${user.uid}`), updateData);
       await refreshProfile(user.uid);
 
-      setToast({ message: 'Media uploaded successfully!', type: 'success' });
+      setToast({ message: 'Image uploaded successfully!', type: 'success' });
       setShowAvatarPicker(false);
     } catch (err) {
       console.error('Upload error:', err);
@@ -321,12 +315,7 @@ const Profile = () => {
   };
 
   const handleImageFile = (e) => {
-    if (e.target.files[0]) handleUploadMedia(e.target.files[0], false);
-    e.target.value = '';
-  };
-
-  const handleGifFile = (e) => {
-    if (e.target.files[0]) handleUploadMedia(e.target.files[0], true);
+    if (e.target.files[0]) handleUploadImage(e.target.files[0]);
     e.target.value = '';
   };
 
@@ -346,7 +335,7 @@ const Profile = () => {
     }
   };
 
-  // ─── Insert text at cursor position ──────────────────────────
+  // ─── Insert text at cursor ──────────────────────────────────
   const insertTextAtCursor = (field, text) => {
     const el = field === 'name' ? nameInputRef.current : bioInputRef.current;
     if (!el) return;
@@ -357,10 +346,8 @@ const Profile = () => {
     const newValue = value.substring(0, start) + text + value.substring(end);
     const newCursor = start + text.length;
 
-    // Update state
     if (field === 'name') {
       setEditData({ ...editData, name: newValue });
-      // Set cursor after update
       setTimeout(() => {
         el.focus();
         el.setSelectionRange(newCursor, newCursor);
@@ -374,10 +361,8 @@ const Profile = () => {
     }
   };
 
-  // ─── Emoji picker handlers ────────────────────────────────────
   const handleEmojiSelect = (emoji) => {
     if (!activeField) return;
-
     const field = activeField;
     const currentValue = field === 'name' ? editData.name : editData.bio;
     const maxLength = field === 'name' ? NAME_MAX_LENGTH : BIO_MAX_LENGTH;
@@ -387,7 +372,6 @@ const Profile = () => {
       return;
     }
 
-    // Insert at cursor position
     insertTextAtCursor(field, emoji);
   };
 
@@ -408,24 +392,20 @@ const Profile = () => {
     setActiveField(null);
   };
 
-  // ─── Handle input focus to set active field ──────────────────
   const handleInputFocus = (field) => {
     if (showEmojiPicker) {
       setActiveField(field);
     }
   };
 
-  // ─── Stop propagation to prevent picker from closing ─────────
   const handleInputMouseDown = (e) => {
     e.stopPropagation();
-    // Also set active field if picker is open
     const field = e.target === nameInputRef.current ? 'name' : 'bio';
     if (showEmojiPicker) {
       setActiveField(field);
     }
   };
 
-  // ─── Cached avatar ──────────────────────────────────────────
   const currentMediaUrl = (editing ? editData.videoUrl : profile?.videoUrl) || 
                           (editing ? editData.avatar : profile?.avatar);
   const cachedMediaUrl = useCachedImage(currentMediaUrl, null);
@@ -446,13 +426,12 @@ const Profile = () => {
   return (
     <div className="profile-page">
       <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleImageFile} />
-      <input type="file" ref={gifInputRef} accept="image/gif" style={{ display: 'none' }} onChange={handleGifFile} />
 
       <div className="profile-card">
         <div
           className="profile-avatar"
-          onClick={() => editing && setShowAvatarPicker(true)}
-          style={{ cursor: editing ? 'pointer' : 'default', position: 'relative' }}
+          onClick={() => (editing || isDemoUser) && setShowAvatarPicker(true)}
+          style={{ cursor: (editing || isDemoUser) ? 'pointer' : 'default', position: 'relative' }}
         >
           {loading ? (
             <SkeletonBlock width="100%" height="100%" borderRadius="50%" />
@@ -465,11 +444,15 @@ const Profile = () => {
           ) : (
             <div className="profile-avatar-initial">{getInitial()}</div>
           )}
-          {editing && <div className="avatar-overlay">Tap to change</div>}
+          {(editing || isDemoUser) && <div className="avatar-overlay">Tap to change</div>}
         </div>
 
-        {/* ─── Name Input ────────────────────────────────────────── */}
-        {editing ? (
+        {/* ─── Name – always read‑only for demo ────────────────── */}
+        {isDemoUser ? (
+          <div className="profile-name" style={{ textAlign: 'center', marginTop: '8px' }}>
+            {profile?.name || 'User'}
+          </div>
+        ) : editing ? (
           <div ref={editingContainerRef} style={{ position: 'relative', width: '100%' }}>
             <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
               <input
@@ -490,7 +473,6 @@ const Profile = () => {
                 onMouseDown={handleInputMouseDown}
                 onTouchStart={handleInputMouseDown}
               />
-              {/* Emoji button on the left */}
               <button
                 type="button"
                 onClick={() => openEmojiPicker('name')}
@@ -511,7 +493,6 @@ const Profile = () => {
               >
                 <i className="fas fa-smile" />
               </button>
-              {/* Counter on the right */}
               <span style={{
                 position: 'absolute',
                 right: '12px',
@@ -548,8 +529,12 @@ const Profile = () => {
           </div>
         )}
 
-        {/* ─── Bio Textarea ──────────────────────────────────────── */}
-        {editing ? (
+        {/* ─── Bio – always read‑only for demo ────────────────── */}
+        {isDemoUser ? (
+          <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>
+            {profile?.bio || 'No bio yet.'}
+          </p>
+        ) : editing ? (
           <div style={{ position: 'relative', width: '100%', marginTop: '12px' }}>
             <div style={{ position: 'relative' }}>
               <textarea
@@ -578,7 +563,6 @@ const Profile = () => {
                 onMouseDown={handleInputMouseDown}
                 onTouchStart={handleInputMouseDown}
               />
-              {/* Emoji button on the left, aligned to top-left */}
               <button
                 type="button"
                 onClick={() => openEmojiPicker('bio')}
@@ -598,7 +582,6 @@ const Profile = () => {
               >
                 <i className="fas fa-smile" />
               </button>
-              {/* Counter on the right */}
               <span style={{
                 position: 'absolute',
                 right: '12px',
@@ -648,17 +631,29 @@ const Profile = () => {
         {/* ─── Actions ───────────────────────────────────────────── */}
         <div className="profile-actions" style={{ marginTop: '24px', display: 'flex', gap: '12px', justifyContent: 'center' }}>
           {editing ? (
-            <>
-              <button className="save-btn" onClick={handleSave} style={{ background: '#6C3CE1', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer', fontWeight: 600 }}>
-                Save
-              </button>
-              <button className="cancel-btn" onClick={() => { setEditing(false); setEditData(profile); }} style={{ background: '#333', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer' }}>
-                Cancel
-              </button>
-            </>
+            isDemoUser ? null : (
+              <>
+                <button className="save-btn" onClick={handleSave} style={{ background: '#6C3CE1', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer', fontWeight: 600 }}>
+                  Save
+                </button>
+                <button className="cancel-btn" onClick={() => { setEditing(false); setEditData(profile); }} style={{ background: '#333', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer' }}>
+                  Cancel
+                </button>
+              </>
+            )
           ) : (
-            <button className="edit-btn" onClick={() => setEditing(true)} style={{ background: '#6C3CE1', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer', fontWeight: 600 }}>
-              Edit Profile
+            <button 
+              className="edit-btn" 
+              onClick={() => {
+                if (isDemoUser) {
+                  setShowAvatarPicker(true); // directly open avatar picker
+                } else {
+                  setEditing(true);
+                }
+              }} 
+              style={{ background: '#6C3CE1', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer', fontWeight: 600 }}
+            >
+              {isDemoUser ? 'Change Avatar' : 'Edit Profile'}
             </button>
           )}
         </div>
@@ -686,16 +681,21 @@ const Profile = () => {
       <AvatarPicker
         isOpen={showAvatarPicker}
         onClose={() => setShowAvatarPicker(false)}
-        onUploadImage={() => imageInputRef.current?.click()}
-        onUploadGif={() => gifInputRef.current?.click()}
+        onUploadImage={() => {
+          if (isDemoUser) {
+            setToast({ message: 'Demo users cannot upload images.', type: 'error' });
+            return;
+          }
+          imageInputRef.current?.click();
+        }}
         onChooseLibrary={() => { setShowAvatarPicker(false); setShowGifLibrary(true); }}
         uploading={uploading}
+        isDemo={isDemoUser}
       />
 
       <GifLibraryModal isOpen={showGifLibrary} onClose={() => setShowGifLibrary(false)} onSelect={handleGifSelect} />
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
 
-      {/* ─── Emoji Picker ───────────────────────────────────────── */}
       {showEmojiPicker && (
         <ChatEmojiPicker
           onClose={closeEmojiPicker}

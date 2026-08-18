@@ -2,7 +2,6 @@
 import { useState, useEffect } from 'react';
 import { getMedia, storeMedia } from '../services/indexedDBService';
 
-// ─── Memory cache for preload tracking ──────────────────────────
 const preloadedSet = new Set();
 
 export const preloadMedia = (url) => {
@@ -37,7 +36,6 @@ export const useCachedBlobUrl = (originalUrl) => {
 
     const load = async () => {
       try {
-        // Check IndexedDB
         const blob = await getMedia(originalUrl);
         if (blob) {
           objectUrl = URL.createObjectURL(blob);
@@ -48,7 +46,6 @@ export const useCachedBlobUrl = (originalUrl) => {
           }
         }
 
-        // Fetch from network
         const response = await fetch(originalUrl);
         if (!response.ok) throw new Error('Network response not ok');
         const blobFromNetwork = await response.blob();
@@ -83,25 +80,22 @@ export const useCachedImage = (url, placeholder = null) => {
   return blobUrl;
 };
 
-/**
- * Background‑cache a media URL (image, video, audio) in IndexedDB
- * @param {string} url - The media URL to fetch and store
- * @returns {Promise<void>}
- */
 export const cacheMedia = async (url) => {
-  if (!url || !url.startsWith('http')) return; // skip blob: or invalid
+  if (!url || !url.startsWith('http')) {
+    console.debug('⏭️ Skipping cache for non-HTTP URL:', url);
+    return;
+  }
+
   try {
-    // Check if already cached
     const existing = await getMedia(url);
-    if (existing) return; // already cached
+    if (existing) return;
 
     const response = await fetch(url);
-    if (!response.ok) throw new Error(`Failed to fetch ${url}`);
+    if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status}`);
     const blob = await response.blob();
     await storeMedia(url, blob);
     console.log(`✅ Cached media: ${url.substring(0, 60)}...`);
   } catch (err) {
-    // Silently fail – media will load from network when needed
     console.debug(`⚠️ Could not pre‑cache media: ${err.message}`);
   }
 };

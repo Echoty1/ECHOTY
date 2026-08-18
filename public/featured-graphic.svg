@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 500" width="1024" height="500">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0A0A0F"/>
+      <stop offset="100%" stop-color="#1A0A2A"/>
+    </linearGradient>
+    <linearGradient id="textGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6C3CE1"/>
+      <stop offset="100%" stop-color="#EC4899"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="4" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="1024" height="500" fill="url(#bgGrad)"/>
+  <circle cx="512" cy="250" r="180" fill="none" stroke="#6C3CE1" stroke-width="1" opacity="0.06"/>
+  <circle cx="512" cy="250" r="140" fill="none" stroke="#EC4899" stroke-width="1" opacity="0.04"/>
+
+  <!-- Logo -->
+  <g transform="translate(482, 120)" filter="url(#glow)">
+    <rect width="60" height="60" rx="10" fill="#182830" stroke="#6C3CE1" stroke-width="0.8" opacity="0.9"/>
+    <path d="M 15 15 H 35 V 22 H 22.5 V 28.5 H 32.5 V 35 H 22.5 V 42 H 35 V 49 H 15 Z" fill="#6C3CE1"/>
+    <path d="M 40 20 A 17.5 17.5 0 0 1 40 44" stroke="#6C3CE1" stroke-width="4.5" fill="none" stroke-linecap="round"/>
+    <path d="M 46 25 A 11 11 0 0 1 46 39" stroke="#EC4899" stroke-width="4" stroke-opacity="0.6" fill="none" stroke-linecap="round"/>
+  </g>
+
+  <!-- ─── ECHO Text ─── -->
+  <text x="512" y="232" font-family="Arial, Helvetica, sans-serif" font-size="48" font-weight="900" fill="url(#textGrad)" text-anchor="middle" letter-spacing="8">ECHO</text>
+
+  <!-- ─── Tagline ─── -->
+  <text x="512" y="262" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#888888" text-anchor="middle" letter-spacing="3" font-weight="400">Discover. Connect. Echo.</text>
+
+  <!-- Dots -->
+  <circle cx="512" cy="285" r="2" fill="#6C3CE1" opacity="0.35"/>
+  <circle cx="498" cy="285" r="1.5" fill="#6C3CE1" opacity="0.25"/>
+  <circle cx="526" cy="285" r="1.5" fill="#6C3CE1" opacity="0.25"/>
+
+  <!-- Footer -->
+  <text x="512" y="460" font-family="Arial, Helvetica, sans-serif" font-size="12" fill="#444444" text-anchor="middle" letter-spacing="2">Real‑time chat • ECHOMOJI • Offline ready</text>
+
+  <ellipse cx="512" cy="232" rx="180" ry="40" fill="#6C3CE1" opacity="0.04"/>
+</svg>

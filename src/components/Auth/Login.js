@@ -1,6 +1,15 @@
+// src/components/Auth/Login.js
 import React, { useState } from 'react';
 import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '../../services/firebase';
+import { auth, db } from '../../services/firebase';
+import { ref, set, get, push, serverTimestamp } from 'firebase/database';
+
+// ─── Demo constants ────────────────────────────────────────────
+const DEMO_EMAIL = 'demo@echoty.xyz';
+const DEMO_PASSWORD = 'demodemo';
+const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
+const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
+const DEMO_AVATAR = 'https://echoty.xyz/videos/library/Animation Smile GIF.gif';
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -25,6 +34,54 @@ const Login = () => {
       }
     } catch (err) {
       alert(err.message);
+    }
+  };
+
+  const handleDemoLogin = async () => {
+    try {
+      await signInWithEmailAndPassword(auth, DEMO_EMAIL, DEMO_PASSWORD);
+
+      const profileRef = ref(db, `profiles/${DEMO_UID}`);
+      await set(profileRef, {
+        name: 'Demo User',
+        avatar: DEMO_AVATAR,
+        videoUrl: DEMO_AVATAR,
+        mood: 'happy',
+        bio: 'Trying ECHO! 🌊',
+        isDemo: true,
+        createdAt: Date.now(),
+        lastActive: Date.now(),
+      });
+
+      const chatId = [SUPPORT_UID, DEMO_UID].sort().join('_');
+      const chatMessagesRef = ref(db, `chats/${chatId}/messages`);
+      const snapshot = await get(chatMessagesRef);
+      if (!snapshot.exists()) {
+        const welcomeMsgRef = push(chatMessagesRef);
+        await set(welcomeMsgRef, {
+          senderId: SUPPORT_UID,
+          receiverId: DEMO_UID,
+          type: 'text',
+          text: 'Welcome to ECHO! How can we help you?',
+          timestamp: serverTimestamp(),
+          isRead: true,
+        });
+      }
+
+      const supportChatRef = ref(db, `userChats/${DEMO_UID}/${SUPPORT_UID}`);
+      await set(supportChatRef, {
+        id: SUPPORT_UID,
+        partnerName: 'ECHO Support',
+        partnerAvatar: '',
+        lastMessage: 'Welcome to ECHO! How can we help you?',
+        lastSenderId: SUPPORT_UID,
+        lastUpdated: Date.now(),
+        unreadCount: 0,
+      });
+
+      // ✅ REMOVED: setting support user's chat entry (avoid permission error)
+    } catch (err) {
+      alert('Demo login failed: ' + err.message);
     }
   };
 
@@ -56,6 +113,33 @@ const Login = () => {
             WebkitTextFillColor: 'transparent',
           }}>ECHO</div>
           <p style={{ color: '#888', fontSize: '14px', marginTop: '4px' }}>The future of conversations</p>
+        </div>
+
+        <button
+          onClick={handleDemoLogin}
+          style={{
+            width: '100%',
+            padding: '12px',
+            borderRadius: '50px',
+            background: 'linear-gradient(135deg, #10B981, #059669)',
+            border: 'none',
+            color: '#fff',
+            fontSize: '16px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            marginBottom: '16px',
+            transition: 'transform 0.2s ease',
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
+          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          🚀 Try Demo
+        </button>
+
+        <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
+          <hr style={{ flex: 1, border: 'none', borderTop: '1px solid rgba(255,255,255,0.06)' }} />
+          <span style={{ padding: '0 12px', color: '#666', fontSize: '12px' }}>or</span>
+          <hr style={{ flex: 1, border: 'none', borderTop: '1px solid rgba(255,255,255,0.06)' }} />
         </div>
 
         <button

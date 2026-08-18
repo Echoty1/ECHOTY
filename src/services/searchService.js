@@ -1,7 +1,7 @@
 // src/services/searchService.js
 import { db } from './firebase';
-import { ref, query, orderByChild, startAt, endAt, limitToFirst, get } from 'firebase/database';
-import { getCache, setCache } from './cacheService';
+import { ref, get } from 'firebase/database';
+import { getCache, setCache, getProfile as getCachedProfile } from './cacheService';
 import { getKeys, removeItem } from './storageService';
 
 const SEARCH_TIMEOUT = 3000;
@@ -9,10 +9,15 @@ const SEARCH_CACHE_TTL = 5 * 60; // 5 minutes
 
 let fullIndexCache = null;
 
-/**
- * Fast pre-fetches profile search index as soon as user opens the app or website
- */
+const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
+const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
+
 export const prefetchProfilesIndex = async (currentUserId) => {
+  if (currentUserId === DEMO_UID) {
+    console.log('🚫 Skipping profile prefetch for demo user.');
+    return;
+  }
+
   try {
     const cached = await getCache('search_full_index');
     if (cached) {
@@ -21,8 +26,7 @@ export const prefetchProfilesIndex = async (currentUserId) => {
     }
 
     const profilesRef = ref(db, 'profiles');
-    const q = query(profilesRef, orderByChild('searchName'), limitToFirst(150));
-    const snapshot = await get(q);
+    const snapshot = await get(profilesRef);
     const data = snapshot.val();
 
     if (data) {
@@ -54,9 +58,6 @@ export const prefetchProfilesIndex = async (currentUserId) => {
   }
 };
 
-/**
- * Ultra-fast profile search with memory pre-fetch, 1-char threshold & caching
- */
 export const searchProfiles = async (
   queryText,
   currentUserId,
@@ -69,10 +70,44 @@ export const searchProfiles = async (
     return { results: [], total: 0, hasMore: false };
   }
 
+  // ─── Demo: only return support if the query matches support's name ──
+  if (currentUserId === DEMO_UID) {
+    let supportProfile = getCachedProfile(SUPPORT_UID);
+    if (!supportProfile) {
+      try {
+        const snap = await get(ref(db, `profiles/${SUPPORT_UID}`));
+        supportProfile = snap.exists() ? snap.val() : null;
+      } catch (_) {
+        supportProfile = null;
+      }
+    }
+    if (supportProfile) {
+      const supportName = (supportProfile.name || '').toLowerCase();
+      const supportUsername = (supportProfile.username || '').toLowerCase();
+      const supportSearchName = (supportProfile.searchName || '').toLowerCase();
+      // Check if query matches support's name or username
+      if (supportName.includes(trimmed) || supportUsername.includes(trimmed) || supportSearchName.includes(trimmed)) {
+        return {
+          results: [{ id: SUPPORT_UID, ...supportProfile, name: supportProfile.name || 'ECHO Support' }],
+          total: 1,
+          hasMore: false,
+        };
+      } else {
+        // No match: return empty (UI will show custom message)
+        return { results: [], total: 0, hasMore: false };
+      }
+    }
+    return { results: [], total: 0, hasMore: false };
+  }
+
+  // ─── Normal search flow ──────────────────────────────────────
   const cacheKey = `search_users_${trimmed}`;
   const cached = await getCache(cacheKey);
   if (cached) {
-    const filtered = cached.filter((user) => user.id !== currentUserId);
+    let filtered = cached.filter((user) => user.id !== currentUserId);
+    if (currentUserId !== SUPPORT_UID) {
+      filtered = filtered.filter(u => u.id !== DEMO_UID);
+    }
     const paginated = filtered.slice(offset, offset + limit);
     return {
       results: paginated,
@@ -81,87 +116,72 @@ export const searchProfiles = async (
     };
   }
 
-  // Check pre-fetched local memory cache first for instant sub-millisecond return
-  if (fullIndexCache && fullIndexCache.length > 0) {
-    const matched = fullIndexCache.filter(
-      (u) =>
-        u.id !== currentUserId &&
-        (u.name?.toLowerCase().includes(trimmed) ||
-          u.searchName?.toLowerCase().includes(trimmed) ||
-          u.username?.toLowerCase().includes(trimmed))
-    );
-    if (matched.length > 0) {
-      await setCache(cacheKey, matched, SEARCH_CACHE_TTL);
-      const paginated = matched.slice(offset, offset + limit);
-      return {
-        results: paginated,
-        total: matched.length,
-        hasMore: offset + limit < matched.length,
-      };
-    }
-  }
-
-  // Firebase Realtime DB Query Fallback
+  // ─── Fallback: fetch all profiles and filter client‑side ──
   try {
     const profilesRef = ref(db, 'profiles');
-    const q = query(
-      profilesRef,
-      orderByChild('searchName'),
-      startAt(trimmed),
-      endAt(trimmed + '\uf8ff'),
-      limitToFirst(limit + offset + 5)
-    );
-
     const snapshot = await Promise.race([
-      get(q),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Search timeout')), timeoutMs)
-      ),
+      get(profilesRef),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Search timeout')), timeoutMs)),
     ]);
 
     const data = snapshot.val();
-    if (data) {
-      const allResults = Object.entries(data)
-        .map(([uid, profile]) => ({
-          id: uid,
-          name: profile.name || profile.displayName || profile.username || 'Unknown User',
-          username: profile.username || '',
-          displayName: profile.displayName || '',
-          country: profile.country || '',
-          city: profile.city || '',
-          interests: profile.interests || [],
-          skills: profile.skills || [],
-          status: profile.status || 'Active',
-          lastActive: profile.lastActive || 'Just now',
-          bio: profile.bio || '',
-          avatar: profile.avatar || '',
-          mood: profile.mood || 'neutral',
-          activeSkin: profile.activeSkin || null,
-          searchName: profile.searchName || '',
-        }))
-        .filter((u) => u.id !== currentUserId);
+    if (!data) return { results: [], total: 0, hasMore: false };
 
-      if (allResults.length > 0) {
-        await setCache(cacheKey, allResults, SEARCH_CACHE_TTL);
-      }
+    let allResults = Object.entries(data)
+      .map(([uid, profile]) => ({
+        id: uid,
+        name: profile.name || profile.displayName || profile.username || 'Unknown User',
+        username: profile.username || '',
+        displayName: profile.displayName || '',
+        country: profile.country || '',
+        city: profile.city || '',
+        interests: profile.interests || [],
+        skills: profile.skills || [],
+        status: profile.status || 'Active',
+        lastActive: profile.lastActive || 'Just now',
+        bio: profile.bio || '',
+        avatar: profile.avatar || '',
+        mood: profile.mood || 'neutral',
+        activeSkin: profile.activeSkin || null,
+        searchName: profile.searchName || '',
+      }))
+      .filter((u) => {
+        if (u.id === currentUserId) return false;
+        if (currentUserId !== SUPPORT_UID && u.id === DEMO_UID) return false;
 
-      const paginated = allResults.slice(offset, offset + limit);
-      return {
-        results: paginated,
-        total: allResults.length,
-        hasMore: offset + limit < allResults.length,
-      };
+        const name = (u.name || '').toLowerCase();
+        const username = (u.username || '').toLowerCase();
+        const searchName = (u.searchName || '').toLowerCase();
+        return name.includes(trimmed) || username.includes(trimmed) || searchName.includes(trimmed);
+      });
+
+    allResults.sort((a, b) => {
+      const aName = (a.name || '').toLowerCase();
+      const bName = (b.name || '').toLowerCase();
+      const aStartsWith = aName.startsWith(trimmed);
+      const bStartsWith = bName.startsWith(trimmed);
+      if (aStartsWith && !bStartsWith) return -1;
+      if (!aStartsWith && bStartsWith) return 1;
+      return aName.localeCompare(bName);
+    });
+
+    if (allResults.length > 0) {
+      await setCache(cacheKey, allResults, SEARCH_CACHE_TTL);
     }
+
+    const paginated = allResults.slice(offset, offset + limit);
+    return {
+      results: paginated,
+      total: allResults.length,
+      hasMore: offset + limit < allResults.length,
+    };
   } catch (err) {
-    console.warn(`⚠️ Indexed query fallback: ${err.message}`);
+    console.warn(`⚠️ Search failed: ${err.message}`);
   }
 
   return { results: [], total: 0, hasMore: false };
 };
 
-/**
- * Searches users or messages with instant cache
- */
 export const searchEntities = async (queryTerm, type = 'users', currentUserId = null) => {
   const trimmed = queryTerm.trim();
   if (!trimmed) return [];
@@ -182,9 +202,6 @@ export const searchEntities = async (queryTerm, type = 'users', currentUserId = 
   }
 };
 
-/**
- * Clears search cache entries from device storage
- */
 export const clearSearchCache = async () => {
   try {
     const keys = await getKeys();

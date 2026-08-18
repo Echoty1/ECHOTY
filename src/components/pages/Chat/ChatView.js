@@ -33,12 +33,17 @@ import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import { loadMessagesFromCache, upsertMessageInCache, deleteMessageFromCache } from '../../../services/messageStorage';
 import { cacheMedia } from '../../../utils/mediaCache';
+import { cleanCachedMessagesForChat } from '../../../services/messageCleanup';
 import './ChatView.css';
 
 const ECHO_AI_AVATAR = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
+
+// ─── Demo & Support constants ──────────────────────────────────
+const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
+const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 
 const sanitizeName = (rawName, userId) => {
   if (!rawName) return 'User';
@@ -81,7 +86,7 @@ const ChatView = () => {
   const captionPreviewRef = useRef(null);
 
   // ── Track which input was last focused ──────────────────────
-  const focusedField = useRef('main'); // 'main' or 'caption'
+  const focusedField = useRef('main');
 
   // ── Helper to detect ECHOMOJI pattern ──────────────────────
   const parseEchoMood = (text) => {
@@ -110,6 +115,10 @@ const ChatView = () => {
   const markReadTimeout = useRef(null);
   const hasMarkedRead = useRef(false);
 
+  // ─── Minimum loading time to show skeleton ──────────────────
+  const [minLoadingTimePassed, setMinLoadingTimePassed] = useState(false);
+  const loadingTimerRef = useRef(null);
+
   // ─── WHATSAPP-STYLE UNREAD LOGIC ─────────────────────────────
   const clearUnreadInstantly = () => {
     if (!userId) return;
@@ -121,9 +130,6 @@ const ChatView = () => {
 
   const markMessagesAsRead = async () => {
     if (!user?.uid || !userId || isEchoAi) return;
-    if (hasMarkedRead.current) {
-      console.log(`🔄 [Unread] Background sync for ${userId}`);
-    }
 
     const cId = [user.uid, userId].sort().join('_');
 
@@ -183,10 +189,55 @@ const ChatView = () => {
         unreadCount: 0,
       });
 
+      window.dispatchEvent(new CustomEvent('chat-unread-cleared', {
+        detail: { partnerId: userId }
+      }));
+
       clearMessageCache(cId);
       console.log(`✅ [Unread] Database sync complete for ${userId}`);
     } catch (err) {
-      console.warn('⚠️ [Unread] markMessagesAsRead error:', err);
+      console.warn('⚠️ [Unread] markMessagesAsRead error:', err.message);
+    }
+  };
+
+  // ─── Auto‑clear support‑demo conversations older than 24h ──
+  const clearOldSupportDemoMessages = async () => {
+    // Only run if this is the support‑demo chat
+    const isSupportDemoChat =
+      (user?.uid === SUPPORT_UID && userId === DEMO_UID) ||
+      (user?.uid === DEMO_UID && userId === SUPPORT_UID);
+
+    if (!isSupportDemoChat) return;
+
+    const cId = [SUPPORT_UID, DEMO_UID].sort().join('_');
+    const now = Date.now();
+    const twentyFourHoursAgo = now - 24 * 60 * 60 * 1000;
+
+    try {
+      const messagesRef = ref(db, `chats/${cId}/messages`);
+      const snapshot = await get(messagesRef);
+      if (!snapshot.exists()) return;
+
+      const data = snapshot.val();
+      const updates = {};
+      let hasOldMessages = false;
+
+      Object.entries(data).forEach(([key, msg]) => {
+        const timestamp = msg.timestamp || 0;
+        const msgTime = typeof timestamp === 'number' ? timestamp : (timestamp?.getTime?.() || 0);
+        if (msgTime > 0 && msgTime < twentyFourHoursAgo) {
+          updates[`chats/${cId}/messages/${key}`] = null;
+          hasOldMessages = true;
+        }
+      });
+
+      if (hasOldMessages) {
+        await update(ref(db), updates);
+        clearMessageCache(cId);
+        console.log(`🧹 Cleared old support‑demo messages (>24h)`);
+      }
+    } catch (err) {
+      console.warn('Failed to clear old support‑demo messages:', err);
     }
   };
 
@@ -194,13 +245,39 @@ const ChatView = () => {
   useEffect(() => {
     if (!user?.uid || !userId || isEchoAi) return;
     clearUnreadInstantly();
+
+    // Run the cleanup for support‑demo chat
+    clearOldSupportDemoMessages();
+
     const syncTimer = setTimeout(() => {
       if (isMounted.current) {
         markMessagesAsRead();
       }
     }, 100);
-    return () => clearTimeout(syncTimer);
+
+    // Periodic cleanup every hour while chat is open
+    const cleanupInterval = setInterval(() => {
+      clearOldSupportDemoMessages();
+    }, 60 * 60 * 1000); // 1 hour
+
+    return () => {
+      clearTimeout(syncTimer);
+      clearInterval(cleanupInterval);
+    };
   }, [user?.uid, userId, isEchoAi]);
+
+  // ─── Skeleton minimum loading time ──────────────────────────
+  useEffect(() => {
+    setMinLoadingTimePassed(false);
+    if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+    loadingTimerRef.current = setTimeout(() => {
+      setMinLoadingTimePassed(true);
+    }, 300);
+
+    return () => {
+      if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
+    };
+  }, [userId]);
 
   // ─── Helper: Start a reply ──────────────────────────────────
   const handleReply = (msg) => {
@@ -264,8 +341,6 @@ const ChatView = () => {
 
     try {
       await remove(ref(db, `chats/${cId}/messages/${messageId}`));
-
-      // Delete from IndexedDB cache
       await deleteMessageFromCache(cId, messageId);
 
       const messagesRef = ref(db, `chats/${cId}/messages`);
@@ -316,9 +391,11 @@ const ChatView = () => {
       }
 
       clearMessageCache(cId);
+      // ─── Clean up any stale messages from cache ──────────────
+      await cleanCachedMessagesForChat(cId);
     } catch (err) {
-      console.error('Failed to delete message:', err);
-      alert('Failed to delete message. Please try again.');
+      console.warn('Delete failed:', err.message);
+      setDeletingMessageId(null);
     } finally {
       setDeletingMessageId(null);
     }
@@ -352,7 +429,6 @@ const ChatView = () => {
         lastEditedAt: serverTimestamp(),
       });
 
-      // Update IndexedDB cache
       const updatedMsg = { ...editingMessage, text: newText, isEdited: true };
       await upsertMessageInCache(cId, updatedMsg);
 
@@ -409,7 +485,6 @@ const ChatView = () => {
         lastEditedAt: serverTimestamp(),
       });
 
-      // Update IndexedDB cache
       const updatedMsg = { ...editingMediaMessage, caption: newCaption, isEdited: true };
       await upsertMessageInCache(cId, updatedMsg);
 
@@ -477,6 +552,10 @@ const ChatView = () => {
       if (isMounted.current && cachedMessages.length > 0) {
         setMessages(cachedMessages);
         setLoadingMessages(false);
+        // ─── Clean up stale messages in the background ──────────
+        cleanCachedMessagesForChat(cId).then(() => {
+          // Optionally re-fetch to update UI if any removed
+        });
         setTimeout(() => scrollToBottom(false), 50);
       }
     });
@@ -518,13 +597,12 @@ const ChatView = () => {
         }
       }
 
-      // Also store in localStorage cache (legacy)
       try {
         setCache(cacheKey, newMessages);
       } catch (e) { /* ignore */ }
       clearMessageCache(cId);
 
-      // ─── Unread marking (unchanged) ──────────────────────────
+      // ─── Unread marking ──────────────────────────────────────────
       const hasUnread = newMessages.some(
         msg => msg.receiverId === user.uid && msg.isRead === false
       );
@@ -1118,6 +1196,11 @@ const ChatView = () => {
       setTimeout(() => scrollToBottom(true), 100);
     } catch (err) {
       console.error('Failed to send text:', err);
+      if (err.message && err.message.includes('permission_denied')) {
+        alert('Unable to send message. Please refresh and try again.');
+      } else {
+        alert('Failed to send message. Please try again.');
+      }
     }
   };
 
@@ -1323,7 +1406,6 @@ const ChatView = () => {
 
   // ─── Handle emoji selection (with cursor insertion) ──────────
   const handleEmojiSelect = (emoji) => {
-    // Use the ref to determine which input was last focused
     const target = focusedField.current;
 
     if (target === 'caption' && captionInputRef.current) {
@@ -1341,7 +1423,6 @@ const ChatView = () => {
       return;
     }
 
-    // Default to main input
     if (inputRef.current) {
       const input = inputRef.current;
       const start = input.selectionStart;
@@ -1355,7 +1436,6 @@ const ChatView = () => {
         input.setSelectionRange(newCursor, newCursor);
       }, 0);
     } else {
-      // Fallback: append
       setNewMessage(prev => prev + emoji);
       setTimeout(() => inputRef.current?.focus(), 0);
     }
@@ -1365,7 +1445,8 @@ const ChatView = () => {
     <div className="chat-view">
       <VideoAudioProvider>
         <div className="messages-container">
-          {loadingMessages && messages.length === 0 ? (
+          {/* ─── Show skeleton if still loading and min time not passed ── */}
+          {(loadingMessages || !minLoadingTimePassed) && messages.length === 0 ? (
             <div className="chat-skeleton-list">
               <SkeletonMessage isOwn={false} />
               <SkeletonMessage isOwn={true} />

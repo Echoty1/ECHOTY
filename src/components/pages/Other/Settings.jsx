@@ -11,8 +11,11 @@ import {
   GoogleAuthProvider,
   EmailAuthProvider,
 } from 'firebase/auth';
-import { removeAllReferencesToUser } from '../../../services/accountCleanup'; // ✅ Import
+import { removeAllReferencesToUser } from '../../../services/accountCleanup';
 import './Settings.css';
+
+// ─── Demo constants ────────────────────────────────────────────
+const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Settings = () => {
   const { user } = useAuth();
@@ -26,6 +29,7 @@ const Settings = () => {
 
   const userName = user?.name || user?.displayName || user?.email?.split('@')[0] || '';
   const isGoogleUser = user?.providerData?.some(p => p.providerId === 'google.com');
+  const isDemoUser = user?.uid === DEMO_UID;
 
   // Redirect after deletion animation
   useEffect(() => {
@@ -38,6 +42,10 @@ const Settings = () => {
   }, [step, navigate]);
 
   const handleDeleteRequest = () => {
+    if (isDemoUser) {
+      setError('Demo accounts cannot be deleted.');
+      return;
+    }
     setStep('verify');
     setError('');
   };
@@ -111,7 +119,7 @@ const Settings = () => {
       });
       await Promise.all(deletePromises);
 
-      // ✅ 2. Remove all references to this user from other users' userChats
+      // 2. Remove all references to this user from other users' userChats
       await removeAllReferencesToUser(uid);
 
       // 3. Delete the user's authentication account
@@ -152,8 +160,19 @@ const Settings = () => {
           <h2><i className="fas fa-exclamation-triangle" /> Danger Zone</h2>
           <p>This action is irreversible. Deleting your account will permanently remove all your data, including messages, profile, and Echoes.</p>
 
+          {isDemoUser && (
+            <p style={{ color: '#f59e0b', marginBottom: '12px' }}>
+              <i className="fas fa-info-circle" /> Demo accounts cannot be deleted.
+            </p>
+          )}
+
           {step === 'idle' && (
-            <button className="btn-danger" onClick={handleDeleteRequest}>
+            <button 
+              className="btn-danger" 
+              onClick={handleDeleteRequest}
+              disabled={isDemoUser}
+              style={{ opacity: isDemoUser ? 0.5 : 1, cursor: isDemoUser ? 'not-allowed' : 'pointer' }}
+            >
               <i className="fas fa-trash-alt" /> Delete Account
             </button>
           )}

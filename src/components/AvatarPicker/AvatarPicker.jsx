@@ -1,7 +1,7 @@
 // src/components/AvatarPicker/AvatarPicker.jsx
 import React from 'react';
 
-const AvatarPicker = ({ isOpen, onClose, onUploadImage, onUploadGif, onChooseLibrary, uploading }) => {
+const AvatarPicker = ({ isOpen, onClose, onUploadImage, onChooseLibrary, uploading, isDemo }) => {
   if (!isOpen) return null;
 
   return (
@@ -9,27 +9,31 @@ const AvatarPicker = ({ isOpen, onClose, onUploadImage, onUploadGif, onChooseLib
       <div className="avatar-picker-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="avatar-picker-handle" />
         <h3>Change Profile Avatar</h3>
+        {isDemo && <p style={{ color: '#f59e0b', fontSize: '14px', marginBottom: '12px' }}>Demo users can only choose from the library.</p>}
         <div className="avatar-picker-options">
           <button 
             className="avatar-picker-option"
             onClick={onUploadImage}
-            disabled={uploading}
+            disabled={uploading || isDemo}
+            style={{ opacity: (uploading || isDemo) ? 0.5 : 1 }}
           >
             <span className="avatar-picker-icon">📷</span>
             <span>Upload Image</span>
           </button>
+
+          {/* ─── Upload GIF removed permanently ────────────────── */}
+          {/* <button ...>Upload GIF</button> */}
 
           <button 
             className="avatar-picker-option"
             onClick={onChooseLibrary}
             disabled={uploading}
           >
-            <span className="avatar-picker-icon">🎥</span>
+            <span className="avatar-picker-icon">📚</span>
             <span>Choose from Library</span>
           </button>
         </div>
 
-        {/* Dynamic Cancel / Uploading Status Button */}
         <button 
           className="avatar-picker-cancel" 
           onClick={uploading ? undefined : onClose}

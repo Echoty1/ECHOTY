@@ -27,6 +27,7 @@ import NetworkStatus from './components/common/NetworkStatus';
 import UpdatePopup from './components/UpdatePopup/UpdatePopup';
 import InstallPopup from './components/InstallPopup/InstallPopup';
 import InstallBanner from './components/common/InstallBanner';
+import { cleanAllCachedMessages } from './services/messageCleanup';
 import { db } from './services/firebase';
 import { clearAllIndexedDB } from './services/indexedDBService';
 
@@ -200,6 +201,36 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, []);
 
+
+
+  // ─── Clean up old localStorage cache (except essential small keys) ──
+  const cleanLocalStorage = () => {
+    try {
+      const keys = Object.keys(localStorage);
+      const toRemove = keys.filter(key =>
+        key.startsWith('echo_cache_') &&
+        key !== 'echo_has_recovered_' + user?.uid &&
+        key !== 'echo_app_version' &&
+        key !== 'echo_changelog_version' &&
+        key !== 'echo_install_popup_dismissed_until' &&
+        key !== 'echo_update_shown'
+      );
+      toRemove.forEach(key => localStorage.removeItem(key));
+      if (toRemove.length > 0) {
+        console.log(`🧹 Cleaned ${toRemove.length} localStorage cache entries`);
+      }
+    } catch (e) {
+      console.warn('LocalStorage cleanup failed:', e);
+    }
+  };
+
+  // ─── Run cleanup after user loads ─────────────────────────────
+  useEffect(() => {
+    if (user) {
+      cleanLocalStorage();
+    }
+  }, [user]);
+
   // ─── Fetch Play Store URL (always) ──────────────────────────
   useEffect(() => {
     const fetchConfig = async () => {
@@ -285,6 +316,28 @@ function AppContent() {
     }
   }, [user?.uid, fetchProfile]);
 
+  // Inside AppContent, after the profile fetch:
+  useEffect(() => {
+    if (user?.uid) {
+      fetchProfile(user.uid);
+
+      // ─── Clean up stale cached messages ──────────────────────
+      const cleanup = async () => {
+        try {
+          // Get the chat list (either from context or from IndexedDB)
+          const chatList = await getChatList(user.uid);
+          if (chatList && chatList.length > 0) {
+            const removed = await cleanAllCachedMessages(user.uid, chatList);
+            if (removed > 0) {
+              console.log(`🧹 Cleaned ${removed} stale messages from cache`);
+            }
+          }
+        } catch (_) {}
+      };
+      cleanup();
+    }
+  }, [user?.uid, fetchProfile]);
+
   const showLoading = loading || !minTimePassed;
 
   if (showLoading) return <LoadingScreen />;
@@ -355,7 +408,11 @@ function App() {
 
     if (storedVersion !== CURRENT_VERSION) {
       // Clear localStorage (keep only essential keys)
-      const keysToKeep = ['echo_install_popup_dismissed_until', 'echo_update_shown', 'echo_changelog_version'];
+      const keysToKeep = [
+        'echo_install_popup_dismissed_until',
+        'echo_update_shown',
+        'echo_changelog_version'
+      ];
       const allKeys = Object.keys(localStorage);
       for (const key of allKeys) {
         if (!keysToKeep.includes(key)) {
