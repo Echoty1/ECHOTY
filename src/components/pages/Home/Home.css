@@ -95,6 +95,7 @@
   transform: scale(1.05);
 }
 
+/* ─── Avatar container ───────────────────────────────────────── */
 .live-avatar {
   position: relative;
   width: 72px;
@@ -103,12 +104,54 @@
   overflow: hidden;
   background: #1a1a24;
   border: 2px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* Ensure the Avatar component fills the container properly */
+.live-avatar > * {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+/* Fallback for the Avatar div (initials) */
+.live-avatar .initials-avatar {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 28px;
+  color: #fff;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  border-radius: 50%;
+}
+
+.online-indicator {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #10B981;
+  border: 2px solid #0A0A0F;
+}
+
+.online-indicator.offline {
+  background: #6B7280;
 }
 
 .live-avatar-img {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 50%;
 }
 
 .live-avatar-placeholder {
@@ -121,17 +164,7 @@
   color: #fff;
   font-weight: 700;
   font-size: 28px;
-}
-
-.online-indicator {
-  position: absolute;
-  bottom: 2px;
-  right: 2px;
-  width: 14px;
-  height: 14px;
   border-radius: 50%;
-  background: #10B981;
-  border: 2px solid #0A0A0F;
 }
 
 .live-username {
@@ -198,159 +231,11 @@
     font-size: 13px;
     max-width: 70px;
   }
-}
-
-/* ─── Skeleton styles ───────────────────────────────────────── */
-.live-avatar-skeleton {
-  width: 72px;
-  height: 72px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.06);
-  animation: pulse-skeleton 1.5s infinite;
-}
-
-/* ─── Live Section ──────────────────────────────────────────── */
-.live-avatar {
-  position: relative;
-  width: 88px;
-  height: 88px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: #1a1a24;
-  border: 2px solid rgba(255, 255, 255, 0.08);
-}
-
-.live-avatar-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #6C3CE1, #EC4899);
-  color: #fff;
-  font-weight: 700;
-  font-size: 34px;
-}
-
-.live-username {
-  font-size: 16px;
-  font-weight: 600;
-  color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 90px;
-  text-align: center;
-}
-
-.live-user-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  min-width: 100px;
-  flex-shrink: 0;
-  cursor: pointer;
-  transition: transform 0.15s;
-  padding: 4px;
-}
-
-/* Skeleton sizes */
-.skeleton-avatar {
-  width: 88px;
-  height: 88px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.06);
-}
-
-/* Responsive */
-@media (max-width: 480px) {
-  .live-avatar {
-    width: 72px;
-    height: 72px;
-  }
-  .live-username {
-    font-size: 14px;
-    max-width: 75px;
-  }
-  .live-user-card {
-    min-width: 80px;
+  .live-avatar .initials-avatar {
+    font-size: 24px;
   }
   .skeleton-avatar {
-    width: 72px;
-    height: 72px;
-  }
-}
-
-/* ─── Live Section ──────────────────────────────────────────── */
-.live-avatar {
-  position: relative;
-  width: 88px;
-  height: 88px;
-  border-radius: 50%;
-  overflow: hidden;
-  background: #1a1a24;
-  border: 2px solid rgba(255, 255, 255, 0.08);
-}
-
-.live-avatar-placeholder {
-  width: 100%;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #6C3CE1, #EC4899);
-  color: #fff;
-  font-weight: 700;
-  font-size: 34px;
-}
-
-.live-username {
-  font-size: 16px;
-  font-weight: 600;
-  color: #fff;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 90px;
-  text-align: center;
-}
-
-.live-user-card {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  min-width: 100px;
-  flex-shrink: 0;
-  cursor: pointer;
-  transition: transform 0.15s;
-  padding: 4px;
-}
-
-/* Skeleton sizes */
-.skeleton-avatar {
-  width: 88px;
-  height: 88px;
-  border-radius: 50%;
-  background: rgba(255,255,255,0.06);
-}
-
-/* Responsive */
-@media (max-width: 480px) {
-  .live-avatar {
-    width: 72px;
-    height: 72px;
-  }
-  .live-username {
-    font-size: 14px;
-    max-width: 75px;
-  }
-  .live-user-card {
-    min-width: 80px;
-  }
-  .skeleton-avatar {
-    width: 72px;
-    height: 72px;
+    width: 64px;
+    height: 64px;
   }
 }

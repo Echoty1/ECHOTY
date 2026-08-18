@@ -24,6 +24,7 @@ import { preloadMedia, useCachedImage } from '../../../utils/mediaCache';
 import { fetchLatestMessage } from '../../../services/messageCache';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { getChatList, storeChatList } from '../../../services/indexedDBService';
+import Avatar from '../../common/Avatar';
 
 const CHAT_CHUNK_SIZE = 20;
 
@@ -195,38 +196,24 @@ const ChatItem = memo(({ chat, onStartChat }) => {
   const profile = profiles[chat.id] || {};
   const isOnline = chat.online;
   const hasUnread = chat.unreadCount > 0;
-  const avatarUrl = chat.avatar || '';
-  const cachedAvatar = useCachedImage(avatarUrl, null);
-
-  const mood = profile.mood || chat.mood || 'neutral';
   const skinId = profile.activeSkin || chat.activeSkin || null;
   const skin = skinId ? getSkinById(skinId) : null;
-
-  const isProfileLoaded = profile.name !== undefined;
-  const showSkeleton = chat.name === 'User' && !isProfileLoaded;
+  const mood = profile.mood || chat.mood || 'neutral';
 
   return (
     <div className="chat-item regular-chat-item" onClick={() => onStartChat(chat)}>
       <div className="chat-avatar">
-        {cachedAvatar ? (
-          <img src={cachedAvatar} alt={chat.name} className="user-profile-img" />
-        ) : (
-          <div className="avatar-placeholder">{chat.name?.[0]?.toUpperCase() || 'U'}</div>
-        )}
+        <Avatar src={chat.avatar} name={chat.name} size={48} />
         <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
         {hasUnread && <span className="unread-badge">{chat.unreadCount}</span>}
         {chat.isDeleted && <span className="archived-badge" title="Account deleted – archived">📁</span>}
       </div>
       <div className="chat-info">
         <div className="chat-title-row">
-          {showSkeleton ? (
-            <div className="skeleton-text" style={{ width: '80px', height: '16px' }} />
-          ) : (
-            <span className="chat-name">
-              {chat.name}
-              {chat.isDeleted && <span className="archived-label"> (archived)</span>}
-            </span>
-          )}
+          <span className="chat-name">
+            {chat.name}
+            {chat.isDeleted && <span className="archived-label"> (archived)</span>}
+          </span>
         </div>
         <div className="chat-last" style={{ fontWeight: hasUnread ? 700 : 400 }}>
           {chat.lastMessage || 'Start chatting...'}
@@ -325,7 +312,6 @@ const Chats = () => {
   }, []);
 
   // ─── Listen for instant unread clear from ChatView ──────────
-  // Already present in Chats.jsx
   useEffect(() => {
     const handleUnreadCleared = (event) => {
       const { partnerId } = event.detail;
@@ -650,11 +636,7 @@ const Chats = () => {
                   onClick={() => startChat(person)}
                 >
                   <div className="chat-avatar">
-                    {person.avatar ? (
-                      <img src={person.avatar} alt={person.name} className="user-profile-img" />
-                    ) : (
-                      <div className="avatar-placeholder">{person.name?.[0]?.toUpperCase() || 'U'}</div>
-                    )}
+                    <Avatar src={person.avatar} name={person.name} size={48} />
                     <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
                   </div>
                   <div className="chat-info">

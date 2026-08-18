@@ -5,7 +5,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useProfile } from '../../contexts/ProfileContext';
 import ECHOMOJI from '../UI/ECHOMOJI';
 import { getSkinById } from '../../constants/echomoji';
-import { useCachedImage, preloadMedia } from '../../utils/mediaCache';
+import Avatar from '../common/Avatar';
+import { preloadMedia } from '../../utils/mediaCache';
 
 // Static direct asset path for ECHO AI
 const ECHO_AI_GIF = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
@@ -26,8 +27,6 @@ const Navbar = memo(() => {
   const { user, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-
-  const [imgError, setImgError] = useState(false);
 
   const pathParts = location.pathname.split('/');
   const targetUserId = pathParts[1] === 'chat' ? pathParts[2] : undefined;
@@ -75,15 +74,6 @@ const Navbar = memo(() => {
       preloadMedia(chatAvatar);
     }
   }, [chatAvatar]);
-
-  // ── Reset imgError when avatar changes ──
-  useEffect(() => {
-    setImgError(false);
-  }, [chatAvatar]);
-
-  // ── Use cached avatar image (returns URL if not cached) ──
-  const cachedAvatar = useCachedImage(chatAvatar, null);
-  const avatarToShow = cachedAvatar || chatAvatar;
 
   // ── Determine online status for non-AI chat ──
   const isTargetOnline = targetUserId && !isEchoAiRoute ? isOnline(targetUserId) : false;
@@ -166,7 +156,6 @@ const Navbar = memo(() => {
                 height: '38px',
                 borderRadius: '50%',
                 overflow: 'hidden',
-                background: 'rgba(255,255,255,0.05)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -175,24 +164,7 @@ const Navbar = memo(() => {
                 position: 'relative',
               }}
             >
-              {avatarToShow && !imgError ? (
-                <img
-                  key={chatAvatar}
-                  src={avatarToShow}
-                  alt={chatName}
-                  onError={() => setImgError(true)}
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    display: 'block',
-                  }}
-                />
-              ) : (
-                <span style={{ color: '#fff', fontWeight: 700, fontSize: '15px' }}>
-                  {chatName[0]?.toUpperCase() || 'E'}
-                </span>
-              )}
+              <Avatar src={chatAvatar} name={chatName} size={38} />
               {partnerSkin && (
                 <div
                   style={{

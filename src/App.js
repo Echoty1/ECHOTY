@@ -192,19 +192,36 @@ function LoadingScreen() {
 
 // ─── AppContent ─────────────────────────────────────────────────
 function AppContent() {
-  const { user, loading, banInfo } = useAuth(); // ✅ Destructure banInfo
+  const { user, loading, banInfo } = useAuth();
   const { fetchProfile } = useProfile();
   const [minTimePassed, setMinTimePassed] = useState(false);
   const [showUpdatePopup, setShowUpdatePopup] = useState(false);
   const [showInstallPopup, setShowInstallPopup] = useState(false);
   const [playStoreUrl, setPlayStoreUrl] = useState('');
   const [appVersion] = useState(process.env.REACT_APP_VERSION || '1.0');
+  const [showDbClearedPopup, setShowDbClearedPopup] = useState(false);
 
   // ─── Minimum loading time (2s) ──────────────────────────────
   useEffect(() => {
     const timer = setTimeout(() => setMinTimePassed(true), 2000);
     return () => clearTimeout(timer);
   }, []);
+
+  // ─── Check for one‑time database cleared notification ────────
+  useEffect(() => {
+    if (user?.uid) {
+      const hasSeen = localStorage.getItem('echo_db_cleared_notification');
+      if (!hasSeen) {
+        setShowDbClearedPopup(true);
+      }
+    }
+  }, [user]);
+
+  const handleDbClearedDismiss = () => {
+    localStorage.setItem('echo_db_cleared_notification', 'true');
+    setShowDbClearedPopup(false);
+    window.location.reload();
+  };
 
   // ─── Clean up ALL cache keys from localStorage ──────────────
   const cleanLocalStorage = () => {
@@ -351,6 +368,23 @@ function AppContent() {
   // ─── Show BanScreen if user is banned ──────────────────────
   if (!showLoading && user && banInfo.isBanned) {
     return <BanScreen />;
+  }
+
+  // ─── Show Database Cleared Popup ──────────────────────────
+  if (!showLoading && user && showDbClearedPopup) {
+    return (
+      <div className="db-cleared-overlay">
+        <div className="db-cleared-modal">
+          <div className="db-cleared-icon">🗄️</div>
+          <h2>Database Update</h2>
+          <p>We have cleared and reset your data to improve performance and reliability.</p>
+          <p>Please refresh to continue using ECHO.</p>
+          <button className="db-cleared-btn" onClick={handleDbClearedDismiss}>
+            Refresh Now
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (showLoading) return <LoadingScreen />;

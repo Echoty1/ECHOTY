@@ -5,7 +5,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { db } from '../../../services/firebase';
 import { ref, onValue, get } from 'firebase/database';
-import { useCachedImage } from '../../../utils/mediaCache';
+import Avatar from '../../common/Avatar';
 import './Home.css';
 
 // ─── Demo constants ────────────────────────────────────────────
@@ -58,9 +58,6 @@ const Home = () => {
 
       // ─── Support user: show all users (including demo if online) ──
       if (isSupportUser) {
-        // Do not filter out demo; keep all onlineUids
-        // But we still need to exclude current user (already done)
-        // We'll fetch profiles for all
         if (onlineUids.length === 0) {
           setOnlineUsers([]);
           setLoading(false);
@@ -101,7 +98,6 @@ const Home = () => {
       }
 
       // ─── Normal users: show everyone except demo ──────────────
-      // Filter out demo user
       onlineUids = onlineUids.filter(uid => uid !== DEMO_UID);
 
       if (onlineUids.length === 0) {
@@ -148,26 +144,11 @@ const Home = () => {
     };
   }, [user, profiles, fetchProfile, isDemoUser, isSupportUser]);
 
-  // ─── Avatar with cache ──────────────────────────────────────
-  const AvatarWithCache = ({ profile }) => {
-    const cachedImage = useCachedImage(profile.avatar, null);
-    const name = profile.name || '';
-
-    if (cachedImage) {
-      return <img src={cachedImage} alt={name} className="live-avatar-img" />;
-    }
-    return (
-      <div className="live-avatar-placeholder">
-        {name[0]?.toUpperCase() || '?'}
-      </div>
-    );
-  };
-
-  const startChat = (uid, name) => {
+  const startChat = (uid, name, avatar) => {
     navigate(`/chat/${uid}`, {
       state: {
         userName: name || 'User',
-        userAvatar: profiles[uid]?.avatar || '',
+        userAvatar: avatar || '',
       },
     });
   };
@@ -216,12 +197,12 @@ const Home = () => {
                   <div
                     key={profile.uid}
                     className="live-user-card"
-                    onClick={() => startChat(profile.uid, profile.name)}
+                    onClick={() => startChat(profile.uid, profile.name, profile.avatar)}
                     role="button"
                     tabIndex={0}
                   >
                     <div className="live-avatar">
-                      <AvatarWithCache profile={profile} />
+                      <Avatar src={profile.avatar} name={profile.name} size={72} />
                       <span className={`online-indicator ${profile.online ? '' : 'offline'}`} />
                     </div>
                     <span className="live-username">{profile.name}</span>
