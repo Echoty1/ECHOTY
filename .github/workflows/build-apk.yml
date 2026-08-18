@@ -54,7 +54,7 @@ jobs:
         run: |
           cd android/app
           # Insert signingConfigs block after "android {"
-          sed -i '/android {/a \    signingConfigs {\n        release {\n            def keystorePropertiesFile = rootProject.file("keystore.properties")\n            def keystoreProperties = new Properties()\n            if (keystorePropertiesFile.exists()) {\n                keystoreProperties.load(new FileInputStream(keystorePropertiesFile))\n            }\n            storeFile file(keystoreProperties.getProperty('\''storeFile'\'', '\''app/echo-release.keystore'\''))\n            storePassword keystoreProperties.getProperty('\''storePassword'\'')\n            keyAlias keystoreProperties.getProperty('\''keyAlias'\'')\n            keyPassword keystoreProperties.getProperty('\''keyPassword'\'')\n        }\n    }\n' build.gradle
+          sed -i '/android {/a \    signingConfigs {\n        release {\n            def keystorePropertiesFile = rootProject.file("keystore.properties")\n            def keystoreProperties = new Properties()\n            if (keystorePropertiesFile.exists()) {\n                keystoreProperties.load(new FileInputStream(keystorePropertiesFile))\n            }\n            storeFile file(keystoreProperties.getProperty('\''storeFile'\'', '\''echo-release.keystore'\''))\n            storePassword keystoreProperties.getProperty('\''storePassword'\'')\n            keyAlias keystoreProperties.getProperty('\''keyAlias'\'')\n            keyPassword keystoreProperties.getProperty('\''keyPassword'\'')\n        }\n    }\n' build.gradle
 
           # Add signingConfig to the release buildType
           sed -i '/buildTypes {/,/}/ s/release {/release {\n            signingConfig signingConfigs.release/' build.gradle
@@ -83,10 +83,10 @@ jobs:
         run: |
           echo "${{ secrets.STORE_FILE_B64 }}" | base64 -d > android/app/echo-release.keystore
 
-      - name: Create keystore.properties
+      - name: Create keystore.properties with correct path
         run: |
           cat > android/keystore.properties << EOF
-          storeFile=app/echo-release.keystore
+          storeFile=echo-release.keystore
           storePassword=${{ secrets.STORE_PASSWORD }}
           keyAlias=${{ secrets.KEY_ALIAS }}
           keyPassword=${{ secrets.KEY_PASSWORD }}
