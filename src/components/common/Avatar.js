@@ -6,8 +6,14 @@ const getInitials = (name) => {
   if (!name) return 'U';
   const parts = name.trim().split(/\s+/);
   if (parts.length === 1) {
-    return parts[0].charAt(0).toUpperCase();
+    const single = parts[0];
+    // If the single part has at least 2 characters, use first two
+    if (single.length >= 2) {
+      return single.substring(0, 2).toUpperCase();
+    }
+    return single.charAt(0).toUpperCase();
   }
+  // First letter of first and last name
   const first = parts[0].charAt(0).toUpperCase();
   const last = parts[parts.length - 1].charAt(0).toUpperCase();
   return first + last;
