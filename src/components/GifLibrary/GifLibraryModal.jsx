@@ -14,12 +14,11 @@ const parseUnlockedGifs = (data) => {
   return [];
 };
 
-// ─── Individual GIF item with lazy loading ──────────────────
+// ─── Individual GIF item ──────────────────────────────────────
 const GifItem = ({ gif, isUnlocked, onSelect }) => {
   const [isVisible, setIsVisible] = useState(false);
   const itemRef = useRef(null);
 
-  // IntersectionObserver to trigger loading only when visible
   useEffect(() => {
     if (!itemRef.current) return;
     const observer = new IntersectionObserver(
@@ -29,82 +28,41 @@ const GifItem = ({ gif, isUnlocked, onSelect }) => {
           observer.disconnect();
         }
       },
-      { rootMargin: '200px' } // start loading a bit before it enters the screen
+      { rootMargin: '200px' }
     );
     observer.observe(itemRef.current);
     return () => observer.disconnect();
   }, []);
 
-  const { blobUrl, isLoading, error } = useCachedBlobUrl(
-    isVisible ? gif.url : null // only fetch if visible
-  );
-
+  const { blobUrl, isLoading, error } = useCachedBlobUrl(isVisible ? gif.url : null);
   const isLocked = gif.isPremium && !isUnlocked;
-
-  // Determine which image source to display
   const imageSrc = blobUrl || (isVisible ? gif.url : null);
 
   const handleClick = () => {
-    if (isLocked) {
-      // show purchase modal handled by parent
-      onSelect(gif);
-    } else {
-      onSelect(gif);
-    }
+    onSelect(gif);
   };
 
   return (
-    <div
-      className={`gif-item ${isLocked ? 'premium' : ''}`}
-      onClick={handleClick}
-      ref={itemRef}
-    >
+    <div className={`gif-item ${isLocked ? 'premium' : ''}`} onClick={handleClick} ref={itemRef}>
       {isVisible ? (
         <>
-          {isLoading && !error && (
-            <div className="gif-loading-spinner">
-              <i className="fas fa-spinner fa-spin" />
-            </div>
-          )}
-          {error ? (
-            <div className="gif-error">⚠️</div>
-          ) : (
-            <img
-              src={imageSrc}
-              alt={gif.title}
-              className="gif-thumb"
-              loading="lazy"
-              style={{ display: isLoading ? 'none' : 'block' }}
-              onError={(e) => {
-                // fallback if image fails
-                e.target.style.display = 'none';
-              }}
-            />
+          {isLoading && !error && <div className="gif-loading-spinner"><i className="fas fa-spinner fa-spin" /></div>}
+          {error ? <div className="gif-error">⚠️</div> : (
+            <img src={imageSrc} alt={gif.title} className="gif-thumb" loading="lazy" style={{ display: isLoading ? 'none' : 'block' }} />
           )}
           {isLoading && <div className="gif-skeleton" />}
         </>
-      ) : (
-        // Placeholder when not yet in viewport
-        <div className="gif-skeleton" />
-      )}
-
-      {/* Overlay with title and price/unlocked status */}
+      ) : <div className="gif-skeleton" />}
       <div className="gif-overlay">
         <span className="gif-title">{gif.title}</span>
-        {isLocked ? (
-          <span className="gif-price">🪙 {gif.price}</span>
-        ) : gif.isPremium ? (
-          <span className="gif-unlocked" style={{ fontSize: '11px', color: '#10B981' }}>
-            ✓ Unlocked
-          </span>
-        ) : null}
+        {isLocked ? <span className="gif-price">🪙 {gif.price}</span> : gif.isPremium ? <span className="gif-unlocked">✓ Unlocked</span> : null}
       </div>
     </div>
   );
 };
 
 // ─── Main Modal ──────────────────────────────────────────────
-const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
+const GifLibraryModal = ({ isOpen, onClose, onSelect, ownedGifs = [], mode = 'profile' }) => {
   const { user } = useAuth();
   const [library, setLibrary] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -112,9 +70,8 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
   const [selectedGif, setSelectedGif] = useState(null);
   const [purchasing, setPurchasing] = useState(false);
   const [userCoins, setUserCoins] = useState(0);
-  const [unlockedGifs, setUnlockedGifs] = useState([]);
+  const [unlockedGifs, setUnlockedGifs] = useState(ownedGifs || []);
 
-  // ─── Load GIF library & user data ──────────────────────────
   useEffect(() => {
     if (!isOpen || !user) return;
 
@@ -140,34 +97,33 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
     };
 
     loadData();
-
-    const userSkinsRef = ref(db, `userSkins/${user.uid}`);
-    const unsubscribe = onValue(userSkinsRef, (snap) => {
-      if (snap.exists()) {
-        const val = snap.val();
-        setUserCoins(val.coins || 0);
-        setUnlockedGifs(parseUnlockedGifs(val.unlockedGifs));
-      }
-    });
-
-    return () => unsubscribe();
   }, [isOpen, user]);
 
-  // ─── Filtered list ──────────────────────────────────────────
+  // ─── Filter based on mode ──────────────────────────────────
   const filteredGifs = useMemo(() => {
-    if (!searchTerm.trim()) return library;
-    const term = searchTerm.toLowerCase();
-    return library.filter((item) =>
-      item.title?.toLowerCase().includes(term) ||
-      (item.tags || []).some((tag) => tag.toLowerCase().includes(term))
-    );
-  }, [library, searchTerm]);
+    let filtered = library;
+    if (searchTerm.trim()) {
+      const term = searchTerm.toLowerCase();
+      filtered = filtered.filter(item =>
+        item.title?.toLowerCase().includes(term) ||
+        (item.tags || []).some(tag => tag.toLowerCase().includes(term))
+      );
+    }
+
+    if (mode === 'profile') {
+      // Show free GIFs + owned premium GIFs
+      filtered = filtered.filter(item => !item.isPremium || unlockedGifs.includes(item.id));
+    } else if (mode === 'shop') {
+      // Show premium GIFs that are NOT owned
+      filtered = filtered.filter(item => item.isPremium && !unlockedGifs.includes(item.id));
+    }
+    return filtered;
+  }, [library, searchTerm, unlockedGifs, mode]);
 
   const isGifUnlocked = (gifId) => {
     return Array.isArray(unlockedGifs) && unlockedGifs.includes(gifId);
   };
 
-  // ─── Selection & Purchase logic ────────────────────────────
   const handleSelect = async (gif) => {
     const unlocked = isGifUnlocked(gif.id);
     if (!gif.isPremium || unlocked) {
@@ -202,7 +158,6 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
         unlockedGifs: updatedUnlocked,
       });
 
-      // Update local state
       setUserCoins(newCoins);
       setUnlockedGifs(updatedUnlocked);
       const gifToUse = selectedGif;
@@ -253,7 +208,9 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
           {loading ? (
             <div className="gif-loading">Loading...</div>
           ) : filteredGifs.length === 0 ? (
-            <div className="gif-empty">No GIFs found</div>
+            <div className="gif-empty">
+              {mode === 'profile' ? 'No free GIFs found. Check out the shop to unlock more!' : 'No premium GIFs available.'}
+            </div>
           ) : (
             <div className="gif-grid">
               {filteredGifs.map((gif) => (
@@ -275,19 +232,12 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect }) => {
               <p>"{selectedGif.title}" costs 🪙 {selectedGif.price} coins.</p>
               <p>You have 🪙 {userCoins} coins.</p>
               <div className="gif-purchase-actions">
-                <button
-                  onClick={handlePurchase}
-                  disabled={purchasing || userCoins < selectedGif.price}
-                >
+                <button onClick={handlePurchase} disabled={purchasing || userCoins < selectedGif.price}>
                   {purchasing ? 'Processing...' : 'Buy & Use'}
                 </button>
                 <button onClick={() => setSelectedGif(null)}>Cancel</button>
               </div>
-              {userCoins < selectedGif.price && (
-                <p style={{ color: '#ff6b6b', fontSize: 13, marginTop: 8 }}>
-                  Not enough coins – earn more by using ECHO!
-                </p>
-              )}
+              {userCoins < selectedGif.price && <p style={{ color: '#ff6b6b', fontSize: 13, marginTop: 8 }}>Not enough coins – visit the Shop to get more!</p>}
             </div>
           </div>
         )}

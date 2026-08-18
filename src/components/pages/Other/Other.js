@@ -46,8 +46,10 @@ const Other = () => {
 
   return (
     <div className="other-page">
-      <h2 className="other-title">⚙️ Settings & Legal</h2>
-      <p className="other-subtitle">Explore additional features and policies</p>
+      <div className="other-header">
+        <h2 className="other-title">⚙️ Settings & Legal</h2>
+        <p className="other-subtitle">Explore additional features and policies</p>
+      </div>
       <div className="other-menu">
         {menuItems.map((item) => (
           <div

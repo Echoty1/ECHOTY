@@ -8,6 +8,46 @@
   color: #e8edf5;
 }
 
+/* ─── Desktop: stretch full width ───────────────────────────── */
+@media (min-width: 1024px) {
+  .legal-page {
+    max-width: 100%;
+    padding: 32px 40px 80px;
+  }
+  .legal-page .legal-header h1 {
+    font-size: 32px;
+  }
+  .legal-page .legal-section {
+    padding: 28px 32px;
+    border-radius: 20px;
+  }
+  .legal-page .legal-section h2 {
+    font-size: 24px;
+  }
+  .legal-page .legal-section p,
+  .legal-page .legal-section li {
+    font-size: 16px;
+  }
+  .legal-page .legal-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .legal-page .legal-card {
+    padding: 18px 20px;
+  }
+  .legal-page .legal-highlight {
+    padding: 16px 20px;
+    font-size: 15px;
+  }
+  .legal-page .privacy-toggle-group label {
+    font-size: 16px;
+  }
+  .legal-page .legal-save-btn,
+  .legal-page .legal-primary-btn {
+    padding: 12px 32px;
+    font-size: 16px;
+  }
+}
+
 .legal-header {
   display: flex;
   align-items: center;

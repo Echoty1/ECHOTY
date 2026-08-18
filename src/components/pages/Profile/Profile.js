@@ -6,12 +6,12 @@ import { db } from '../../../services/firebase';
 import { ref, onValue, update, set } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
-import { Country, City } from 'country-state-city';
 import GifLibraryModal from '../../GifLibrary/GifLibraryModal';
 import AvatarPicker from '../../AvatarPicker/AvatarPicker';
 import Toast from '../../Toast/Toast';
 import { useCachedImage } from '../../../utils/mediaCache';
 import ChatEmojiPicker from '../Chat/ChatEmojiPicker';
+import MoodPicker from '../../common/MoodPicker';
 import './Profile.css';
 
 const STORAGE_PREFIX = 'echo_cache_';
@@ -64,7 +64,6 @@ const DEFAULT_INTEREST_TEMPLATES = [
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
 
-// ─── Demo constants ────────────────────────────────────────────
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
@@ -113,8 +112,9 @@ const Profile = () => {
     countryCode: '',
     city: '',
   });
+  // ─── For unlocked GIFs – used in GifLibraryModal ──────────
+  const [unlockedGifs, setUnlockedGifs] = useState([]);
 
-  // Only keep image input ref (GIF upload removed)
   const imageInputRef = useRef(null);
 
   useEffect(() => {
@@ -130,6 +130,7 @@ const Profile = () => {
       const data = snap.val() || {};
       const newActive = data.activeSkin || data.active || null;
       setActiveSkinId(newActive);
+      setUnlockedGifs(data.unlockedGifs || []);
       const existingSkinCache = getFastLocal(skinCacheKey) || {};
       setFastLocal(skinCacheKey, { ...existingSkinCache, active: newActive });
     });
@@ -183,42 +184,6 @@ const Profile = () => {
     };
   }, [user?.uid, editing]);
 
-  const countriesList = useMemo(() => Country.getAllCountries(), []);
-
-  const matchedCountryCode = useMemo(() => {
-    if (editData.countryCode) return editData.countryCode;
-    if (editData.country) {
-      const found = countriesList.find(
-        (c) => c.name.toLowerCase() === editData.country.toLowerCase()
-      );
-      return found ? found.isoCode : '';
-    }
-    return '';
-  }, [editData.country, editData.countryCode, countriesList]);
-
-  const citiesList = useMemo(() => {
-    return matchedCountryCode ? City.getCitiesOfCountry(matchedCountryCode) : [];
-  }, [matchedCountryCode]);
-
-  const handleCountrySelect = (e) => {
-    const selectedIsoCode = e.target.value;
-    if (!selectedIsoCode) {
-      setEditData({ ...editData, country: '', countryCode: '', city: '' });
-      return;
-    }
-    const countryObj = Country.getCountryByCode(selectedIsoCode);
-    setEditData({
-      ...editData,
-      country: countryObj ? countryObj.name : '',
-      countryCode: selectedIsoCode,
-      city: '',
-    });
-  };
-
-  const handleCitySelect = (e) => {
-    setEditData({ ...editData, city: e.target.value });
-  };
-
   const handleSave = async () => {
     if (!user) return;
 
@@ -261,7 +226,6 @@ const Profile = () => {
     setTimeout(() => setCopiedUid(false), 2000);
   };
 
-  // Only image upload remains – GIF upload removed
   const handleUploadImage = async (file) => {
     if (!user) return;
 
@@ -332,6 +296,18 @@ const Profile = () => {
     } catch (err) {
       console.error('Failed to set GIF:', err);
       setToast({ message: 'Failed to set GIF.', type: 'error' });
+    }
+  };
+
+  // ─── Mood change handler ──────────────────────────────────────
+  const handleMoodChange = async (mood) => {
+    if (!user) return;
+    try {
+      await update(ref(db, `profiles/${user.uid}`), { mood });
+      setProfile((prev) => ({ ...prev, mood }));
+      setEditData((prev) => ({ ...prev, mood }));
+    } catch (err) {
+      console.error('Failed to update mood:', err);
     }
   };
 
@@ -447,7 +423,7 @@ const Profile = () => {
           {(editing || isDemoUser) && <div className="avatar-overlay">Tap to change</div>}
         </div>
 
-        {/* ─── Name – always read‑only for demo ────────────────── */}
+        {/* ─── Name ────────────────────────────────────────────── */}
         {isDemoUser ? (
           <div className="profile-name" style={{ textAlign: 'center', marginTop: '8px' }}>
             {profile?.name || 'User'}
@@ -512,24 +488,10 @@ const Profile = () => {
         ) : (
           <>
             <div className="profile-name">{profile?.name || 'User'}</div>
-            {!loading && (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginTop: '6px' }}>
-                <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={36} interactive={false} animated={true} />
-                <span style={{ fontSize: '13px', color: '#888', fontWeight: 500 }}>
-                  Mood: <strong style={{ color: '#FFF', textTransform: 'capitalize' }}>{profile?.mood || 'happy'}</strong>
-                </span>
-              </div>
-            )}
           </>
         )}
 
-        {!loading && !editing && (profile?.city || profile?.country) && (
-          <div className="profile-location" style={{ fontSize: '13px', color: '#888', marginTop: '4px' }}>
-            📍 {[profile.city, profile.country].filter(Boolean).join(', ')}
-          </div>
-        )}
-
-        {/* ─── Bio – always read‑only for demo ────────────────── */}
+        {/* ─── Bio ────────────────────────────────────────────── */}
         {isDemoUser ? (
           <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>
             {profile?.bio || 'No bio yet.'}
@@ -598,7 +560,26 @@ const Profile = () => {
           profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>{profile.bio}</p>
         )}
 
-        {/* ─── Interests ─────────────────────────────────────────── */}
+        {/* ─── Mood Picker ─────────────────────────────────────── */}
+        {!loading && (
+          <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px' }}>
+            {editing ? (
+              <>
+                <div style={{ fontSize: '14px', color: '#888', marginBottom: '8px', fontWeight: 500 }}>Choose your mood</div>
+                <MoodPicker currentMood={editData.mood || 'neutral'} onSelect={handleMoodChange} />
+              </>
+            ) : (
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+                <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={48} interactive={false} animated={true} />
+                <span style={{ fontSize: '13px', color: '#888', fontWeight: 500 }}>
+                  Mood: <strong style={{ color: '#FFF', textTransform: 'capitalize' }}>{profile?.mood || 'happy'}</strong>
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ─── Interests (moving) ────────────────────────────── */}
         <div className="moving-interests-container" style={{ width: '100%', overflow: 'hidden', padding: '6px 0', marginTop: '12px' }}>
           <div
             className="moving-interests-track"
@@ -646,7 +627,7 @@ const Profile = () => {
               className="edit-btn" 
               onClick={() => {
                 if (isDemoUser) {
-                  setShowAvatarPicker(true); // directly open avatar picker
+                  setShowAvatarPicker(true);
                 } else {
                   setEditing(true);
                 }
@@ -660,20 +641,22 @@ const Profile = () => {
       </div>
 
       {/* ─── Account Details ────────────────────────────────────── */}
-      <div style={{ background: 'rgba(255,255,255,0.03)', borderRadius: 16, padding: '16px', border: '1px solid rgba(255,255,255,0.08)', marginTop: '16px' }}>
-        <div style={{ fontSize: '12px', color: '#888', marginBottom: '6px', fontWeight: 600, textTransform: 'uppercase' }}>Account Details</div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.05)' }}>
-          <span style={{ fontSize: '13px', color: '#AAA' }}>Email</span>
-          <span style={{ fontSize: '13px', color: '#FFF', fontWeight: 500 }}>{user?.email || 'N/A'}</span>
+      <div className="account-details">
+        <div className="account-details-header">
+          <span>ACCOUNT DETAILS</span>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingTop: '8px' }}>
-          <div>
-            <div style={{ fontSize: '13px', color: '#AAA' }}>User ID (UID)</div>
-            <div style={{ fontSize: '11px', color: '#6C3CE1', fontFamily: 'monospace', marginTop: '2px', wordBreak: 'break-all' }}>{user?.uid}</div>
+        <div className="account-details-row">
+          <span className="account-details-label">Email</span>
+          <span className="account-details-value">{user?.email || 'N/A'}</span>
+        </div>
+        <div className="account-details-row">
+          <span className="account-details-label">User ID (UID)</span>
+          <div className="account-details-uid-wrapper">
+            <span className="account-details-value uid">{user?.uid}</span>
+            <button className="copy-uid-btn" onClick={handleCopyUid}>
+              {copiedUid ? 'Copied! ✓' : 'Copy UID'}
+            </button>
           </div>
-          <button onClick={handleCopyUid} style={{ background: copiedUid ? '#10B981' : '#6C3CE1', color: '#FFF', border: 'none', padding: '6px 14px', borderRadius: '20px', fontSize: '12px', fontWeight: 600, cursor: 'pointer', flexShrink: 0, marginLeft: '12px' }}>
-            {copiedUid ? 'Copied! ✓' : 'Copy UID'}
-          </button>
         </div>
       </div>
 
@@ -688,12 +671,21 @@ const Profile = () => {
           }
           imageInputRef.current?.click();
         }}
-        onChooseLibrary={() => { setShowAvatarPicker(false); setShowGifLibrary(true); }}
+        onChooseLibrary={() => { 
+          setShowAvatarPicker(false); 
+          setShowGifLibrary(true); 
+        }}
         uploading={uploading}
         isDemo={isDemoUser}
       />
 
-      <GifLibraryModal isOpen={showGifLibrary} onClose={() => setShowGifLibrary(false)} onSelect={handleGifSelect} />
+      <GifLibraryModal
+        isOpen={showGifLibrary}
+        onClose={() => setShowGifLibrary(false)}
+        onSelect={handleGifSelect}
+        ownedGifs={unlockedGifs}
+        mode="profile"
+      />
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
 
       {showEmojiPicker && (

@@ -194,3 +194,8 @@ body.hide-bottom-nav .bottom-nav-container {
   from { transform: scale(0.95); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
+
+#main-content {
+  max-width: 1400px;
+  margin: 0 auto;
+}

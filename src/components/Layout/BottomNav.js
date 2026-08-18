@@ -22,7 +22,7 @@ const BottomNav = () => {
     { to: '/chats', label: 'Chats', icon: 'fa-comment-dots' },
     isSupport
       ? { to: '/control', label: 'CONTROL', icon: 'fa-sliders-h' }
-      : { to: '/echomoji', label: 'ECHOMOJI', icon: 'fa-face-smile' },
+      : { to: '/shop', label: 'Shop', icon: 'fa-store' },
     { to: '/profile', label: 'Profile', icon: 'fa-user' },
     { to: '/other', label: 'Other', icon: 'fa-ellipsis-h' },
   ];

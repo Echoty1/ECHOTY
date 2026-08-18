@@ -10,7 +10,6 @@ import { CacheProvider } from './contexts/CacheContext';
 import Home from './components/pages/Home/Home';
 import Chats from './components/pages/Chats/Chats';
 import ChatView from './components/pages/Chat/ChatView';
-import ECHOMojiTab from './components/pages/ECHOMojiTab/ECHOMojiTab';
 import Profile from './components/pages/Profile/Profile';
 import Other from './components/pages/Other/Other';
 import Terms from './components/pages/Other/Terms';
@@ -30,6 +29,7 @@ import InstallBanner from './components/common/InstallBanner';
 import { cleanAllCachedMessages } from './services/messageCleanup';
 import { getChatList } from './services/indexedDBService';
 import { db } from './services/firebase';
+import Shop from './components/pages/Shop/Shop';
 import { clearAllIndexedDB } from './services/indexedDBService';
 import AdminPanel from './components/pages/Admin/AdminPanel';
 import BanScreen from './components/BanScreen/BanScreen';
@@ -404,13 +404,15 @@ function AppContent() {
           overflowY: 'auto',
           overflowX: 'hidden',
           background: '#0A0A0F',
+          maxWidth: '1400px',   // or 1200px
+          margin: '0 auto',
+          width: '100%',
         }}
       >
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/chats" element={<Chats />} />
           <Route path="/chat/:userId" element={<ChatView />} />
-          <Route path="/echomoji" element={<ECHOMojiTab />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/other" element={<Other />} />
           <Route path="/terms" element={<Terms />} />
@@ -421,6 +423,7 @@ function AppContent() {
           <Route path="/about" element={<About />} />
           <Route path="/control" element={<AdminPanel />} />
           <Route path="*" element={<Navigate to="/" />} />
+          <Route path="/shop" element={<Shop />} />
         </Routes>
       </div>
       <BottomNav />
