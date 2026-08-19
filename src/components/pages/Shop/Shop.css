@@ -2,7 +2,7 @@
 .shop-page {
   max-width: 480px;
   margin: 0 auto;
-  padding: 0 16px 100px;        /* ⬅️ no top padding – relies on App.js container */
+  padding: 0 16px 100px;
   color: #fff;
   min-height: 100%;
 }
@@ -19,7 +19,7 @@
   }
   .shop-page .shop-section {
     max-width: 720px;
-    margin: 24px auto 32px;    /* ⬅️ top margin for sections */
+    margin: 24px auto 32px;
     padding: 24px 20px;
     border-radius: 20px;
   }
@@ -43,7 +43,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 8px;          /* ⬅️ reduced bottom margin to bring sections closer */
+  margin-bottom: 8px;
   gap: 8px;
   flex-wrap: wrap;
 }
@@ -126,7 +126,7 @@
   margin-bottom: 32px;
   border-radius: 16px;
   padding: 20px 16px;
-  margin-top: 20px;            /* ⬅️ gives space between header and first section */
+  margin-top: 20px;
 }
 
 /* ─── Skins section – pink background ───────────────────────── */
@@ -265,14 +265,15 @@
   font-weight: 600;
 }
 
-/* ─── GIF preview ────────────────────────────────────────────── */
+/* ─── GIF preview – circle like profile avatar ────────────── */
 .gif-item .gif-preview {
   width: 100%;
-  height: 80px;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
   overflow: hidden;
-  border-radius: 8px;
   margin-bottom: 6px;
   background: rgba(0,0,0,0.2);
+  border: 2px solid rgba(255,255,255,0.06);
 }
 
 .gif-item .gif-preview img {
@@ -311,7 +312,7 @@
     flex-wrap: wrap;
     justify-content: center;
     gap: 4px;
-    margin-bottom: 4px;       /* ⬅️ reduce bottom margin on mobile */
+    margin-bottom: 4px;
   }
   .shop-header-left,
   .shop-header-right {
@@ -338,7 +339,7 @@
     padding: 4px 14px;
   }
   .shop-section {
-    margin-top: 16px;         /* ⬅️ slightly less top margin on mobile */
+    margin-top: 16px;
     margin-bottom: 24px;
   }
 }
