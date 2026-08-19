@@ -12,6 +12,7 @@ import Toast from '../../Toast/Toast';
 import { useCachedImage } from '../../../utils/mediaCache';
 import ChatEmojiPicker from '../Chat/ChatEmojiPicker';
 import MoodPicker from '../../common/MoodPicker';
+import Avatar from '../../common/Avatar';
 import './Profile.css';
 
 const STORAGE_PREFIX = 'echo_cache_';
@@ -112,7 +113,6 @@ const Profile = () => {
     countryCode: '',
     city: '',
   });
-  // ─── For unlocked GIFs – used in GifLibraryModal ──────────
   const [unlockedGifs, setUnlockedGifs] = useState([]);
 
   const imageInputRef = useRef(null);
@@ -299,7 +299,6 @@ const Profile = () => {
     }
   };
 
-  // ─── Mood change handler ──────────────────────────────────────
   const handleMoodChange = async (mood) => {
     if (!user) return;
     try {
@@ -311,7 +310,6 @@ const Profile = () => {
     }
   };
 
-  // ─── Insert text at cursor ──────────────────────────────────
   const insertTextAtCursor = (field, text) => {
     const el = field === 'name' ? nameInputRef.current : bioInputRef.current;
     if (!el) return;
@@ -394,11 +392,6 @@ const Profile = () => {
   const currentSkinId = activeSkinId || profile?.activeSkin;
   const activeSkinObj = useMemo(() => (currentSkinId ? getSkinById(currentSkinId) : null), [currentSkinId]);
 
-  const getInitial = () => {
-    const name = (editing ? editData.name : profile?.name) || 'User';
-    return name[0]?.toUpperCase() || 'U';
-  };
-
   return (
     <div className="profile-page">
       <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleImageFile} />
@@ -415,11 +408,11 @@ const Profile = () => {
             <video src={displayMediaUrl} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
           ) : displayMediaUrl ? (
             <img src={displayMediaUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-          ) : activeSkinObj ? (
-            <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={110} />
           ) : (
-            <div className="profile-avatar-initial">{getInitial()}</div>
+            // ✅ Show initials using Avatar component (no ECHOMOJI)
+            <Avatar src={null} name={editData?.name || profile?.name || 'User'} size={110} />
           )}
+          
           {(editing || isDemoUser) && <div className="avatar-overlay">Tap to change</div>}
         </div>
 
@@ -692,7 +685,7 @@ const Profile = () => {
         <ChatEmojiPicker
           onClose={closeEmojiPicker}
           onSelect={handleEmojiSelect}
-          excludeRef={editingContainerRef}
+          excludeRefs={[editingContainerRef]}
           style={{
             position: 'fixed',
             left: '20px',

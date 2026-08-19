@@ -1,9 +1,9 @@
 // src/components/pages/Shop/Shop.jsx
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../../services/firebase';
-import { ref, onValue, update } from 'firebase/database';
+import { ref, onValue, update, push, set, remove, get } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { SKINS, getSkinById } from '../../../constants/echomoji';
 import { fetchGifLibrary } from '../../../services/gifLibraryService';
@@ -11,21 +11,9 @@ import Modal from '../../common/Modal';
 import Toast from '../../Toast/Toast';
 import './Shop.css';
 
-// ─── LocalStorage helpers for coins ──────────────────────────
-const getCachedCoins = (uid) => {
-  if (!uid) return null;
-  try {
-    const raw = localStorage.getItem(`echo_coins_${uid}`);
-    return raw !== null ? parseInt(raw, 10) : null;
-  } catch { return null; }
-};
-
-const setCachedCoins = (uid, coins) => {
-  if (!uid) return;
-  try {
-    localStorage.setItem(`echo_coins_${uid}`, String(coins));
-  } catch {}
-};
+const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
+const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
+const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
 
 // ─── Skin item ────────────────────────────────────────────────────
 const SkinItem = React.memo(({ skin, isOwned, isActive, purchase, onApply, onPurchase }) => {
@@ -141,16 +129,439 @@ const CountdownBadge = React.memo(({ purchase }) => {
   );
 });
 
+// ─── Admin GIF Upload Panel ──────────────────────────────────────
+const AdminGifPanel = ({ onGifAdded }) => {
+  const [name, setName] = useState('');
+  const [file, setFile] = useState(null);
+  const [coinPrice, setCoinPrice] = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [toast, setToast] = useState(null);
+  const fileInputRef = useRef(null);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleFileChange = (e) => {
+    const selected = e.target.files[0];
+    if (selected) {
+      setFile(selected);
+      const url = URL.createObjectURL(selected);
+      setPreview(url);
+    }
+    e.target.value = '';
+  };
+
+  const handleUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleRemoveFile = () => {
+    setFile(null);
+    setPreview(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      showToast('Please enter a name for the GIF.', 'error');
+      return;
+    }
+    if (!file) {
+      showToast('Please select a GIF file to upload.', 'error');
+      return;
+    }
+
+    setUploading(true);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
+
+      const downloadUrl = data.secure_url;
+      const isPremium = coinPrice && parseInt(coinPrice) > 0;
+      const price = isPremium ? parseInt(coinPrice) : 0;
+
+      const gifRef = push(ref(db, 'gifLibrary'));
+      await set(gifRef, {
+        title: name.trim(),
+        url: downloadUrl,
+        isPremium,
+        price,
+        category: 'General',
+        duration: 0,
+      });
+
+      showToast(`GIF "${name.trim()}" added successfully!`, 'success');
+      setName('');
+      setFile(null);
+      setPreview(null);
+      setCoinPrice('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      if (onGifAdded) onGifAdded();
+    } catch (err) {
+      console.error('Failed to add GIF:', err);
+      showToast(`Failed to add GIF: ${err.message}`, 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  return (
+    <div className="admin-gif-panel">
+      <h3><i className="fas fa-plus-circle" /> Add GIF to Library</h3>
+      <form onSubmit={handleSubmit}>
+        <div className="admin-gif-form-group">
+          <label>GIF Name *</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Funny Cat GIF"
+            disabled={uploading}
+            required
+          />
+        </div>
+
+        <div className="admin-gif-form-group">
+          <label>GIF File *</label>
+          <div className="admin-gif-upload-area">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/gif,video/mp4,video/webm"
+              onChange={handleFileChange}
+              disabled={uploading}
+              style={{ display: 'none' }}
+            />
+            {!preview ? (
+              <div 
+                className="admin-gif-drop-zone" 
+                onClick={handleUploadClick}
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  const dropped = e.dataTransfer.files[0];
+                  if (dropped && (dropped.type === 'image/gif' || dropped.type.startsWith('video/'))) {
+                    setFile(dropped);
+                    const url = URL.createObjectURL(dropped);
+                    setPreview(url);
+                  }
+                }}
+              >
+                <i className="fas fa-cloud-upload-alt" />
+                <span>Drop your GIF here or click to browse</span>
+                <small>Supports GIF, MP4, WebM</small>
+              </div>
+            ) : (
+              <div className="admin-gif-preview-wrapper">
+                <div className="admin-gif-preview-circle">
+                  <img src={preview} alt="Preview" />
+                </div>
+                <div className="admin-gif-preview-actions">
+                  <button 
+                    type="button" 
+                    className="admin-gif-change-btn" 
+                    onClick={handleUploadClick}
+                    disabled={uploading}
+                  >
+                    <i className="fas fa-exchange-alt" /> Change
+                  </button>
+                  <button 
+                    type="button" 
+                    className="admin-gif-remove-btn" 
+                    onClick={handleRemoveFile}
+                    disabled={uploading}
+                  >
+                    <i className="fas fa-times" /> Remove
+                  </button>
+                </div>
+                <div className="admin-gif-filename">
+                  <i className="fas fa-file-image" /> {file?.name || 'No file'}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="admin-gif-form-group">
+          <label>Coin Price (optional)</label>
+          <input
+            type="number"
+            value={coinPrice}
+            onChange={(e) => setCoinPrice(e.target.value)}
+            placeholder="Leave empty for free GIF"
+            disabled={uploading}
+            min="0"
+          />
+          <small>If empty, GIF will be free (isPremium: false)</small>
+        </div>
+
+        <button type="submit" className="admin-gif-submit" disabled={uploading}>
+          {uploading ? (
+            <>
+              <span className="admin-gif-spinner" />
+              Uploading...
+            </>
+          ) : (
+            'Add GIF'
+          )}
+        </button>
+      </form>
+      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+    </div>
+  );
+};
+
+// ─── Admin Manage GIFs Panel ─────────────────────────────────────
+const AdminManageGifs = ({ gifs, onGifUpdated, onGifDeleted }) => {
+  const [editingGif, setEditingGif] = useState(null);
+  const [editTitle, setEditTitle] = useState('');
+  const [editPrice, setEditPrice] = useState('');
+  const [editIsPremium, setEditIsPremium] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [deleting, setDeleting] = useState(false);
+
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  const handleEditClick = (gif) => {
+    setEditingGif(gif);
+    setEditTitle(gif.title || '');
+    setEditPrice(gif.price?.toString() || '');
+    setEditIsPremium(gif.isPremium || false);
+    setShowEditModal(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editingGif) return;
+    if (!editTitle.trim()) {
+      showToast('Title is required.', 'error');
+      return;
+    }
+
+    const price = editPrice && parseInt(editPrice) > 0 ? parseInt(editPrice) : 0;
+    const isPremium = price > 0 || editIsPremium;
+
+    try {
+      const gifRef = ref(db, `gifLibrary/${editingGif.id}`);
+      await update(gifRef, {
+        title: editTitle.trim(),
+        price: price,
+        isPremium: isPremium,
+      });
+      showToast(`GIF "${editTitle.trim()}" updated!`, 'success');
+      setShowEditModal(false);
+      setEditingGif(null);
+      if (onGifUpdated) onGifUpdated();
+    } catch (err) {
+      console.error('Failed to update GIF:', err);
+      showToast(`Failed to update GIF: ${err.message}`, 'error');
+    }
+  };
+
+  const handleDeleteGif = async (gif) => {
+    if (!window.confirm(`Delete "${gif.title}"? This will remove it from all users who have it.`)) return;
+    setDeleting(true);
+
+    try {
+      const gifUrl = gif.url;
+      const gifId = gif.id;
+
+      // 1. Delete from gifLibrary – this is critical
+      await remove(ref(db, `gifLibrary/${gifId}`));
+
+      // 2. Try to clean up profiles and userSkins, but don't fail if these fail
+      let cleanupErrors = [];
+
+      try {
+        // Reset profiles that use this GIF
+        const profilesSnap = await get(ref(db, 'profiles'));
+        if (profilesSnap.exists()) {
+          const profiles = profilesSnap.val();
+          const updates = {};
+          for (const [uid, profile] of Object.entries(profiles)) {
+            if (profile.avatar === gifUrl || profile.videoUrl === gifUrl) {
+              updates[`profiles/${uid}/avatar`] = '';
+              updates[`profiles/${uid}/videoUrl`] = '';
+            }
+          }
+          if (Object.keys(updates).length > 0) {
+            await update(ref(db), updates);
+          }
+        }
+      } catch (err) {
+        cleanupErrors.push('profiles: ' + err.message);
+      }
+
+      try {
+        // Remove this GIF from all users' unlockedGifs arrays
+        const userSkinsSnap = await get(ref(db, 'userSkins'));
+        if (userSkinsSnap.exists()) {
+          const allSkins = userSkinsSnap.val();
+          const skinUpdates = {};
+          for (const [uid, data] of Object.entries(allSkins)) {
+            if (data.unlockedGifs && Array.isArray(data.unlockedGifs) && data.unlockedGifs.includes(gifId)) {
+              const newUnlocked = data.unlockedGifs.filter(id => id !== gifId);
+              skinUpdates[`userSkins/${uid}/unlockedGifs`] = newUnlocked;
+            }
+          }
+          if (Object.keys(skinUpdates).length > 0) {
+            await update(ref(db), skinUpdates);
+          }
+        }
+      } catch (err) {
+        cleanupErrors.push('userSkins: ' + err.message);
+      }
+
+      // Show result
+      if (cleanupErrors.length > 0) {
+        showToast(`GIF "${gif.title}" deleted, but cleanup had issues: ${cleanupErrors.join('; ')}`, 'warning');
+      } else {
+        showToast(`GIF "${gif.title}" deleted and removed from all users.`, 'success');
+      }
+
+      setDeleting(false);
+      if (onGifDeleted) onGifDeleted();
+    } catch (err) {
+      console.error('Failed to delete GIF:', err);
+      if (err.message.includes('Permission denied')) {
+        showToast('Permission denied to delete GIF. Check Firebase rules for gifLibrary.', 'error');
+      } else {
+        showToast(`Failed to delete GIF: ${err.message}`, 'error');
+      }
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="admin-gif-panel admin-manage-gifs">
+      <h3><i className="fas fa-edit" /> Manage GIFs</h3>
+      {deleting && (
+        <div style={{ textAlign: 'center', padding: '8px', color: '#F59E0B' }}>
+          <span className="admin-gif-spinner" /> Deleting...
+        </div>
+      )}
+      {gifs.length === 0 ? (
+        <p style={{ color: '#666', textAlign: 'center', padding: '16px 0' }}>
+          No GIFs in library yet.
+        </p>
+      ) : (
+        <div className="admin-gif-list">
+          {gifs.map((gif) => (
+            <div key={gif.id} className="admin-gif-list-item">
+              <div className="admin-gif-list-preview">
+                <img src={gif.url} alt={gif.title} />
+              </div>
+              <div className="admin-gif-list-info">
+                <div className="admin-gif-list-title">{gif.title}</div>
+                <div className="admin-gif-list-meta">
+                  {gif.isPremium ? `🪙 ${gif.price} coins` : 'Free'}
+                </div>
+              </div>
+              <div className="admin-gif-list-actions">
+                <button 
+                  className="admin-gif-edit-btn" 
+                  onClick={() => handleEditClick(gif)}
+                  disabled={deleting}
+                >
+                  <i className="fas fa-pen" />
+                </button>
+                <button 
+                  className="admin-gif-delete-btn" 
+                  onClick={() => handleDeleteGif(gif)}
+                  disabled={deleting}
+                >
+                  <i className="fas fa-trash-alt" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {showEditModal && editingGif && (
+        <div className="admin-edit-modal-overlay" onClick={() => setShowEditModal(false)}>
+          <div className="admin-edit-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="admin-edit-modal-header">
+              <h4>Edit GIF</h4>
+              <button className="admin-edit-modal-close" onClick={() => setShowEditModal(false)}>✕</button>
+            </div>
+            <div className="admin-edit-modal-body">
+              <div className="admin-gif-form-group">
+                <label>Title *</label>
+                <input
+                  type="text"
+                  value={editTitle}
+                  onChange={(e) => setEditTitle(e.target.value)}
+                  placeholder="GIF title"
+                />
+              </div>
+              <div className="admin-gif-form-group">
+                <label>Price (coins)</label>
+                <input
+                  type="number"
+                  value={editPrice}
+                  onChange={(e) => setEditPrice(e.target.value)}
+                  placeholder="0 for free"
+                  min="0"
+                />
+              </div>
+              <div className="admin-gif-form-group">
+                <label className="admin-gif-checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={editIsPremium}
+                    onChange={(e) => setEditIsPremium(e.target.checked)}
+                  />
+                  Premium (requires coins)
+                </label>
+                <small>If checked, GIF will appear in shop. If unchecked, it will be free in library.</small>
+              </div>
+            </div>
+            <div className="admin-edit-modal-actions">
+              <button className="admin-edit-modal-cancel" onClick={() => setShowEditModal(false)}>Cancel</button>
+              <button className="admin-edit-modal-save" onClick={handleSaveEdit}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+    </div>
+  );
+};
+
 // ─── Main Shop Component ──────────────────────────────────────
 const Shop = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const [ownedSkins, setOwnedSkins] = useState([]);
   const [activeSkin, setActiveSkin] = useState(null);
-  const [coins, setCoins] = useState(() => getCachedCoins(user?.uid)); // from localStorage
+  const [coins, setCoins] = useState(null);
   const [purchaseDataMap, setPurchaseDataMap] = useState({});
   const [ownedGifs, setOwnedGifs] = useState([]);
   const [gifLibrary, setGifLibrary] = useState([]);
+  const [allGifs, setAllGifs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
 
@@ -161,42 +572,46 @@ const Shop = () => {
     type: 'info',
   });
 
+  const isAdmin = user?.uid === SUPPORT_UID;
+
   const showModal = (title, message, type = 'info') => setModal({ isOpen: true, title, message, type });
   const closeModal = () => setModal((prev) => ({ ...prev, isOpen: false }));
 
-  // ─── Listen to Firebase and sync coins to localStorage ──────
   useEffect(() => {
-    if (!user?.uid) {
-      setCoins(null);
-      return;
-    }
+    if (!user) return;
 
-    // First, read from localStorage (already done in initial state)
-    // But we also want to listen to Firebase for updates
     const userSkinsRef = ref(db, `userSkins/${user.uid}`);
     const unsub = onValue(userSkinsRef, (snap) => {
       const data = snap.val() || {};
-      const newCoins = data.coins ?? 0;
-      setCoins(newCoins);
-      setCachedCoins(user.uid, newCoins);
       setOwnedSkins(data.owned || []);
       setActiveSkin(data.active || data.activeSkin || null);
+      setCoins(data.coins || 0);
       setPurchaseDataMap(data.purchases || {});
       setOwnedGifs(data.unlockedGifs || []);
     });
 
-    return () => unsub();
-  }, [user?.uid]);
+    loadAllData();
 
-  // ─── Load GIF library ────────────────────────────────────────
-  useEffect(() => {
-    const loadGifs = async () => {
-      const allGifs = await fetchGifLibrary();
+    return () => unsub();
+  }, [user]);
+
+  const loadAllData = async () => {
+    setLoading(true);
+    try {
+      const allGifs = await fetchGifLibrary(true);
+      console.log('📦 Loaded all GIFs:', allGifs.length);
+      setAllGifs(allGifs);
       const premiumGifs = allGifs.filter(g => g.isPremium);
       setGifLibrary(premiumGifs);
+    } catch (err) {
+      console.error('Failed to load GIFs:', err);
+    } finally {
       setLoading(false);
-    };
-    loadGifs();
+    }
+  };
+
+  const refreshData = useCallback(async () => {
+    await loadAllData();
   }, []);
 
   const showToast = (message, type = 'success') => {
@@ -204,7 +619,6 @@ const Shop = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ─── Purchase skin ──────────────────────────────────────────────
   const purchaseSkin = useCallback(
     (skinId, price) => {
       if (!user || coins === null || coins < price) {
@@ -221,7 +635,6 @@ const Shop = () => {
 
       setOwnedSkins(newOwned);
       setCoins(newCoins);
-      setCachedCoins(user.uid, newCoins);
 
       const updates = {
         owned: newOwned,
@@ -246,7 +659,6 @@ const Shop = () => {
     [user, coins, ownedSkins]
   );
 
-  // ─── Apply skin ──────────────────────────────────────────────────
   const applySkin = useCallback(
     (skinId) => {
       if (!user) return;
@@ -258,7 +670,6 @@ const Shop = () => {
     [user]
   );
 
-  // ─── Purchase GIF ──────────────────────────────────────────────────
   const purchaseGif = useCallback(
     (gifId, price) => {
       if (!user || coins === null || coins < price) {
@@ -275,7 +686,6 @@ const Shop = () => {
 
       setOwnedGifs(newOwned);
       setCoins(newCoins);
-      setCachedCoins(user.uid, newCoins);
 
       update(ref(db, `userSkins/${user.uid}`), {
         coins: newCoins,
@@ -298,8 +708,8 @@ const Shop = () => {
 
   const availableGifs = gifLibrary.filter(gif => !ownedGifs.includes(gif.id));
 
-  return (
-    <div className="shop-page">
+  const renderShopContent = () => (
+    <>
       <div className="shop-header">
         <div className="shop-header-left">
           {coins === null ? (
@@ -314,10 +724,7 @@ const Shop = () => {
           <h1>🛍️ Shop</h1>
         </div>
         <div className="shop-header-right">
-          <button
-            className="shop-get-more"
-            onClick={() => navigate('/coins')}
-          >
+          <button className="shop-get-more" onClick={() => navigate('/coins')}>
             Get More
           </button>
         </div>
@@ -359,6 +766,28 @@ const Shop = () => {
           )}
         </div>
       </div>
+    </>
+  );
+
+  return (
+    <div className="shop-page">
+      {isAdmin ? (
+        <div className="shop-admin-layout">
+          <div className="shop-admin-left">
+            {renderShopContent()}
+          </div>
+          <div className="shop-admin-right">
+            <AdminGifPanel onGifAdded={refreshData} />
+            <AdminManageGifs
+              gifs={allGifs}
+              onGifUpdated={refreshData}
+              onGifDeleted={refreshData}
+            />
+          </div>
+        </div>
+      ) : (
+        renderShopContent()
+      )}
 
       <Modal isOpen={modal.isOpen} onClose={closeModal} title={modal.title} message={modal.message} type={modal.type} />
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
