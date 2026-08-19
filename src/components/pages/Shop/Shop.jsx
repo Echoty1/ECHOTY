@@ -9,6 +9,8 @@ import { SKINS, getSkinById } from '../../../constants/echomoji';
 import { fetchGifLibrary } from '../../../services/gifLibraryService';
 import Modal from '../../common/Modal';
 import Toast from '../../Toast/Toast';
+import SEO from '../../common/SEO';
+import StructuredData from '../../common/StructuredData';
 import './Shop.css';
 
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
@@ -251,8 +253,8 @@ const AdminGifPanel = ({ onGifAdded }) => {
               style={{ display: 'none' }}
             />
             {!preview ? (
-              <div 
-                className="admin-gif-drop-zone" 
+              <div
+                className="admin-gif-drop-zone"
                 onClick={handleUploadClick}
                 onDragOver={(e) => e.preventDefault()}
                 onDrop={(e) => {
@@ -275,17 +277,17 @@ const AdminGifPanel = ({ onGifAdded }) => {
                   <img src={preview} alt="Preview" />
                 </div>
                 <div className="admin-gif-preview-actions">
-                  <button 
-                    type="button" 
-                    className="admin-gif-change-btn" 
+                  <button
+                    type="button"
+                    className="admin-gif-change-btn"
                     onClick={handleUploadClick}
                     disabled={uploading}
                   >
                     <i className="fas fa-exchange-alt" /> Change
                   </button>
-                  <button 
-                    type="button" 
-                    className="admin-gif-remove-btn" 
+                  <button
+                    type="button"
+                    className="admin-gif-remove-btn"
                     onClick={handleRemoveFile}
                     disabled={uploading}
                   >
@@ -387,59 +389,39 @@ const AdminManageGifs = ({ gifs, onGifUpdated, onGifDeleted }) => {
       const gifUrl = gif.url;
       const gifId = gif.id;
 
-      // 1. Delete from gifLibrary – this is critical
       await remove(ref(db, `gifLibrary/${gifId}`));
 
-      // 2. Try to clean up profiles and userSkins, but don't fail if these fail
-      let cleanupErrors = [];
-
-      try {
-        // Reset profiles that use this GIF
-        const profilesSnap = await get(ref(db, 'profiles'));
-        if (profilesSnap.exists()) {
-          const profiles = profilesSnap.val();
-          const updates = {};
-          for (const [uid, profile] of Object.entries(profiles)) {
-            if (profile.avatar === gifUrl || profile.videoUrl === gifUrl) {
-              updates[`profiles/${uid}/avatar`] = '';
-              updates[`profiles/${uid}/videoUrl`] = '';
-            }
-          }
-          if (Object.keys(updates).length > 0) {
-            await update(ref(db), updates);
+      const profilesSnap = await get(ref(db, 'profiles'));
+      if (profilesSnap.exists()) {
+        const profiles = profilesSnap.val();
+        const updates = {};
+        for (const [uid, profile] of Object.entries(profiles)) {
+          if (profile.avatar === gifUrl || profile.videoUrl === gifUrl) {
+            updates[`profiles/${uid}/avatar`] = '';
+            updates[`profiles/${uid}/videoUrl`] = '';
           }
         }
-      } catch (err) {
-        cleanupErrors.push('profiles: ' + err.message);
+        if (Object.keys(updates).length > 0) {
+          await update(ref(db), updates);
+        }
       }
 
-      try {
-        // Remove this GIF from all users' unlockedGifs arrays
-        const userSkinsSnap = await get(ref(db, 'userSkins'));
-        if (userSkinsSnap.exists()) {
-          const allSkins = userSkinsSnap.val();
-          const skinUpdates = {};
-          for (const [uid, data] of Object.entries(allSkins)) {
-            if (data.unlockedGifs && Array.isArray(data.unlockedGifs) && data.unlockedGifs.includes(gifId)) {
-              const newUnlocked = data.unlockedGifs.filter(id => id !== gifId);
-              skinUpdates[`userSkins/${uid}/unlockedGifs`] = newUnlocked;
-            }
-          }
-          if (Object.keys(skinUpdates).length > 0) {
-            await update(ref(db), skinUpdates);
+      const userSkinsSnap = await get(ref(db, 'userSkins'));
+      if (userSkinsSnap.exists()) {
+        const allSkins = userSkinsSnap.val();
+        const skinUpdates = {};
+        for (const [uid, data] of Object.entries(allSkins)) {
+          if (data.unlockedGifs && Array.isArray(data.unlockedGifs) && data.unlockedGifs.includes(gifId)) {
+            const newUnlocked = data.unlockedGifs.filter(id => id !== gifId);
+            skinUpdates[`userSkins/${uid}/unlockedGifs`] = newUnlocked;
           }
         }
-      } catch (err) {
-        cleanupErrors.push('userSkins: ' + err.message);
+        if (Object.keys(skinUpdates).length > 0) {
+          await update(ref(db), skinUpdates);
+        }
       }
 
-      // Show result
-      if (cleanupErrors.length > 0) {
-        showToast(`GIF "${gif.title}" deleted, but cleanup had issues: ${cleanupErrors.join('; ')}`, 'warning');
-      } else {
-        showToast(`GIF "${gif.title}" deleted and removed from all users.`, 'success');
-      }
-
+      showToast(`GIF "${gif.title}" deleted and removed from all users.`, 'success');
       setDeleting(false);
       if (onGifDeleted) onGifDeleted();
     } catch (err) {
@@ -479,15 +461,15 @@ const AdminManageGifs = ({ gifs, onGifUpdated, onGifDeleted }) => {
                 </div>
               </div>
               <div className="admin-gif-list-actions">
-                <button 
-                  className="admin-gif-edit-btn" 
+                <button
+                  className="admin-gif-edit-btn"
                   onClick={() => handleEditClick(gif)}
                   disabled={deleting}
                 >
                   <i className="fas fa-pen" />
                 </button>
-                <button 
-                  className="admin-gif-delete-btn" 
+                <button
+                  className="admin-gif-delete-btn"
                   onClick={() => handleDeleteGif(gif)}
                   disabled={deleting}
                 >
@@ -499,7 +481,6 @@ const AdminManageGifs = ({ gifs, onGifUpdated, onGifDeleted }) => {
         </div>
       )}
 
-      {/* Edit Modal */}
       {showEditModal && editingGif && (
         <div className="admin-edit-modal-overlay" onClick={() => setShowEditModal(false)}>
           <div className="admin-edit-modal" onClick={(e) => e.stopPropagation()}>
@@ -599,7 +580,6 @@ const Shop = () => {
     setLoading(true);
     try {
       const allGifs = await fetchGifLibrary(true);
-      console.log('📦 Loaded all GIFs:', allGifs.length);
       setAllGifs(allGifs);
       const premiumGifs = allGifs.filter(g => g.isPremium);
       setGifLibrary(premiumGifs);
@@ -770,28 +750,34 @@ const Shop = () => {
   );
 
   return (
-    <div className="shop-page">
-      {isAdmin ? (
-        <div className="shop-admin-layout">
-          <div className="shop-admin-left">
-            {renderShopContent()}
+    <>
+      <SEO
+        title="Shop – Skins & GIFs"
+        description="Customize your ECHOMOJI with exclusive skins and unlock premium GIFs. Express yourself with unique styles."
+      />
+      <StructuredData />
+      <div className="shop-page">
+        {isAdmin ? (
+          <div className="shop-admin-layout">
+            <div className="shop-admin-left">
+              {renderShopContent()}
+            </div>
+            <div className="shop-admin-right">
+              <AdminGifPanel onGifAdded={refreshData} />
+              <AdminManageGifs
+                gifs={allGifs}
+                onGifUpdated={refreshData}
+                onGifDeleted={refreshData}
+              />
+            </div>
           </div>
-          <div className="shop-admin-right">
-            <AdminGifPanel onGifAdded={refreshData} />
-            <AdminManageGifs
-              gifs={allGifs}
-              onGifUpdated={refreshData}
-              onGifDeleted={refreshData}
-            />
-          </div>
-        </div>
-      ) : (
-        renderShopContent()
-      )}
-
-      <Modal isOpen={modal.isOpen} onClose={closeModal} title={modal.title} message={modal.message} type={modal.type} />
-      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
-    </div>
+        ) : (
+          renderShopContent()
+        )}
+        <Modal isOpen={modal.isOpen} onClose={closeModal} title={modal.title} message={modal.message} type={modal.type} />
+        {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+      </div>
+    </>
   );
 };
 

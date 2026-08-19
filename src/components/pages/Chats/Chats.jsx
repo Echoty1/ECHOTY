@@ -25,10 +25,11 @@ import { fetchLatestMessage } from '../../../services/messageCache';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { getChatList, storeChatList } from '../../../services/indexedDBService';
 import Avatar from '../../common/Avatar';
+import SEO from '../../common/SEO';
+import StructuredData from '../../common/StructuredData';
 
 const CHAT_CHUNK_SIZE = 20;
 
-// ─── Demo constants ────────────────────────────────────────────
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 
@@ -69,7 +70,6 @@ const sanitizeName = (rawName, userId) => {
   return str;
 };
 
-// ─── Enhanced loadPartnerData – fetches profile + activeSkin ──
 const loadPartnerData = async (partnerId) => {
   try {
     const [profileSnap, skinSnap] = await Promise.all([
@@ -85,7 +85,6 @@ const loadPartnerData = async (partnerId) => {
       activeSkin: activeSkin || profile.activeSkin || null 
     };
     
-    // Cache in IndexedDB
     await setProfile(partnerId, fullProfile);
 
     return fullProfile;
@@ -98,7 +97,6 @@ const loadPartnerData = async (partnerId) => {
 // ─── Process a single chat item ─────────────────────────────────
 const processChatItem = async (chat, user, onlineUsers) => {
   try {
-    // Fetch profile with activeSkin
     const profile = await loadPartnerData(chat.id);
 
     let partnerName;
@@ -169,7 +167,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
       online: isOnline,
     };
   } catch (err) {
-    // Fallback
     let unreadCount = chat.unreadCount || 0;
     const readFlagKey = `chat_read_${chat.id}`;
     if (sessionStorage.getItem(readFlagKey) === 'true') {
@@ -607,148 +604,153 @@ const Chats = () => {
   const isSearchActive = searchQuery.trim().length > 0;
 
   return (
-    <div className="chats-page" ref={containerRef}>
-      <div className="search-container">
-        <div className="search-input-wrapper">
-          <i className="fas fa-search search-icon" />
-          <input
-            ref={inputRef}
-            type="text"
-            className="search-input"
-            placeholder="Search people or locations..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-          {searchQuery && (
-            <button className="search-clear" onClick={handleClearSearch}>✕</button>
-          )}
-        </div>
-      </div>
-
-      {isSearchActive ? (
-        <div className="recent-chats search-results-section">
-          <div className="section-header">
-            <span>Search Results {!isSearching && `(${safeResults.length})`}</span>
+    <>
+      <SEO
+        title="Chats – Recent Conversations"
+        description="View all your recent conversations on ECHO. Search and connect with friends and new people."
+      />
+      <StructuredData />
+      <div className="chats-page" ref={containerRef}>
+        <div className="search-container">
+          <div className="search-input-wrapper">
+            <i className="fas fa-search search-icon" />
+            <input
+              ref={inputRef}
+              type="text"
+              className="search-input"
+              placeholder="Search people or locations..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+            {searchQuery && (
+              <button className="search-clear" onClick={handleClearSearch}>✕</button>
+            )}
           </div>
-          {isSearching ? (
-            <div className="search-skeleton-wrapper">
-              <SkeletonChatItem />
-              <SkeletonChatItem />
-              <SkeletonChatItem />
+        </div>
+
+        {isSearchActive ? (
+          <div className="recent-chats search-results-section">
+            <div className="section-header">
+              <span>Search Results {!isSearching && `(${safeResults.length})`}</span>
             </div>
-          ) : safeResults.length > 0 ? (
-            safeResults.map((person) => {
-              if (!person) return null;
-              const isOnline = !!onlineUsers[person.id];
-              return (
-                <div
-                  key={person.id}
-                  className="chat-item regular-chat-item"
-                  onClick={() => startChat(person)}
-                >
-                  <div className="chat-avatar">
-                    <Avatar src={person.avatar} name={person.name} size={48} />
-                    <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
-                  </div>
-                  <div className="chat-info">
-                    <div className="chat-title-row">
-                      <span className="chat-name">{person.name}</span>
-                      {person.location && (
-                        <span className="chat-location-badge">📍 {person.location}</span>
-                      )}
+            {isSearching ? (
+              <div className="search-skeleton-wrapper">
+                <SkeletonChatItem />
+                <SkeletonChatItem />
+                <SkeletonChatItem />
+              </div>
+            ) : safeResults.length > 0 ? (
+              safeResults.map((person) => {
+                if (!person) return null;
+                const isOnline = !!onlineUsers[person.id];
+                return (
+                  <div
+                    key={person.id}
+                    className="chat-item regular-chat-item"
+                    onClick={() => startChat(person)}
+                  >
+                    <div className="chat-avatar">
+                      <Avatar src={person.avatar} name={person.name} size={48} />
+                      <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
                     </div>
-                    <div className="chat-last">
-                      {person.bio || person.status || 'Available on ECHO'}
+                    <div className="chat-info">
+                      <div className="chat-title-row">
+                        <span className="chat-name">{person.name}</span>
+                        {person.location && (
+                          <span className="chat-location-badge">📍 {person.location}</span>
+                        )}
+                      </div>
+                      <div className="chat-last">
+                        {person.bio || person.status || 'Available on ECHO'}
+                      </div>
+                    </div>
+                    <div className="chat-echomoji-middle">
+                      <ECHOMOJI
+                        mood={person.mood || 'happy'}
+                        skin={person.activeSkin ? getSkinById(person.activeSkin) : null}
+                        size={38}
+                        interactive={false}
+                      />
                     </div>
                   </div>
-                  <div className="chat-echomoji-middle">
-                    <ECHOMOJI
-                      mood={person.mood || 'happy'}
-                      skin={person.activeSkin ? getSkinById(person.activeSkin) : null}
-                      size={38}
-                      interactive={false}
-                    />
-                  </div>
+                );
+              })
+            ) : isDemoUser ? (
+              <div className="demo-search-empty">
+                <div className="demo-search-icon">
+                  <i className="fas fa-user-plus" />
                 </div>
-              );
-            })
-          ) : isDemoUser ? (
-            <div className="demo-search-empty">
-              <div className="demo-search-icon">
-                <i className="fas fa-user-plus" />
+                <p className="demo-search-title">Create an account to connect with others</p>
+                <span className="demo-search-subtitle">
+                  Sign up to chat with people around the world
+                </span>
               </div>
-              <p className="demo-search-title">Create an account to connect with others</p>
-              <span className="demo-search-subtitle">
-                Sign up to chat with people around the world
-              </span>
-            </div>
-          ) : (
-            <div className="no-chats-premium">
-              <div className="no-chats-icon-wrapper"><i className="fas fa-user-slash" /></div>
-              <p className="no-chats-title">No matching users found</p>
-              <span className="no-chats-subtitle">
-                Try searching for a different name, username, or location
-              </span>
-            </div>
-          )}
-        </div>
-      ) : (
-        <div className="recent-chats">
-          <div className="section-header">
-            <span>Recent Conversations</span>
-          </div>
-
-          {/* ─── ECHO AI Card ─────────────────────────────────── */}
-          <div className="chat-item ai-item floating-ai-card" onClick={() => startChat(ECHO_AI_USER)}>
-            <div className="chat-avatar">
-              <img src={ECHO_AI_USER.avatar} alt="ECHO AI" className="user-profile-img" style={{ objectFit: 'cover' }} />
-              <span className="presence-dot online" />
-            </div>
-            <div className="chat-info">
-              <div className="chat-title-row">
-                <span className="chat-name">{ECHO_AI_USER.name}</span>
-                <span className="ai-badge">AI</span>
+            ) : (
+              <div className="no-chats-premium">
+                <div className="no-chats-icon-wrapper"><i className="fas fa-user-slash" /></div>
+                <p className="no-chats-title">No matching users found</p>
+                <span className="no-chats-subtitle">
+                  Try searching for a different name, username, or location
+                </span>
               </div>
-              <div className="chat-last">{ECHO_AI_USER.lastMessage}</div>
-            </div>
-            <div className="chat-time">Always Active</div>
+            )}
           </div>
-
-          {/* ─── Sorted Non-AI Chats ──────────────────────────── */}
-          {loadingChats && safeRecentChats.length === 0 ? (
-            <SkeletonChatItem />
-          ) : safeRecentChats.length === 0 ? (
-            <div className="no-chats-premium">
-              <div className="no-chats-icon-wrapper"><i className="fas fa-comments" /></div>
-              <p className="no-chats-title">No conversations yet</p>
-              <span className="no-chats-subtitle">Search for people above to start a new chat</span>
+        ) : (
+          <div className="recent-chats">
+            <div className="section-header">
+              <span>Recent Conversations</span>
             </div>
-          ) : (
-            safeRecentChats.map((chat) => (
-              <ChatItem
-                key={chat.id}
-                chat={chat}
-                onStartChat={startChat}
-              />
-            ))
-          )}
 
-          {isLoadingMore && (
-            <div className="premium-status-pill">
-              <div className="pill-spinner" />
-              <span>Fetching conversations...</span>
+            <div className="chat-item ai-item floating-ai-card" onClick={() => startChat(ECHO_AI_USER)}>
+              <div className="chat-avatar">
+                <img src={ECHO_AI_USER.avatar} alt="ECHO AI" className="user-profile-img" style={{ objectFit: 'cover' }} />
+                <span className="presence-dot online" />
+              </div>
+              <div className="chat-info">
+                <div className="chat-title-row">
+                  <span className="chat-name">{ECHO_AI_USER.name}</span>
+                  <span className="ai-badge">AI</span>
+                </div>
+                <div className="chat-last">{ECHO_AI_USER.lastMessage}</div>
+              </div>
+              <div className="chat-time">Always Active</div>
             </div>
-          )}
 
-          {!hasMore && safeRecentChats.length > 0 && (
-            <div className="premium-end-pill">
-              <i className="fas fa-check-circle end-icon" />
-              <span>You're all caught up</span>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+            {loadingChats && safeRecentChats.length === 0 ? (
+              <SkeletonChatItem />
+            ) : safeRecentChats.length === 0 ? (
+              <div className="no-chats-premium">
+                <div className="no-chats-icon-wrapper"><i className="fas fa-comments" /></div>
+                <p className="no-chats-title">No conversations yet</p>
+                <span className="no-chats-subtitle">Search for people above to start a new chat</span>
+              </div>
+            ) : (
+              safeRecentChats.map((chat) => (
+                <ChatItem
+                  key={chat.id}
+                  chat={chat}
+                  onStartChat={startChat}
+                />
+              ))
+            )}
+
+            {isLoadingMore && (
+              <div className="premium-status-pill">
+                <div className="pill-spinner" />
+                <span>Fetching conversations...</span>
+              </div>
+            )}
+
+            {!hasMore && safeRecentChats.length > 0 && (
+              <div className="premium-end-pill">
+                <i className="fas fa-check-circle end-icon" />
+                <span>You're all caught up</span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </>
   );
 };
 

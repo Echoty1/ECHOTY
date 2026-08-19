@@ -34,6 +34,8 @@ import { getSkinById } from '../../../constants/echomoji';
 import { loadMessagesFromCache, upsertMessageInCache, deleteMessageFromCache } from '../../../services/messageStorage';
 import { cacheMedia } from '../../../utils/mediaCache';
 import { cleanCachedMessagesForChat } from '../../../services/messageCleanup';
+import SEO from '../../common/SEO';
+import StructuredData from '../../common/StructuredData';
 import './ChatView.css';
 
 const ECHO_AI_AVATAR = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
@@ -1442,127 +1444,135 @@ const ChatView = () => {
   };
 
   return (
-    <div className="chat-view">
-      <VideoAudioProvider>
-        <div className="messages-container">
-          {/* ─── Show skeleton if still loading and min time not passed ── */}
-          {(loadingMessages || !minLoadingTimePassed) && messages.length === 0 ? (
-            <div className="chat-skeleton-list">
-              <SkeletonMessage isOwn={false} />
-              <SkeletonMessage isOwn={true} />
-              <SkeletonMessage isOwn={false} />
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="empty-chat-state">
-              <i className="fas fa-paper-plane empty-icon" />
-              <p>No messages yet. Say hello!</p>
-            </div>
-          ) : (
-            messages.map((msg) => (
-              <React.Fragment key={msg.id}>{renderMessage(msg)}</React.Fragment>
-            ))
-          )}
-          <div ref={messagesEndRef} />
-        </div>
-      </VideoAudioProvider>
-
-      {/* ─── Emoji Picker ───────────────────────────────────────── */}
-      {showEmojiPicker && (
-        <ChatEmojiPicker
-          onClose={() => setShowEmojiPicker(false)}
-          onSelect={handleEmojiSelect}
-          excludeRefs={[inputContainerRef, captionPreviewRef]}
-        />
-      )}
-
-      {/* ─── Input Bar ──────────────────────────────────────────── */}
-      <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
-        {replyTo && <ReplyPreview replyTo={replyTo} onCancel={cancelReply} />}
-        <div className="chat-input-row">
-          <button
-            type="button"
-            className="chat-attach-btn"
-            onClick={() => fileInputRef.current?.click()}
-            title="Attach image or video"
-          >
-            <i className="fas fa-paperclip" />
-          </button>
-          <button
-            type="button"
-            className="chat-emoji-btn"
-            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            title="Emojis"
-          >
-            <i className="fas fa-smile" />
-          </button>
-          <button
-            type="button"
-            className="chat-voice-btn"
-            onClick={() => setShowVoiceRecorder(true)}
-            title="Voice note"
-          >
-            <i className="fas fa-microphone" />
-          </button>
-          <input
-            ref={inputRef}
-            type="text"
-            className="chat-input"
-            placeholder={`Message ${displayName}...`}
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSendText(e);
-              }
-            }}
-            onFocus={() => { focusedField.current = 'main'; }}
-            onBlur={() => { /* keep last known focus */ }}
-          />
-          <input
-            type="file"
-            ref={fileInputRef}
-            accept="image/*,video/*"
-            style={{ display: 'none' }}
-            onChange={handleFileSelect}
-          />
-          <button
-            type="submit"
-            className="chat-send-btn"
-            disabled={!newMessage.trim()}
-          >
-            <i className="fas fa-paper-plane" />
-          </button>
-        </div>
-      </form>
-
-      {/* ─── Voice Recorder Overlay ─────────────────────────────── */}
-      {showVoiceRecorder && (
-        <VoiceRecorder
-          onSend={handleVoiceSend}
-          onCancel={() => setShowVoiceRecorder(false)}
-        />
-      )}
-
-      {renderPreviewOverlay()}
-
-      {/* ─── Edit Message Modal ────────────────────────────────── */}
-      <EditMessageModal
-        isOpen={!!editingMessage}
-        onClose={() => setEditingMessage(null)}
-        messageText={editingMessage?.text || ''}
-        onSave={saveEditedMessage}
+    <>
+      <SEO
+        title={isEchoAi ? 'ECHO AI Chat' : `Chat with ${displayName}`}
+        description={isEchoAi ? 'Chat with ECHO AI assistant.' : `Chat with ${displayName} on ECHO.`}
+        url={`https://echoty.xyz/chat/${userId}`}
       />
+      <StructuredData />
+      <div className="chat-view">
+        <VideoAudioProvider>
+          <div className="messages-container">
+            {/* ─── Show skeleton if still loading and min time not passed ── */}
+            {(loadingMessages || !minLoadingTimePassed) && messages.length === 0 ? (
+              <div className="chat-skeleton-list">
+                <SkeletonMessage isOwn={false} />
+                <SkeletonMessage isOwn={true} />
+                <SkeletonMessage isOwn={false} />
+              </div>
+            ) : messages.length === 0 ? (
+              <div className="empty-chat-state">
+                <i className="fas fa-paper-plane empty-icon" />
+                <p>No messages yet. Say hello!</p>
+              </div>
+            ) : (
+              messages.map((msg) => (
+                <React.Fragment key={msg.id}>{renderMessage(msg)}</React.Fragment>
+              ))
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        </VideoAudioProvider>
 
-      {/* ─── Edit Media Caption Modal ──────────────────────────── */}
-      <EditMediaCaptionModal
-        isOpen={!!editingMediaMessage}
-        onClose={() => setEditingMediaMessage(null)}
-        currentCaption={editingMediaMessage?.caption || ''}
-        mediaType={editingMediaMessage?.mediaType}
-        onSave={saveMediaCaption}
-      />
-    </div>
+        {/* ─── Emoji Picker ───────────────────────────────────────── */}
+        {showEmojiPicker && (
+          <ChatEmojiPicker
+            onClose={() => setShowEmojiPicker(false)}
+            onSelect={handleEmojiSelect}
+            excludeRefs={[inputContainerRef, captionPreviewRef]}
+          />
+        )}
+
+        {/* ─── Input Bar ──────────────────────────────────────────── */}
+        <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
+          {replyTo && <ReplyPreview replyTo={replyTo} onCancel={cancelReply} />}
+          <div className="chat-input-row">
+            <button
+              type="button"
+              className="chat-attach-btn"
+              onClick={() => fileInputRef.current?.click()}
+              title="Attach image or video"
+            >
+              <i className="fas fa-paperclip" />
+            </button>
+            <button
+              type="button"
+              className="chat-emoji-btn"
+              onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+              title="Emojis"
+            >
+              <i className="fas fa-smile" />
+            </button>
+            <button
+              type="button"
+              className="chat-voice-btn"
+              onClick={() => setShowVoiceRecorder(true)}
+              title="Voice note"
+            >
+              <i className="fas fa-microphone" />
+            </button>
+            <input
+              ref={inputRef}
+              type="text"
+              className="chat-input"
+              placeholder={`Message ${displayName}...`}
+              value={newMessage}
+              onChange={(e) => setNewMessage(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSendText(e);
+                }
+              }}
+              onFocus={() => { focusedField.current = 'main'; }}
+              onBlur={() => { /* keep last known focus */ }}
+            />
+            <input
+              type="file"
+              ref={fileInputRef}
+              accept="image/*,video/*"
+              style={{ display: 'none' }}
+              onChange={handleFileSelect}
+            />
+            <button
+              type="submit"
+              className="chat-send-btn"
+              disabled={!newMessage.trim()}
+            >
+              <i className="fas fa-paper-plane" />
+            </button>
+          </div>
+        </form>
+
+        {/* ─── Voice Recorder Overlay ─────────────────────────────── */}
+        {showVoiceRecorder && (
+          <VoiceRecorder
+            onSend={handleVoiceSend}
+            onCancel={() => setShowVoiceRecorder(false)}
+          />
+        )}
+
+        {renderPreviewOverlay()}
+
+        {/* ─── Edit Message Modal ────────────────────────────────── */}
+        <EditMessageModal
+          isOpen={!!editingMessage}
+          onClose={() => setEditingMessage(null)}
+          messageText={editingMessage?.text || ''}
+          onSave={saveEditedMessage}
+        />
+
+        {/* ─── Edit Media Caption Modal ──────────────────────────── */}
+        <EditMediaCaptionModal
+          isOpen={!!editingMediaMessage}
+          onClose={() => setEditingMediaMessage(null)}
+          currentCaption={editingMediaMessage?.caption || ''}
+          mediaType={editingMediaMessage?.mediaType}
+          onSave={saveMediaCaption}
+        />
+      </div>
+    </>
   );
 };
 

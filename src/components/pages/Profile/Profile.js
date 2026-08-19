@@ -13,6 +13,8 @@ import { useCachedImage } from '../../../utils/mediaCache';
 import ChatEmojiPicker from '../Chat/ChatEmojiPicker';
 import MoodPicker from '../../common/MoodPicker';
 import Avatar from '../../common/Avatar';
+import SEO from '../../common/SEO';
+import StructuredData from '../../common/StructuredData';
 import './Profile.css';
 
 const STORAGE_PREFIX = 'echo_cache_';
@@ -47,7 +49,7 @@ const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', 
   />
 );
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 const DEFAULT_INTEREST_TEMPLATES = [
   '🎮 Gaming',
@@ -380,323 +382,319 @@ const Profile = () => {
     }
   };
 
-  const currentMediaUrl = (editing ? editData.videoUrl : profile?.videoUrl) || 
-                          (editing ? editData.avatar : profile?.avatar);
+  const currentMediaUrl = (editing ? editData.videoUrl : profile?.videoUrl) ||
+    (editing ? editData.avatar : profile?.avatar);
   const cachedMediaUrl = useCachedImage(currentMediaUrl, null);
   const displayMediaUrl = cachedMediaUrl || currentMediaUrl;
 
-  const isVideoFormat = (editing ? editData.videoUrl : profile?.videoUrl) && 
-                        ((editing ? editData.videoUrl : profile?.videoUrl)?.endsWith('.mp4') || 
-                         (editing ? editData.videoUrl : profile?.videoUrl)?.endsWith('.webm'));
+  const isVideoFormat = (editing ? editData.videoUrl : profile?.videoUrl) &&
+    ((editing ? editData.videoUrl : profile?.videoUrl)?.endsWith('.mp4') ||
+     (editing ? editData.videoUrl : profile?.videoUrl)?.endsWith('.webm'));
 
   const currentSkinId = activeSkinId || profile?.activeSkin;
   const activeSkinObj = useMemo(() => (currentSkinId ? getSkinById(currentSkinId) : null), [currentSkinId]);
 
   return (
-    <div className="profile-page">
-      <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleImageFile} />
+    <>
+      <SEO
+        title="Profile – Your Identity"
+        description="Manage your profile, mood, and avatar on ECHO. Show the world who you are with your unique ECHOMOJI."
+      />
+      <StructuredData />
+      <div className="profile-page">
+        <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleImageFile} />
 
-      <div className="profile-card">
-        <div
-          className="profile-avatar"
-          onClick={() => (editing || isDemoUser) && setShowAvatarPicker(true)}
-          style={{ cursor: (editing || isDemoUser) ? 'pointer' : 'default', position: 'relative' }}
-        >
-          {loading ? (
-            <SkeletonBlock width="100%" height="100%" borderRadius="50%" />
-          ) : isVideoFormat ? (
-            <video src={displayMediaUrl} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-          ) : displayMediaUrl ? (
-            <img src={displayMediaUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-          ) : (
-            // ✅ Show initials using Avatar component (no ECHOMOJI)
-            <Avatar src={null} name={editData?.name || profile?.name || 'User'} size={110} />
-          )}
-          
-          {(editing || isDemoUser) && <div className="avatar-overlay">Tap to change</div>}
-        </div>
-
-        {/* ─── Name ────────────────────────────────────────────── */}
-        {isDemoUser ? (
-          <div className="profile-name" style={{ textAlign: 'center', marginTop: '8px' }}>
-            {profile?.name || 'User'}
-          </div>
-        ) : editing ? (
-          <div ref={editingContainerRef} style={{ position: 'relative', width: '100%' }}>
-            <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-              <input
-                ref={nameInputRef}
-                type="text"
-                className="profile-name-input"
-                value={editData.name || ''}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val.length <= NAME_MAX_LENGTH) {
-                    setEditData({ ...editData, name: val });
-                  }
-                }}
-                placeholder="Your name"
-                maxLength={NAME_MAX_LENGTH}
-                style={{ flex: 1, paddingLeft: '40px', paddingRight: '50px' }}
-                onFocus={() => handleInputFocus('name')}
-                onMouseDown={handleInputMouseDown}
-                onTouchStart={handleInputMouseDown}
-              />
-              <button
-                type="button"
-                onClick={() => openEmojiPicker('name')}
-                style={{
-                  position: 'absolute',
-                  left: '8px',
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  background: 'none',
-                  border: 'none',
-                  color: '#888',
-                  fontSize: '18px',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  zIndex: 2,
-                }}
-                title="Insert emoji"
-              >
-                <i className="fas fa-smile" />
-              </button>
-              <span style={{
-                position: 'absolute',
-                right: '12px',
-                bottom: '6px',
-                fontSize: '11px',
-                color: (editData.name?.length || 0) >= NAME_MAX_LENGTH ? '#EF4444' : '#666',
-                pointerEvents: 'none',
-              }}>
-                {editData.name?.length || 0}/{NAME_MAX_LENGTH}
-              </span>
-            </div>
-          </div>
-        ) : loading ? (
-          <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
-            <SkeletonBlock width="140px" height="22px" />
-          </div>
-        ) : (
-          <>
-            <div className="profile-name">{profile?.name || 'User'}</div>
-          </>
-        )}
-
-        {/* ─── Bio ────────────────────────────────────────────── */}
-        {isDemoUser ? (
-          <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>
-            {profile?.bio || 'No bio yet.'}
-          </p>
-        ) : editing ? (
-          <div style={{ position: 'relative', width: '100%', marginTop: '12px' }}>
-            <div style={{ position: 'relative' }}>
-              <textarea
-                ref={bioInputRef}
-                className="profile-bio-input"
-                value={editData.bio || ''}
-                onChange={(e) => {
-                  const val = e.target.value;
-                  if (val.length <= BIO_MAX_LENGTH) {
-                    setEditData({ ...editData, bio: val });
-                  }
-                }}
-                placeholder="Write a short bio..."
-                rows={3}
-                maxLength={BIO_MAX_LENGTH}
-                style={{
-                  width: '100%',
-                  background: 'rgba(255,255,255,0.05)',
-                  color: '#fff',
-                  border: '1px solid rgba(255,255,255,0.1)',
-                  borderRadius: '8px',
-                  padding: '8px 60px 8px 40px',
-                  resize: 'vertical',
-                }}
-                onFocus={() => handleInputFocus('bio')}
-                onMouseDown={handleInputMouseDown}
-                onTouchStart={handleInputMouseDown}
-              />
-              <button
-                type="button"
-                onClick={() => openEmojiPicker('bio')}
-                style={{
-                  position: 'absolute',
-                  left: '8px',
-                  top: '8px',
-                  background: 'none',
-                  border: 'none',
-                  color: '#888',
-                  fontSize: '18px',
-                  cursor: 'pointer',
-                  padding: '4px',
-                  zIndex: 2,
-                }}
-                title="Insert emoji"
-              >
-                <i className="fas fa-smile" />
-              </button>
-              <span style={{
-                position: 'absolute',
-                right: '12px',
-                bottom: '6px',
-                fontSize: '11px',
-                color: (editData.bio?.length || 0) >= BIO_MAX_LENGTH ? '#EF4444' : '#666',
-                pointerEvents: 'none',
-              }}>
-                {editData.bio?.length || 0}/{BIO_MAX_LENGTH}
-              </span>
-            </div>
-          </div>
-        ) : (
-          profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>{profile.bio}</p>
-        )}
-
-        {/* ─── Mood Picker ─────────────────────────────────────── */}
-        {!loading && (
-          <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px' }}>
-            {editing ? (
-              <>
-                <div style={{ fontSize: '14px', color: '#888', marginBottom: '8px', fontWeight: 500 }}>Choose your mood</div>
-                <MoodPicker currentMood={editData.mood || 'neutral'} onSelect={handleMoodChange} />
-              </>
+        <div className="profile-card">
+          <div
+            className="profile-avatar"
+            onClick={() => (editing || isDemoUser) && setShowAvatarPicker(true)}
+            style={{ cursor: (editing || isDemoUser) ? 'pointer' : 'default', position: 'relative' }}
+          >
+            {loading ? (
+              <SkeletonBlock width="100%" height="100%" borderRadius="50%" />
+            ) : isVideoFormat ? (
+              <video src={displayMediaUrl} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+            ) : displayMediaUrl ? (
+              <img src={displayMediaUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-                <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={48} interactive={false} animated={true} />
-                <span style={{ fontSize: '13px', color: '#888', fontWeight: 500 }}>
-                  Mood: <strong style={{ color: '#FFF', textTransform: 'capitalize' }}>{profile?.mood || 'happy'}</strong>
+              <Avatar src={null} name={editData?.name || profile?.name || 'User'} size={110} />
+            )}
+            {(editing || isDemoUser) && <div className="avatar-overlay">Tap to change</div>}
+          </div>
+
+          {isDemoUser ? (
+            <div className="profile-name" style={{ textAlign: 'center', marginTop: '8px' }}>
+              {profile?.name || 'User'}
+            </div>
+          ) : editing ? (
+            <div ref={editingContainerRef} style={{ position: 'relative', width: '100%' }}>
+              <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+                <input
+                  ref={nameInputRef}
+                  type="text"
+                  className="profile-name-input"
+                  value={editData.name || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val.length <= NAME_MAX_LENGTH) {
+                      setEditData({ ...editData, name: val });
+                    }
+                  }}
+                  placeholder="Your name"
+                  maxLength={NAME_MAX_LENGTH}
+                  style={{ flex: 1, paddingLeft: '40px', paddingRight: '50px' }}
+                  onFocus={() => handleInputFocus('name')}
+                  onMouseDown={handleInputMouseDown}
+                  onTouchStart={handleInputMouseDown}
+                />
+                <button
+                  type="button"
+                  onClick={() => openEmojiPicker('name')}
+                  style={{
+                    position: 'absolute',
+                    left: '8px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    background: 'none',
+                    border: 'none',
+                    color: '#888',
+                    fontSize: '18px',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    zIndex: 2,
+                  }}
+                  title="Insert emoji"
+                >
+                  <i className="fas fa-smile" />
+                </button>
+                <span style={{
+                  position: 'absolute',
+                  right: '12px',
+                  bottom: '6px',
+                  fontSize: '11px',
+                  color: (editData.name?.length || 0) >= NAME_MAX_LENGTH ? '#EF4444' : '#666',
+                  pointerEvents: 'none',
+                }}>
+                  {editData.name?.length || 0}/{NAME_MAX_LENGTH}
                 </span>
               </div>
+            </div>
+          ) : loading ? (
+            <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
+              <SkeletonBlock width="140px" height="22px" />
+            </div>
+          ) : (
+            <div className="profile-name">{profile?.name || 'User'}</div>
+          )}
+
+          {isDemoUser ? (
+            <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>
+              {profile?.bio || 'No bio yet.'}
+            </p>
+          ) : editing ? (
+            <div style={{ position: 'relative', width: '100%', marginTop: '12px' }}>
+              <div style={{ position: 'relative' }}>
+                <textarea
+                  ref={bioInputRef}
+                  className="profile-bio-input"
+                  value={editData.bio || ''}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val.length <= BIO_MAX_LENGTH) {
+                      setEditData({ ...editData, bio: val });
+                    }
+                  }}
+                  placeholder="Write a short bio..."
+                  rows={3}
+                  maxLength={BIO_MAX_LENGTH}
+                  style={{
+                    width: '100%',
+                    background: 'rgba(255,255,255,0.05)',
+                    color: '#fff',
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    borderRadius: '8px',
+                    padding: '8px 60px 8px 40px',
+                    resize: 'vertical',
+                  }}
+                  onFocus={() => handleInputFocus('bio')}
+                  onMouseDown={handleInputMouseDown}
+                  onTouchStart={handleInputMouseDown}
+                />
+                <button
+                  type="button"
+                  onClick={() => openEmojiPicker('bio')}
+                  style={{
+                    position: 'absolute',
+                    left: '8px',
+                    top: '8px',
+                    background: 'none',
+                    border: 'none',
+                    color: '#888',
+                    fontSize: '18px',
+                    cursor: 'pointer',
+                    padding: '4px',
+                    zIndex: 2,
+                  }}
+                  title="Insert emoji"
+                >
+                  <i className="fas fa-smile" />
+                </button>
+                <span style={{
+                  position: 'absolute',
+                  right: '12px',
+                  bottom: '6px',
+                  fontSize: '11px',
+                  color: (editData.bio?.length || 0) >= BIO_MAX_LENGTH ? '#EF4444' : '#666',
+                  pointerEvents: 'none',
+                }}>
+                  {editData.bio?.length || 0}/{BIO_MAX_LENGTH}
+                </span>
+              </div>
+            </div>
+          ) : (
+            profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>{profile.bio}</p>
+          )}
+
+          {!loading && (
+            <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px' }}>
+              {editing ? (
+                <>
+                  <div style={{ fontSize: '14px', color: '#888', marginBottom: '8px', fontWeight: 500 }}>Choose your mood</div>
+                  <MoodPicker currentMood={editData.mood || 'neutral'} onSelect={handleMoodChange} />
+                </>
+              ) : (
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+                  <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={48} interactive={false} animated={true} />
+                  <span style={{ fontSize: '13px', color: '#888', fontWeight: 500 }}>
+                    Mood: <strong style={{ color: '#FFF', textTransform: 'capitalize' }}>{profile?.mood || 'happy'}</strong>
+                  </span>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="moving-interests-container" style={{ width: '100%', overflow: 'hidden', padding: '6px 0', marginTop: '12px' }}>
+            <div
+              className="moving-interests-track"
+              style={{
+                display: 'flex',
+                gap: '8px',
+                width: 'max-content',
+                animation: 'scrollInterests 18s linear infinite',
+              }}
+            >
+              {[...DEFAULT_INTEREST_TEMPLATES, ...DEFAULT_INTEREST_TEMPLATES].map((item, idx) => (
+                <span
+                  key={idx}
+                  style={{
+                    background: 'rgba(255, 255, 255, 0.08)',
+                    color: '#AAA',
+                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    padding: '4px 12px',
+                    borderRadius: '12px',
+                    fontSize: '12px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {item}
+                </span>
+              ))}
+            </div>
+          </div>
+
+          <div className="profile-actions" style={{ marginTop: '24px', display: 'flex', gap: '12px', justifyContent: 'center' }}>
+            {editing ? (
+              isDemoUser ? null : (
+                <>
+                  <button className="save-btn" onClick={handleSave} style={{ background: '#6C3CE1', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer', fontWeight: 600 }}>
+                    Save
+                  </button>
+                  <button className="cancel-btn" onClick={() => { setEditing(false); setEditData(profile); }} style={{ background: '#333', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer' }}>
+                    Cancel
+                  </button>
+                </>
+              )
+            ) : (
+              <button
+                className="edit-btn"
+                onClick={() => {
+                  if (isDemoUser) {
+                    setShowAvatarPicker(true);
+                  } else {
+                    setEditing(true);
+                  }
+                }}
+                style={{ background: '#6C3CE1', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer', fontWeight: 600 }}
+              >
+                {isDemoUser ? 'Change Avatar' : 'Edit Profile'}
+              </button>
             )}
           </div>
-        )}
+        </div>
 
-        {/* ─── Interests (moving) ────────────────────────────── */}
-        <div className="moving-interests-container" style={{ width: '100%', overflow: 'hidden', padding: '6px 0', marginTop: '12px' }}>
-          <div
-            className="moving-interests-track"
-            style={{
-              display: 'flex',
-              gap: '8px',
-              width: 'max-content',
-              animation: 'scrollInterests 18s linear infinite',
-            }}
-          >
-            {[...DEFAULT_INTEREST_TEMPLATES, ...DEFAULT_INTEREST_TEMPLATES].map((item, idx) => (
-              <span
-                key={idx}
-                style={{
-                  background: 'rgba(255, 255, 255, 0.08)',
-                  color: '#AAA',
-                  border: '1px solid rgba(255, 255, 255, 0.12)',
-                  padding: '4px 12px',
-                  borderRadius: '12px',
-                  fontSize: '12px',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {item}
-              </span>
-            ))}
+        <div className="account-details">
+          <div className="account-details-header">
+            <span>ACCOUNT DETAILS</span>
+          </div>
+          <div className="account-details-row">
+            <span className="account-details-label">Email</span>
+            <span className="account-details-value">{user?.email || 'N/A'}</span>
+          </div>
+          <div className="account-details-row">
+            <span className="account-details-label">User ID (UID)</span>
+            <div className="account-details-uid-wrapper">
+              <span className="account-details-value uid">{user?.uid}</span>
+              <button className="copy-uid-btn" onClick={handleCopyUid}>
+                {copiedUid ? 'Copied! ✓' : 'Copy UID'}
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* ─── Actions ───────────────────────────────────────────── */}
-        <div className="profile-actions" style={{ marginTop: '24px', display: 'flex', gap: '12px', justifyContent: 'center' }}>
-          {editing ? (
-            isDemoUser ? null : (
-              <>
-                <button className="save-btn" onClick={handleSave} style={{ background: '#6C3CE1', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer', fontWeight: 600 }}>
-                  Save
-                </button>
-                <button className="cancel-btn" onClick={() => { setEditing(false); setEditData(profile); }} style={{ background: '#333', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer' }}>
-                  Cancel
-                </button>
-              </>
-            )
-          ) : (
-            <button 
-              className="edit-btn" 
-              onClick={() => {
-                if (isDemoUser) {
-                  setShowAvatarPicker(true);
-                } else {
-                  setEditing(true);
-                }
-              }} 
-              style={{ background: '#6C3CE1', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer', fontWeight: 600 }}
-            >
-              {isDemoUser ? 'Change Avatar' : 'Edit Profile'}
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* ─── Account Details ────────────────────────────────────── */}
-      <div className="account-details">
-        <div className="account-details-header">
-          <span>ACCOUNT DETAILS</span>
-        </div>
-        <div className="account-details-row">
-          <span className="account-details-label">Email</span>
-          <span className="account-details-value">{user?.email || 'N/A'}</span>
-        </div>
-        <div className="account-details-row">
-          <span className="account-details-label">User ID (UID)</span>
-          <div className="account-details-uid-wrapper">
-            <span className="account-details-value uid">{user?.uid}</span>
-            <button className="copy-uid-btn" onClick={handleCopyUid}>
-              {copiedUid ? 'Copied! ✓' : 'Copy UID'}
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ─── Modals ───────────────────────────────────────────────── */}
-      <AvatarPicker
-        isOpen={showAvatarPicker}
-        onClose={() => setShowAvatarPicker(false)}
-        onUploadImage={() => {
-          if (isDemoUser) {
-            setToast({ message: 'Demo users cannot upload images.', type: 'error' });
-            return;
-          }
-          imageInputRef.current?.click();
-        }}
-        onChooseLibrary={() => { 
-          setShowAvatarPicker(false); 
-          setShowGifLibrary(true); 
-        }}
-        uploading={uploading}
-        isDemo={isDemoUser}
-      />
-
-      <GifLibraryModal
-        isOpen={showGifLibrary}
-        onClose={() => setShowGifLibrary(false)}
-        onSelect={handleGifSelect}
-        ownedGifs={unlockedGifs}
-        mode="profile"
-      />
-      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
-
-      {showEmojiPicker && (
-        <ChatEmojiPicker
-          onClose={closeEmojiPicker}
-          onSelect={handleEmojiSelect}
-          excludeRefs={[editingContainerRef]}
-          style={{
-            position: 'fixed',
-            left: '20px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: '320px',
-            maxHeight: '70vh',
+        <AvatarPicker
+          isOpen={showAvatarPicker}
+          onClose={() => setShowAvatarPicker(false)}
+          onUploadImage={() => {
+            if (isDemoUser) {
+              setToast({ message: 'Demo users cannot upload images.', type: 'error' });
+              return;
+            }
+            imageInputRef.current?.click();
           }}
+          onChooseLibrary={() => {
+            setShowAvatarPicker(false);
+            setShowGifLibrary(true);
+          }}
+          uploading={uploading}
+          isDemo={isDemoUser}
         />
-      )}
-    </div>
+
+        <GifLibraryModal
+          isOpen={showGifLibrary}
+          onClose={() => setShowGifLibrary(false)}
+          onSelect={handleGifSelect}
+          ownedGifs={unlockedGifs}
+          mode="profile"
+        />
+        {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+
+        {showEmojiPicker && (
+          <ChatEmojiPicker
+            onClose={closeEmojiPicker}
+            onSelect={handleEmojiSelect}
+            excludeRefs={[editingContainerRef]}
+            style={{
+              position: 'fixed',
+              left: '20px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: '320px',
+              maxHeight: '70vh',
+            }}
+          />
+        )}
+      </div>
+    </>
   );
 };
 

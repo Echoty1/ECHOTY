@@ -1,6 +1,8 @@
 // src/components/pages/Other/Other.js
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import SEO from '../../common/SEO';
+import StructuredData from '../../common/StructuredData';
 import './Other.css';
 
 const Other = () => {
@@ -52,32 +54,39 @@ const Other = () => {
   ];
 
   return (
-    <div className="other-page">
-      <div className="other-header">
-        <h2 className="other-title">⚙️ Settings & Legal</h2>
-        <p className="other-subtitle">Explore additional features and policies</p>
+    <>
+      <SEO
+        title="Settings & Legal"
+        description="Manage your ECHO settings, read our terms of service, privacy policy, and learn more about us."
+      />
+      <StructuredData />
+      <div className="other-page">
+        <div className="other-header">
+          <h2 className="other-title">⚙️ Settings & Legal</h2>
+          <p className="other-subtitle">Explore additional features and policies</p>
+        </div>
+        <div className="other-menu">
+          {menuItems.map((item) => (
+            <div
+              key={item.id}
+              className="other-menu-item"
+              onClick={() => navigate(item.path)}
+            >
+              <div className="other-icon-wrapper">
+                <i className={`fas ${item.icon}`} />
+              </div>
+              <div className="other-item-content">
+                <div className="other-item-label">{item.label}</div>
+                <div className="other-item-desc">{item.description}</div>
+              </div>
+              <div className="other-item-arrow">
+                <i className="fas fa-chevron-right" />
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
-      <div className="other-menu">
-        {menuItems.map((item) => (
-          <div
-            key={item.id}
-            className="other-menu-item"
-            onClick={() => navigate(item.path)}
-          >
-            <div className="other-icon-wrapper">
-              <i className={`fas ${item.icon}`} />
-            </div>
-            <div className="other-item-content">
-              <div className="other-item-label">{item.label}</div>
-              <div className="other-item-desc">{item.description}</div>
-            </div>
-            <div className="other-item-arrow">
-              <i className="fas fa-chevron-right" />
-            </div>
-          </div>
-        ))}
-      </div>
-    </div>
+    </>
   );
 };
 

@@ -8,29 +8,23 @@ const UserPreviewModal = ({ user, onClose, onChat }) => {
   if (!user) return null;
 
   const skin = user.activeSkin ? getSkinById(user.activeSkin) : null;
-  const mood = user.mood || 'happy';
 
   return (
     <div className="user-preview-overlay" onClick={onClose}>
       <div className="user-preview-card" onClick={(e) => e.stopPropagation()}>
-        {/* Close button */}
         <button className="user-preview-close" onClick={onClose}>
           <i className="fas fa-times" />
         </button>
 
-        {/* Avatar with glow ring */}
-        <div className="user-preview-avatar-wrapper">
-          <div className="user-preview-avatar-ring">
-            <Avatar src={user.avatar} name={user.name} size={80} />
-          </div>
+        <div className="user-preview-avatar">
+          <Avatar src={user.avatar} name={user.name} size={80} />
         </div>
 
-        {/* Name + ECHOMOJI side by side */}
-        <div className="user-preview-name-row">
-          <span className="user-preview-name">{user.name}</span>
+        <div className="user-preview-name">
+          {user.name}
           <span className="user-preview-echomoji">
             <ECHOMOJI
-              mood={mood}
+              mood={user.mood || 'happy'}
               skin={skin}
               size={36}
               interactive={false}
@@ -39,12 +33,10 @@ const UserPreviewModal = ({ user, onClose, onChat }) => {
           </span>
         </div>
 
-        {/* Bio */}
         {user.bio && (
           <p className="user-preview-bio">{user.bio}</p>
         )}
 
-        {/* Chat button */}
         <button className="user-preview-chat-btn" onClick={onChat}>
           <i className="fas fa-comment" /> Chat
         </button>
@@ -57,13 +49,13 @@ const UserPreviewModal = ({ user, onClose, onChat }) => {
           left: 0;
           right: 0;
           bottom: 0;
-          background: rgba(0, 0, 0, 0.8);
-          backdrop-filter: blur(12px);
+          background: rgba(0, 0, 0, 0.75);
+          backdrop-filter: blur(8px);
           display: flex;
           align-items: center;
           justify-content: center;
           z-index: 10000;
-          animation: fadeIn 0.25s ease;
+          animation: fadeIn 0.2s ease;
         }
         .user-preview-card {
           background: #12121A;

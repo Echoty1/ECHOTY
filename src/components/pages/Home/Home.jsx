@@ -7,6 +7,8 @@ import { db } from '../../../services/firebase';
 import { ref, onValue } from 'firebase/database';
 import Avatar from '../../common/Avatar';
 import UserPreviewModal from '../../common/UserPreviewModal';
+import SEO from '../../common/SEO';
+import StructuredData from '../../common/StructuredData';
 import './Home.css';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
@@ -107,47 +109,54 @@ const Home = () => {
   }
 
   return (
-    <div className="home-page">
-      <div className="home-container">
-        <section className="home-section live-section">
-          <div className="section-header">
-            <span className="live-dot" />
-            <h3>Live Now</h3>
-            <span className="live-count">{onlineUsers.length} online</span>
-          </div>
-          <p className="live-hint">Tap any profile to view and chat</p>
-          <div className="live-users-scroll">
-            {onlineUsers.length === 0 ? (
-              <p className="live-empty">No one online right now</p>
-            ) : (
-              onlineUsers.map((profile) => (
-                <div
-                  key={profile.uid}
-                  className="live-user-card"
-                  onClick={() => openUserPreview(profile.uid)}
-                  role="button"
-                  tabIndex={0}
-                >
-                  <div className="live-avatar">
-                    <Avatar src={profile.avatar} name={profile.name} size={72} />
-                    <span className="online-indicator" />
+    <>
+      <SEO
+        title="Live Now – Chat with Friends"
+        description="See who's online and start a conversation instantly on ECHO. Connect with friends and make new ones."
+      />
+      <StructuredData />
+      <div className="home-page">
+        <div className="home-container">
+          <section className="home-section live-section">
+            <div className="section-header">
+              <span className="live-dot" />
+              <h3>Live Now</h3>
+              <span className="live-count">{onlineUsers.length} online</span>
+            </div>
+            <p className="live-hint">Tap any profile to view and chat</p>
+            <div className="live-users-scroll">
+              {onlineUsers.length === 0 ? (
+                <p className="live-empty">No one online right now</p>
+              ) : (
+                onlineUsers.map((profile) => (
+                  <div
+                    key={profile.uid}
+                    className="live-user-card"
+                    onClick={() => openUserPreview(profile.uid)}
+                    role="button"
+                    tabIndex={0}
+                  >
+                    <div className="live-avatar">
+                      <Avatar src={profile.avatar} name={profile.name} size={72} />
+                      <span className="online-indicator" />
+                    </div>
+                    <span className="live-username">{profile.name}</span>
                   </div>
-                  <span className="live-username">{profile.name}</span>
-                </div>
-              ))
-            )}
-          </div>
-        </section>
-      </div>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
 
-      {selectedUser && (
-        <UserPreviewModal
-          user={selectedUser}
-          onClose={closeUserPreview}
-          onChat={() => startChat(selectedUser.uid, selectedUser.name, selectedUser.avatar)}
-        />
-      )}
-    </div>
+        {selectedUser && (
+          <UserPreviewModal
+            user={selectedUser}
+            onClose={closeUserPreview}
+            onChat={() => startChat(selectedUser.uid, selectedUser.name, selectedUser.avatar)}
+          />
+        )}
+      </div>
+    </>
   );
 };
 
