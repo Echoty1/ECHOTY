@@ -16,11 +16,11 @@ import {
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import './Chats.css';
-import { getCache, setCache, getProfile as getCachedProfile } from '../../../services/cacheService';
+import { getCache, setCache, setProfile } from '../../../services/cacheService';
 import { searchProfiles } from '../../../services/searchService';
 import { useInfiniteScroll } from '../../../hooks/useInfiniteScroll';
 import { SkeletonChatItem } from '../../common/SkeletonLoader';
-import { preloadMedia, useCachedImage } from '../../../utils/mediaCache';
+import { preloadMedia } from '../../../utils/mediaCache';
 import { fetchLatestMessage } from '../../../services/messageCache';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { getChatList, storeChatList } from '../../../services/indexedDBService';
@@ -69,26 +69,37 @@ const sanitizeName = (rawName, userId) => {
   return str;
 };
 
+// ─── Enhanced loadPartnerData – fetches profile + activeSkin ──
 const loadPartnerData = async (partnerId) => {
   try {
-    const profileRef = ref(db, `profiles/${partnerId}`);
-    const snapshot = await get(profileRef);
-    if (snapshot.exists()) {
-      return snapshot.val();
-    }
+    const [profileSnap, skinSnap] = await Promise.all([
+      get(ref(db, `profiles/${partnerId}`)),
+      get(ref(db, `userSkins/${partnerId}/activeSkin`))
+    ]);
+
+    const profile = profileSnap.exists() ? profileSnap.val() : {};
+    const activeSkin = skinSnap.exists() ? skinSnap.val() : null;
+
+    const fullProfile = { 
+      ...profile, 
+      activeSkin: activeSkin || profile.activeSkin || null 
+    };
+    
+    // Cache in IndexedDB
+    await setProfile(partnerId, fullProfile);
+
+    return fullProfile;
   } catch (error) {
-    console.warn(`⚠️ Error loading partner profile: ${partnerId}`, error);
+    console.warn(`⚠️ Error loading partner data: ${partnerId}`, error);
+    return null;
   }
-  return null;
 };
 
 // ─── Process a single chat item ─────────────────────────────────
 const processChatItem = async (chat, user, onlineUsers) => {
   try {
-    let profile = getCachedProfile(chat.id);
-    if (!profile) {
-      profile = (await loadPartnerData(chat.id)) || {};
-    }
+    // Fetch profile with activeSkin
+    const profile = await loadPartnerData(chat.id);
 
     let partnerName;
     let isDeleted = false;
@@ -98,14 +109,17 @@ const processChatItem = async (chat, user, onlineUsers) => {
       isDeleted = true;
     } else {
       partnerName = sanitizeName(
-        profile.name ||
-        profile.displayName ||
-        profile.username ||
+        profile?.name ||
+        profile?.displayName ||
+        profile?.username ||
         chat.partnerName ||
         chat.name,
         chat.id
       );
     }
+
+    const rawAvatar = profile?.avatar || chat.partnerAvatar || '';
+    if (rawAvatar) preloadMedia(rawAvatar);
 
     const compositeChatId = [user.uid, chat.id].sort().join('_');
     const latest = await fetchLatestMessage(compositeChatId);
@@ -114,7 +128,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
     const isSender = lastSenderId === user.uid;
 
     let displayMessage = rawLastMessage;
-
     if (latest.type === 'echomoji') {
       const moodLabel = latest.mood || 'neutral';
       displayMessage = `😊 ECHOMOJI (${moodLabel})`;
@@ -124,9 +137,7 @@ const processChatItem = async (chat, user, onlineUsers) => {
       else if (latest.mediaType === 'audio') mediaLabel = '🎤 Voice note';
       displayMessage = isSender ? `You: ${mediaLabel}` : `${partnerName}: ${mediaLabel}`;
     } else {
-      if (displayMessage === 'Start chatting...') {
-        // keep as is
-      } else {
+      if (displayMessage !== 'Start chatting...') {
         displayMessage = isSender ? `You: ${displayMessage}` : `${partnerName}: ${displayMessage}`;
         if (displayMessage.length > 30) {
           displayMessage = displayMessage.substring(0, 30) + '...';
@@ -141,18 +152,15 @@ const processChatItem = async (chat, user, onlineUsers) => {
       sessionStorage.removeItem(readFlagKey);
     }
 
-    const rawAvatar = profile.avatar || chat.partnerAvatar || '';
-    if (rawAvatar) preloadMedia(rawAvatar);
-
     const isOnline = !!onlineUsers[chat.id];
 
     return {
       id: chat.id,
       name: partnerName,
       avatar: rawAvatar,
-      mood: profile.mood || chat.mood || 'neutral',
-      activeSkin: profile.activeSkin || chat.activeSkin || 'default',
-      location: profile.location || [profile.city, profile.country].filter(Boolean).join(', ') || '',
+      mood: profile?.mood || chat.mood || 'neutral',
+      activeSkin: profile?.activeSkin || chat.activeSkin || null,
+      location: profile?.location || [profile?.city, profile?.country].filter(Boolean).join(', ') || '',
       lastMessage: displayMessage,
       timestamp: chat.lastUpdated || chat.timestamp || Date.now(),
       lastSenderId: lastSenderId,
@@ -161,16 +169,17 @@ const processChatItem = async (chat, user, onlineUsers) => {
       online: isOnline,
     };
   } catch (err) {
+    // Fallback
     let unreadCount = chat.unreadCount || 0;
     const readFlagKey = `chat_read_${chat.id}`;
     if (sessionStorage.getItem(readFlagKey) === 'true') {
       unreadCount = 0;
       sessionStorage.removeItem(readFlagKey);
     }
-
     return {
       id: chat.id,
       name: sanitizeName(chat.partnerName || chat.name, chat.id),
+      avatar: chat.partnerAvatar || '',
       lastMessage: chat.lastMessage || 'Start chatting...',
       timestamp: chat.lastUpdated || Date.now(),
       lastSenderId: chat.lastSenderId || '',
@@ -196,14 +205,14 @@ const ChatItem = memo(({ chat, onStartChat }) => {
   const profile = profiles[chat.id] || {};
   const isOnline = chat.online;
   const hasUnread = chat.unreadCount > 0;
-  const skinId = profile.activeSkin || chat.activeSkin || null;
+  const skinId = chat.activeSkin || profile.activeSkin || null;
   const skin = skinId ? getSkinById(skinId) : null;
   const mood = profile.mood || chat.mood || 'neutral';
 
   return (
     <div className="chat-item regular-chat-item" onClick={() => onStartChat(chat)}>
       <div className="chat-avatar">
-        <Avatar src={chat.avatar} name={chat.name} size={48} />
+        <Avatar key={chat.avatar} src={chat.avatar} name={chat.name} size={48} />
         <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
         {hasUnread && <span className="unread-badge">{chat.unreadCount}</span>}
         {chat.isDeleted && <span className="archived-badge" title="Account deleted – archived">📁</span>}
@@ -225,6 +234,7 @@ const ChatItem = memo(({ chat, onStartChat }) => {
           skin={skin}
           size={38}
           interactive={false}
+          animated={true}
         />
       </div>
       <div className="chat-time">{timeAgo(chat.timestamp)}</div>
@@ -296,7 +306,7 @@ const Chats = () => {
     loadCached();
   }, [user?.uid, isDemoUser, isSupportUser]);
 
-  // ─── Listen for chat-read events to instantly clear unread ──
+  // ─── Listen for chat-read events ──────────────────────────────
   useEffect(() => {
     const handleChatRead = (event) => {
       const { userId } = event.detail;
@@ -311,7 +321,6 @@ const Chats = () => {
     return () => window.removeEventListener('chat-read', handleChatRead);
   }, []);
 
-  // ─── Listen for instant unread clear from ChatView ──────────
   useEffect(() => {
     const handleUnreadCleared = (event) => {
       const { partnerId } = event.detail;
@@ -500,8 +509,12 @@ const Chats = () => {
       const livePromises = rawResults.map(async (u) => {
         if (!u || typeof u !== 'object') return null;
         try {
-          const snap = await get(ref(db, `profiles/${u.id}`));
-          const freshData = snap.exists() ? snap.val() : {};
+          const [profileSnap, skinSnap] = await Promise.all([
+            get(ref(db, `profiles/${u.id}`)),
+            get(ref(db, `userSkins/${u.id}/activeSkin`))
+          ]);
+          const freshData = profileSnap.exists() ? profileSnap.val() : {};
+          const activeSkin = skinSnap.exists() ? skinSnap.val() : null;
           const safeDisplayName = sanitizeName(
             freshData.name || freshData.displayName || freshData.username || u.name || u.displayName,
             u.id
@@ -517,7 +530,7 @@ const Chats = () => {
             id: u.id,
             name: safeDisplayName,
             mood: freshData.mood || u.mood || 'happy',
-            activeSkin: freshData.activeSkin || u.activeSkin || 'default',
+            activeSkin: activeSkin || freshData.activeSkin || u.activeSkin || 'default',
             location: userLoc,
             isOnline: !!onlineUsers[u.id],
           };
@@ -531,8 +544,6 @@ const Chats = () => {
       });
       const resolved = await Promise.all(livePromises);
       const updatedResults = resolved.filter(Boolean);
-      // Final filter: for demo, only keep support (already handled by search service)
-      // but we also filter out demo from non-support
       const finalResults = updatedResults.filter(u => {
         if (u.id === DEMO_UID && !isSupportUser) return false;
         return true;
@@ -662,7 +673,6 @@ const Chats = () => {
               );
             })
           ) : isDemoUser ? (
-            // ─── Demo specific empty state ─────────────────────────
             <div className="demo-search-empty">
               <div className="demo-search-icon">
                 <i className="fas fa-user-plus" />

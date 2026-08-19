@@ -33,6 +33,7 @@ import Shop from './components/pages/Shop/Shop';
 import { clearAllIndexedDB } from './services/indexedDBService';
 import AdminPanel from './components/pages/Admin/AdminPanel';
 import BanScreen from './components/BanScreen/BanScreen';
+import Communities from './components/pages/Communities/Communities';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
@@ -423,6 +424,7 @@ function AppContent() {
           <Route path="/about" element={<About />} />
           <Route path="/control" element={<AdminPanel />} />
           <Route path="*" element={<Navigate to="/" />} />
+          <Route path="/communities" element={<Communities />} />
           <Route path="/shop" element={<Shop />} />
         </Routes>
       </div>

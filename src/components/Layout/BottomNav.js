@@ -17,15 +17,24 @@ const BottomNav = () => {
 
   const isSupport = user?.uid === SUPPORT_UID;
 
-  const tabs = [
-    { to: '/', label: 'Home', icon: 'fa-house' },
-    { to: '/chats', label: 'Chats', icon: 'fa-comment-dots' },
-    isSupport
-      ? { to: '/control', label: 'CONTROL', icon: 'fa-sliders-h' }
-      : { to: '/shop', label: 'Shop', icon: 'fa-store' },
-    { to: '/profile', label: 'Profile', icon: 'fa-user' },
-    { to: '/other', label: 'Other', icon: 'fa-ellipsis-h' },
-  ];
+  // ─── Define tabs based on user role ──────────────────────────
+  const getTabs = () => {
+    const commonTabs = [
+      { to: '/chats', label: 'Chats', icon: 'fa-comment-dots' },
+      { to: '/communities', label: 'Communities', icon: 'fa-users' },
+      { to: '/shop', label: 'Shop', icon: 'fa-store' },
+      { to: '/other', label: 'Other', icon: 'fa-ellipsis-h' },
+    ];
+    if (isSupport) {
+      // Admin: Control first, then common tabs
+      return [{ to: '/control', label: 'Control', icon: 'fa-sliders-h' }, ...commonTabs];
+    } else {
+      // Normal: Home first, then common tabs
+      return [{ to: '/', label: 'Home', icon: 'fa-house' }, ...commonTabs];
+    }
+  };
+
+  const tabs = getTabs();
 
   // ─── Real‑time unread contacts count ──────────────────────────
   useEffect(() => {
@@ -67,15 +76,12 @@ const BottomNav = () => {
     const touch = e.touches ? e.touches[0] : e;
     const dx = touch.clientX - startPos.current.x;
     const dy = touch.clientY - startPos.current.y;
-
     let newX = startOffset.current.x + dx;
     let newY = startOffset.current.y + dy;
-
     const maxX = 600;
     const maxY = 400;
     newX = Math.max(-maxX, Math.min(maxX, newX));
     newY = Math.max(-maxY, Math.min(maxY, newY));
-
     setPosition({ x: newX, y: newY });
   };
 
@@ -145,6 +151,7 @@ const BottomNav = () => {
       />
       {tabs.map((tab) => {
         const isChatTab = tab.to === '/chats';
+        const isControlTab = tab.to === '/control';
         return (
           <NavLink
             key={tab.to}
@@ -191,6 +198,29 @@ const BottomNav = () => {
                   }}
                 >
                   {unreadChatsCount > 9 ? '9+' : unreadChatsCount}
+                </span>
+              )}
+              {isControlTab && (
+                <span
+                  style={{
+                    position: 'absolute',
+                    top: '-6px',
+                    right: '-10px',
+                    minWidth: '16px',
+                    height: '16px',
+                    borderRadius: '50%',
+                    backgroundColor: '#10B981',
+                    color: '#fff',
+                    fontSize: '8px',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid rgba(10,10,15,0.92)',
+                    lineHeight: 1,
+                  }}
+                >
+                  ★
                 </span>
               )}
             </div>

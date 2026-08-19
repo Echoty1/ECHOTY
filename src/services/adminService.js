@@ -120,3 +120,17 @@ export const getUserBanStatus = async (uid) => {
     notFound: false,
   };
 };
+
+// ─── Subtract coins from user ──────────────────────────────────
+export const subtractUserCoins = async (uid, amount) => {
+  if (!uid) throw new Error('UID is required');
+  if (!(await userExists(uid))) throw new Error('User not found');
+  if (!amount || amount <= 0) throw new Error('Amount must be positive');
+  const coinsRef = ref(db, `userSkins/${uid}/coins`);
+  const snap = await get(coinsRef);
+  const current = snap.exists() ? snap.val() : 0;
+  if (current < amount) throw new Error('Insufficient coins');
+  const newCoins = current - amount;
+  await set(coinsRef, newCoins);
+  return newCoins;
+};

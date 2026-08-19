@@ -4,6 +4,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import {
   getUserCoins,
   addUserCoins,
+  subtractUserCoins,
   wipeUserData,
   forceLogoutUser,
   deleteUserAccount,
@@ -32,7 +33,6 @@ const AdminPanel = () => {
   const [banReason, setBanReason] = useState('');
   const [uidNotFound, setUidNotFound] = useState(false);
 
-  // ─── Check if user is support ──────────────────────────────
   if (!user || !checkIsSupport(user.uid)) {
     return (
       <div className="admin-panel">
@@ -42,11 +42,8 @@ const AdminPanel = () => {
     );
   }
 
-  // ─── Load users with IndexedDB cache ────────────────────────
   const loadUsers = async (forceRefresh = false) => {
     setUsersLoading(true);
-
-    // 1. Try to load from cache if not forcing refresh
     if (!forceRefresh) {
       try {
         const cached = await getAdminUserList();
@@ -54,7 +51,6 @@ const AdminPanel = () => {
           setUsers(cached);
           setFilteredUsers(cached);
           setUsersLoading(false);
-          // Still refresh in background
           refreshUsersInBackground();
           return;
         }
@@ -62,8 +58,6 @@ const AdminPanel = () => {
         console.warn('Failed to load cached users:', err);
       }
     }
-
-    // 2. Load fresh from Firebase
     try {
       const profilesSnap = await get(ref(db, 'profiles'));
       const usersList = [];
@@ -71,6 +65,11 @@ const AdminPanel = () => {
         const data = profilesSnap.val();
         for (const [uid, profile] of Object.entries(data)) {
           const banStatus = await getUserBanStatus(uid);
+          let isOnline = false;
+          try {
+            const presenceSnap = await get(ref(db, `presence/online/${uid}`));
+            isOnline = presenceSnap.val() === true;
+          } catch (_) {}
           usersList.push({
             uid,
             name: profile.name || 'Unknown',
@@ -78,12 +77,12 @@ const AdminPanel = () => {
             avatar: profile.avatar || '',
             mood: profile.mood || 'neutral',
             isBanned: banStatus.isBanned,
+            isOnline: isOnline,
           });
         }
         usersList.sort((a, b) => a.name.localeCompare(b.name));
         setUsers(usersList);
         setFilteredUsers(usersList);
-        // Cache the result
         try {
           await setAdminUserList(usersList);
         } catch (_) {}
@@ -102,7 +101,6 @@ const AdminPanel = () => {
     }
   };
 
-  // ─── Refresh users in background ────────────────────────────
   const refreshUsersInBackground = async () => {
     try {
       const profilesSnap = await get(ref(db, 'profiles'));
@@ -111,6 +109,11 @@ const AdminPanel = () => {
         const usersList = [];
         for (const [uid, profile] of Object.entries(data)) {
           const banStatus = await getUserBanStatus(uid);
+          let isOnline = false;
+          try {
+            const presenceSnap = await get(ref(db, `presence/online/${uid}`));
+            isOnline = presenceSnap.val() === true;
+          } catch (_) {}
           usersList.push({
             uid,
             name: profile.name || 'Unknown',
@@ -118,6 +121,7 @@ const AdminPanel = () => {
             avatar: profile.avatar || '',
             mood: profile.mood || 'neutral',
             isBanned: banStatus.isBanned,
+            isOnline: isOnline,
           });
         }
         usersList.sort((a, b) => a.name.localeCompare(b.name));
@@ -136,7 +140,6 @@ const AdminPanel = () => {
     loadUsers();
   }, []);
 
-  // ─── Fetch ban status when UID changes ──────────────────────
   useEffect(() => {
     const fetchBanStatus = async () => {
       if (!uid.trim()) {
@@ -166,7 +169,6 @@ const AdminPanel = () => {
     fetchBanStatus();
   }, [uid]);
 
-  // ─── Filter users by search term ────────────────────────────
   useEffect(() => {
     const term = searchTerm.toLowerCase().trim();
     if (!term) {
@@ -185,14 +187,12 @@ const AdminPanel = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ─── Copy UID to clipboard ──────────────────────────────────
   const copyUid = (uid) => {
     navigator.clipboard.writeText(uid)
       .then(() => showToast(`UID copied: ${uid}`, 'success'))
       .catch(() => showToast('Failed to copy UID', 'error'));
   };
 
-  // ─── Admin actions ──────────────────────────────────────────
   const handleCheckCoins = async () => {
     if (!uid.trim()) return showToast('Please enter a UID.', 'error');
     if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
@@ -224,6 +224,23 @@ const AdminPanel = () => {
     }
   };
 
+  const handleSubtractCoins = async () => {
+    if (!uid.trim()) return showToast('Please enter a UID.', 'error');
+    if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
+    const amount = parseInt(coinAmount);
+    if (!amount || amount <= 0) return showToast('Enter a valid positive amount.', 'error');
+    setLoading(true);
+    try {
+      const newCoins = await subtractUserCoins(uid.trim(), amount);
+      showToast(`Subtracted ${amount} coins. New balance: ${newCoins}`, 'success');
+      setCoinAmount('');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleWipeData = async () => {
     if (!uid.trim()) return showToast('Please enter a UID.', 'error');
     if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
@@ -232,7 +249,7 @@ const AdminPanel = () => {
     try {
       await wipeUserData(uid.trim());
       showToast(`User data for ${uid.trim()} wiped successfully.`, 'success');
-      loadUsers(true); // force refresh
+      loadUsers(true);
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -263,7 +280,7 @@ const AdminPanel = () => {
     try {
       await deleteUserAccount(uid.trim());
       showToast(`User ${uid.trim()} deleted successfully.`, 'success');
-      loadUsers(true); // force refresh
+      loadUsers(true);
       setUid('');
     } catch (err) {
       showToast(err.message, 'error');
@@ -287,7 +304,7 @@ const AdminPanel = () => {
         showToast(`User ${uid.trim()} banned.`, 'success');
       }
       setIsBanned(!isBanned);
-      loadUsers(true); // force refresh
+      loadUsers(true);
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -302,143 +319,163 @@ const AdminPanel = () => {
         <p className="admin-subtitle">Manage users, coins, and system settings.</p>
       </div>
 
-      {/* ─── User List ────────────────────────────────────────── */}
-      <div className="admin-card user-list-card">
-        <div className="card-header">
-          <h2><i className="fas fa-users" /> All Users</h2>
-          <div className="search-wrapper">
-            <i className="fas fa-search search-icon" />
-            <input
-              type="text"
-              placeholder="Search by name or UID..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              disabled={usersLoading}
-            />
-            <button className="refresh-btn" onClick={() => loadUsers(true)} disabled={usersLoading}>
-              <i className={`fas fa-sync-alt ${usersLoading ? 'fa-spin' : ''}`} />
-            </button>
-          </div>
-        </div>
-        <div className="table-wrapper">
-          {usersLoading ? (
-            <div className="loading-placeholder">Loading users...</div>
-          ) : filteredUsers.length === 0 ? (
-            <div className="empty-placeholder">No users found.</div>
-          ) : (
-            <table className="user-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>UID</th>
-                  <th>Status</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredUsers.map((u) => (
-                  <tr key={u.uid}>
-                    <td>{u.name}</td>
-                    <td className="uid-cell">
-                      <code>{u.uid}</code>
-                      <button
-                        className="copy-btn"
-                        onClick={() => copyUid(u.uid)}
-                        title="Copy UID"
-                      >
-                        <i className="fas fa-copy" />
-                      </button>
-                    </td>
-                    <td>
-                      {u.isBanned ? (
-                        <span className="status-badge banned">Banned</span>
-                      ) : (
-                        <span className="status-badge active">Active</span>
-                      )}
-                    </td>
-                    <td>
-                      <button
-                        className="action-btn select-btn"
-                        onClick={() => setUid(u.uid)}
-                        title="Select this user for actions"
-                      >
-                        <i className="fas fa-chevron-right" /> Select
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-        {filteredUsers.length > 0 && (
-          <div className="table-footer">
-            <span>{filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''}</span>
-          </div>
-        )}
-      </div>
-
-      {/* ─── User Management ──────────────────────────────────── */}
-      <div className="admin-card">
-        <h2><i className="fas fa-tools" /> User Management</h2>
-        <div className="admin-input-group">
-          <label>User UID</label>
-          <div className="uid-input-wrapper">
-            <input
-              type="text"
-              value={uid}
-              onChange={(e) => setUid(e.target.value)}
-              placeholder="Enter user UID or select from list"
-              disabled={loading}
-              style={{ borderColor: uidNotFound ? '#EF4444' : '' }}
-            />
-            {uid && (
-              <button className="clear-uid" onClick={() => setUid('')} disabled={loading}>
-                <i className="fas fa-times" />
-              </button>
+      <div className="admin-two-col">
+        <div className="admin-col-left">
+          <div className="admin-card user-list-card">
+            <div className="card-header">
+              <h2><i className="fas fa-users" /> All Users</h2>
+              <div className="search-wrapper">
+                <i className="fas fa-search search-icon" />
+                <input
+                  type="text"
+                  placeholder="Search by name or UID..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  disabled={usersLoading}
+                />
+                <button className="refresh-btn" onClick={() => loadUsers(true)} disabled={usersLoading}>
+                  <i className={`fas fa-sync-alt ${usersLoading ? 'fa-spin' : ''}`} />
+                </button>
+              </div>
+            </div>
+            <div className="table-wrapper">
+              {usersLoading ? (
+                <div className="loading-placeholder">Loading users...</div>
+              ) : filteredUsers.length === 0 ? (
+                <div className="empty-placeholder">No users found.</div>
+              ) : (
+                <table className="user-table">
+                  <thead>
+                    <tr>
+                      <th>Name</th>
+                      <th>UID</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredUsers.map((u) => {
+                      let statusText, statusClass;
+                      if (u.isBanned) {
+                        statusText = 'Banned';
+                        statusClass = 'banned';
+                      } else if (u.isOnline) {
+                        statusText = 'Online';
+                        statusClass = 'online';
+                      } else {
+                        statusText = 'Offline';
+                        statusClass = 'offline';
+                      }
+                      return (
+                        <tr key={u.uid}>
+                          <td>{u.name}</td>
+                          <td className="uid-cell">
+                            <code>{u.uid}</code>
+                            <button
+                              className="copy-btn"
+                              onClick={() => copyUid(u.uid)}
+                              title="Copy UID"
+                            >
+                              <i className="fas fa-copy" />
+                            </button>
+                          </td>
+                          <td>
+                            <span className={`status-badge ${statusClass}`}>{statusText}</span>
+                          </td>
+                          <td>
+                            <button
+                              className="action-btn select-btn"
+                              onClick={() => setUid(u.uid)}
+                              title="Select this user for actions"
+                            >
+                              <i className="fas fa-chevron-right" /> Select
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+            {filteredUsers.length > 0 && (
+              <div className="table-footer">
+                <span>{filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''}</span>
+              </div>
             )}
           </div>
-          {uidNotFound && (
-            <p style={{ color: '#EF4444', fontSize: '13px', marginTop: '4px' }}>
-              ⚠️ User not found. Please check the UID.
-            </p>
-          )}
         </div>
 
-        <div className="admin-actions-grid">
-          <button onClick={handleCheckCoins} disabled={loading || !uid.trim() || uidNotFound}>
-            <i className="fas fa-coins" /> Check Coins
-          </button>
-          <div className="add-coins-wrapper">
-            <input
-              type="number"
-              value={coinAmount}
-              onChange={(e) => setCoinAmount(e.target.value)}
-              placeholder="Amount"
-              disabled={loading || !uid.trim() || uidNotFound}
-              min="1"
-            />
-            <button onClick={handleAddCoins} disabled={loading || !uid.trim() || !coinAmount || uidNotFound}>
-              <i className="fas fa-plus-circle" /> Add
-            </button>
+        <div className="admin-col-right">
+          <div className="admin-card">
+            <h2><i className="fas fa-tools" /> User Management</h2>
+            <div className="admin-input-group">
+              <label>User UID</label>
+              <div className="uid-input-wrapper">
+                <input
+                  type="text"
+                  value={uid}
+                  onChange={(e) => setUid(e.target.value)}
+                  placeholder="Enter user UID or select from list"
+                  disabled={loading}
+                  style={{ borderColor: uidNotFound ? '#EF4444' : '' }}
+                />
+                {uid && (
+                  <button className="clear-uid" onClick={() => setUid('')} disabled={loading}>
+                    <i className="fas fa-times" />
+                  </button>
+                )}
+              </div>
+              {uidNotFound && (
+                <p style={{ color: '#EF4444', fontSize: '13px', marginTop: '4px' }}>
+                  ⚠️ User not found. Please check the UID.
+                </p>
+              )}
+            </div>
+
+            <div className="admin-actions-grid">
+              <button onClick={handleCheckCoins} disabled={loading || !uid.trim() || uidNotFound}>
+                <i className="fas fa-coins" /> Check Coins
+              </button>
+              <div className="add-coins-wrapper">
+                <input
+                  type="number"
+                  value={coinAmount}
+                  onChange={(e) => setCoinAmount(e.target.value)}
+                  placeholder="Amount"
+                  disabled={loading || !uid.trim() || uidNotFound}
+                  min="1"
+                />
+                <button onClick={handleAddCoins} disabled={loading || !uid.trim() || !coinAmount || uidNotFound}>
+                  <i className="fas fa-plus-circle" /> Add
+                </button>
+                <button 
+                  onClick={handleSubtractCoins} 
+                  className="admin-danger" 
+                  disabled={loading || !uid.trim() || !coinAmount || uidNotFound}
+                >
+                  <i className="fas fa-minus-circle" /> Subtract
+                </button>
+              </div>
+              <button className="admin-danger" onClick={handleForceLogout} disabled={loading || !uid.trim() || uidNotFound}>
+                <i className="fas fa-sign-out-alt" /> Force Logout
+              </button>
+              <button className="admin-danger" onClick={handleWipeData} disabled={loading || !uid.trim() || uidNotFound}>
+                <i className="fas fa-trash-alt" /> Wipe Data
+              </button>
+              <button className="admin-danger" onClick={handleDeleteAccount} disabled={loading || !uid.trim() || uidNotFound}>
+                <i className="fas fa-user-minus" /> Delete Account
+              </button>
+              <button
+                className={isBanned ? 'admin-success' : 'admin-danger'}
+                onClick={handleToggleBan}
+                disabled={loading || !uid.trim() || uidNotFound}
+              >
+                <i className={`fas ${isBanned ? 'fa-check-circle' : 'fa-ban'}`} />
+                {isBanned ? 'Unban' : 'Ban'}
+              </button>
+            </div>
           </div>
-          <button className="admin-danger" onClick={handleForceLogout} disabled={loading || !uid.trim() || uidNotFound}>
-            <i className="fas fa-sign-out-alt" /> Force Logout
-          </button>
-          <button className="admin-danger" onClick={handleWipeData} disabled={loading || !uid.trim() || uidNotFound}>
-            <i className="fas fa-trash-alt" /> Wipe Data
-          </button>
-          <button className="admin-danger" onClick={handleDeleteAccount} disabled={loading || !uid.trim() || uidNotFound}>
-            <i className="fas fa-user-minus" /> Delete Account
-          </button>
-          <button
-            className={isBanned ? 'admin-success' : 'admin-danger'}
-            onClick={handleToggleBan}
-            disabled={loading || !uid.trim() || uidNotFound}
-          >
-            <i className={`fas ${isBanned ? 'fa-check-circle' : 'fa-ban'}`} />
-            {isBanned ? 'Unban' : 'Ban'}
-          </button>
         </div>
       </div>
 

@@ -1,9 +1,41 @@
 /* src/components/pages/Admin/AdminPanel.css */
 .admin-panel {
-  max-width: 900px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: 20px 16px 80px;
   color: #fff;
+}
+
+/* ─── Two‑column layout ──────────────────────────────────────── */
+.admin-two-col {
+  display: flex;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.admin-col-left {
+  flex: 2;           /* user list takes 2/3 of space */
+  min-width: 0;
+}
+
+.admin-col-right {
+  flex: 1.5;         /* controls take 1.5/3 – wider than before */
+  min-width: 320px;
+  max-width: 480px;  /* prevent it from being too wide on big screens */
+}
+
+/* ─── Stack on mobile ────────────────────────────────────────── */
+@media (max-width: 1024px) {
+  .admin-two-col {
+    flex-direction: column;
+  }
+  .admin-col-left,
+  .admin-col-right {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+  }
 }
 
 .admin-header {
@@ -297,12 +329,6 @@
   }
 }
 
-@media (min-width: 768px) {
-  .admin-actions-grid {
-    grid-template-columns: 1fr 1fr 1fr;
-  }
-}
-
 .admin-actions-grid button {
   padding: 10px 16px;
   border-radius: 10px;
@@ -338,10 +364,20 @@
   background: rgba(239, 68, 68, 0.25);
 }
 
+.admin-actions-grid .admin-success {
+  background: rgba(16, 185, 129, 0.15);
+}
+
+.admin-actions-grid .admin-success:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.25);
+}
+
+/* ─── Coin input row – full width with Add & Subtract side by side ── */
 .add-coins-wrapper {
   display: flex;
   gap: 8px;
   width: 100%;
+  grid-column: 1 / -1;        /* span both columns in the grid */
 }
 
 .add-coins-wrapper input {
@@ -362,19 +398,41 @@
 
 .add-coins-wrapper button {
   flex: 1;
+  min-width: 80px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: none;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
-/* ─── Toast override ────────────────────────────────────────── */
-.toast {
-  bottom: 100px !important;
+.add-coins-wrapper button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
-.admin-actions-grid .admin-success {
-  background: rgba(16, 185, 129, 0.15);
+.add-coins-wrapper button:first-of-type {
+  background: rgba(16, 185, 129, 0.2);
+  color: #10B981;
 }
 
-.admin-actions-grid .admin-success:hover:not(:disabled) {
-  background: rgba(16, 185, 129, 0.25);
+.add-coins-wrapper button:first-of-type:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.3);
+}
+
+.add-coins-wrapper button:last-of-type {
+  background: rgba(239, 68, 68, 0.2);
+  color: #EF4444;
+}
+
+.add-coins-wrapper button:last-of-type:hover:not(:disabled) {
+  background: rgba(239, 68, 68, 0.3);
 }
 
 /* ─── Status Badge ──────────────────────────────────────────── */
@@ -387,12 +445,22 @@
   letter-spacing: 0.3px;
 }
 
-.status-badge.active {
+.status-badge.online {
   background: rgba(16, 185, 129, 0.15);
   color: #10B981;
+}
+
+.status-badge.offline {
+  background: rgba(107, 114, 128, 0.15);
+  color: #9CA3AF;
 }
 
 .status-badge.banned {
   background: rgba(239, 68, 68, 0.15);
   color: #EF4444;
+}
+
+/* ─── Toast override ────────────────────────────────────────── */
+.toast {
+  bottom: 100px !important;
 }

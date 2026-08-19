@@ -4,11 +4,11 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { db } from '../../../services/firebase';
-import { ref, onValue, get } from 'firebase/database';
+import { ref, onValue } from 'firebase/database';
 import Avatar from '../../common/Avatar';
+import UserPreviewModal from '../../common/UserPreviewModal';
 import './Home.css';
 
-// ─── Demo constants ────────────────────────────────────────────
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 
@@ -16,135 +16,55 @@ const Home = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { profiles, fetchProfile } = useProfile();
-  const [onlineUsers, setOnlineUsers] = useState([]);
+  const [onlineUids, setOnlineUids] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [fetching, setFetching] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
 
   const isDemoUser = user?.uid === DEMO_UID;
   const isSupportUser = user?.uid === SUPPORT_UID;
 
-  // ─── Listen to presence and fetch profiles ──────────────────
+  // ─── Real‑time presence listener ──────────────────────────────
   useEffect(() => {
     if (!user) return;
 
     const presenceRef = ref(db, 'presence/online');
-    let isMounted = true;
-
-    const unsubscribe = onValue(presenceRef, async (snapshot) => {
-      if (!isMounted) return;
+    const unsubscribe = onValue(presenceRef, (snapshot) => {
       const data = snapshot.val() || {};
-      let onlineUids = Object.keys(data).filter(uid => data[uid] === true && uid !== user.uid);
+      let online = Object.keys(data).filter(uid => data[uid] === true && uid !== user.uid);
 
-      // ─── Demo user: only show support if online ──────────────
       if (isDemoUser) {
-        const supportOnline = data[SUPPORT_UID] === true;
-        if (supportOnline) {
-          if (!profiles[SUPPORT_UID]) {
-            await fetchProfile(SUPPORT_UID);
-          }
-          const supportProfile = profiles[SUPPORT_UID];
-          if (supportProfile) {
-            setOnlineUsers([{ uid: SUPPORT_UID, ...supportProfile, online: true }]);
-          } else {
-            setOnlineUsers([]);
-          }
-        } else {
-          setOnlineUsers([]);
-        }
-        setLoading(false);
-        setFetching(false);
-        return;
+        online = online.filter(uid => uid === SUPPORT_UID);
+      } else if (!isSupportUser) {
+        online = online.filter(uid => uid !== DEMO_UID);
       }
 
-      // ─── Support user: show all users (including demo if online) ──
-      if (isSupportUser) {
-        if (onlineUids.length === 0) {
-          setOnlineUsers([]);
-          setLoading(false);
-          setFetching(false);
-          return;
-        }
+      setOnlineUids(online);
+      setLoading(false);
 
-        setFetching(true);
-        setLoading(true);
-
-        const profilePromises = onlineUids.map(async (uid) => {
-          if (profiles[uid] && profiles[uid].name) {
-            return profiles[uid];
-          }
-          const profileRef = ref(db, `profiles/${uid}`);
-          const snapshot = await get(profileRef);
-          if (snapshot.exists()) {
-            const data = snapshot.val();
-            fetchProfile(uid);
-            return data;
-          }
-          return null;
-        });
-
-        const profileResults = await Promise.all(profilePromises);
-        const list = onlineUids.map((uid, index) => ({
-          uid,
-          ...(profileResults[index] || { name: null, avatar: '' })
-        }));
-
-        const hasAllNames = list.every(p => p.name !== null);
-        if (isMounted) {
-          setOnlineUsers(list);
-          setLoading(!hasAllNames);
-          setFetching(false);
-        }
-        return;
-      }
-
-      // ─── Normal users: show everyone except demo ──────────────
-      onlineUids = onlineUids.filter(uid => uid !== DEMO_UID);
-
-      if (onlineUids.length === 0) {
-        setOnlineUsers([]);
-        setLoading(false);
-        setFetching(false);
-        return;
-      }
-
-      setFetching(true);
-      setLoading(true);
-
-      const profilePromises = onlineUids.map(async (uid) => {
-        if (profiles[uid] && profiles[uid].name) {
-          return profiles[uid];
-        }
-        const profileRef = ref(db, `profiles/${uid}`);
-        const snapshot = await get(profileRef);
-        if (snapshot.exists()) {
-          const data = snapshot.val();
+      // Fetch profiles for any online users we don't have yet
+      online.forEach(uid => {
+        if (!profiles[uid]) {
           fetchProfile(uid);
-          return data;
         }
-        return null;
       });
-
-      const profileResults = await Promise.all(profilePromises);
-      const list = onlineUids.map((uid, index) => ({
-        uid,
-        ...(profileResults[index] || { name: null, avatar: '' })
-      }));
-
-      const hasAllNames = list.every(p => p.name !== null);
-      if (isMounted) {
-        setOnlineUsers(list);
-        setLoading(!hasAllNames);
-        setFetching(false);
-      }
     });
 
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
-  }, [user, profiles, fetchProfile, isDemoUser, isSupportUser]);
+    return () => unsubscribe();
+  }, [user, isDemoUser, isSupportUser, profiles, fetchProfile]);
+
+  const openUserPreview = (uid) => {
+    const profile = profiles[uid];
+    if (profile) {
+      setSelectedUser({ uid, ...profile });
+    }
+  };
+
+  const closeUserPreview = () => {
+    setSelectedUser(null);
+  };
 
   const startChat = (uid, name, avatar) => {
+    closeUserPreview();
     navigate(`/chat/${uid}`, {
       state: {
         userName: name || 'User',
@@ -153,7 +73,16 @@ const Home = () => {
     });
   };
 
-  if (loading || fetching) {
+  // Build user list from onlineUids and profiles
+  const onlineUsers = onlineUids
+    .map(uid => {
+      const profile = profiles[uid];
+      if (!profile) return null;
+      return { uid, ...profile, online: true };
+    })
+    .filter(Boolean);
+
+  if (loading) {
     return (
       <div className="home-page">
         <div className="home-container">
@@ -186,33 +115,38 @@ const Home = () => {
             <h3>Live Now</h3>
             <span className="live-count">{onlineUsers.length} online</span>
           </div>
-          <p className="live-hint">Tap any profile to start a chat</p>
+          <p className="live-hint">Tap any profile to view and chat</p>
           <div className="live-users-scroll">
             {onlineUsers.length === 0 ? (
               <p className="live-empty">No one online right now</p>
             ) : (
-              onlineUsers.map((profile) => {
-                if (!profile.name) return null;
-                return (
-                  <div
-                    key={profile.uid}
-                    className="live-user-card"
-                    onClick={() => startChat(profile.uid, profile.name, profile.avatar)}
-                    role="button"
-                    tabIndex={0}
-                  >
-                    <div className="live-avatar">
-                      <Avatar src={profile.avatar} name={profile.name} size={72} />
-                      <span className={`online-indicator ${profile.online ? '' : 'offline'}`} />
-                    </div>
-                    <span className="live-username">{profile.name}</span>
+              onlineUsers.map((profile) => (
+                <div
+                  key={profile.uid}
+                  className="live-user-card"
+                  onClick={() => openUserPreview(profile.uid)}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="live-avatar">
+                    <Avatar src={profile.avatar} name={profile.name} size={72} />
+                    <span className="online-indicator" />
                   </div>
-                );
-              })
+                  <span className="live-username">{profile.name}</span>
+                </div>
+              ))
             )}
           </div>
         </section>
       </div>
+
+      {selectedUser && (
+        <UserPreviewModal
+          user={selectedUser}
+          onClose={closeUserPreview}
+          onChat={() => startChat(selectedUser.uid, selectedUser.name, selectedUser.avatar)}
+        />
+      )}
     </div>
   );
 };

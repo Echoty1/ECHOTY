@@ -8,6 +8,13 @@ const Other = () => {
 
   const menuItems = [
     {
+      id: 'profile',
+      label: 'Profile',
+      icon: 'fa-user',
+      path: '/profile',
+      description: 'View and edit your profile',
+    },
+    {
       id: 'settings',
       label: 'Settings',
       icon: 'fa-gear',
