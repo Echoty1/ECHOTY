@@ -15,7 +15,7 @@ const parseUnlockedGifs = (data) => {
 };
 
 // ─── Individual GIF item ──────────────────────────────────────
-const GifItem = ({ gif, isUnlocked, onSelect }) => {
+const GifItem = ({ gif, isUnlocked, onSelect, mode }) => {
   const [isVisible, setIsVisible] = useState(false);
   const itemRef = useRef(null);
 
@@ -42,8 +42,15 @@ const GifItem = ({ gif, isUnlocked, onSelect }) => {
     onSelect(gif);
   };
 
+  // Determine if we should show circular preview (profile mode)
+  const isProfileMode = mode === 'profile';
+
   return (
-    <div className={`gif-item ${isLocked ? 'premium' : ''}`} onClick={handleClick} ref={itemRef}>
+    <div 
+      className={`gif-item ${isLocked ? 'premium' : ''} ${isProfileMode ? 'profile-mode' : 'shop-mode'}`} 
+      onClick={handleClick} 
+      ref={itemRef}
+    >
       {isVisible ? (
         <>
           {isLoading && !error && <div className="gif-loading-spinner"><i className="fas fa-spinner fa-spin" /></div>}
@@ -175,9 +182,9 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect, ownedGifs = [], mode = 'pr
 
   return (
     <div className="gif-modal-overlay">
-      <div className="gif-modal-content">
+      <div className={`gif-modal-content ${mode === 'profile' ? 'profile-mode' : ''}`}>
         <div className="gif-modal-header">
-          <h2>Choose a Profile GIF</h2>
+          <h2>{mode === 'profile' ? 'Choose Profile GIF' : 'Premium GIFs'}</h2>
           <div className="gif-modal-coins">🪙 {userCoins} coins</div>
           <button className="gif-modal-close" onClick={onClose}>✕</button>
         </div>
@@ -212,13 +219,14 @@ const GifLibraryModal = ({ isOpen, onClose, onSelect, ownedGifs = [], mode = 'pr
               {mode === 'profile' ? 'No free GIFs found. Check out the shop to unlock more!' : 'No premium GIFs available.'}
             </div>
           ) : (
-            <div className="gif-grid">
+            <div className={`gif-grid ${mode === 'profile' ? 'profile-grid' : 'shop-grid'}`}>
               {filteredGifs.map((gif) => (
                 <GifItem
                   key={gif.id}
                   gif={gif}
                   isUnlocked={isGifUnlocked(gif.id)}
                   onSelect={handleSelect}
+                  mode={mode}
                 />
               ))}
             </div>
