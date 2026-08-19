@@ -1,5 +1,5 @@
 // src/components/pages/Admin/AdminPanel.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import {
   getUserCoins,
@@ -14,9 +14,10 @@ import {
   checkIsSupport,
 } from '../../../services/adminService';
 import { db } from '../../../services/firebase';
-import { ref, get } from 'firebase/database';
+import { ref, onValue, get } from 'firebase/database';
 import { getAdminUserList, setAdminUserList } from '../../../services/indexedDBService';
 import Toast from '../../Toast/Toast';
+import LoginAnalyticsChart from './LoginAnalyticsChart';
 import './AdminPanel.css';
 
 const AdminPanel = () => {
@@ -33,6 +34,9 @@ const AdminPanel = () => {
   const [banReason, setBanReason] = useState('');
   const [uidNotFound, setUidNotFound] = useState(false);
 
+  const banStatusCache = useRef({});
+  const presenceCache = useRef({});
+
   if (!user || !checkIsSupport(user.uid)) {
     return (
       <div className="admin-panel">
@@ -42,104 +46,103 @@ const AdminPanel = () => {
     );
   }
 
-  const loadUsers = async (forceRefresh = false) => {
+  // ─── Build user list from profile data, ban status, and presence ──
+  const buildUserList = (profilesData) => {
+    const list = [];
+    for (const [uid, profile] of Object.entries(profilesData || {})) {
+      list.push({
+        uid,
+        name: profile.name || 'Unknown',
+        email: profile.email || '',
+        avatar: profile.avatar || '',
+        mood: profile.mood || 'neutral',
+        isBanned: banStatusCache.current[uid] || false,
+        isOnline: presenceCache.current[uid] || false,
+      });
+    }
+    list.sort((a, b) => a.name.localeCompare(b.name));
+    return list;
+  };
+
+  // ─── Real‑time listeners ──────────────────────────────────────
+  useEffect(() => {
     setUsersLoading(true);
-    if (!forceRefresh) {
+
+    // 1. Listen to profiles (new users, name changes)
+    const profilesRef = ref(db, 'profiles');
+    const unsubProfiles = onValue(profilesRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const newUsers = buildUserList(data);
+      setUsers(newUsers);
+      setUsersLoading(false);
+      // Cache for offline
+      setAdminUserList(newUsers).catch(() => {});
+    });
+
+    // 2. Listen to presence/online
+    const presenceRef = ref(db, 'presence/online');
+    const unsubPresence = onValue(presenceRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      presenceCache.current = data;
+      // Update existing users' online status
+      setUsers((prev) =>
+        prev.map((u) => ({
+          ...u,
+          isOnline: data[u.uid] === true,
+        }))
+      );
+    });
+
+    // 3. Listen to accounts for ban status
+    const accountsRef = ref(db, 'accounts');
+    const unsubAccounts = onValue(accountsRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const newBanStatus = {};
+      for (const [uid, acc] of Object.entries(data)) {
+        if (acc.banned === true) newBanStatus[uid] = true;
+      }
+      banStatusCache.current = newBanStatus;
+      setUsers((prev) =>
+        prev.map((u) => ({
+          ...u,
+          isBanned: newBanStatus[u.uid] || false,
+        }))
+      );
+    });
+
+    // Also load initial cache from IndexedDB for faster first paint
+    const loadCached = async () => {
       try {
         const cached = await getAdminUserList();
         if (cached && cached.length > 0) {
           setUsers(cached);
-          setFilteredUsers(cached);
           setUsersLoading(false);
-          refreshUsersInBackground();
-          return;
         }
-      } catch (err) {
-        console.warn('Failed to load cached users:', err);
-      }
-    }
-    try {
-      const profilesSnap = await get(ref(db, 'profiles'));
-      const usersList = [];
-      if (profilesSnap.exists()) {
-        const data = profilesSnap.val();
-        for (const [uid, profile] of Object.entries(data)) {
-          const banStatus = await getUserBanStatus(uid);
-          let isOnline = false;
-          try {
-            const presenceSnap = await get(ref(db, `presence/online/${uid}`));
-            isOnline = presenceSnap.val() === true;
-          } catch (_) {}
-          usersList.push({
-            uid,
-            name: profile.name || 'Unknown',
-            email: profile.email || '',
-            avatar: profile.avatar || '',
-            mood: profile.mood || 'neutral',
-            isBanned: banStatus.isBanned,
-            isOnline: isOnline,
-          });
-        }
-        usersList.sort((a, b) => a.name.localeCompare(b.name));
-        setUsers(usersList);
-        setFilteredUsers(usersList);
-        try {
-          await setAdminUserList(usersList);
-        } catch (_) {}
-      } else {
-        setUsers([]);
-        setFilteredUsers([]);
-        try {
-          await setAdminUserList([]);
-        } catch (_) {}
-      }
-    } catch (err) {
-      console.error('Failed to load users:', err);
-      showToast('Failed to load user list', 'error');
-    } finally {
-      setUsersLoading(false);
-    }
-  };
+      } catch (_) {}
+    };
+    loadCached();
 
-  const refreshUsersInBackground = async () => {
-    try {
-      const profilesSnap = await get(ref(db, 'profiles'));
-      if (profilesSnap.exists()) {
-        const data = profilesSnap.val();
-        const usersList = [];
-        for (const [uid, profile] of Object.entries(data)) {
-          const banStatus = await getUserBanStatus(uid);
-          let isOnline = false;
-          try {
-            const presenceSnap = await get(ref(db, `presence/online/${uid}`));
-            isOnline = presenceSnap.val() === true;
-          } catch (_) {}
-          usersList.push({
-            uid,
-            name: profile.name || 'Unknown',
-            email: profile.email || '',
-            avatar: profile.avatar || '',
-            mood: profile.mood || 'neutral',
-            isBanned: banStatus.isBanned,
-            isOnline: isOnline,
-          });
-        }
-        usersList.sort((a, b) => a.name.localeCompare(b.name));
-        setUsers(usersList);
-        setFilteredUsers(usersList);
-        try {
-          await setAdminUserList(usersList);
-        } catch (_) {}
-      }
-    } catch (err) {
-      console.warn('Background refresh failed:', err);
-    }
-  };
-
-  useEffect(() => {
-    loadUsers();
+    return () => {
+      unsubProfiles();
+      unsubPresence();
+      unsubAccounts();
+    };
   }, []);
 
+  // ─── Filter users by search ──────────────────────────────────
+  useEffect(() => {
+    const term = searchTerm.toLowerCase().trim();
+    if (!term) {
+      setFilteredUsers(users);
+      return;
+    }
+    const filtered = users.filter((u) =>
+      u.name.toLowerCase().includes(term) || u.uid.toLowerCase().includes(term)
+    );
+    setFilteredUsers(filtered);
+  }, [searchTerm, users]);
+
+  // ─── Fetch ban status for the selected UID ───────────────────
   useEffect(() => {
     const fetchBanStatus = async () => {
       if (!uid.trim()) {
@@ -169,19 +172,6 @@ const AdminPanel = () => {
     fetchBanStatus();
   }, [uid]);
 
-  useEffect(() => {
-    const term = searchTerm.toLowerCase().trim();
-    if (!term) {
-      setFilteredUsers(users);
-      return;
-    }
-    const filtered = users.filter(u =>
-      u.name.toLowerCase().includes(term) ||
-      u.uid.toLowerCase().includes(term)
-    );
-    setFilteredUsers(filtered);
-  }, [searchTerm, users]);
-
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
@@ -193,6 +183,7 @@ const AdminPanel = () => {
       .catch(() => showToast('Failed to copy UID', 'error'));
   };
 
+  // ─── Admin actions ──────────────────────────────────────────
   const handleCheckCoins = async () => {
     if (!uid.trim()) return showToast('Please enter a UID.', 'error');
     if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
@@ -249,7 +240,6 @@ const AdminPanel = () => {
     try {
       await wipeUserData(uid.trim());
       showToast(`User data for ${uid.trim()} wiped successfully.`, 'success');
-      loadUsers(true);
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -280,7 +270,6 @@ const AdminPanel = () => {
     try {
       await deleteUserAccount(uid.trim());
       showToast(`User ${uid.trim()} deleted successfully.`, 'success');
-      loadUsers(true);
       setUid('');
     } catch (err) {
       showToast(err.message, 'error');
@@ -304,7 +293,6 @@ const AdminPanel = () => {
         showToast(`User ${uid.trim()} banned.`, 'success');
       }
       setIsBanned(!isBanned);
-      loadUsers(true);
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -319,6 +307,10 @@ const AdminPanel = () => {
         <p className="admin-subtitle">Manage users, coins, and system settings.</p>
       </div>
 
+      {/* ─── Chart ────────────────────────────────────────────── */}
+      <LoginAnalyticsChart />
+
+      {/* ─── Two‑column layout ─────────────────────────────────── */}
       <div className="admin-two-col">
         <div className="admin-col-left">
           <div className="admin-card user-list-card">
@@ -333,7 +325,17 @@ const AdminPanel = () => {
                   onChange={(e) => setSearchTerm(e.target.value)}
                   disabled={usersLoading}
                 />
-                <button className="refresh-btn" onClick={() => loadUsers(true)} disabled={usersLoading}>
+                <button
+                  className="refresh-btn"
+                  onClick={() => {
+                    // Force re-fetch by clearing cache and reloading
+                    banStatusCache.current = {};
+                    presenceCache.current = {};
+                    setUsersLoading(true);
+                    // The listeners will automatically update
+                  }}
+                  disabled={usersLoading}
+                >
                   <i className={`fas fa-sync-alt ${usersLoading ? 'fa-spin' : ''}`} />
                 </button>
               </div>
@@ -449,9 +451,9 @@ const AdminPanel = () => {
                 <button onClick={handleAddCoins} disabled={loading || !uid.trim() || !coinAmount || uidNotFound}>
                   <i className="fas fa-plus-circle" /> Add
                 </button>
-                <button 
-                  onClick={handleSubtractCoins} 
-                  className="admin-danger" 
+                <button
+                  onClick={handleSubtractCoins}
+                  className="admin-danger"
                   disabled={loading || !uid.trim() || !coinAmount || uidNotFound}
                 >
                   <i className="fas fa-minus-circle" /> Subtract

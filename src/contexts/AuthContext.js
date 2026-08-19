@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import { auth, db } from '../services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { ref, set, onDisconnect, update, onValue, remove } from 'firebase/database';
+import { ref, set, update, onDisconnect, onValue, remove, get, runTransaction } from 'firebase/database';
 import { initPresence } from '../services/presenceService';
 
 export const AuthContext = createContext();
@@ -15,7 +15,27 @@ export const AuthProvider = ({ children }) => {
   const accountCleanupRef = useRef(null);
   const profileUnsubRef = useRef(null);
 
-  // Clean up all listeners on unmount or logout
+  // ─── Update daily login count using userDailyLogins path ────
+  const updateDailyLogin = async (uid) => {
+    if (!uid) return;
+    const today = new Date().toISOString().split('T')[0];
+    try {
+      const userLoginRef = ref(db, `userDailyLogins/${uid}/${today}`);
+      const snap = await get(userLoginRef);
+      if (snap.exists()) {
+        console.log(`✅ ${uid} already logged in today (${today})`);
+        return;
+      }
+      await set(userLoginRef, true);
+      // Also update the profile's lastLoginDate for consistency
+      await update(ref(db, `profiles/${uid}`), { lastLoginDate: today });
+      console.log(`✅ Daily login marked for ${uid} (${today})`);
+    } catch (err) {
+      console.warn(`❌ Failed to mark daily login for ${uid}:`, err);
+    }
+  };
+
+  // ─── Clean up all listeners ──────────────────────────────────
   const cleanupAll = () => {
     if (presenceCleanupRef.current) {
       presenceCleanupRef.current();
@@ -33,7 +53,6 @@ export const AuthProvider = ({ children }) => {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      // Clean up previous listeners
       cleanupAll();
 
       if (firebaseUser) {
@@ -42,11 +61,8 @@ export const AuthProvider = ({ children }) => {
           console.log('👤 User authenticated:', uid);
 
           setLoading(false);
-
-          // Initialize presence
           presenceCleanupRef.current = initPresence(uid);
 
-          // ─── Set a basic user object immediately ──────────
           const baseUser = {
             uid: firebaseUser.uid,
             email: firebaseUser.email,
@@ -54,7 +70,7 @@ export const AuthProvider = ({ children }) => {
             photoURL: firebaseUser.photoURL,
             emailVerified: firebaseUser.emailVerified,
             name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-            avatar: firebaseUser.photoURL || '',
+            avatar: '',
             mood: 'neutral',
             activeSkin: null,
             bio: '',
@@ -69,19 +85,14 @@ export const AuthProvider = ({ children }) => {
 
           const profileRef = ref(db, `profiles/${uid}`);
 
-          // ─── Load profile in the background ──────────────
           const unsubscribeProfile = onValue(
             profileRef,
-            (snapshot) => {
+            async (snapshot) => {
               if (snapshot.exists()) {
                 const profileData = snapshot.val();
-                console.log('📂 Existing profile loaded:', profileData);
+                console.log('📂 Existing profile loaded for:', uid);
 
-                const googleName =
-                  firebaseUser.displayName ||
-                  firebaseUser.email?.split('@')[0] ||
-                  'User';
-
+                const googleName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
                 const currentName = profileData.name || profileData.displayName || profileData.username || '';
                 const isUid = currentName.length >= 28;
                 const isDefault = !currentName || currentName === 'User' || isUid;
@@ -93,7 +104,6 @@ export const AuthProvider = ({ children }) => {
                   updatedData.name = googleName;
                   updatedData.searchName = googleName.toLowerCase();
                   needsUpdate = true;
-                  console.log(`🔄 Setting initial name from "${currentName}" to "${googleName}"`);
                 } else {
                   const expectedSearch = (currentName || 'User').toLowerCase();
                   if (profileData.searchName !== expectedSearch) {
@@ -102,9 +112,14 @@ export const AuthProvider = ({ children }) => {
                   }
                 }
 
+                if (profileData.avatar && profileData.avatar.startsWith('https://lh3.googleusercontent.com')) {
+                  updatedData.avatar = '';
+                  needsUpdate = true;
+                }
+
                 if (needsUpdate) {
                   update(profileRef, updatedData)
-                    .then(() => console.log('✅ Updated profile:', updatedData))
+                    .then(() => console.log('✅ Updated profile for:', uid))
                     .catch((err) => console.warn('Could not update profile:', err));
                   Object.assign(profileData, updatedData);
                 }
@@ -116,13 +131,17 @@ export const AuthProvider = ({ children }) => {
                   photoURL: firebaseUser.photoURL || profileData.avatar || '',
                 }));
 
+                // ✅ Count this login if not already counted today
+                await updateDailyLogin(uid);
+
               } else {
+                // Profile does not exist – create one
                 const name = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
-                console.log('👤 Creating new profile for:', name);
+                console.log('👤 Creating new profile for:', uid, name);
                 const newProfile = {
                   name,
                   searchName: name.toLowerCase(),
-                  avatar: firebaseUser.photoURL || '',
+                  avatar: '',
                   mood: 'neutral',
                   activeSkin: null,
                   bio: 'New to ECHO! 🌊',
@@ -140,46 +159,42 @@ export const AuthProvider = ({ children }) => {
                   ...newProfile,
                 }));
 
-                set(profileRef, newProfile).catch((err) => {
-                  console.error('Error creating profile:', err);
-                });
-
-                Promise.all([
-                  set(ref(db, `accounts/${uid}`), {
-                    email: firebaseUser.email,
-                    joined: Date.now(),
-                    banned: false,
-                  }),
-                  set(ref(db, `userSkins/${uid}`), {
-                    owned: [],
-                    active: null,
-                    coins: 350,
-                    purchases: {},
-                  }),
-                ]).catch((err) =>
-                  console.warn('Error creating auxiliary nodes:', err)
-                );
+                try {
+                  await set(profileRef, newProfile);
+                  await Promise.all([
+                    set(ref(db, `accounts/${uid}`), {
+                      email: firebaseUser.email,
+                      joined: Date.now(),
+                      banned: false,
+                    }),
+                    set(ref(db, `userSkins/${uid}`), {
+                      owned: [],
+                      active: null,
+                      coins: 350,
+                      purchases: {},
+                    }),
+                  ]);
+                  await updateDailyLogin(uid);
+                  console.log('✅ New profile created and daily login counted for:', uid);
+                } catch (err) {
+                  console.warn('Error creating profile or auxiliary nodes:', err);
+                }
               }
             },
             (error) => {
-              console.error('❌ Profile listener error:', error);
+              console.error('❌ Profile listener error for', uid, error);
             }
           );
           profileUnsubRef.current = unsubscribeProfile;
 
-          // ─── Accounts listener (force logout + ban) ──────
           const accountRef = ref(db, `accounts/${uid}`);
           const unsubAccount = onValue(accountRef, (snap) => {
             const data = snap.val();
-            // Force logout
             if (data?.forceLogout === true) {
               console.log(`🔴 Force logout for ${uid}`);
-              // Sign out the user
               signOut(auth).catch(() => {});
-              // Clear the flag so they can log in again
               remove(ref(db, `accounts/${uid}/forceLogout`)).catch(() => {});
             }
-            // Ban
             if (data?.banned === true) {
               setBanInfo({
                 isBanned: true,
