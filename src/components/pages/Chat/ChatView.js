@@ -57,12 +57,15 @@ const sanitizeName = (rawName, userId) => {
 };
 
 const getBackendUrl = (path) => {
-  // Priority: 1) environment variable, 2) localhost for dev, 3) production backend
-  const base = process.env.REACT_APP_API_URL ||
-               (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-                 ? 'http://localhost:3000'
-                 : 'https://echoty-fv30.onrender.com');
-  return `${base}${path}`;
+  let base = process.env.REACT_APP_API_URL ||
+             (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+               ? 'http://localhost:3000'
+               : 'https://echoty-fv30.onrender.com');
+  // Remove trailing slash from base
+  base = base.replace(/\/+$/, '');
+  // Ensure path starts with a slash
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+  return `${base}${normalizedPath}`;
 };
 
 const ChatView = () => {
@@ -70,15 +73,6 @@ const ChatView = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-
-  const getBackendUrl = (path) => {
-    // Priority: 1) environment variable, 2) localhost for dev, 3) production backend
-    const base = process.env.REACT_APP_API_URL ||
-                (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-                  ? 'http://localhost:3000'
-                  : 'https://echoty-fv30.onrender.com');
-    return `${base}${path}`;
-  };
 
   if (userId === ECHO_AI_ID) {
     return <EchoAI />;
