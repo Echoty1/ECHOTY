@@ -18,6 +18,7 @@ import { ref, onValue, get } from 'firebase/database';
 import { getAdminUserList, setAdminUserList } from '../../../services/indexedDBService';
 import Toast from '../../Toast/Toast';
 import LoginAnalyticsChart from './LoginAnalyticsChart';
+import ConfirmModal from '../../common/ConfirmModal';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import './AdminPanel.css';
@@ -35,6 +36,35 @@ const AdminPanel = () => {
   const [isBanned, setIsBanned] = useState(false);
   const [banReason, setBanReason] = useState('');
   const [uidNotFound, setUidNotFound] = useState(false);
+
+  // ─── Confirm Modal State ─────────────────────────────────────
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: 'Confirm',
+    cancelText: 'Cancel',
+    showInput: false,
+    inputPlaceholder: '',
+    inputValue: '',
+    onConfirm: null,
+    onInputChange: null,
+    loading: false,
+  });
+
+  const closeConfirmModal = () => {
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+  };
+
+  const openConfirmModal = (config) => {
+    setConfirmModal({
+      isOpen: true,
+      loading: false,
+      inputValue: '',
+      onInputChange: null,
+      ...config,
+    });
+  };
 
   const banStatusCache = useRef({});
   const presenceCache = useRef({});
@@ -68,8 +98,64 @@ const AdminPanel = () => {
     return list;
   };
 
-  useEffect(() => {
+  const loadUsers = async (forceRefresh = false) => {
     setUsersLoading(true);
+    if (!forceRefresh) {
+      try {
+        const cached = await getAdminUserList();
+        if (cached && cached.length > 0) {
+          setUsers(cached);
+          setFilteredUsers(cached);
+          setUsersLoading(false);
+          return;
+        }
+      } catch (_) {}
+    }
+    try {
+      const profilesSnap = await get(ref(db, 'profiles'));
+      const usersList = [];
+      if (profilesSnap.exists()) {
+        const data = profilesSnap.val();
+        for (const [uid, profile] of Object.entries(data)) {
+          const banStatus = await getUserBanStatus(uid);
+          let isOnline = false;
+          try {
+            const presenceSnap = await get(ref(db, `presence/online/${uid}`));
+            isOnline = presenceSnap.val() === true;
+          } catch (_) {}
+          usersList.push({
+            uid,
+            name: profile.name || 'Unknown',
+            email: profile.email || '',
+            avatar: profile.avatar || '',
+            mood: profile.mood || 'neutral',
+            isBanned: banStatus.isBanned,
+            isOnline: isOnline,
+          });
+        }
+        usersList.sort((a, b) => a.name.localeCompare(b.name));
+        setUsers(usersList);
+        setFilteredUsers(usersList);
+        try {
+          await setAdminUserList(usersList);
+        } catch (_) {}
+      } else {
+        setUsers([]);
+        setFilteredUsers([]);
+        try {
+          await setAdminUserList([]);
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.error('Failed to load users:', err);
+      showToast('Failed to load user list', 'error');
+    } finally {
+      setUsersLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadUsers();
 
     const profilesRef = ref(db, 'profiles');
     const unsubProfiles = onValue(profilesRef, (snapshot) => {
@@ -226,71 +312,138 @@ const AdminPanel = () => {
     }
   };
 
-  const handleWipeData = async () => {
+  const handleWipeData = () => {
     if (!uid.trim()) return showToast('Please enter a UID.', 'error');
     if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
-    if (!window.confirm(`Are you sure you want to permanently wipe all data for UID ${uid.trim()}?`)) return;
-    setLoading(true);
-    try {
-      await wipeUserData(uid.trim());
-      showToast(`User data for ${uid.trim()} wiped successfully.`, 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setLoading(false);
-    }
+    openConfirmModal({
+      title: 'Wipe User Data',
+      message: `Are you sure you want to permanently wipe all data for UID ${uid.trim()}? This cannot be undone.`,
+      confirmText: 'Wipe Data',
+      cancelText: 'Cancel',
+      showInput: false,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, loading: true }));
+        try {
+          await wipeUserData(uid.trim());
+          showToast(`User data for ${uid.trim()} wiped successfully.`, 'success');
+          closeConfirmModal();
+          loadUsers(true);
+        } catch (err) {
+          showToast(err.message, 'error');
+          setConfirmModal(prev => ({ ...prev, loading: false }));
+        }
+      },
+    });
   };
 
-  const handleForceLogout = async () => {
+  const handleForceLogout = () => {
     if (!uid.trim()) return showToast('Please enter a UID.', 'error');
     if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
-    if (!window.confirm(`Force logout user ${uid.trim()}?`)) return;
-    setLoading(true);
-    try {
-      await forceLogoutUser(uid.trim());
-      showToast(`User ${uid.trim()} logged out.`, 'success');
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setLoading(false);
-    }
+    openConfirmModal({
+      title: 'Force Logout',
+      message: `Force logout user ${uid.trim()}? They will be signed out immediately.`,
+      confirmText: 'Force Logout',
+      cancelText: 'Cancel',
+      showInput: false,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, loading: true }));
+        try {
+          await forceLogoutUser(uid.trim());
+          showToast(`User ${uid.trim()} logged out.`, 'success');
+          closeConfirmModal();
+        } catch (err) {
+          showToast(err.message, 'error');
+          setConfirmModal(prev => ({ ...prev, loading: false }));
+        }
+      },
+    });
   };
 
-  const handleDeleteAccount = async () => {
+  const handleDeleteAccount = () => {
     if (!uid.trim()) return showToast('Please enter a UID.', 'error');
     if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
-    if (!window.confirm(`Are you sure you want to permanently delete the account of UID ${uid.trim()}? This will delete all data and the authentication account.`)) return;
-    setLoading(true);
-    try {
-      await deleteUserAccount(uid.trim());
-      showToast(`User ${uid.trim()} deleted successfully.`, 'success');
-      setUid('');
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setLoading(false);
-    }
+    openConfirmModal({
+      title: 'Delete Account',
+      message: `Are you sure you want to permanently delete the account of UID ${uid.trim()}? This will delete all data and the authentication account. This cannot be undone.`,
+      confirmText: 'Delete Account',
+      cancelText: 'Cancel',
+      showInput: false,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, loading: true }));
+        try {
+          await deleteUserAccount(uid.trim());
+          showToast(`User ${uid.trim()} deleted successfully.`, 'success');
+          setUid('');
+          closeConfirmModal();
+          loadUsers(true);
+        } catch (err) {
+          showToast(err.message, 'error');
+          setConfirmModal(prev => ({ ...prev, loading: false }));
+        }
+      },
+    });
   };
 
-  const handleToggleBan = async () => {
+  const handleToggleBan = () => {
     if (!uid.trim()) return showToast('Please enter a UID.', 'error');
     if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
-    const action = isBanned ? 'Unban' : 'Ban';
-    if (!window.confirm(`${action} user ${uid.trim()}?`)) return;
-    setLoading(true);
-    try {
-      if (isBanned) {
-        await unbanUser(uid.trim());
-        showToast(`User ${uid.trim()} unbanned.`, 'success');
-      } else {
-        await banUser(uid.trim());
-        showToast(`User ${uid.trim()} banned.`, 'success');
-      }
-      setIsBanned(!isBanned);
-    } catch (err) {
-      showToast(err.message, 'error');
-    } finally {
-      setLoading(false);
+    if (isBanned) {
+      openConfirmModal({
+        title: 'Unban User',
+        message: `Unban user ${uid.trim()}? They will be able to log in again.`,
+        confirmText: 'Unban',
+        cancelText: 'Cancel',
+        showInput: false,
+        onConfirm: async () => {
+          setConfirmModal(prev => ({ ...prev, loading: true }));
+          try {
+            await unbanUser(uid.trim());
+            setIsBanned(false);
+            setBanReason('');
+            showToast(`User ${uid.trim()} unbanned.`, 'success');
+            closeConfirmModal();
+            loadUsers(true);
+          } catch (err) {
+            showToast(err.message, 'error');
+            setConfirmModal(prev => ({ ...prev, loading: false }));
+          }
+        },
+      });
+    } else {
+      // Reset input value for each ban attempt
+      setConfirmModal(prev => ({
+        ...prev,
+        isOpen: true,
+        title: 'Ban User',
+        message: `Enter a reason for banning ${uid.trim()}:`,
+        confirmText: 'Ban',
+        cancelText: 'Cancel',
+        showInput: true,
+        inputPlaceholder: 'Enter ban reason...',
+        inputValue: '', // ✅ reset value
+        loading: false,
+        onConfirm: async (reason) => { // ✅ now receives reason as parameter
+          if (!reason || !reason.trim()) {
+            showToast('Please enter a reason for the ban.', 'error');
+            return;
+          }
+          setConfirmModal(prev => ({ ...prev, loading: true }));
+          try {
+            await banUser(uid.trim(), reason.trim());
+            setIsBanned(true);
+            setBanReason(reason.trim());
+            showToast(`User ${uid.trim()} banned.`, 'success');
+            closeConfirmModal();
+            loadUsers(true);
+          } catch (err) {
+            showToast(err.message, 'error');
+            setConfirmModal(prev => ({ ...prev, loading: false }));
+          }
+        },
+        onInputChange: (value) => {
+          setConfirmModal(prev => ({ ...prev, inputValue: value }));
+        },
+      }));
     }
   };
 
@@ -325,11 +478,7 @@ const AdminPanel = () => {
                   />
                   <button
                     className="refresh-btn"
-                    onClick={() => {
-                      banStatusCache.current = {};
-                      presenceCache.current = {};
-                      setUsersLoading(true);
-                    }}
+                    onClick={() => loadUsers(true)}
                     disabled={usersLoading}
                   >
                     <i className={`fas fa-sync-alt ${usersLoading ? 'fa-spin' : ''}`} />
@@ -477,6 +626,21 @@ const AdminPanel = () => {
           </div>
         </div>
         {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+
+        <ConfirmModal
+          isOpen={confirmModal.isOpen}
+          onClose={closeConfirmModal}
+          onConfirm={confirmModal.onConfirm}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmText={confirmModal.confirmText}
+          cancelText={confirmModal.cancelText}
+          showInput={confirmModal.showInput}
+          inputPlaceholder={confirmModal.inputPlaceholder}
+          inputValue={confirmModal.inputValue}
+          onInputChange={confirmModal.onInputChange || (() => {})}
+          loading={confirmModal.loading}
+        />
       </div>
     </>
   );
