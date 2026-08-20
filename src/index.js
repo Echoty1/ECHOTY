@@ -13,11 +13,10 @@ root.render(
   </HelmetProvider>
 );
 
-// ─── Register service worker with auto-reload on update ────────
+// ✅ Register service worker (only in production)
 serviceWorkerRegistration.register({
   onUpdate: () => {
-    // When a new version is installed, reload the page
-    console.log('🔄 New version detected – reloading...');
+    console.log('🔄 Service worker updated – reloading...');
     window.location.reload();
   },
 });
