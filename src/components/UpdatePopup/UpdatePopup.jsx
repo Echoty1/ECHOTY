@@ -28,10 +28,17 @@ const UpdatePopup = ({ currentVersion, onClose }) => {
     fetchUpdate();
   }, []);
 
+  // ─── Fix: handle both string and number for latest ──────────
   const isUpdateAvailable = () => {
     if (!updateData || !updateData.latest) return false;
-    const current = currentVersion.split('.').map(Number);
-    const latest = updateData.latest.split('.').map(Number);
+    
+    // Convert to string safely
+    const latestStr = String(updateData.latest);
+    const currentStr = String(currentVersion);
+    
+    const current = currentStr.split('.').map(Number);
+    const latest = latestStr.split('.').map(Number);
+    
     for (let i = 0; i < Math.max(current.length, latest.length); i++) {
       const c = current[i] || 0;
       const l = latest[i] || 0;
@@ -56,7 +63,7 @@ const UpdatePopup = ({ currentVersion, onClose }) => {
         <div className="update-popup-icon">📱</div>
         <h3>New Version Available</h3>
         <p className="update-popup-version">
-          Version {updateData.latest} is now available.
+          Version {String(updateData.latest)} is now available.
         </p>
         {updateData.whatsNew && (
           <div className="update-popup-changelog">

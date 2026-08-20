@@ -2,7 +2,7 @@
 /**
  * Checks for a new version of the app and performs a hard refresh if one is found.
  * Uses localStorage to track the current version and a timestamp to avoid excessive checks.
- * 
+ *
  * On every page load, it fetches the latest version from Firebase and compares it
  * with the stored version. If they differ, it stores the new version and reloads.
  */
@@ -14,6 +14,7 @@ const CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes – avoid hammering Firebase
 /**
  * Fetches the latest version from Firebase.
  * Uses the REST API for simplicity (no Firebase SDK dependency here).
+ * Handles both string and number values for `latest`.
  */
 async function fetchLatestVersion() {
   try {
@@ -22,7 +23,9 @@ async function fetchLatestVersion() {
     );
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    return data?.latest || null;
+    const latest = data?.latest;
+    // ─── Convert to string if number (or any non-string) ──────
+    return latest !== undefined && latest !== null ? String(latest) : null;
   } catch (err) {
     console.warn('Version check failed:', err.message);
     return null;
@@ -67,7 +70,7 @@ export async function checkVersionAndReload() {
     localStorage.setItem(VERSION_STORAGE_KEY, remoteVersion);
     // Also store a flag to indicate we're reloading
     sessionStorage.setItem('echo_reloading', 'true');
-    // Perform a hard refresh
+    // Perform a hard refresh (bypass cache)
     window.location.reload(true);
   } else {
     // Versions match – nothing to do
