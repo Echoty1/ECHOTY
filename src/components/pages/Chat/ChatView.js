@@ -56,11 +56,29 @@ const sanitizeName = (rawName, userId) => {
   return str;
 };
 
+const getBackendUrl = (path) => {
+  // Priority: 1) environment variable, 2) localhost for dev, 3) production backend
+  const base = process.env.REACT_APP_API_URL ||
+               (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                 ? 'http://localhost:3000'
+                 : 'https://echoty-fv30.onrender.com');
+  return `${base}${path}`;
+};
+
 const ChatView = () => {
   const { userId } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+
+  const getBackendUrl = (path) => {
+    // Priority: 1) environment variable, 2) localhost for dev, 3) production backend
+    const base = process.env.REACT_APP_API_URL ||
+                (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                  ? 'http://localhost:3000'
+                  : 'https://echoty-fv30.onrender.com');
+    return `${base}${path}`;
+  };
 
   if (userId === ECHO_AI_ID) {
     return <EchoAI />;
@@ -1326,9 +1344,9 @@ const ChatView = () => {
                 flex: 1,
                 padding: '10px 16px',
                 borderRadius: '24px',
-                border: '1px solid rgba(255, 255, 255, 0.1)',
-                background: 'rgba(255, 255, 255, 0.05)',
-                color: '#fff',
+                border: '1px solid var(--border-color)',
+                background: 'var(--bg-input)',
+                color: 'var(--text-primary)',  // ✅ changed from '#fff'
                 fontSize: '14px',
                 outline: 'none',
                 boxSizing: 'border-box',

@@ -45,8 +45,11 @@ const ECHO_AI_AVATAR = '/videos/library/Artificial Intelligence Ai GIF by Abdi S
 const ECHO_AI_ID = 'echo_ai_assistant';
 
 const getBackendUrl = (path) => {
-  const isLocal = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-  const base = isLocal ? 'http://localhost:3000' : '';
+  // Priority: 1) environment variable, 2) localhost for dev, 3) production backend
+  const base = process.env.REACT_APP_API_URL ||
+               (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+                 ? 'http://localhost:3000'
+                 : 'https://echoty-fv30.onrender.com');
   return `${base}${path}`;
 };
 
@@ -928,9 +931,9 @@ const EchoAI = () => {
               flex: 1,
               padding: '10px 16px',
               borderRadius: '24px',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              background: 'rgba(255, 255, 255, 0.05)',
-              color: '#fff',
+              border: '1px solid var(--border-color)',
+              background: 'var(--bg-input)',
+              color: 'var(--text-primary)',  // ✅ changed from '#fff'
               fontSize: '14px',
               outline: 'none',
               boxSizing: 'border-box',

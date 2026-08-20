@@ -575,3 +575,27 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+.admin-message-card .admin-message-input,
+.admin-message-card .admin-message-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-primary);  /* ✅ this ensures dark text in light theme */
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+.admin-message-card .admin-message-input:disabled,
+.admin-message-card .admin-message-textarea:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.admin-message-card .admin-message-input::placeholder,
+.admin-message-card .admin-message-textarea::placeholder {
+  color: var(--text-muted);
+}

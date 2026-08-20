@@ -284,9 +284,9 @@ const EchoInput = forwardRef(({ placeholder, onSend, activeSkinId, onChange }, r
           flex: 1,
           padding: '10px 16px',
           borderRadius: '24px',
-          border: '1px solid rgba(255,255,255,0.1)',
-          background: 'rgba(255,255,255,0.05)',
-          color: '#fff',
+          border: '1px solid var(--border-color)',
+          background: 'var(--bg-input)',
+          color: 'var(--text-primary)',  // ✅ changed from '#fff'
           fontSize: '14px',
           outline: 'none',
           minHeight: '44px',
@@ -311,7 +311,7 @@ const EchoInput = forwardRef(({ placeholder, onSend, activeSkinId, onChange }, r
           left: '16px',
           top: '50%',
           transform: 'translateY(-50%)',
-          color: '#666',
+          color: 'var(--text-muted)',  // ✅ changed from '#666'
           pointerEvents: 'none',
           fontSize: '14px',
           transition: 'opacity 0.2s',

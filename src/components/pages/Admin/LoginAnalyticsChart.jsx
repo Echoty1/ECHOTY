@@ -92,7 +92,7 @@ const LoginAnalyticsChart = () => {
     return (
       <div className="login-chart-wrapper" style={{ padding: '20px', textAlign: 'center' }}>
         <p style={{ color: '#EF4444' }}>⚠️ {error}</p>
-        <p style={{ color: '#888', fontSize: '14px' }}>Please check the console for details.</p>
+        <p style={{ color: 'var(--text-secondary)', fontSize: '14px' }}>Please check the console for details.</p>
       </div>
     );
   }
@@ -113,8 +113,8 @@ const LoginAnalyticsChart = () => {
   if (!hasData) {
     return (
       <div className="login-chart-wrapper" style={{ padding: '20px', textAlign: 'center' }}>
-        <p style={{ color: '#888' }}>📊 No login data available yet.</p>
-        <p style={{ color: '#666', fontSize: '13px' }}>Data will appear here as users log in.</p>
+        <p style={{ color: 'var(--text-secondary)' }}>📊 No login data available yet.</p>
+        <p style={{ color: 'var(--text-muted)', fontSize: '13px' }}>Data will appear here as users log in.</p>
       </div>
     );
   }
@@ -148,15 +148,15 @@ const LoginAnalyticsChart = () => {
                 <stop offset="95%" stopColor="#6C3CE1" stopOpacity={0.05} />
               </linearGradient>
             </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--border-color)" />
             <XAxis
               dataKey="label"
-              tick={{ fill: '#888', fontSize: 11 }}
+              tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
               axisLine={false}
               tickLine={false}
             />
             <YAxis
-              tick={{ fill: '#888', fontSize: 11 }}
+              tick={{ fill: 'var(--text-secondary)', fontSize: 11 }}
               axisLine={false}
               tickLine={false}
               allowDecimals={false}
@@ -186,7 +186,7 @@ const LoginAnalyticsChart = () => {
         }
         .skeleton-line {
           height: 16px;
-          background: rgba(255,255,255,0.06);
+          background: var(--bg-input);
           border-radius: 4px;
           animation: pulse 1.5s infinite;
         }
@@ -196,8 +196,8 @@ const LoginAnalyticsChart = () => {
           50% { opacity: 0.8; }
         }
         .login-chart-wrapper {
-          background: rgba(255,255,255,0.04);
-          border: 1px solid rgba(255,255,255,0.08);
+          background: var(--bg-input);
+          border: 1px solid var(--border-color);
           border-radius: 16px;
           padding: 20px 24px;
           margin-bottom: 24px;
@@ -212,7 +212,7 @@ const LoginAnalyticsChart = () => {
           font-size: 16px;
           font-weight: 600;
           margin: 0;
-          color: #eee;
+          color: var(--text-primary);
         }
         .today-badge {
           font-size: 11px;
@@ -224,18 +224,18 @@ const LoginAnalyticsChart = () => {
           letter-spacing: 0.5px;
         }
         .chart-tooltip {
-          background: #1a1a24;
-          border: 1px solid rgba(255,255,255,0.1);
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
           border-radius: 8px;
           padding: 8px 12px;
         }
         .tooltip-label {
-          color: #aaa;
+          color: var(--text-secondary);
           font-size: 12px;
           margin: 0;
         }
         .tooltip-value {
-          color: #fff;
+          color: var(--text-primary);
           font-size: 16px;
           font-weight: 700;
           margin: 0;

@@ -37,6 +37,10 @@ const AdminPanel = () => {
   const [banReason, setBanReason] = useState('');
   const [uidNotFound, setUidNotFound] = useState(false);
 
+  // ─── Bulk selection state ──────────────────────────────────────
+  const [selectedUsers, setSelectedUsers] = useState(new Set());
+  const [selectAll, setSelectAll] = useState(false);
+
   // ─── Admin Message State ──────────────────────────────────────
   const [adminMessageTitle, setAdminMessageTitle] = useState('');
   const [adminMessageBody, setAdminMessageBody] = useState('');
@@ -85,6 +89,7 @@ const AdminPanel = () => {
     );
   }
 
+  // ─── Build user list ──────────────────────────────────────────
   const buildUserList = (profilesData) => {
     const list = [];
     for (const [uid, profile] of Object.entries(profilesData || {})) {
@@ -102,6 +107,7 @@ const AdminPanel = () => {
     return list;
   };
 
+  // ─── Load users ──────────────────────────────────────────────
   const loadUsers = async (forceRefresh = false) => {
     setUsersLoading(true);
     if (!forceRefresh) {
@@ -117,9 +123,9 @@ const AdminPanel = () => {
     }
     try {
       const profilesSnap = await get(ref(db, 'profiles'));
-      const usersList = [];
       if (profilesSnap.exists()) {
         const data = profilesSnap.val();
+        const usersList = [];
         for (const [uid, profile] of Object.entries(data)) {
           const banStatus = await getUserBanStatus(uid);
           let isOnline = false;
@@ -158,6 +164,7 @@ const AdminPanel = () => {
     }
   };
 
+  // ─── Real‑time listeners ──────────────────────────────────────
   useEffect(() => {
     loadUsers();
 
@@ -168,6 +175,7 @@ const AdminPanel = () => {
       setUsers(newUsers);
       setUsersLoading(false);
       setAdminUserList(newUsers).catch(() => {});
+      // Removed reset of selectedUsers to keep manual selection active during updates
     });
 
     const presenceRef = ref(db, 'presence/online');
@@ -198,17 +206,6 @@ const AdminPanel = () => {
       );
     });
 
-    const loadCached = async () => {
-      try {
-        const cached = await getAdminUserList();
-        if (cached && cached.length > 0) {
-          setUsers(cached);
-          setUsersLoading(false);
-        }
-      } catch (_) {}
-    };
-    loadCached();
-
     return () => {
       unsubProfiles();
       unsubPresence();
@@ -216,6 +213,7 @@ const AdminPanel = () => {
     };
   }, []);
 
+  // ─── Filter users ─────────────────────────────────────────────
   useEffect(() => {
     const term = searchTerm.toLowerCase().trim();
     if (!term) {
@@ -228,6 +226,7 @@ const AdminPanel = () => {
     setFilteredUsers(filtered);
   }, [searchTerm, users]);
 
+  // ─── Fetch ban status for typed/selected UID ──────────────────
   useEffect(() => {
     const fetchBanStatus = async () => {
       if (!uid.trim()) {
@@ -262,29 +261,276 @@ const AdminPanel = () => {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const copyUid = (uid) => {
-    navigator.clipboard.writeText(uid)
-      .then(() => showToast(`UID copied: ${uid}`, 'success'))
+  const copyUid = (userUid) => {
+    navigator.clipboard.writeText(userUid)
+      .then(() => showToast(`UID copied: ${userUid}`, 'success'))
       .catch(() => showToast('Failed to copy UID', 'error'));
   };
 
-  // ─── Send Admin Message ──────────────────────────────────────
+  // ─── Selection Logic Fixes ─────────────────────────────────────
+  const handleSelectAll = () => {
+    if (selectAll) {
+      setSelectedUsers(new Set());
+    } else {
+      const ids = filteredUsers.map(u => u.uid);
+      setSelectedUsers(new Set(ids));
+      if (ids.length > 0) setUid(ids[0]);
+    }
+    setSelectAll(!selectAll);
+  };
+
+  const handleToggleUser = (userUid) => {
+    const newSet = new Set(selectedUsers);
+    if (newSet.has(userUid)) {
+      newSet.delete(userUid);
+    } else {
+      newSet.add(userUid);
+      setUid(userUid);
+    }
+    setSelectedUsers(newSet);
+    setSelectAll(newSet.size === filteredUsers.length && filteredUsers.length > 0);
+  };
+
+  const handleRowClick = (userUid) => {
+    setUid(userUid);
+    if (!selectedUsers.has(userUid)) {
+      const newSet = new Set(selectedUsers);
+      newSet.add(userUid);
+      setSelectedUsers(newSet);
+      setSelectAll(newSet.size === filteredUsers.length && filteredUsers.length > 0);
+    }
+  };
+
+  // Helper to resolve active target UIDs for bulk or single mode
+  const getActiveTargetUids = () => {
+    if (selectedUsers.size > 0) {
+      return Array.from(selectedUsers);
+    }
+    if (uid.trim() && !uidNotFound) {
+      return [uid.trim()];
+    }
+    return [];
+  };
+
+  const getSelectedUserNames = () => {
+    const targets = getActiveTargetUids();
+    return users
+      .filter(u => targets.includes(u.uid))
+      .map(u => u.name || u.uid)
+      .join(', ');
+  };
+
+  const getSelectedUsersList = () => {
+    const targets = getActiveTargetUids();
+    return users.filter(u => targets.includes(u.uid));
+  };
+
+  // ─── Bulk Action Handlers ──────────────────────────────────────
+  const handleBulkForceLogout = () => {
+    const uids = getActiveTargetUids();
+    if (uids.length === 0) {
+      showToast('Select at least one user or enter a valid UID.', 'error');
+      return;
+    }
+    const names = getSelectedUserNames();
+    const count = uids.length;
+    openConfirmModal({
+      title: `Force Logout ${count} User${count > 1 ? 's' : ''}`,
+      message: `Are you sure you want to force logout ${count} user${count > 1 ? 's' : ''}?\n\n${names}`,
+      confirmText: 'Force Logout',
+      cancelText: 'Cancel',
+      showInput: false,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, loading: true }));
+        try {
+          let success = 0;
+          let failed = 0;
+          for (const userUid of uids) {
+            try {
+              await forceLogoutUser(userUid);
+              success++;
+            } catch (err) {
+              failed++;
+              console.warn(`Failed to logout ${userUid}:`, err);
+            }
+          }
+          showToast(`Logged out ${success} user${success > 1 ? 's' : ''}${failed > 0 ? `, ${failed} failed` : ''}`, 'success');
+          closeConfirmModal();
+          setSelectedUsers(new Set());
+          setSelectAll(false);
+        } catch (err) {
+          showToast(err.message, 'error');
+          setConfirmModal(prev => ({ ...prev, loading: false }));
+        }
+      },
+    });
+  };
+
+  const handleBulkWipeData = () => {
+    const uids = getActiveTargetUids();
+    if (uids.length === 0) {
+      showToast('Select at least one user or enter a valid UID.', 'error');
+      return;
+    }
+    const names = getSelectedUserNames();
+    const count = uids.length;
+    openConfirmModal({
+      title: `Wipe Data for ${count} User${count > 1 ? 's' : ''}`,
+      message: `Are you sure you want to permanently wipe ALL data for ${count} user${count > 1 ? 's' : ''}? This cannot be undone.\n\n${names}`,
+      confirmText: 'Wipe Data',
+      cancelText: 'Cancel',
+      showInput: false,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, loading: true }));
+        try {
+          let success = 0;
+          let failed = 0;
+          for (const userUid of uids) {
+            try {
+              await wipeUserData(userUid);
+              success++;
+            } catch (err) {
+              failed++;
+              console.warn(`Failed to wipe ${userUid}:`, err);
+            }
+          }
+          showToast(`Wiped data for ${success} user${success > 1 ? 's' : ''}${failed > 0 ? `, ${failed} failed` : ''}`, 'success');
+          closeConfirmModal();
+          setSelectedUsers(new Set());
+          setSelectAll(false);
+          loadUsers(true);
+        } catch (err) {
+          showToast(err.message, 'error');
+          setConfirmModal(prev => ({ ...prev, loading: false }));
+        }
+      },
+    });
+  };
+
+  const handleBulkDeleteAccounts = () => {
+    const uids = getActiveTargetUids();
+    if (uids.length === 0) {
+      showToast('Select at least one user or enter a valid UID.', 'error');
+      return;
+    }
+    const names = getSelectedUserNames();
+    const count = uids.length;
+    openConfirmModal({
+      title: `Delete ${count} Account${count > 1 ? 's' : ''}`,
+      message: `Are you sure you want to permanently DELETE ${count} account${count > 1 ? 's' : ''}? This will delete all data and authentication accounts. This cannot be undone.\n\n${names}`,
+      confirmText: 'Delete Accounts',
+      cancelText: 'Cancel',
+      showInput: false,
+      onConfirm: async () => {
+        setConfirmModal(prev => ({ ...prev, loading: true }));
+        try {
+          let success = 0;
+          let failed = 0;
+          for (const userUid of uids) {
+            try {
+              await deleteUserAccount(userUid);
+              success++;
+            } catch (err) {
+              failed++;
+              console.warn(`Failed to delete ${userUid}:`, err);
+            }
+          }
+          showToast(`Deleted ${success} account${success > 1 ? 's' : ''}${failed > 0 ? `, ${failed} failed` : ''}`, 'success');
+          closeConfirmModal();
+          setSelectedUsers(new Set());
+          setSelectAll(false);
+          setUid('');
+          loadUsers(true);
+        } catch (err) {
+          showToast(err.message, 'error');
+          setConfirmModal(prev => ({ ...prev, loading: false }));
+        }
+      },
+    });
+  };
+
+  const handleBulkToggleBan = () => {
+    const uids = getActiveTargetUids();
+    if (uids.length === 0) {
+      showToast('Select at least one user or enter a valid UID.', 'error');
+      return;
+    }
+    const names = getSelectedUserNames();
+    const count = uids.length;
+
+    const selectedList = getSelectedUsersList();
+    const allBanned = selectedList.length > 0 && selectedList.every(u => u.isBanned);
+
+    const action = allBanned ? 'Unban' : 'Ban';
+    const actionLower = action.toLowerCase();
+
+    openConfirmModal({
+      title: `${action} ${count} User${count > 1 ? 's' : ''}`,
+      message: `Are you sure you want to ${actionLower} ${count} user${count > 1 ? 's' : ''}?\n\n${names}`,
+      confirmText: action,
+      cancelText: 'Cancel',
+      showInput: !allBanned,
+      inputPlaceholder: 'Enter ban reason...',
+      onConfirm: async (reason) => {
+        if (!allBanned && (!reason || !reason.trim())) {
+          showToast('Please enter a reason for the ban.', 'error');
+          return;
+        }
+        setConfirmModal(prev => ({ ...prev, loading: true }));
+        try {
+          let success = 0;
+          let failed = 0;
+          for (const userUid of uids) {
+            try {
+              if (allBanned) {
+                await unbanUser(userUid);
+              } else {
+                await banUser(userUid, reason.trim());
+              }
+              success++;
+            } catch (err) {
+              failed++;
+              console.warn(`Failed to ${actionLower} ${userUid}:`, err);
+            }
+          }
+          showToast(`${action}ned ${success} user${success > 1 ? 's' : ''}${failed > 0 ? `, ${failed} failed` : ''}`, 'success');
+          closeConfirmModal();
+          setSelectedUsers(new Set());
+          setSelectAll(false);
+          loadUsers(true);
+        } catch (err) {
+          showToast(err.message, 'error');
+          setConfirmModal(prev => ({ ...prev, loading: false }));
+        }
+      },
+      onInputChange: (value) => {
+        setConfirmModal(prev => ({ ...prev, inputValue: value }));
+      },
+    });
+  };
+
+  // ─── Admin Message Handler ────────────────────────────────────
   const handleSendAdminMessage = async () => {
-    if (!uid.trim() || uidNotFound) return showToast('Select a valid user.', 'error');
+    const uids = getActiveTargetUids();
+    if (uids.length === 0) return showToast('Select at least one valid user.', 'error');
     if (!adminMessageTitle.trim() || !adminMessageBody.trim()) {
       return showToast('Please fill in both title and body.', 'error');
     }
     setLoading(true);
     try {
-      const notifRef = ref(db, `adminNotifications/${uid.trim()}/messages`);
-      const newMsgRef = push(notifRef);
-      await set(newMsgRef, {
-        title: adminMessageTitle.trim(),
-        body: adminMessageBody.trim(),
-        timestamp: Date.now(),
-        read: false,
-      });
-      showToast(`Message sent to ${uid.trim()}!`, 'success');
+      let count = 0;
+      for (const targetUid of uids) {
+        const notifRef = ref(db, `adminNotifications/${targetUid}/messages`);
+        const newMsgRef = push(notifRef);
+        await set(newMsgRef, {
+          title: adminMessageTitle.trim(),
+          body: adminMessageBody.trim(),
+          timestamp: Date.now(),
+          read: false,
+        });
+        count++;
+      }
+      showToast(`Message sent to ${count} user${count > 1 ? 's' : ''}!`, 'success');
       setAdminMessageTitle('');
       setAdminMessageBody('');
     } catch (err) {
@@ -294,14 +540,14 @@ const AdminPanel = () => {
     }
   };
 
-  // ─── Admin actions ────────────────────────────────────────────
+  // ─── Single/Selected User Coin Actions ─────────────────────────
   const handleCheckCoins = async () => {
-    if (!uid.trim()) return showToast('Please enter a UID.', 'error');
-    if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
+    const targetUid = uid.trim() || (selectedUsers.size > 0 ? Array.from(selectedUsers)[0] : '');
+    if (!targetUid) return showToast('Please select or enter a UID.', 'error');
     setLoading(true);
     try {
-      const coins = await getUserCoins(uid.trim());
-      showToast(`User has ${coins} coins.`, 'success');
+      const coins = await getUserCoins(targetUid);
+      showToast(`User (${targetUid}) has ${coins} coins.`, 'success');
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -310,14 +556,16 @@ const AdminPanel = () => {
   };
 
   const handleAddCoins = async () => {
-    if (!uid.trim()) return showToast('Please enter a UID.', 'error');
-    if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
+    const uids = getActiveTargetUids();
+    if (uids.length === 0) return showToast('Please select or enter a UID.', 'error');
     const amount = parseInt(coinAmount);
     if (!amount || amount <= 0) return showToast('Enter a valid positive amount.', 'error');
     setLoading(true);
     try {
-      const newCoins = await addUserCoins(uid.trim(), amount);
-      showToast(`Added ${amount} coins. New balance: ${newCoins}`, 'success');
+      for (const targetUid of uids) {
+        await addUserCoins(targetUid, amount);
+      }
+      showToast(`Added ${amount} coins to ${uids.length} user${uids.length > 1 ? 's' : ''}.`, 'success');
       setCoinAmount('');
     } catch (err) {
       showToast(err.message, 'error');
@@ -327,14 +575,16 @@ const AdminPanel = () => {
   };
 
   const handleSubtractCoins = async () => {
-    if (!uid.trim()) return showToast('Please enter a UID.', 'error');
-    if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
+    const uids = getActiveTargetUids();
+    if (uids.length === 0) return showToast('Please select or enter a UID.', 'error');
     const amount = parseInt(coinAmount);
     if (!amount || amount <= 0) return showToast('Enter a valid positive amount.', 'error');
     setLoading(true);
     try {
-      const newCoins = await subtractUserCoins(uid.trim(), amount);
-      showToast(`Subtracted ${amount} coins. New balance: ${newCoins}`, 'success');
+      for (const targetUid of uids) {
+        await subtractUserCoins(targetUid, amount);
+      }
+      showToast(`Subtracted ${amount} coins from ${uids.length} user${uids.length > 1 ? 's' : ''}.`, 'success');
       setCoinAmount('');
     } catch (err) {
       showToast(err.message, 'error');
@@ -343,139 +593,7 @@ const AdminPanel = () => {
     }
   };
 
-  const handleWipeData = () => {
-    if (!uid.trim()) return showToast('Please enter a UID.', 'error');
-    if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
-    openConfirmModal({
-      title: 'Wipe User Data',
-      message: `Are you sure you want to permanently wipe all data for UID ${uid.trim()}? This cannot be undone.`,
-      confirmText: 'Wipe Data',
-      cancelText: 'Cancel',
-      showInput: false,
-      onConfirm: async () => {
-        setConfirmModal(prev => ({ ...prev, loading: true }));
-        try {
-          await wipeUserData(uid.trim());
-          showToast(`User data for ${uid.trim()} wiped successfully.`, 'success');
-          closeConfirmModal();
-          loadUsers(true);
-        } catch (err) {
-          showToast(err.message, 'error');
-          setConfirmModal(prev => ({ ...prev, loading: false }));
-        }
-      },
-    });
-  };
-
-  const handleForceLogout = () => {
-    if (!uid.trim()) return showToast('Please enter a UID.', 'error');
-    if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
-    openConfirmModal({
-      title: 'Force Logout',
-      message: `Force logout user ${uid.trim()}? They will be signed out immediately.`,
-      confirmText: 'Force Logout',
-      cancelText: 'Cancel',
-      showInput: false,
-      onConfirm: async () => {
-        setConfirmModal(prev => ({ ...prev, loading: true }));
-        try {
-          await forceLogoutUser(uid.trim());
-          showToast(`User ${uid.trim()} logged out.`, 'success');
-          closeConfirmModal();
-        } catch (err) {
-          showToast(err.message, 'error');
-          setConfirmModal(prev => ({ ...prev, loading: false }));
-        }
-      },
-    });
-  };
-
-  const handleDeleteAccount = () => {
-    if (!uid.trim()) return showToast('Please enter a UID.', 'error');
-    if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
-    openConfirmModal({
-      title: 'Delete Account',
-      message: `Are you sure you want to permanently delete the account of UID ${uid.trim()}? This will delete all data and the authentication account. This cannot be undone.`,
-      confirmText: 'Delete Account',
-      cancelText: 'Cancel',
-      showInput: false,
-      onConfirm: async () => {
-        setConfirmModal(prev => ({ ...prev, loading: true }));
-        try {
-          await deleteUserAccount(uid.trim());
-          showToast(`User ${uid.trim()} deleted successfully.`, 'success');
-          setUid('');
-          closeConfirmModal();
-          loadUsers(true);
-        } catch (err) {
-          showToast(err.message, 'error');
-          setConfirmModal(prev => ({ ...prev, loading: false }));
-        }
-      },
-    });
-  };
-
-  const handleToggleBan = () => {
-    if (!uid.trim()) return showToast('Please enter a UID.', 'error');
-    if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
-    if (isBanned) {
-      openConfirmModal({
-        title: 'Unban User',
-        message: `Unban user ${uid.trim()}? They will be able to log in again.`,
-        confirmText: 'Unban',
-        cancelText: 'Cancel',
-        showInput: false,
-        onConfirm: async () => {
-          setConfirmModal(prev => ({ ...prev, loading: true }));
-          try {
-            await unbanUser(uid.trim());
-            setIsBanned(false);
-            setBanReason('');
-            showToast(`User ${uid.trim()} unbanned.`, 'success');
-            closeConfirmModal();
-            loadUsers(true);
-          } catch (err) {
-            showToast(err.message, 'error');
-            setConfirmModal(prev => ({ ...prev, loading: false }));
-          }
-        },
-      });
-    } else {
-      setConfirmModal(prev => ({
-        ...prev,
-        isOpen: true,
-        title: 'Ban User',
-        message: `Enter a reason for banning ${uid.trim()}:`,
-        confirmText: 'Ban',
-        cancelText: 'Cancel',
-        showInput: true,
-        inputPlaceholder: 'Enter ban reason...',
-        inputValue: '',
-        loading: false,
-        onConfirm: async (reason) => {
-          if (!reason || !reason.trim()) {
-            showToast('Please enter a reason for the ban.', 'error');
-            return;
-          }
-          setConfirmModal(prev => ({ ...prev, loading: true }));
-          try {
-            await banUser(uid.trim(), reason.trim());
-            setIsBanned(true);
-            setBanReason(reason.trim());
-            showToast(`User ${uid.trim()} banned.`, 'success');
-            closeConfirmModal();
-            loadUsers(true);
-          } catch (err) {
-            showToast(err.message, 'error');
-            setConfirmModal(prev => ({ ...prev, loading: false }));
-          }
-        },
-        onInputChange: (value) => {
-          setConfirmModal(prev => ({ ...prev, inputValue: value }));
-        },
-      }));
-    }
-  };
+  const activeCount = getActiveTargetUids().length;
 
   return (
     <>
@@ -515,6 +633,7 @@ const AdminPanel = () => {
                   </button>
                 </div>
               </div>
+
               <div className="table-wrapper">
                 {usersLoading ? (
                   <div className="loading-placeholder">Loading users...</div>
@@ -524,60 +643,68 @@ const AdminPanel = () => {
                   <table className="user-table">
                     <thead>
                       <tr>
+                        <th style={{ width: '40px' }}>
+                          <input
+                            type="checkbox"
+                            checked={selectAll}
+                            onChange={handleSelectAll}
+                            disabled={filteredUsers.length === 0}
+                          />
+                        </th>
                         <th>Name</th>
                         <th>UID</th>
                         <th>Status</th>
-                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredUsers.map((u) => {
-                        let statusText, statusClass;
-                        if (u.isBanned) {
-                          statusText = 'Banned';
-                          statusClass = 'banned';
-                        } else if (u.isOnline) {
-                          statusText = 'Online';
-                          statusClass = 'online';
-                        } else {
-                          statusText = 'Offline';
-                          statusClass = 'offline';
-                        }
-                        return (
-                          <tr key={u.uid}>
-                            <td>{u.name}</td>
-                            <td className="uid-cell">
-                              <code>{u.uid}</code>
-                              <button
-                                className="copy-btn"
-                                onClick={() => copyUid(u.uid)}
-                                title="Copy UID"
-                              >
-                                <i className="fas fa-copy" />
-                              </button>
-                            </td>
-                            <td>
-                              <span className={`status-badge ${statusClass}`}>{statusText}</span>
-                            </td>
-                            <td>
-                              <button
-                                className="action-btn select-btn"
-                                onClick={() => setUid(u.uid)}
-                                title="Select this user for actions"
-                              >
-                                <i className="fas fa-chevron-right" /> Select
-                              </button>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                      {filteredUsers.map((u) => (
+                        <tr
+                          key={u.uid}
+                          onClick={() => handleRowClick(u.uid)}
+                          style={{
+                            cursor: 'pointer',
+                            background: selectedUsers.has(u.uid) || uid === u.uid ? 'rgba(108,60,225,0.08)' : 'transparent',
+                            transition: 'background 0.15s ease',
+                          }}
+                        >
+                          <td onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedUsers.has(u.uid)}
+                              onChange={() => handleToggleUser(u.uid)}
+                            />
+                          </td>
+                          <td>{u.name}</td>
+                          <td className="uid-cell">
+                            <code>{u.uid}</code>
+                            <button
+                              className="copy-btn"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                copyUid(u.uid);
+                              }}
+                              title="Copy UID"
+                            >
+                              <i className="fas fa-copy" />
+                            </button>
+                          </td>
+                          <td>
+                            <span className={`status-badge ${u.isBanned ? 'banned' : u.isOnline ? 'online' : 'offline'}`}>
+                              {u.isBanned ? 'Banned' : u.isOnline ? 'Online' : 'Offline'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 )}
               </div>
               {filteredUsers.length > 0 && (
                 <div className="table-footer">
-                  <span>{filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''}</span>
+                  <span>
+                    {filteredUsers.length} user{filteredUsers.length !== 1 ? 's' : ''}
+                    {selectedUsers.size > 0 && ` · ${selectedUsers.size} selected`}
+                  </span>
                 </div>
               )}
             </div>
@@ -586,14 +713,57 @@ const AdminPanel = () => {
           <div className="admin-col-right">
             <div className="admin-card">
               <h2><i className="fas fa-tools" /> User Management</h2>
+
+              {/* ─── Active Target Info ─────────────────────────── */}
+              {activeCount > 0 && (
+                <div style={{
+                  background: 'rgba(108,60,225,0.08)',
+                  borderRadius: '10px',
+                  padding: '10px 14px',
+                  marginBottom: '12px',
+                  border: '1px solid rgba(108,60,225,0.2)',
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: 'var(--text-primary)', fontSize: '14px' }}>
+                      <strong>{activeCount}</strong> user{activeCount > 1 ? 's' : ''} targeted
+                    </span>
+                    <button
+                      onClick={() => { setSelectedUsers(new Set()); setSelectAll(false); setUid(''); }}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: 'var(--text-muted)',
+                        cursor: 'pointer',
+                        fontSize: '13px',
+                      }}
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-muted)', marginTop: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {getActiveTargetUids().slice(0, 5).map(targetUid => {
+                      const u = users.find(x => x.uid === targetUid);
+                      return u ? u.name : targetUid;
+                    }).join(', ')}
+                    {activeCount > 5 && ` +${activeCount - 5} more`}
+                  </div>
+                </div>
+              )}
+
               <div className="admin-input-group">
                 <label>User UID</label>
                 <div className="uid-input-wrapper">
                   <input
                     type="text"
                     value={uid}
-                    onChange={(e) => setUid(e.target.value)}
-                    placeholder="Enter user UID or select from list"
+                    onChange={(e) => {
+                      setUid(e.target.value);
+                      if (selectedUsers.size > 0) {
+                        setSelectedUsers(new Set());
+                        setSelectAll(false);
+                      }
+                    }}
+                    placeholder="Enter UID or click a row in the table"
                     disabled={loading}
                     style={{ borderColor: uidNotFound ? '#EF4444' : '' }}
                   />
@@ -611,7 +781,7 @@ const AdminPanel = () => {
               </div>
 
               <div className="admin-actions-grid">
-                <button onClick={handleCheckCoins} disabled={loading || !uid.trim() || uidNotFound}>
+                <button onClick={handleCheckCoins} disabled={loading || activeCount === 0}>
                   <i className="fas fa-coins" /> Check Coins
                 </button>
                 <div className="add-coins-wrapper">
@@ -620,43 +790,60 @@ const AdminPanel = () => {
                     value={coinAmount}
                     onChange={(e) => setCoinAmount(e.target.value)}
                     placeholder="Amount"
-                    disabled={loading || !uid.trim() || uidNotFound}
+                    disabled={loading || activeCount === 0}
                     min="1"
                   />
-                  <button onClick={handleAddCoins} disabled={loading || !uid.trim() || !coinAmount || uidNotFound}>
+                  <button onClick={handleAddCoins} disabled={loading || activeCount === 0 || !coinAmount}>
                     <i className="fas fa-plus-circle" /> Add
                   </button>
                   <button
                     onClick={handleSubtractCoins}
                     className="admin-danger"
-                    disabled={loading || !uid.trim() || !coinAmount || uidNotFound}
+                    disabled={loading || activeCount === 0 || !coinAmount}
                   >
                     <i className="fas fa-minus-circle" /> Subtract
                   </button>
                 </div>
-                <button className="admin-danger" onClick={handleForceLogout} disabled={loading || !uid.trim() || uidNotFound}>
-                  <i className="fas fa-sign-out-alt" /> Force Logout
-                </button>
-                <button className="admin-danger" onClick={handleWipeData} disabled={loading || !uid.trim() || uidNotFound}>
-                  <i className="fas fa-trash-alt" /> Wipe Data
-                </button>
-                <button className="admin-danger" onClick={handleDeleteAccount} disabled={loading || !uid.trim() || uidNotFound}>
-                  <i className="fas fa-user-minus" /> Delete Account
+
+                {/* ─── Bulk & Single action buttons ──────────────── */}
+                <button
+                  className="admin-danger"
+                  onClick={handleBulkForceLogout}
+                  disabled={loading || activeCount === 0}
+                >
+                  <i className="fas fa-sign-out-alt" /> Force Logout{activeCount > 1 ? ' All' : ''}
                 </button>
                 <button
-                  className={isBanned ? 'admin-success' : 'admin-danger'}
-                  onClick={handleToggleBan}
-                  disabled={loading || !uid.trim() || uidNotFound}
+                  className="admin-danger"
+                  onClick={handleBulkWipeData}
+                  disabled={loading || activeCount === 0}
                 >
-                  <i className={`fas ${isBanned ? 'fa-check-circle' : 'fa-ban'}`} />
-                  {isBanned ? 'Unban' : 'Ban'}
+                  <i className="fas fa-trash-alt" /> Wipe Data{activeCount > 1 ? ' All' : ''}
+                </button>
+                <button
+                  className="admin-danger"
+                  onClick={handleBulkDeleteAccounts}
+                  disabled={loading || activeCount === 0}
+                >
+                  <i className="fas fa-user-minus" /> Delete{activeCount > 1 ? ' All' : ''}
+                </button>
+                <button
+                  className={activeCount > 0 && getSelectedUsersList().every(u => u.isBanned) ? 'admin-success' : 'admin-danger'}
+                  onClick={handleBulkToggleBan}
+                  disabled={loading || activeCount === 0}
+                >
+                  <i className={`fas ${activeCount > 0 && getSelectedUsersList().every(u => u.isBanned) ? 'fa-check-circle' : 'fa-ban'}`} />
+                  {activeCount > 0 && getSelectedUsersList().every(u => u.isBanned) ? 'Unban' : 'Ban'}{activeCount > 1 ? ' All' : ''}
                 </button>
               </div>
             </div>
 
-            {/* ─── Send Admin Message Card (Styled) ────────────────── */}
+            {/* ─── Send Admin Message Card ────────────────────────── */}
             <div className="admin-card admin-message-card">
               <h2><i className="fas fa-bullhorn" /> Send Admin Message</h2>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginBottom: '12px' }}>
+                {activeCount === 0 ? '⚠️ Select users or enter a UID above.' : `✅ Ready to message ${activeCount} user${activeCount > 1 ? 's' : ''}.`}
+              </p>
               <div className="admin-input-group">
                 <label>Message Title</label>
                 <input
@@ -665,7 +852,7 @@ const AdminPanel = () => {
                   placeholder="e.g. Important Notice"
                   value={adminMessageTitle}
                   onChange={(e) => setAdminMessageTitle(e.target.value)}
-                  disabled={loading || !uid.trim() || uidNotFound}
+                  disabled={loading || activeCount === 0}
                 />
               </div>
               <div className="admin-input-group">
@@ -675,14 +862,14 @@ const AdminPanel = () => {
                   placeholder="Enter your message..."
                   value={adminMessageBody}
                   onChange={(e) => setAdminMessageBody(e.target.value)}
-                  disabled={loading || !uid.trim() || uidNotFound}
+                  disabled={loading || activeCount === 0}
                   rows="4"
                 />
               </div>
               <button
                 className="admin-message-send-btn"
                 onClick={handleSendAdminMessage}
-                disabled={loading || !uid.trim() || uidNotFound || !adminMessageTitle.trim() || !adminMessageBody.trim()}
+                disabled={loading || activeCount === 0 || !adminMessageTitle.trim() || !adminMessageBody.trim()}
               >
                 <i className="fas fa-paper-plane" /> Send Message
               </button>
@@ -703,7 +890,7 @@ const AdminPanel = () => {
           showInput={confirmModal.showInput}
           inputPlaceholder={confirmModal.inputPlaceholder}
           inputValue={confirmModal.inputValue}
-          onInputChange={confirmModal.onInputChange || (() => {})}
+          onInputChange={confirmModal.onInputChange}
           loading={confirmModal.loading}
         />
       </div>
