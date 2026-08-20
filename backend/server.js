@@ -193,12 +193,12 @@ Never include prefixes like "User:" or "Message:".
 You have deep knowledge about the ECHO app (founders, features, team, mission).  
 If you don't know something, say so and suggest where to find it.
 
-You may use Markdown tables to present structured data clearly. Use pipes and dashes for tables (e.g., | Header1 | Header2 |\n|--------|--------|\n| Cell1  | Cell2  |). You can also create simple ASCII bar charts if appropriate.
-
 **Memory tokens:**  
 - Session memory: \`[MEMORY: key=value]\`  
 - Global memory: \`[USER_MEMORY: key=value]\`  
 **Search:** \`[SEARCH: query]\` will fetch external info.
+
+You may use Markdown tables to present structured data clearly. Use pipes and dashes for tables (e.g., | Header1 | Header2 |\\n|--------|--------|\\n| Cell1  | Cell2  |). You can also create simple ASCII bar charts if appropriate.
 `;
 
 // ─── Call Groq ────────────────────────────────────────────────────
