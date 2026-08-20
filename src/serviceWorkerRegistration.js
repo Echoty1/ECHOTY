@@ -10,7 +10,13 @@ const isLocalhost = Boolean(
 
 export function register(config) {
   // ✅ Only register in production to avoid development errors
-  if (process.env.NODE_ENV !== 'production' || !('serviceWorker' in navigator)) {
+  if (process.env.NODE_ENV !== 'production') {
+    // Unregister any existing service workers to clean up
+    unregister();
+    return;
+  }
+
+  if (!('serviceWorker' in navigator)) {
     return;
   }
 
@@ -18,7 +24,7 @@ export function register(config) {
     const swUrl = `${process.env.PUBLIC_URL}/service-worker.js`;
 
     if (isLocalhost) {
-      // Development localhost – check for valid service worker
+      // This is localhost – check if a valid service worker exists
       checkValidServiceWorker(swUrl, config);
       navigator.serviceWorker.ready.then(() => {
         console.log('✅ Service worker ready in development.');
@@ -34,7 +40,7 @@ function registerValidSW(swUrl, config) {
   navigator.serviceWorker
     .register(swUrl)
     .then((registration) => {
-      // Unregister any previous (stale) service workers
+      // Unregister any stale registrations
       navigator.serviceWorker.getRegistrations().then((registrations) => {
         for (let reg of registrations) {
           if (reg !== registration) {
@@ -80,7 +86,7 @@ function checkValidServiceWorker(swUrl, config) {
         response.status === 404 ||
         (contentType != null && contentType.indexOf('javascript') === -1)
       ) {
-        // No valid service worker found – unregister any existing ones
+        // No valid service worker – unregister any existing ones
         navigator.serviceWorker.ready.then((registration) => {
           registration.unregister().then(() => {
             window.location.reload();

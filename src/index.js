@@ -13,7 +13,7 @@ root.render(
   </HelmetProvider>
 );
 
-// ✅ Register service worker (only in production)
+// Register service worker – the function handles NODE_ENV internally
 serviceWorkerRegistration.register({
   onUpdate: () => {
     console.log('🔄 Service worker updated – reloading...');

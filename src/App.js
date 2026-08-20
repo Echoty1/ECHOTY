@@ -364,15 +364,6 @@ function AppContent() {
     }
   }, [user?.uid, fetchProfile]);
 
-  // ─── Check for service worker updates on app start ────────────
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then((registration) => {
-        registration.update();
-      }).catch(() => {});
-    }
-  }, []);
-
   const showLoading = loading || !minTimePassed;
 
   // ─── Show BanScreen if user is banned ──────────────────────

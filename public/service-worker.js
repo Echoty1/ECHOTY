@@ -3,14 +3,10 @@
 
 const CACHE_NAME = 'echo-v2-cache-v3';
 
-// ─── Install: skip waiting to activate immediately ────────────
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    self.skipWaiting()
-  );
+  event.waitUntil(self.skipWaiting());
 });
 
-// ─── Activate: claim clients and clean old caches ─────────────
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
@@ -25,27 +21,21 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// ─── Fetch: cache‑first, but dynamically cache new assets ─────
 self.addEventListener('fetch', (event) => {
   event.respondWith(
     caches.match(event.request).then((response) => {
       if (response) {
         return response;
       }
-
       const fetchRequest = event.request.clone();
-
       return fetch(fetchRequest).then((networkResponse) => {
         if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
           return networkResponse;
         }
-
         const responseToCache = networkResponse.clone();
-
         caches.open(CACHE_NAME).then((cache) => {
           cache.put(event.request, responseToCache);
         });
-
         return networkResponse;
       });
     })
