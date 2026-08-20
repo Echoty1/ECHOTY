@@ -331,8 +331,11 @@ function AppContent() {
         if (!snapshot.exists()) return;
         const data = snapshot.val();
 
-        // ─── Ensure latestVersion is a string ──────────────────
-        const latestVersion = data?.latest ?? '1.0';
+        // ─── Fix: handle number or string ──────────────────────
+        let latestVersion = data?.latest ?? '1.0';
+        if (typeof latestVersion === 'number') {
+          latestVersion = String(latestVersion);
+        }
         if (typeof latestVersion !== 'string') {
           console.warn('Latest version is not a string:', latestVersion);
           return;
