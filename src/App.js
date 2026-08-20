@@ -364,6 +364,15 @@ function AppContent() {
     }
   }, [user?.uid, fetchProfile]);
 
+  // ─── Check for service worker updates on app start ────────────
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.update();
+      }).catch(() => {});
+    }
+  }, []);
+
   const showLoading = loading || !minTimePassed;
 
   // ─── Show BanScreen if user is banned ──────────────────────
@@ -405,7 +414,7 @@ function AppContent() {
           overflowY: 'auto',
           overflowX: 'hidden',
           background: '#0A0A0F',
-          maxWidth: '1400px',   // or 1200px
+          maxWidth: '1400px',
           margin: '0 auto',
           width: '100%',
         }}
@@ -456,7 +465,7 @@ function AppContent() {
 function App() {
   // ─── Version check: clear localStorage & IndexedDB on first visit after update ──
   useEffect(() => {
-    const CURRENT_VERSION = '2.0.0'; // change with each release
+    const CURRENT_VERSION = '2.0.0';
     const storedVersion = localStorage.getItem('echo_app_version');
 
     if (storedVersion !== CURRENT_VERSION) {

@@ -1,3 +1,4 @@
+// src/index.js
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { HelmetProvider } from 'react-helmet-async';
@@ -12,4 +13,11 @@ root.render(
   </HelmetProvider>
 );
 
-serviceWorkerRegistration.register();
+// ─── Register service worker with auto-reload on update ────────
+serviceWorkerRegistration.register({
+  onUpdate: () => {
+    // When a new version is installed, reload the page
+    console.log('🔄 New version detected – reloading...');
+    window.location.reload();
+  },
+});
