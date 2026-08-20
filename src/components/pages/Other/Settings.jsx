@@ -15,12 +15,14 @@ import { removeAllReferencesToUser } from '../../../services/accountCleanup';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import './Settings.css';
+import { useTheme } from '../../../contexts/ThemeContext';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Settings = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { themePreference, setTheme } = useTheme();
 
   const [step, setStep] = useState('idle');
   const [typedName, setTypedName] = useState('');
@@ -150,6 +152,40 @@ const Settings = () => {
           <h1>Settings</h1>
         </div>
         <div className="settings-content">
+          <div className="settings-card">
+            <h2><i className="fas fa-palette" /> Theme</h2>
+            <p>Choose your preferred app appearance.</p>
+            <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
+              {['dark', 'light', 'system'].map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setTheme(mode)}
+                  style={{
+                    padding: '10px 20px',
+                    borderRadius: '30px',
+                    border: themePreference === mode ? '2px solid #6C3CE1' : '1px solid var(--border-color)',
+                    background: themePreference === mode ? 'rgba(108,60,225,0.15)' : 'var(--bg-input)',
+                    color: 'var(--text-primary)',
+                    cursor: 'pointer',
+                    fontWeight: themePreference === mode ? 600 : 400,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px',
+                    transition: 'all 0.2s ease',
+                    fontFamily: 'inherit',
+                    flex: '0 1 auto',
+                  }}
+                >
+                  {mode === 'dark' && '🌙 Dark'}
+                  {mode === 'light' && '☀️ Light'}
+                  {mode === 'system' && '⚙️ System'}
+                </button>
+              ))}
+            </div>
+            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px' }}>
+              {themePreference === 'system' ? 'Auto-detects from your device settings.' : `Currently using ${themePreference} mode.`}
+            </p>
+          </div>
           <div className="settings-card danger-zone">
             <h2><i className="fas fa-exclamation-triangle" /> Danger Zone</h2>
             <p>This action is irreversible. Deleting your account will permanently remove all your data, including messages, profile, and Echoes.</p>

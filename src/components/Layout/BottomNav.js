@@ -15,7 +15,6 @@ const BottomNav = () => {
   const startOffset = useRef({ x: 0, y: 0 });
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
 
-  // ─── Retractable state (saved in localStorage) ──────────────
   const [isMinimized, setIsMinimized] = useState(() => {
     return localStorage.getItem('bottomNavMinimized') === 'true';
   });
@@ -28,7 +27,6 @@ const BottomNav = () => {
 
   const isSupport = user?.uid === SUPPORT_UID;
 
-  // ─── Define tabs based on user role ──────────────────────────
   const getTabs = () => {
     const commonTabs = [
       { to: '/chats', label: 'Chats', icon: 'fa-comment-dots' },
@@ -45,7 +43,6 @@ const BottomNav = () => {
 
   const tabs = getTabs();
 
-  // ─── Real‑time unread contacts count ──────────────────────────
   useEffect(() => {
     if (!user?.uid) {
       setUnreadChatsCount(0);
@@ -72,9 +69,8 @@ const BottomNav = () => {
     return () => unsubscribe();
   }, [user?.uid]);
 
-  // ─── Dragging handlers (unchanged) ────────────────────────────
   const handleStart = (e) => {
-    if (isMinimized) return; // don't drag when minimized
+    if (isMinimized) return;
     const touch = e.touches ? e.touches[0] : e;
     startPos.current = { x: touch.clientX, y: touch.clientY };
     startOffset.current = { x: position.x, y: position.y };
@@ -129,9 +125,9 @@ const BottomNav = () => {
         left: '50%',
         transform: `translateX(calc(-50% + ${position.x}px)) translateY(${position.y}px)`,
         zIndex: 50,
-        background: 'rgba(10,10,15,0.92)',
+        background: 'var(--bg-primary)',
         backdropFilter: 'blur(16px)',
-        border: '1px solid rgba(255,255,255,0.06)',
+        border: '1px solid var(--border-color)',
         borderRadius: '28px',
         display: 'flex',
         flexDirection: 'column',
@@ -141,7 +137,7 @@ const BottomNav = () => {
         height: navHeight,
         width: 'calc(100% - 16px)',
         maxWidth: '440px',
-        boxShadow: '0 8px 40px rgba(0,0,0,0.5)',
+        boxShadow: '0 8px 40px var(--shadow-color)',
         cursor: isDragging ? 'grabbing' : isMinimized ? 'default' : 'grab',
         touchAction: 'none',
         transition: 'height 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease',
@@ -152,7 +148,6 @@ const BottomNav = () => {
       onMouseDown={handleStart}
       onTouchStart={handleStart}
     >
-      {/* ─── Toggle Button ──────────────────────────────────────── */}
       <button
         onClick={toggleMinimize}
         style={{
@@ -162,7 +157,7 @@ const BottomNav = () => {
           transform: 'translateX(-50%)',
           background: 'none',
           border: 'none',
-          color: '#888',
+          color: 'var(--text-muted)',
           fontSize: '14px',
           cursor: 'pointer',
           padding: '2px 8px',
@@ -174,7 +169,6 @@ const BottomNav = () => {
         <i className={`fas fa-chevron-${isMinimized ? 'up' : 'down'}`} />
       </button>
 
-      {/* ─── Nav Links ──────────────────────────────────────────── */}
       <div
         style={{
           display: 'flex',
@@ -200,7 +194,7 @@ const BottomNav = () => {
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: isActive ? 'white' : '#555',
+                color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
                 fontSize: '10px',
                 padding: '4px 8px',
                 borderRadius: '16px',
@@ -231,7 +225,7 @@ const BottomNav = () => {
                       alignItems: 'center',
                       justifyContent: 'center',
                       padding: '0 4px',
-                      border: '2px solid rgba(10,10,15,0.92)',
+                      border: '2px solid var(--bg-primary)',
                       boxShadow: '0 0 8px rgba(239,68,68,0.3)',
                       lineHeight: 1,
                     }}
@@ -255,7 +249,7 @@ const BottomNav = () => {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      border: '2px solid rgba(10,10,15,0.92)',
+                      border: '2px solid var(--bg-primary)',
                       lineHeight: 1,
                     }}
                   >
@@ -269,7 +263,6 @@ const BottomNav = () => {
         })}
       </div>
 
-      {/* ─── Small drag handle (visible when minimized) ────────── */}
       {isMinimized && (
         <div
           style={{
@@ -280,7 +273,7 @@ const BottomNav = () => {
             width: '30px',
             height: '3px',
             borderRadius: '2px',
-            background: 'rgba(255,255,255,0.15)',
+            background: 'var(--border-color)',
             pointerEvents: 'none',
           }}
         />

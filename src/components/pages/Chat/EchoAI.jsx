@@ -1,4 +1,4 @@
-// src/components/pages/Chat/EchoAI.jsx (with word‑by‑word streaming, table styling, edit restriction)
+// src/components/pages/Chat/EchoAI.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../../services/firebase';
@@ -28,7 +28,12 @@ import { VideoAudioProvider } from '../../../contexts/VideoAudioContext';
 import { useProfile } from '../../../contexts/ProfileContext';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
-import { loadMessagesFromCache, upsertMessageInCache, deleteMessageFromCache } from '../../../services/messageStorage';
+import {
+  loadMessagesFromCache,
+  upsertMessageInCache,
+  deleteMessageFromCache,
+  saveMessagesToCache,
+} from '../../../services/messageStorage';
 import { cacheMedia } from '../../../utils/mediaCache';
 import { cleanCachedMessagesForChat } from '../../../services/messageCleanup';
 import Markdown from 'react-markdown';
@@ -62,7 +67,6 @@ const EchoAI = () => {
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [toast, setToast] = useState(null);
 
-  // ─── Word‑by‑word streaming state ───────────────────────────
   const streamingRef = useRef({
     active: false,
     messageId: null,
@@ -74,6 +78,7 @@ const EchoAI = () => {
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const chatId = useRef(null);
+  const hasLoadedFromCache = useRef(false);
 
   const cacheKey = `messages_${user?.uid}_${userId}`;
   const isMounted = useRef(true);
@@ -308,9 +313,8 @@ const EchoAI = () => {
     setIsNearBottom(isNear);
   };
 
-  // ─── Word‑by‑word streaming logic ────────────────────────────
+  // ─── Word‑by‑word streaming ──────────────────────────────────
   const startStreaming = (messageId, fullText) => {
-    // Stop any existing stream
     if (streamingRef.current.interval) {
       clearInterval(streamingRef.current.interval);
       streamingRef.current.interval = null;
@@ -321,7 +325,6 @@ const EchoAI = () => {
     streamingRef.current.fullText = fullText;
     streamingRef.current.currentIndex = 0;
 
-    // Update message with initial empty text
     setMessages((prev) =>
       prev.map((msg) =>
         msg.id === messageId
@@ -330,7 +333,6 @@ const EchoAI = () => {
       )
     );
 
-    // Start interval to add characters
     const interval = setInterval(() => {
       if (!isMounted.current) {
         clearInterval(interval);
@@ -349,7 +351,6 @@ const EchoAI = () => {
         )
       );
 
-      // Scroll if near bottom
       if (isNearBottom && !scrollCooldownRef.current) {
         scrollCooldownRef.current = true;
         setTimeout(() => {
@@ -361,7 +362,6 @@ const EchoAI = () => {
       streamingRef.current.currentIndex = nextIndex;
 
       if (nextIndex >= fullText.length) {
-        // Finished streaming
         clearInterval(interval);
         streamingRef.current.interval = null;
         streamingRef.current.active = false;
@@ -374,12 +374,11 @@ const EchoAI = () => {
           )
         );
 
-        // Final scroll
         if (isNearBottom) {
           setTimeout(() => scrollToBottom(true), 50);
         }
       }
-    }, 25); // 25ms per character – ~40 chars/sec, feels natural
+    }, 25);
 
     streamingRef.current.interval = interval;
   };
@@ -395,11 +394,17 @@ const EchoAI = () => {
     const cId = [user.uid, userId].sort().join('_');
     chatId.current = cId;
 
+    // ─── Load from cache first ──────────────────────────────────
     loadMessagesFromCache(cId).then((cachedMessages) => {
-      if (isMounted.current && cachedMessages.length > 0) {
-        setMessages(cachedMessages);
+      if (isMounted.current) {
+        hasLoadedFromCache.current = true;
+        if (cachedMessages.length > 0) {
+          setMessages(cachedMessages);
+        }
         setLoadingMessages(false);
-        setTimeout(() => scrollToBottom(false), 50);
+        if (cachedMessages.length > 0) {
+          setTimeout(() => scrollToBottom(false), 50);
+        }
       }
     });
 
@@ -407,23 +412,22 @@ const EchoAI = () => {
 
     const unsubscribe = onValue(
       messagesRef,
-      (snapshot) => {
+      async (snapshot) => {
         if (!isMounted.current) return;
         const data = snapshot.val();
-        let newMessages = [];
-        if (data) {
-          newMessages = Object.entries(data)
-            .map(([id, val]) => ({ id, ...val }))
-            .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+
+        // ─── If Firebase has no data, keep whatever we have ──
+        if (!data) {
+          // Do NOT clear messages – keep cached ones
+          setLoadingMessages(false);
+          return;
         }
 
-        // Check for new AI message to stream
-        const prevMessages = messages;
-        const newAIMessages = newMessages.filter(
-          (msg) => msg.senderId === ECHO_AI_ID && !prevMessages.some((p) => p.id === msg.id)
-        );
+        const newMessages = Object.entries(data)
+          .map(([id, val]) => ({ id, ...val }))
+          .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-        // Update messages state, but preserve streaming state for existing messages
+        // Update messages, preserving streaming state
         setMessages((prev) => {
           const prevMap = new Map(prev.map(m => [m.id, m]));
           return newMessages.map(msg => {
@@ -437,25 +441,25 @@ const EchoAI = () => {
 
         setLoadingMessages(false);
 
-        // Start streaming for new AI messages (only if not already streaming)
-        newAIMessages.forEach((aiMsg) => {
-          if (aiMsg.text && !streamingRef.current.active) {
-            // Clear any stale interval
-            if (streamingRef.current.interval) {
-              clearInterval(streamingRef.current.interval);
-              streamingRef.current.interval = null;
-            }
-            // Start streaming this message
-            startStreaming(aiMsg.id, aiMsg.text);
-          }
-        });
+        // Check for new AI messages to stream
+        const prevMessages = messages;
+        const newAIMessages = newMessages.filter(
+          (msg) => msg.senderId === ECHO_AI_ID && !prevMessages.some((p) => p.id === msg.id)
+        );
 
-        // If we have new AI messages, hide loading indicator
         if (newAIMessages.length > 0) {
           setIsAILoading(false);
+          newAIMessages.forEach((aiMsg) => {
+            if (aiMsg.text && !streamingRef.current.active) {
+              if (streamingRef.current.interval) {
+                clearInterval(streamingRef.current.interval);
+                streamingRef.current.interval = null;
+              }
+              startStreaming(aiMsg.id, aiMsg.text);
+            }
+          });
         }
 
-        // Scroll if near bottom (but not if streaming is active – it handles scrolling)
         if (isNearBottom && !scrollCooldownRef.current && !streamingRef.current.active) {
           scrollCooldownRef.current = true;
           setTimeout(() => {
@@ -464,14 +468,21 @@ const EchoAI = () => {
           setTimeout(() => scrollToBottom(true), 100);
         }
 
+        // ─── Update caches ──────────────────────────────────────
+        // Clear both individual and full list caches
+        await clearMessageCache(cId);
+        // Re‑add all messages to both caches
         for (const msg of newMessages) {
-          upsertMessageInCache(cId, msg);
+          await upsertMessageInCache(cId, msg);
           if (msg.type === 'media' && msg.mediaUrl && msg.mediaUrl.startsWith('http')) {
             cacheMedia(msg.mediaUrl);
           }
         }
+        // ─── Update full list cache ──────────────────────────────
+        await saveMessagesToCache(cId, newMessages);
+
+        // Also update generic cache (optional)
         setCache(cacheKey, newMessages).catch(() => {});
-        clearMessageCache(cId);
       },
       (error) => {
         console.error('❌ [EchoAI] Firebase listener error:', error);
@@ -501,6 +512,7 @@ const EchoAI = () => {
     };
   }, [user?.uid, cacheKey, isNearBottom]);
 
+  // ─── Partner profile ──────────────────────────────────────────
   useEffect(() => {
     setPartnerProfile({
       name: 'ECHO AI',
@@ -510,6 +522,7 @@ const EchoAI = () => {
     });
   }, []);
 
+  // ─── Current user profile ────────────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
     const myProfileRef = ref(db, `profiles/${user.uid}`);
@@ -579,7 +592,6 @@ const EchoAI = () => {
       unreadCount: 0,
     });
 
-    // Show thinking animation
     setIsAILoading(true);
     if (isNearBottom && !scrollCooldownRef.current) {
       scrollCooldownRef.current = true;
@@ -614,14 +626,13 @@ const EchoAI = () => {
       if (result.conversationId) {
         setCurrentConversationId(result.conversationId);
       }
-      // The listener will handle the AI response and streaming
     } catch (err) {
       console.error('AI error:', err);
       setIsAILoading(false);
       const errorMsg = {
         id: `error_${Date.now()}`,
         senderId: ECHO_AI_ID,
-        text: `⚠️ ${err.message || 'AI service unavailable'}`,
+        text: `⚠️ AI is currently unavailable. Please try again later.`,
         timestamp: Date.now(),
         type: 'text',
       };
@@ -639,7 +650,6 @@ const EchoAI = () => {
       ? { ...msg.replyTo, senderName: msg.replyTo.senderName || 'User' }
       : null;
 
-    // ─── Edit button: only show on the last user message ────────
     let allowEdit = false;
     if (isOwn) {
       const userMessages = messages.filter(m => m.senderId === user.uid);
@@ -721,7 +731,6 @@ const EchoAI = () => {
       );
     }
 
-    // ─── Text message ─────────────────────────────────────────────
     const displayText = msg._isStreaming && msg._streamingText !== undefined
       ? msg._streamingText
       : msg.text || '';
@@ -778,7 +787,6 @@ const EchoAI = () => {
         return;
       }
     }
-    // Allow text paste
   };
 
   useEffect(() => {
@@ -839,7 +847,7 @@ const EchoAI = () => {
     <div className="chat-view">
       <VideoAudioProvider>
         <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll}>
-          {(loadingMessages || !minLoadingTimePassed) && messages.length === 0 ? (
+          {loadingMessages && messages.length === 0 ? (
             <div className="chat-skeleton-list">
               <SkeletonMessage isOwn={false} />
               <SkeletonMessage isOwn={true} />

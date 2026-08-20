@@ -1,4 +1,4 @@
-// src/components/Layout/Navbar.js
+// src/components/Layout/Navbar.js (theme‑aware)
 import React, { useEffect, memo, useState, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocation, useNavigate } from 'react-router-dom';
@@ -32,7 +32,6 @@ const Navbar = memo(() => {
   const navigate = useNavigate();
   const { fetchProfile, getProfile, isOnline } = useProfile();
 
-  // ─── Notifications State ──────────────────────────────────────
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -41,7 +40,6 @@ const Navbar = memo(() => {
   const dropdownRef = useRef(null);
   const bellRef = useRef(null);
 
-  // ─── Confirm Modal State ──────────────────────────────────────
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     title: '',
@@ -64,13 +62,11 @@ const Navbar = memo(() => {
     });
   };
 
-  // ─── Determine route state ────────────────────────────────────
   const pathParts = location.pathname.split('/');
   const targetUserId = pathParts[1] === 'chat' ? pathParts[2] : undefined;
   const isChatRoute = location.pathname.startsWith('/chat/');
   const isEchoAiRoute = targetUserId === 'echo_ai_assistant';
 
-  // ─── Listen to admin notifications ──────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
     const notifRef = ref(db, `adminNotifications/${user.uid}/messages`);
@@ -93,14 +89,12 @@ const Navbar = memo(() => {
     return () => unsubscribe();
   }, [user?.uid]);
 
-  // ─── Mark a single message as read ───────────────────────────
   const markAsRead = (msgId) => {
     if (!user?.uid) return;
     const notifRef = ref(db, `adminNotifications/${user.uid}/messages/${msgId}`);
     update(notifRef, { read: true });
   };
 
-  // ─── Clear all messages ──────────────────────────────────────
   const handleClearAll = () => {
     if (!user?.uid || notifications.length === 0) return;
     openConfirmModal({
@@ -125,7 +119,6 @@ const Navbar = memo(() => {
     });
   };
 
-  // ─── Open modal for a notification ──────────────────────────
   const openNotification = (msg) => {
     setSelectedNotification(msg);
     setModalOpen(true);
@@ -141,12 +134,10 @@ const Navbar = memo(() => {
     setShowNotifications(false);
   };
 
-  // ─── Toggle dropdown ──────────────────────────────────────────
   const toggleDropdown = () => {
     setShowNotifications((prev) => !prev);
   };
 
-  // ─── Close dropdown when clicking outside ──────────────────
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (
@@ -162,7 +153,6 @@ const Navbar = memo(() => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // ─── Existing profile logic ──────────────────────────────────
   useEffect(() => {
     if (user?.uid) {
       const cleanup = fetchProfile(user.uid);
@@ -230,14 +220,15 @@ const Navbar = memo(() => {
         left: 0,
         right: 0,
         height: '60px',
-        backgroundColor: '#0A0A0F',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.1)',
+        backgroundColor: 'var(--bg-primary)',
+        borderBottom: '1px solid var(--border-color)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: '0 16px',
         zIndex: 1000,
         boxSizing: 'border-box',
+        color: 'var(--text-primary)',
       }}
     >
       {/* LEFT SECTION */}
@@ -248,7 +239,7 @@ const Navbar = memo(() => {
             style={{
               background: 'none',
               border: 'none',
-              color: '#fff',
+              color: 'var(--text-primary)',
               fontSize: '18px',
               cursor: 'pointer',
               padding: '4px',
@@ -264,7 +255,7 @@ const Navbar = memo(() => {
               fontSize: '20px',
               fontWeight: 800,
               letterSpacing: '1px',
-              color: '#fff',
+              color: 'var(--text-primary)',
             }}
           >
             ECHO
@@ -282,7 +273,7 @@ const Navbar = memo(() => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: '1px solid rgba(255,255,255,0.15)',
+                border: '1px solid var(--border-color)',
                 flexShrink: 0,
                 position: 'relative',
               }}
@@ -297,11 +288,11 @@ const Navbar = memo(() => {
                     width: 22,
                     height: 22,
                     borderRadius: '50%',
-                    background: '#0A0A0F',
+                    background: 'var(--bg-primary)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    border: '2px solid #0A0A0F',
+                    border: '2px solid var(--bg-primary)',
                   }}
                 >
                   <ECHOMOJI
@@ -317,7 +308,7 @@ const Navbar = memo(() => {
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: '#fff', fontWeight: 700, fontSize: '14px', lineHeight: '1.2' }}>
+                <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '14px', lineHeight: '1.2' }}>
                   {chatName}
                 </span>
                 <ECHOMOJI
@@ -338,14 +329,14 @@ const Navbar = memo(() => {
 
       {/* RIGHT SECTION */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        {/* ─── Notification Bell ─────────────────────────────── */}
+        {/* Notification Bell */}
         <div ref={bellRef} className="notification-bell-wrapper" style={{ position: 'relative' }}>
           <button
             onClick={toggleDropdown}
             style={{
               background: 'none',
               border: 'none',
-              color: '#ccc',
+              color: 'var(--text-secondary)',
               fontSize: '20px',
               cursor: 'pointer',
               padding: '4px',
@@ -373,7 +364,7 @@ const Navbar = memo(() => {
                   alignItems: 'center',
                   justifyContent: 'center',
                   padding: '0 4px',
-                  border: '2px solid #0A0A0F',
+                  border: '2px solid var(--bg-primary)',
                   lineHeight: 1,
                 }}
               >
@@ -382,7 +373,6 @@ const Navbar = memo(() => {
             )}
           </button>
 
-          {/* ─── Dropdown ──────────────────────────────────────── */}
           {showNotifications && (
             <div
               ref={dropdownRef}
@@ -394,18 +384,18 @@ const Navbar = memo(() => {
                 width: 'min(320px, calc(100vw - 32px))',
                 maxHeight: 'min(360px, calc(100vh - 120px))',
                 overflowY: 'auto',
-                background: '#1a1a24',
+                background: 'var(--bg-secondary)',
                 borderRadius: '12px',
-                border: '1px solid rgba(255,255,255,0.08)',
-                boxShadow: '0 12px 40px rgba(0,0,0,0.6)',
+                border: '1px solid var(--border-color)',
+                boxShadow: '0 12px 40px var(--shadow-color)',
                 padding: '8px 0',
                 zIndex: 9999,
                 transform: 'none !important',
                 left: 'auto !important',
               }}
             >
-              <div style={{ padding: '10px 16px', borderBottom: '1px solid rgba(255,255,255,0.06)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: '#fff', fontSize: '14px', fontWeight: 600 }}>
+              <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-primary)', fontSize: '14px', fontWeight: 600 }}>
                   Admin Messages
                 </span>
                 {notifications.length > 0 && (
@@ -414,7 +404,7 @@ const Navbar = memo(() => {
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: '#888',
+                      color: 'var(--text-muted)',
                       fontSize: '16px',
                       cursor: 'pointer',
                       padding: '4px 6px',
@@ -431,7 +421,7 @@ const Navbar = memo(() => {
               </div>
 
               {notifications.length === 0 ? (
-                <div style={{ padding: '20px', textAlign: 'center', color: '#666' }}>
+                <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
                   No messages from admin
                 </div>
               ) : (
@@ -441,7 +431,7 @@ const Navbar = memo(() => {
                     onClick={() => openNotification(msg)}
                     style={{
                       padding: '10px 16px',
-                      borderBottom: '1px solid rgba(255,255,255,0.04)',
+                      borderBottom: '1px solid var(--border-color)',
                       backgroundColor: msg.read ? 'transparent' : 'rgba(108,60,225,0.08)',
                       cursor: 'pointer',
                       transition: 'background 0.15s',
@@ -452,7 +442,7 @@ const Navbar = memo(() => {
                     }}
                   >
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <span style={{ color: '#fff', fontWeight: 600, fontSize: '14px' }}>
+                      <span style={{ color: 'var(--text-primary)', fontWeight: 600, fontSize: '14px' }}>
                         {msg.title || 'Admin Message'}
                       </span>
                       {!msg.read && (
@@ -469,7 +459,7 @@ const Navbar = memo(() => {
                     </div>
                     <p
                       style={{
-                        color: '#888',
+                        color: 'var(--text-secondary)',
                         fontSize: '13px',
                         margin: '4px 0 0 0',
                         lineHeight: '1.3',
@@ -488,7 +478,7 @@ const Navbar = memo(() => {
           )}
         </div>
 
-        {/* ─── User Info ──────────────────────────────────────── */}
+        {/* User Info */}
         {ownSkin && (
           <ECHOMOJI
             mood={ownProfile?.mood || 'happy'}
@@ -501,7 +491,7 @@ const Navbar = memo(() => {
         <span
           style={{
             fontSize: '14px',
-            color: '#CCCCCC',
+            color: 'var(--text-secondary)',
             fontWeight: 600,
             whiteSpace: 'nowrap',
             maxWidth: '80px',
@@ -529,7 +519,6 @@ const Navbar = memo(() => {
         </button>
       </div>
 
-      {/* ─── Notification Modal ────────────────────────────────── */}
       <NotificationModal
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
@@ -538,7 +527,6 @@ const Navbar = memo(() => {
         timestamp={selectedNotification?.timestamp}
       />
 
-      {/* ─── Confirm Modal ────────────────────────────────────── */}
       <ConfirmModal
         isOpen={confirmModal.isOpen}
         onClose={closeConfirmModal}

@@ -1,5 +1,4 @@
 /* src/components/pages/Profile/Profile.css */
-
 .profile-page {
   max-width: 480px;
   margin: 0 auto;
@@ -11,7 +10,6 @@
   overflow-x: hidden;
 }
 
-/* ─── Desktop: stretch full width, center content ──────────── */
 @media (min-width: 1024px) {
   .profile-page {
     max-width: 100%;
@@ -104,12 +102,12 @@
 }
 
 .profile-card {
-  background: rgba(18,18,26,0.8);
+  background: var(--bg-card);
   backdrop-filter: blur(12px);
   border-radius: 24px;
   padding: 24px;
-  border: 1px solid rgba(255,255,255,0.06);
-  box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 32px var(--shadow-color);
   text-align: center;
   transition: all 0.3s ease;
   width: 100%;
@@ -130,38 +128,35 @@
   justify-content: center;
   background: linear-gradient(135deg, #6C3CE1, #EC4899);
   border: 2px solid #8B5CF6;
-  box-shadow: 0 0 30px rgba(139,92,246,0.15);
+  box-shadow: 0 0 30px rgba(139, 92, 246, 0.15);
 }
-
 .profile-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-
 .profile-avatar span {
   font-size: 38px;
   font-weight: 700;
   color: #fff;
 }
-
 .profile-avatar .avatar-overlay {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0, 0, 0, 0.6);
   padding: 4px;
   font-size: 11px;
   color: #fff;
 }
 
 .profile-name-input {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 8px 14px;
-  color: white;
+  color: var(--text-primary);
   font-size: 20px;
   font-weight: 700;
   width: 100%;
@@ -176,6 +171,7 @@
   font-size: 22px;
   font-weight: 700;
   margin-bottom: 2px;
+  color: var(--text-primary);
   word-break: break-word;
 }
 
@@ -186,21 +182,19 @@
   width: 100%;
   flex-wrap: wrap;
 }
-
 .profile-location-inputs input {
   flex: 1;
   min-width: 100px;
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 6px 12px;
-  color: white;
+  color: var(--text-primary);
   font-size: 13px;
   outline: none;
   font-family: inherit;
   box-sizing: border-box;
 }
-
 @media (max-width: 400px) {
   .profile-location-inputs {
     flex-direction: column;
@@ -213,17 +207,17 @@
 
 .profile-location {
   font-size: 13px;
-  color: #888;
+  color: var(--text-muted);
   margin-top: 4px;
   word-break: break-word;
 }
 
 .profile-bio-textarea {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.1);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 10px 14px;
-  color: white;
+  color: var(--text-primary);
   font-size: 14px;
   width: 100%;
   min-height: 60px;
@@ -236,7 +230,7 @@
 
 .profile-bio {
   font-size: 14px;
-  color: #aaa;
+  color: var(--text-secondary);
   margin: 8px 0;
   line-height: 1.5;
   word-break: break-word;
@@ -251,7 +245,7 @@
 }
 
 .profile-tag {
-  background: rgba(108,60,225,0.15);
+  background: rgba(108, 60, 225, 0.15);
   color: #8B5CF6;
   padding: 4px 14px;
   border-radius: 20px;
@@ -259,9 +253,8 @@
   font-weight: 500;
   white-space: nowrap;
 }
-
 .profile-tag.skill {
-  background: rgba(236,72,153,0.12);
+  background: rgba(236, 72, 153, 0.12);
   color: #EC4899;
 }
 
@@ -272,9 +265,9 @@
   margin-bottom: 8px;
   min-height: 32px;
   padding: 4px;
-  background: rgba(255,255,255,0.03);
+  background: var(--bg-input);
   border-radius: 12px;
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid var(--border-color);
   width: 100%;
   box-sizing: border-box;
 }
@@ -284,7 +277,7 @@
   min-width: 100px;
   background: transparent;
   border: none;
-  color: white;
+  color: var(--text-primary);
   font-size: 12px;
   outline: none;
   padding: 4px 8px;
@@ -311,32 +304,26 @@
   transition: transform 0.2s ease, border-color 0.2s ease;
   flex: 0 1 auto;
 }
-
 .btn-save {
   background: linear-gradient(135deg, #6C3CE1, #EC4899);
   color: #fff;
 }
-
 .btn-save:hover {
   transform: scale(1.02);
 }
-
 .btn-cancel {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: #888;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
 }
-
 .btn-cancel:hover {
   border-color: #EF4444;
 }
-
 .btn-edit {
-  background: rgba(255,255,255,0.06);
-  border: 1px solid rgba(255,255,255,0.12);
-  color: #fff;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
 }
-
 .btn-edit:hover {
   border-color: #6C3CE1;
 }
@@ -380,31 +367,28 @@
 .profile-select {
   width: 100%;
   padding: 12px 14px;
-  background: rgba(22, 18, 38, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 10px;
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 14px;
   outline: none;
   cursor: pointer;
   transition: all 0.2s ease;
 }
-
 .profile-select:focus {
   border-color: #8b5cf6;
   box-shadow: 0 0 8px rgba(139, 92, 246, 0.3);
 }
-
 .profile-select:disabled {
-  background: rgba(255, 255, 255, 0.04);
-  color: rgba(255, 255, 255, 0.3);
-  border-color: rgba(255, 255, 255, 0.05);
+  background: var(--bg-input);
+  color: var(--text-muted);
+  border-color: var(--border-color);
   cursor: not-allowed;
 }
-
 .profile-select option {
-  background-color: #161226;
-  color: #ffffff;
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
   padding: 8px;
 }
 
@@ -414,14 +398,13 @@
   }
 }
 
-/* ─── Avatar Picker Styles ──────────────────────────────────── */
 .avatar-picker-overlay {
   position: fixed;
   top: 0;
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: flex-end;
@@ -429,89 +412,78 @@
   z-index: 10000;
   animation: fadeIn 0.2s ease;
 }
-
 .avatar-picker-sheet {
-  background: #1a1a24;
+  background: var(--bg-secondary);
   border-radius: 20px 20px 0 0;
   padding: 20px 24px 32px;
   width: 100%;
   max-width: 480px;
   animation: slideUp 0.3s ease;
-  box-shadow: 0 -10px 40px rgba(0,0,0,0.5);
+  box-shadow: 0 -10px 40px var(--shadow-color);
 }
-
 .avatar-picker-handle {
   width: 36px;
   height: 4px;
-  background: rgba(255,255,255,0.15);
+  background: var(--border-color);
   border-radius: 4px;
   margin: 0 auto 16px;
 }
-
 .avatar-picker-sheet h3 {
-  color: #fff;
+  color: var(--text-primary);
   font-size: 18px;
   text-align: center;
   margin-bottom: 20px;
 }
-
 .avatar-picker-options {
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
-
 .avatar-picker-option {
   display: flex;
   align-items: center;
   gap: 12px;
-  background: rgba(255,255,255,0.04);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 14px 16px;
-  color: #fff;
+  color: var(--text-primary);
   font-size: 16px;
   cursor: pointer;
   transition: background 0.2s;
 }
-
 .avatar-picker-option:hover {
-  background: rgba(255,255,255,0.08);
+  background: var(--border-color);
 }
-
 .avatar-picker-option:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
-
 .avatar-picker-icon {
   font-size: 24px;
   width: 36px;
   text-align: center;
 }
-
 .avatar-picker-cancel {
   margin-top: 12px;
   width: 100%;
   padding: 14px;
   background: transparent;
-  border: 1px solid rgba(255,255,255,0.1);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
-  color: #888;
+  color: var(--text-muted);
   font-size: 16px;
   cursor: pointer;
   transition: background 0.2s;
 }
-
 .avatar-picker-cancel:hover {
-  background: rgba(255,255,255,0.04);
+  background: var(--bg-input);
 }
 
 @keyframes slideUp {
   from { transform: translateY(100%); }
   to { transform: translateY(0); }
 }
-
 @keyframes fadeIn {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -531,7 +503,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: rgba(0,0,0,0.6);
+  background: rgba(0, 0, 0, 0.6);
   color: #fff;
   text-align: center;
   padding: 4px 0;
@@ -540,12 +512,8 @@
 }
 
 @keyframes scrollInterests {
-  0% {
-    transform: translateX(0);
-  }
-  100% {
-    transform: translateX(-50%);
-  }
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
 }
 
 .profile-avatar-initial {
@@ -561,68 +529,59 @@
   font-weight: 700;
 }
 
-/* ─── Account Details ───────────────────────────────────────── */
 .account-details {
-  background: rgba(255,255,255,0.03);
+  background: var(--bg-input);
   border-radius: 16px;
   padding: 16px 20px;
-  border: 1px solid rgba(255,255,255,0.06);
+  border: 1px solid var(--border-color);
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
   margin-top: 16px;
 }
-
 .account-details-header {
   font-size: 12px;
   font-weight: 600;
-  color: #888;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 1px;
   margin-bottom: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid var(--border-color);
 }
-
 .account-details-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
   padding: 8px 0;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  border-bottom: 1px solid var(--border-color);
 }
-
 .account-details-row:last-child {
   border-bottom: none;
 }
-
 .account-details-label {
   font-size: 13px;
-  color: #aaa;
+  color: var(--text-secondary);
 }
-
 .account-details-value {
   font-size: 13px;
-  color: #fff;
+  color: var(--text-primary);
   font-weight: 500;
   word-break: break-all;
   text-align: right;
   max-width: 60%;
 }
-
 .account-details-value.uid {
   font-family: monospace;
   font-size: 12px;
   color: #8B5CF6;
 }
-
 .account-details-uid-wrapper {
   display: flex;
   align-items: center;
   gap: 10px;
   max-width: 70%;
 }
-
 .copy-uid-btn {
   background: #6C3CE1;
   color: #fff;
@@ -635,7 +594,6 @@
   flex-shrink: 0;
   transition: transform 0.2s, background 0.2s;
 }
-
 .copy-uid-btn:hover {
   transform: scale(1.04);
   background: #7C4CE1;

@@ -3,11 +3,10 @@
   max-width: 480px;
   margin: 0 auto;
   padding: 0 16px 100px;
-  color: #fff;
+  color: var(--text-primary);
   min-height: 100%;
 }
 
-/* ─── Desktop: stretch full width ───────────────────────────── */
 @media (min-width: 1024px) {
   .shop-page {
     max-width: 100%;
@@ -38,7 +37,6 @@
   }
 }
 
-/* ─── Admin two‑column layout ────────────────────────────────── */
 .shop-admin-layout {
   display: flex;
   gap: 32px;
@@ -46,12 +44,10 @@
   max-width: 1400px;
   margin: 0 auto;
 }
-
 .shop-admin-left {
   flex: 2;
   min-width: 0;
 }
-
 .shop-admin-right {
   flex: 1;
   min-width: 320px;
@@ -62,21 +58,16 @@
   overflow-y: auto;
   padding-right: 4px;
 }
-
 .shop-admin-right::-webkit-scrollbar {
   width: 4px;
 }
-
 .shop-admin-right::-webkit-scrollbar-track {
   background: transparent;
 }
-
 .shop-admin-right::-webkit-scrollbar-thumb {
   background: #6C3CE1;
   border-radius: 4px;
 }
-
-/* ─── Stack on tablet/mobile ────────────────────────────────── */
 @media (max-width: 1024px) {
   .shop-admin-layout {
     flex-direction: column;
@@ -94,15 +85,13 @@
   }
 }
 
-/* ─── Admin GIF Panel ────────────────────────────────────────── */
 .admin-gif-panel {
-  background: rgba(255, 255, 255, 0.04);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 16px 20px;
   margin-bottom: 20px;
 }
-
 .admin-gif-panel h3 {
   font-size: 16px;
   font-weight: 600;
@@ -110,57 +99,49 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  color: #eee;
+  color: var(--text-primary);
 }
-
 .admin-gif-panel h3 i {
   color: #6C3CE1;
 }
-
 .admin-gif-form-group {
   margin-bottom: 12px;
 }
-
 .admin-gif-form-group label {
   display: block;
   font-size: 13px;
-  color: #aaa;
+  color: var(--text-secondary);
   margin-bottom: 4px;
 }
-
 .admin-gif-form-group input[type="text"],
 .admin-gif-form-group input[type="number"] {
   width: 100%;
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-primary);
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s;
 }
-
 .admin-gif-form-group input:focus {
   border-color: #6C3CE1;
 }
-
 .admin-gif-form-group input:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
-
 .admin-gif-form-group small {
   display: block;
   margin-top: 4px;
-  color: #666;
+  color: var(--text-muted);
   font-size: 12px;
 }
 
 .admin-gif-upload-area {
   width: 100%;
 }
-
 .admin-gif-drop-zone {
   display: flex;
   flex-direction: column;
@@ -168,47 +149,41 @@
   justify-content: center;
   padding: 20px 16px;
   min-height: 100px;
-  border: 2px dashed rgba(255, 255, 255, 0.15);
+  border: 2px dashed var(--border-color);
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-input);
   cursor: pointer;
   transition: all 0.2s ease;
   gap: 6px;
 }
-
 .admin-gif-drop-zone:hover {
   border-color: rgba(108, 60, 225, 0.5);
   background: rgba(108, 60, 225, 0.05);
 }
-
 .admin-gif-drop-zone i {
   font-size: 28px;
   color: #6C3CE1;
   opacity: 0.6;
 }
-
 .admin-gif-drop-zone span {
-  color: #aaa;
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
 }
-
 .admin-gif-drop-zone small {
-  color: #666;
+  color: var(--text-muted);
   font-size: 11px;
 }
-
 .admin-gif-preview-wrapper {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 10px;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-input);
   border-radius: 16px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border-color);
 }
-
 .admin-gif-preview-circle {
   width: 80px;
   height: 80px;
@@ -217,18 +192,15 @@
   border: 2px solid rgba(108, 60, 225, 0.3);
   box-shadow: 0 0 20px rgba(108, 60, 225, 0.15);
 }
-
 .admin-gif-preview-circle img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-
 .admin-gif-preview-actions {
   display: flex;
   gap: 8px;
 }
-
 .admin-gif-change-btn,
 .admin-gif-remove-btn {
   padding: 4px 14px;
@@ -242,43 +214,35 @@
   align-items: center;
   gap: 4px;
 }
-
 .admin-gif-change-btn {
   background: rgba(108, 60, 225, 0.2);
   color: #8B5CF6;
 }
-
 .admin-gif-change-btn:hover:not(:disabled) {
   background: rgba(108, 60, 225, 0.3);
 }
-
 .admin-gif-remove-btn {
   background: rgba(239, 68, 68, 0.15);
   color: #EF4444;
 }
-
 .admin-gif-remove-btn:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.25);
 }
-
 .admin-gif-change-btn:disabled,
 .admin-gif-remove-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
 }
-
 .admin-gif-filename {
   font-size: 12px;
-  color: #888;
+  color: var(--text-muted);
   display: flex;
   align-items: center;
   gap: 6px;
 }
-
 .admin-gif-filename i {
   color: #6C3CE1;
 }
-
 .admin-gif-submit {
   width: 100%;
   padding: 10px;
@@ -292,17 +256,14 @@
   transition: opacity 0.2s, transform 0.15s;
   margin-top: 4px;
 }
-
 .admin-gif-submit:hover:not(:disabled) {
   opacity: 0.9;
   transform: scale(1.01);
 }
-
 .admin-gif-submit:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-
 .admin-gif-spinner {
   display: inline-block;
   width: 16px;
@@ -315,11 +276,9 @@
   vertical-align: middle;
 }
 
-/* ─── Admin Manage GIFs ──────────────────────────────────────── */
 .admin-manage-gifs {
   margin-top: 0;
 }
-
 .admin-gif-list {
   display: flex;
   flex-direction: column;
@@ -328,75 +287,63 @@
   overflow-y: auto;
   padding-right: 4px;
 }
-
 .admin-gif-list::-webkit-scrollbar {
   width: 4px;
 }
-
 .admin-gif-list::-webkit-scrollbar-track {
   background: transparent;
 }
-
 .admin-gif-list::-webkit-scrollbar-thumb {
   background: #6C3CE1;
   border-radius: 4px;
 }
-
 .admin-gif-list-item {
   display: flex;
   align-items: center;
   gap: 10px;
   padding: 8px 10px;
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-input);
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
   transition: background 0.2s;
 }
-
 .admin-gif-list-item:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--border-color);
 }
-
 .admin-gif-list-preview {
   width: 40px;
   height: 40px;
   border-radius: 50%;
   overflow: hidden;
   flex-shrink: 0;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
 }
-
 .admin-gif-list-preview img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
-
 .admin-gif-list-info {
   flex: 1;
   min-width: 0;
 }
-
 .admin-gif-list-title {
   font-size: 13px;
   font-weight: 500;
-  color: #eee;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .admin-gif-list-meta {
   font-size: 11px;
-  color: #888;
+  color: var(--text-muted);
 }
-
 .admin-gif-list-actions {
   display: flex;
   gap: 6px;
   flex-shrink: 0;
 }
-
 .admin-gif-edit-btn,
 .admin-gif-delete-btn {
   width: 28px;
@@ -410,26 +357,21 @@
   transition: all 0.2s;
   font-size: 12px;
 }
-
 .admin-gif-edit-btn {
   background: rgba(108, 60, 225, 0.2);
   color: #8B5CF6;
 }
-
 .admin-gif-edit-btn:hover {
   background: rgba(108, 60, 225, 0.35);
 }
-
 .admin-gif-delete-btn {
   background: rgba(239, 68, 68, 0.15);
   color: #EF4444;
 }
-
 .admin-gif-delete-btn:hover {
   background: rgba(239, 68, 68, 0.3);
 }
 
-/* ─── Edit Modal ─────────────────────────────────────────────── */
 .admin-edit-modal-overlay {
   position: fixed;
   top: 0;
@@ -444,100 +386,86 @@
   z-index: 999999;
   animation: fadeIn 0.2s ease;
 }
-
 .admin-edit-modal {
-  background: #1a1a24;
+  background: var(--bg-secondary);
   border-radius: 20px;
   padding: 24px 28px;
   max-width: 400px;
   width: 90%;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 20px 60px var(--shadow-color);
   animation: scaleIn 0.2s ease;
 }
-
 .admin-edit-modal-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 16px;
 }
-
 .admin-edit-modal-header h4 {
-  color: #fff;
+  color: var(--text-primary);
   font-size: 18px;
   margin: 0;
 }
-
 .admin-edit-modal-close {
   background: none;
   border: none;
-  color: #888;
+  color: var(--text-muted);
   font-size: 20px;
   cursor: pointer;
   padding: 4px;
   border-radius: 50%;
   transition: background 0.2s;
 }
-
 .admin-edit-modal-close:hover {
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
+  background: var(--bg-input);
+  color: var(--text-primary);
 }
-
 .admin-edit-modal-body {
   margin-bottom: 16px;
 }
-
 .admin-edit-modal-body .admin-gif-form-group {
   margin-bottom: 12px;
 }
-
 .admin-edit-modal-body .admin-gif-form-group label {
   display: block;
   font-size: 13px;
-  color: #aaa;
+  color: var(--text-secondary);
   margin-bottom: 4px;
 }
-
 .admin-edit-modal-body .admin-gif-form-group input[type="text"],
 .admin-edit-modal-body .admin-gif-form-group input[type="number"] {
   width: 100%;
   padding: 10px 14px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(255, 255, 255, 0.06);
-  color: #fff;
+  border: 1px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-primary);
   font-size: 14px;
   outline: none;
 }
-
 .admin-edit-modal-body .admin-gif-form-group input:focus {
   border-color: #6C3CE1;
 }
-
 .admin-gif-checkbox-label {
   display: flex !important;
   align-items: center;
   gap: 8px;
   cursor: pointer;
-  color: #eee !important;
-  font-size: 14px !important;
+  color: var(--text-primary);
+  font-size: 14px;
 }
-
 .admin-gif-checkbox-label input[type="checkbox"] {
   width: 18px;
   height: 18px;
   accent-color: #6C3CE1;
   cursor: pointer;
 }
-
 .admin-edit-modal-actions {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
 }
-
 .admin-edit-modal-cancel,
 .admin-edit-modal-save {
   padding: 8px 20px;
@@ -548,21 +476,17 @@
   cursor: pointer;
   transition: all 0.2s;
 }
-
 .admin-edit-modal-cancel {
-  background: rgba(255, 255, 255, 0.08);
-  color: #ccc;
+  background: var(--bg-input);
+  color: var(--text-secondary);
 }
-
 .admin-edit-modal-cancel:hover {
-  background: rgba(255, 255, 255, 0.15);
+  background: var(--border-color);
 }
-
 .admin-edit-modal-save {
   background: linear-gradient(135deg, #6C3CE1, #EC4899);
   color: #fff;
 }
-
 .admin-edit-modal-save:hover {
   transform: scale(1.02);
   box-shadow: 0 4px 20px rgba(108, 60, 225, 0.3);
@@ -572,13 +496,11 @@
   from { opacity: 0; }
   to { opacity: 1; }
 }
-
 @keyframes scaleIn {
   from { transform: scale(0.95); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
 }
 
-/* ─── Shop Header ────────────────────────────────────────────── */
 .shop-header {
   display: flex;
   justify-content: space-between;
@@ -587,16 +509,13 @@
   gap: 8px;
   flex-wrap: wrap;
 }
-
 .shop-header-left {
   flex: 0 0 auto;
 }
-
 .shop-header-center {
   flex: 1;
   text-align: center;
 }
-
 .shop-header-center h1 {
   font-size: 28px;
   background: linear-gradient(135deg, #6C3CE1, #EC4899);
@@ -605,11 +524,9 @@
   background-clip: text;
   margin: 0;
 }
-
 .shop-header-right {
   flex: 0 0 auto;
 }
-
 .shop-coins {
   font-size: 18px;
   font-weight: 700;
@@ -620,7 +537,6 @@
   border: 1px solid rgba(245, 215, 66, 0.2);
   white-space: nowrap;
 }
-
 .shop-coins-skeleton {
   display: inline-block;
   background: rgba(245, 215, 66, 0.08);
@@ -628,20 +544,17 @@
   padding: 6px 16px;
   border: 1px solid rgba(245, 215, 66, 0.1);
 }
-
 .shop-coins-skeleton .skeleton-line {
   width: 80px;
   height: 20px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-input);
   animation: pulse 1.2s ease-in-out infinite;
 }
-
 @keyframes pulse {
   0%, 100% { opacity: 0.4; }
   50% { opacity: 0.8; }
 }
-
 .shop-get-more {
   padding: 6px 16px;
   border-radius: 20px;
@@ -654,73 +567,62 @@
   transition: transform 0.2s ease, box-shadow 0.2s ease;
   white-space: nowrap;
 }
-
 .shop-get-more:hover {
   transform: scale(1.05);
   box-shadow: 0 4px 15px rgba(245, 158, 11, 0.4);
 }
 
-/* ─── Shop Sections ──────────────────────────────────────────── */
 .shop-section {
   margin-bottom: 32px;
   border-radius: 16px;
   padding: 20px 16px;
   margin-top: 20px;
 }
-
 .shop-section.skins-section {
   background: rgba(236, 72, 153, 0.06);
   border: 1px solid rgba(236, 72, 153, 0.15);
 }
-
 .shop-section.skins-section h2 {
   color: #EC4899;
 }
-
 .shop-section.gifs-section {
   background: rgba(59, 130, 246, 0.06);
   border: 1px solid rgba(59, 130, 246, 0.15);
 }
-
 .shop-section.gifs-section h2 {
   color: #60A5FA;
 }
-
 .shop-section h2 {
   font-size: 20px;
   font-weight: 600;
   margin-bottom: 16px;
   text-align: center;
+  color: var(--text-primary);
 }
 
-/* ─── Shop Grid ───────────────────────────────────────────────── */
 .shop-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
   gap: 16px;
 }
 
-/* ─── Shop Items ─────────────────────────────────────────────── */
 .shop-item {
-  background: rgba(0, 0, 0, 0.4);
+  background: var(--bg-card);
   backdrop-filter: blur(4px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--border-color);
   border-radius: 12px;
   padding: 12px;
   text-align: center;
   transition: all 0.2s;
 }
-
 .shop-item:hover {
   transform: translateY(-2px);
-  box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+  box-shadow: 0 8px 30px var(--shadow-color);
 }
-
 .skins-section .shop-item:hover {
   border-color: rgba(236, 72, 153, 0.4);
   box-shadow: 0 8px 30px rgba(236, 72, 153, 0.08);
 }
-
 .gifs-section .shop-item:hover {
   border-color: rgba(59, 130, 246, 0.4);
   box-shadow: 0 8px 30px rgba(59, 130, 246, 0.08);
@@ -730,37 +632,32 @@
   font-size: 13px;
   font-weight: 500;
   margin: 6px 0 4px;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .shop-item-limited {
   font-size: 10px;
   color: #F59E0B;
 }
-
 .countdown {
   font-size: 10px;
   color: #F59E0B;
   margin: 2px 0;
 }
-
 .countdown.expired {
   color: #EF4444;
 }
-
 .shop-item-price {
   font-size: 13px;
   color: #F59E0B;
   font-weight: 600;
   margin: 4px 0;
 }
-
 .shop-item-actions {
   margin-top: 8px;
 }
-
 .shop-btn {
   padding: 4px 12px;
   border-radius: 50px;
@@ -776,72 +673,61 @@
   margin: 0 auto;
   display: block;
 }
-
 .shop-btn:hover:not(:disabled) {
   transform: scale(1.02);
 }
-
 .shop-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
-
 .shop-btn.buy {
   background: linear-gradient(135deg, #6C3CE1, #EC4899);
 }
-
 .shop-btn.active {
   background: #10B981;
 }
-
 .owned-badge {
   font-size: 12px;
   color: #10B981;
   font-weight: 600;
 }
 
-/* ─── GIF Preview (Circle like profile avatar) ──────────────── */
 .gif-item .gif-preview {
   width: 100%;
   aspect-ratio: 1 / 1;
   border-radius: 50%;
   overflow: hidden;
   margin-bottom: 6px;
-  background: rgba(0,0,0,0.2);
-  border: 2px solid rgba(255,255,255,0.06);
+  background: rgba(0, 0, 0, 0.2);
+  border: 2px solid var(--border-color);
 }
-
 .gif-item .gif-preview img {
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-/* ─── Loading State ──────────────────────────────────────────── */
 .shop-loading {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   min-height: 60vh;
-  color: #888;
+  color: var(--text-muted);
   gap: 16px;
 }
-
 .shop-loading-spinner {
   width: 40px;
   height: 40px;
-  border: 3px solid rgba(255,255,255,0.05);
+  border: 3px solid var(--border-color);
   border-top-color: #6C3CE1;
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
-
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
 
-/* ─── Mobile Tweaks ──────────────────────────────────────────── */
 @media (max-width: 480px) {
   .shop-header {
     flex-wrap: wrap;

@@ -5,6 +5,49 @@
   box-sizing: border-box;
 }
 
+/* ─── Theme Variables ─────────────────────────────────────────── */
+:root {
+  /* Default (dark) */
+  --bg-primary: #0A0A0F;
+  --bg-secondary: #12121A;
+  --bg-card: rgba(18, 18, 26, 0.8);
+  --bg-input: rgba(255, 255, 255, 0.05);
+  --text-primary: #ffffff;
+  --text-secondary: #aaaaaa;
+  --text-muted: #666666;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --shadow-color: rgba(0, 0, 0, 0.3);
+  --scrollbar-thumb: #6C3CE1;
+  --scrollbar-track: transparent;
+}
+
+/* Dark theme (same as default, but explicit) */
+html.theme-dark {
+  --bg-primary: #0A0A0F;
+  --bg-secondary: #12121A;
+  --bg-card: rgba(18, 18, 26, 0.8);
+  --bg-input: rgba(255, 255, 255, 0.05);
+  --text-primary: #ffffff;
+  --text-secondary: #aaaaaa;
+  --text-muted: #666666;
+  --border-color: rgba(255, 255, 255, 0.08);
+  --shadow-color: rgba(0, 0, 0, 0.3);
+}
+
+/* Light theme */
+html.theme-light {
+  --bg-primary: #f5f5f5;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.9);
+  --bg-input: rgba(0, 0, 0, 0.04);
+  --text-primary: #1a1a2e;
+  --text-secondary: #444444;
+  --text-muted: #888888;
+  --border-color: rgba(0, 0, 0, 0.08);
+  --shadow-color: rgba(0, 0, 0, 0.1);
+}
+
+/* ─── Base Styles ────────────────────────────────────────────── */
 html,
 body,
 #root {
@@ -15,27 +58,28 @@ body,
 
 body {
   font-family: 'Inter', -apple-system, sans-serif;
-  background: #0A0A0F;
-  color: #fff;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 #root {
   overflow: hidden;
 }
 
-/* Scrollbars only where needed */
+/* ─── Scrollbars ─────────────────────────────────────────────── */
 ::-webkit-scrollbar {
   width: 4px;
 }
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--scrollbar-track);
 }
 ::-webkit-scrollbar-thumb {
-  background: #6C3CE1;
+  background: var(--scrollbar-thumb);
   border-radius: 10px;
 }
 
-/* Animations */
+/* ─── Animations ─────────────────────────────────────────────── */
 @keyframes float {
   0%, 100% { transform: translateY(0); }
   50% { transform: translateY(-10px); }
@@ -72,23 +116,7 @@ body {
   100% { transform: scale(1) rotate(0deg); opacity: 1; }
 }
 
-/* ─── EchoMoji Animations ────────────────────────────────────── */
-@keyframes echoFloat {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-6px); }
-}
-
-@keyframes echoRingPulse {
-  0% { transform: scale(1); opacity: 0.6; }
-  100% { transform: scale(1.6); opacity: 0; }
-}
-
-@keyframes accessoryPop {
-  0% { transform: scale(0.5) rotate(-20deg); opacity: 0; }
-  100% { transform: scale(1) rotate(0deg); opacity: 1; }
-}
-
-/* Toast styles – add to global or App.css */
+/* ─── Toast ───────────────────────────────────────────────────── */
 .toast {
   position: fixed;
   bottom: 80px;
@@ -100,15 +128,15 @@ body {
   font-weight: 500;
   z-index: 99999;
   animation: toastIn 0.3s ease;
-  background: #1a1a24;
-  color: #fff;
-  border: 1px solid rgba(255,255,255,0.1);
-  box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 8px 30px var(--shadow-color);
 }
 
 .toast-success {
   border-color: #10B981;
-  background: rgba(16,185,129,0.15);
+  background: rgba(16, 185, 129, 0.15);
   color: #10B981;
 }
 
@@ -121,7 +149,7 @@ body.hide-bottom-nav .bottom-nav-container {
   display: none !important;
 }
 
-/* ─── Database Cleared Popup ───────────────────────────────── */
+/* ─── Database Cleared Popup ─────────────────────────────────── */
 .db-cleared-overlay {
   position: fixed;
   top: 0;
@@ -138,14 +166,14 @@ body.hide-bottom-nav .bottom-nav-container {
 }
 
 .db-cleared-modal {
-  background: #1a1a24;
+  background: var(--bg-secondary);
   border-radius: 24px;
   padding: 40px 32px;
   max-width: 400px;
   width: 90%;
   text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.8);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 24px 80px var(--shadow-color);
   animation: scaleIn 0.3s ease;
 }
 
@@ -155,14 +183,14 @@ body.hide-bottom-nav .bottom-nav-container {
 }
 
 .db-cleared-modal h2 {
-  color: #fff;
+  color: var(--text-primary);
   font-size: 22px;
   font-weight: 700;
   margin: 0 0 12px;
 }
 
 .db-cleared-modal p {
-  color: #aaa;
+  color: var(--text-secondary);
   font-size: 15px;
   line-height: 1.6;
   margin: 0 0 8px;
@@ -180,7 +208,6 @@ body.hide-bottom-nav .bottom-nav-container {
   margin-top: 16px;
   transition: transform 0.2s;
 }
-
 .db-cleared-btn:hover {
   transform: scale(1.02);
 }
@@ -189,7 +216,6 @@ body.hide-bottom-nav .bottom-nav-container {
   from { opacity: 0; }
   to { opacity: 1; }
 }
-
 @keyframes scaleIn {
   from { transform: scale(0.95); opacity: 0; }
   to { transform: scale(1); opacity: 1; }
@@ -200,14 +226,12 @@ body.hide-bottom-nav .bottom-nav-container {
   margin: 0 auto;
 }
 
-/* ─── Notification Bell & Dropdown (Mobile Fixes) ────────────── */
-
-/* The bell wrapper – ensures the dropdown aligns properly */
+/* ─── Notification Bell & Dropdown ───────────────────────────── */
 .notification-bell-wrapper {
   position: relative;
 }
 
-/* Dropdown – base styles */
+/* Dropdown – base styles (overridden below) */
 .notification-dropdown {
   position: absolute;
   top: 44px;
@@ -215,27 +239,44 @@ body.hide-bottom-nav .bottom-nav-container {
   width: min(320px, calc(100vw - 32px)) !important;
   max-height: min(360px, calc(100vh - 120px)) !important;
   overflow-y: auto;
-  background: #1a1a24;
+  background: var(--bg-secondary);
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 12px 40px var(--shadow-color);
   padding: 8px 0;
   z-index: 9999 !important;
   right: 0;
   left: auto;
 }
 
-/* ─── Mobile: make the dropdown full width and better positioned ─── */
+/* Override for fixed positioning */
+.notification-dropdown {
+  position: fixed !important;
+  top: 60px !important;
+  right: 16px !important;
+  width: min(320px, calc(100vw - 32px)) !important;
+  max-height: min(360px, calc(100vh - 120px)) !important;
+  overflow-y: auto;
+  background: var(--bg-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  box-shadow: 0 12px 40px var(--shadow-color);
+  padding: 8px 0;
+  z-index: 9999 !important;
+  transform: none !important;
+  left: auto !important;
+}
+
+/* ─── Mobile fine‑tuning ────────────────────────────────────── */
 @media (max-width: 480px) {
   .notification-dropdown {
-    width: calc(100vw - 32px) !important;
-    right: -8px !important;      /* shift left to align with bell */
-    top: 44px !important;
-    max-height: calc(100vh - 120px) !important;
+    right: 8px !important;
+    top: 56px !important;
+    width: calc(100vw - 16px) !important;
+    max-height: calc(100vh - 100px) !important;
     border-radius: 12px;
   }
 
-  /* Slightly reduce font sizes on mobile for better fit */
   .notification-dropdown .notification-item-title {
     font-size: 13px !important;
   }
@@ -244,7 +285,7 @@ body.hide-bottom-nav .bottom-nav-container {
   }
 }
 
-/* Optional: custom scrollbar for the dropdown */
+/* ─── Scrollbar for dropdown ────────────────────────────────── */
 .notification-dropdown::-webkit-scrollbar {
   width: 4px;
 }
@@ -256,10 +297,10 @@ body.hide-bottom-nav .bottom-nav-container {
   border-radius: 4px;
 }
 
-/* Smooth hover effect for items (already in Navbar, but we ensure it) */
+/* ─── Notification items ────────────────────────────────────── */
 .notification-dropdown .notification-item {
   padding: 10px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  border-bottom: 1px solid var(--border-color);
   cursor: pointer;
   transition: background 0.15s;
 }
@@ -270,92 +311,12 @@ body.hide-bottom-nav .bottom-nav-container {
   background: rgba(108, 60, 225, 0.08);
 }
 .notification-dropdown .notification-item .title {
-  color: #fff;
+  color: var(--text-primary);
   font-weight: 600;
   font-size: 14px;
 }
 .notification-dropdown .notification-item .body {
-  color: #888;
-  font-size: 13px;
-  margin: 4px 0 0 0;
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 90%;
-}
-.notification-dropdown .notification-item .unread-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #6C3CE1;
-  flex-shrink: 0;
-}
-
-/* ─── Notification Dropdown (Mobile & Desktop Fix) ────────────── */
-
-/* Override the inline styles of the dropdown */
-.notification-dropdown {
-  position: fixed !important;          /* ✅ fixed position relative to viewport */
-  top: 60px !important;                /* ✅ directly below the navbar */
-  right: 16px !important;              /* ✅ aligned to the right edge */
-  width: min(320px, calc(100vw - 32px)) !important;
-  max-height: min(360px, calc(100vh - 120px)) !important;
-  overflow-y: auto;
-  background: #1a1a24;
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.6);
-  padding: 8px 0;
-  z-index: 9999 !important;
-  /* Remove any inherited transforms or offsets */
-  transform: none !important;
-  left: auto !important;
-}
-
-/* ─── Mobile fine‑tuning ──────────────────────────────────────── */
-@media (max-width: 480px) {
-  .notification-dropdown {
-    right: 8px !important;             /* slight padding from the right edge */
-    top: 56px !important;              /* a bit tighter on small screens */
-    width: calc(100vw - 16px) !important;
-    max-height: calc(100vh - 100px) !important;
-    border-radius: 12px;
-  }
-}
-
-/* ─── Scrollbar styling ────────────────────────────────────────── */
-.notification-dropdown::-webkit-scrollbar {
-  width: 4px;
-}
-.notification-dropdown::-webkit-scrollbar-track {
-  background: transparent;
-}
-.notification-dropdown::-webkit-scrollbar-thumb {
-  background: #6C3CE1;
-  border-radius: 4px;
-}
-
-/* ─── Individual items (ensure they use the same classes as in Navbar) ── */
-.notification-dropdown .notification-item {
-  padding: 10px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.notification-dropdown .notification-item:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-.notification-dropdown .notification-item.unread {
-  background: rgba(108, 60, 225, 0.08);
-}
-.notification-dropdown .notification-item .title {
-  color: #fff;
-  font-weight: 600;
-  font-size: 14px;
-}
-.notification-dropdown .notification-item .body {
-  color: #888;
+  color: var(--text-secondary);
   font-size: 13px;
   margin: 4px 0 0 0;
   line-height: 1.3;

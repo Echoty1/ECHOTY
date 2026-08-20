@@ -14,6 +14,7 @@ import {
   serverTimestamp,
   runTransaction,
 } from 'firebase/database';
+import { loadMessagesFromCache, upsertMessageInCache, deleteMessageFromCache, saveMessagesToCache } from '../../../services/messageStorage';
 import { useAuth } from '../../../hooks/useAuth';
 import { SkeletonMessage } from '../../common/SkeletonLoader';
 import { getCache, setCache } from '../../../services/cacheService';
@@ -31,7 +32,6 @@ import { VideoAudioProvider } from '../../../contexts/VideoAudioContext';
 import { useProfile } from '../../../contexts/ProfileContext';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
-import { loadMessagesFromCache, upsertMessageInCache, deleteMessageFromCache } from '../../../services/messageStorage';
 import { cacheMedia } from '../../../utils/mediaCache';
 import { cleanCachedMessagesForChat } from '../../../services/messageCleanup';
 import SEO from '../../common/SEO';
@@ -362,6 +362,7 @@ const ChatView = () => {
       });
       const updatedMsg = { ...editingMessage, text: newText, isEdited: true };
       await upsertMessageInCache(cId, updatedMsg);
+      await saveMessagesToCache(cId, newMessages);
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const snapshot = await get(messagesRef);
       if (snapshot.exists()) {
@@ -421,6 +422,7 @@ const ChatView = () => {
       });
       const updatedMsg = { ...editingMediaMessage, caption: newCaption, isEdited: true };
       await upsertMessageInCache(cId, updatedMsg);
+      await saveMessagesToCache(cId, newMessages);
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const snapshot = await get(messagesRef);
       if (snapshot.exists()) {
@@ -521,6 +523,7 @@ const ChatView = () => {
 
         for (const msg of newMessages) {
           await upsertMessageInCache(cId, msg);
+          await saveMessagesToCache(cId, newMessages);
           if (msg.type === 'media' && msg.mediaUrl && msg.mediaUrl.startsWith('http')) {
             cacheMedia(msg.mediaUrl);
           }

@@ -212,3 +212,12 @@ export const setAdminUserList = async (users, expiry) => {
   await tx.store.put({ key: 'admin_user_list', value: users, expiry: expiry || Date.now() + 5 * 60 * 1000 });
   await tx.done;
 };
+
+// src/services/indexedDBService.js (add near other clear functions)
+
+export const clearChatMessages = async (chatId) => {
+  const db = await getDB();
+  const tx = db.transaction('chatMessages', 'readwrite');
+  await tx.store.delete(chatId);
+  await tx.done;
+};

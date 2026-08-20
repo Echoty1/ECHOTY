@@ -7,6 +7,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ProfileProvider, useProfile } from './contexts/ProfileContext';
 import { PresenceProvider } from './contexts/PresenceContext';
 import { CacheProvider } from './contexts/CacheContext';
+import { ThemeProvider } from './contexts/ThemeContext'; // ✅ ADD THIS
 import Home from './components/pages/Home/Home';
 import Chats from './components/pages/Chats/Chats';
 import ChatView from './components/pages/Chat/ChatView';
@@ -52,8 +53,10 @@ function ScrollToTop() {
   return null;
 }
 
-// ─── Loading Screen ──────────────────────────────────────────────
+// ─── Loading Screen (Theme‑aware + mobile friendly) ────────────
 function LoadingScreen() {
+  const isMobile = window.innerWidth <= 480;
+
   return (
     <div
       style={{
@@ -62,18 +65,21 @@ function LoadingScreen() {
         alignItems: 'center',
         justifyContent: 'center',
         height: '100vh',
-        background: '#0A0A0F',
+        background: 'var(--bg-primary)',
         position: 'relative',
         overflow: 'hidden',
+        transition: 'background 0.3s ease',
       }}
     >
+      {/* ─── Decorative rings (use theme variables) ────────────── */}
       <div
         style={{
           position: 'absolute',
           width: '240px',
           height: '240px',
           borderRadius: '50%',
-          border: '2px solid rgba(108, 60, 225, 0.2)',
+          border: '2px solid var(--border-color)',
+          opacity: 0.3,
           animation: 'echoRingPulse 2.5s ease-out infinite',
         }}
       />
@@ -83,7 +89,8 @@ function LoadingScreen() {
           width: '320px',
           height: '320px',
           borderRadius: '50%',
-          border: '2px solid rgba(236, 72, 153, 0.15)',
+          border: '2px solid var(--border-color)',
+          opacity: 0.2,
           animation: 'echoRingPulse 3s ease-out infinite 0.5s',
         }}
       />
@@ -93,11 +100,13 @@ function LoadingScreen() {
           width: '400px',
           height: '400px',
           borderRadius: '50%',
-          border: '2px solid rgba(108, 60, 225, 0.1)',
+          border: '2px solid var(--border-color)',
+          opacity: 0.1,
           animation: 'echoRingPulse 3.5s ease-out infinite 1s',
         }}
       />
 
+      {/* Logo */}
       <div
         style={{
           width: '100px',
@@ -113,7 +122,8 @@ function LoadingScreen() {
           viewBox="0 0 512 512"
           style={{ width: '100%', height: '100%' }}
         >
-          <rect width="512" height="512" rx="96" fill="#182830" />
+          {/* ─── Background rectangle uses theme variable ────── */}
+          <rect width="512" height="512" rx="96" fill="var(--bg-secondary)" />
           <path
             d="M 120 120 H 280 V 176 H 180 V 228 H 260 V 284 H 180 V 336 H 280 V 392 H 120 Z"
             fill="#6C3CE1"
@@ -136,40 +146,45 @@ function LoadingScreen() {
         </svg>
       </div>
 
+      {/* ─── ECHO Text ──────────────────────────────────────────── */}
       <div
         style={{
-          fontSize: '40px',
+          fontSize: isMobile ? '32px' : '40px',
           fontWeight: 900,
           background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
           WebkitBackgroundClip: 'text',
           WebkitTextFillColor: 'transparent',
-          letterSpacing: '8px',
+          letterSpacing: isMobile ? '4px' : '8px',
           zIndex: 2,
           textShadow: '0 0 40px rgba(108,60,225,0.3), 0 0 80px rgba(236,72,153,0.15)',
           fontFamily: 'Inter, sans-serif',
+          whiteSpace: 'nowrap',
         }}
       >
         ECHO
       </div>
 
+      {/* ─── Tagline ────────────────────────────────────────────── */}
       <div
         style={{
-          color: 'rgba(255,255,255,0.2)',
-          fontSize: '13px',
-          letterSpacing: '8px',
+          color: 'var(--text-muted)',
+          fontSize: isMobile ? '10px' : '13px',
+          letterSpacing: isMobile ? '4px' : '8px',
           textTransform: 'uppercase',
           marginTop: '2px',
           zIndex: 2,
+          whiteSpace: 'nowrap',
         }}
       >
         Discover. Connect. Echo.
       </div>
 
+      {/* ─── Progress bar ───────────────────────────────────────── */}
       <div
         style={{
           width: '200px',
           height: '3px',
-          background: 'rgba(255,255,255,0.05)',
+          background: 'var(--bg-input)',
           borderRadius: '4px',
           marginTop: '30px',
           overflow: 'hidden',
@@ -331,7 +346,6 @@ function AppContent() {
         if (!snapshot.exists()) return;
         const data = snapshot.val();
 
-        // ─── Fix: handle number or string ──────────────────────
         let latestVersion = data?.latest ?? '1.0';
         if (typeof latestVersion === 'number') {
           latestVersion = String(latestVersion);
@@ -341,7 +355,6 @@ function AppContent() {
           return;
         }
 
-        // ─── Ensure appVersion is a string ──────────────────────
         const currentVersion = typeof appVersion === 'string' ? appVersion : '1.0';
 
         const currentParts = currentVersion.split('.').map(Number);
@@ -434,11 +447,11 @@ function AppContent() {
         id="main-content"
         style={{
           paddingBottom: '72px',
-          paddingTop: '64px',
+          paddingTop: '60px',
           height: '100vh',
           overflowY: 'auto',
           overflowX: 'hidden',
-          background: '#0A0A0F',
+          background: 'var(--bg-primary)',
           maxWidth: '1400px',
           margin: '0 auto',
           width: '100%',
@@ -464,7 +477,6 @@ function AppContent() {
       </div>
       <BottomNav />
 
-      {/* ─── Update Popup ────────────────────────────────────────── */}
       {showUpdatePopup && (
         <UpdatePopup
           currentVersion={appVersion}
@@ -472,7 +484,6 @@ function AppContent() {
         />
       )}
 
-      {/* ─── Install Popup (full‑screen) ────────────────────────── */}
       {showInstallPopup && (
         <InstallPopup
           playStoreUrl={playStoreUrl}
@@ -480,7 +491,6 @@ function AppContent() {
         />
       )}
 
-      {/* ─── Install Banner (bottom, with 5‑day snooze) ─────────── */}
       <InstallBanner playStoreUrl={playStoreUrl} />
     </>
   );
@@ -515,15 +525,18 @@ function App() {
 
   return (
     <BrowserRouter>
-      <AuthProvider>
-        <PresenceProvider>
-          <ProfileProvider>
-            <CacheProvider>
-              <AppContent />
-            </CacheProvider>
-          </ProfileProvider>
-        </PresenceProvider>
-      </AuthProvider>
+      {/* ─── ThemeProvider MUST wrap everything ─────────────────── */}
+      <ThemeProvider>
+        <AuthProvider>
+          <PresenceProvider>
+            <ProfileProvider>
+              <CacheProvider>
+                <AppContent />
+              </CacheProvider>
+            </ProfileProvider>
+          </PresenceProvider>
+        </AuthProvider>
+      </ThemeProvider>
     </BrowserRouter>
   );
 }

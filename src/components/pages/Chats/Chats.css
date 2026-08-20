@@ -1,8 +1,7 @@
 /* src/components/pages/Chats/Chats.css */
-
 .chats-page {
   min-height: 100vh;
-  background: #0A0A0F;
+  background: var(--bg-primary);
   padding: 12px 16px 100px !important;
   margin-top: 0px !important;
   width: 100%;
@@ -13,12 +12,11 @@
   box-sizing: border-box;
 }
 
-/* ─── SEARCH BAR CONTAINER ─── */
 .search-container {
   position: sticky;
   top: 0;
   z-index: 20;
-  background: #0A0A0F;
+  background: var(--bg-primary);
   padding-top: 0px !important;
   padding-bottom: 12px !important;
   margin-bottom: 12px !important;
@@ -27,8 +25,8 @@
 .search-input-wrapper {
   display: flex;
   align-items: center;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 16px;
   padding: 0 16px;
   height: 48px;
@@ -37,12 +35,12 @@
 
 .search-input-wrapper:focus-within {
   border-color: rgba(108, 60, 225, 0.4);
-  background: rgba(255, 255, 255, 0.08);
+  background: var(--bg-input);
   box-shadow: 0 0 12px rgba(108, 60, 225, 0.15);
 }
 
 .search-icon {
-  color: #666;
+  color: var(--text-muted);
   font-size: 16px;
   margin-right: 10px;
 }
@@ -52,25 +50,24 @@
   background: transparent;
   border: none;
   outline: none;
-  color: #ffffff;
+  color: var(--text-primary);
   font-size: 15px;
 }
 
 .search-input::placeholder {
-  color: #666;
+  color: var(--text-muted);
 }
 
 .search-clear {
   background: transparent;
   border: none;
-  color: #888;
+  color: var(--text-muted);
   font-size: 16px;
   cursor: pointer;
   padding: 4px 8px;
 }
-
 .search-clear:hover {
-  color: #fff;
+  color: var(--text-primary);
 }
 
 .search-skeleton-wrapper {
@@ -79,7 +76,6 @@
   gap: 10px;
 }
 
-/* ─── Premium Centered Loading More & End-of-List Indicators ─── */
 .premium-status-pill,
 .premium-end-pill {
   display: flex;
@@ -90,11 +86,11 @@
   margin: 18px auto 8px;
   width: fit-content;
   max-width: 90%;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.07);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 20px;
   backdrop-filter: blur(10px);
-  color: #9ca3af;
+  color: var(--text-secondary);
   font-size: 13px;
   font-weight: 500;
   letter-spacing: 0.2px;
@@ -125,7 +121,6 @@
   to { transform: rotate(360deg); }
 }
 
-/* ─── Premium Centered Empty State Card ─────────────────────── */
 .no-chats-premium {
   display: flex;
   flex-direction: column;
@@ -135,8 +130,8 @@
   padding: 48px 24px;
   margin: 28px auto;
   max-width: 380px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 24px;
   backdrop-filter: blur(12px);
   animation: fadeIn 0.3s ease-out;
@@ -159,14 +154,14 @@
 .no-chats-title {
   font-size: 16px;
   font-weight: 700;
-  color: #FFFFFF;
+  color: var(--text-primary);
   margin: 0 0 6px 0;
   letter-spacing: -0.2px;
 }
 
 .no-chats-subtitle {
   font-size: 13px;
-  color: #8888a0;
+  color: var(--text-muted);
   line-height: 1.5;
 }
 
@@ -175,7 +170,6 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-/* ─── Recent Chats List Items ────────────────────────────────── */
 .recent-chats {
   display: flex;
   flex-direction: column;
@@ -185,7 +179,7 @@
 .section-header {
   font-size: 13px;
   font-weight: 700;
-  color: #666;
+  color: var(--text-muted);
   text-transform: uppercase;
   letter-spacing: 0.8px;
   margin-bottom: 4px;
@@ -197,8 +191,8 @@
   gap: 12px;
   padding: 12px 14px;
   border-radius: 16px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   cursor: pointer;
   transition: background 0.15s ease, transform 0.15s ease;
 }
@@ -206,9 +200,12 @@
 .chat-item:active {
   transform: scale(0.99);
 }
+.chat-item:hover {
+  background: var(--border-color);
+}
 
 .chat-avatar {
-  position: relative;   /* needed for badge positioning */
+  position: relative;
   width: 48px;
   height: 48px;
   flex-shrink: 0;
@@ -219,7 +216,7 @@
   height: 48px;
   border-radius: 50%;
   object-fit: cover;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid var(--border-color);
 }
 
 .avatar-placeholder {
@@ -235,7 +232,6 @@
   justify-content: center;
 }
 
-/* ─── Presence Dot ─── */
 .presence-dot {
   position: absolute;
   bottom: 1px;
@@ -243,18 +239,15 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 2px solid #0A0A0F;
+  border: 2px solid var(--bg-primary);
 }
-
 .presence-dot.online {
   background: #10B981;
 }
-
 .presence-dot.offline {
   background: #6B7280;
 }
 
-/* ─── UNREAD BADGE (positioned top-right over avatar) ─── */
 .unread-badge {
   position: absolute;
   top: -4px;
@@ -270,14 +263,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid #0A0A0F;
+  border: 2px solid var(--bg-primary);
   box-shadow: 0 0 10px rgba(239, 68, 68, 0.4);
   line-height: 1;
   text-align: center;
-  pointer-events: none;   /* so clicks pass through to the parent item */
+  pointer-events: none;
 }
 
-/* ─── Archived Badge ─── */
 .archived-badge {
   position: absolute;
   bottom: -2px;
@@ -286,11 +278,11 @@
   background: rgba(0, 0, 0, 0.6);
   border-radius: 50%;
   padding: 2px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
+  border: 1px solid var(--border-color);
 }
 
 .archived-label {
-  color: #888;
+  color: var(--text-muted);
   font-size: 11px;
   font-weight: 400;
 }
@@ -310,7 +302,7 @@
 .chat-name {
   font-size: 15px;
   font-weight: 700;
-  color: #FFF;
+  color: var(--text-primary);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -318,7 +310,7 @@
 
 .chat-last {
   font-size: 13px;
-  color: #8888a0;
+  color: var(--text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -326,7 +318,7 @@
 
 .chat-time {
   font-size: 11px;
-  color: #666;
+  color: var(--text-muted);
 }
 
 .ai-badge {
@@ -348,13 +340,11 @@
   white-space: nowrap;
 }
 
-/* ─── Fix for search results section ─── */
 .regular-chat-item.location-matched {
   border-left: 3px solid #8b5cf6;
   background: rgba(139, 92, 246, 0.05);
 }
 
-/* ─── Responsive ─── */
 @media (max-width: 480px) {
   .chat-avatar {
     width: 42px;
@@ -374,7 +364,6 @@
   }
 }
 
-/* ─── Demo empty search state ──────────────────────────────── */
 .demo-search-empty {
   display: flex;
   flex-direction: column;
@@ -384,8 +373,8 @@
   padding: 48px 24px;
   margin: 28px auto;
   max-width: 380px;
-  background: rgba(255, 255, 255, 0.02);
-  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 24px;
   backdrop-filter: blur(12px);
   animation: fadeIn 0.3s ease-out;
@@ -408,13 +397,13 @@
 .demo-search-title {
   font-size: 18px;
   font-weight: 700;
-  color: #FFFFFF;
+  color: var(--text-primary);
   margin: 0 0 6px 0;
   letter-spacing: -0.2px;
 }
 
 .demo-search-subtitle {
   font-size: 14px;
-  color: #8888a0;
+  color: var(--text-muted);
   line-height: 1.5;
 }

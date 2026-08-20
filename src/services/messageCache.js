@@ -1,17 +1,15 @@
 // src/services/messageCache.js
-import { getMessagesForChat, storeMessage, clearMessagesForChat } from './indexedDBService';
+import { getMessagesForChat, storeMessage, clearMessagesForChat, clearChatMessages } from './indexedDBService';
 import { ref, get, query, orderByKey, limitToLast } from 'firebase/database';
 import { db } from './firebase';
 
 let memoryCache = new Map();
 
 export const fetchLatestMessage = async (chatId) => {
-  // Check memory first
   if (memoryCache.has(chatId)) {
     return memoryCache.get(chatId);
   }
 
-  // Check IndexedDB
   const messages = await getMessagesForChat(chatId);
   if (messages.length > 0) {
     const latest = messages[messages.length - 1];
@@ -26,7 +24,6 @@ export const fetchLatestMessage = async (chatId) => {
     return result;
   }
 
-  // Fallback to Firebase
   try {
     const messagesRef = ref(db, `chats/${chatId}/messages`);
     const snapshot = await get(query(messagesRef, orderByKey(), limitToLast(1)));
@@ -55,10 +52,12 @@ export const fetchLatestMessage = async (chatId) => {
 export const storeMessageInCache = async (chatId, message) => {
   const msgWithChat = { ...message, chatId };
   await storeMessage(msgWithChat);
-  memoryCache.delete(chatId); // invalidate memory cache
+  memoryCache.delete(chatId);
 };
 
 export const clearMessageCache = async (chatId) => {
   memoryCache.delete(chatId);
+  // ─── Clear BOTH individual message cache AND full list cache ──
   await clearMessagesForChat(chatId);
+  await clearChatMessages(chatId);
 };

@@ -4,10 +4,9 @@
   margin: 0 auto;
   padding: 20px 16px 80px;
   min-height: 100%;
-  background: #0A0A0F;
+  background: var(--bg-primary);
 }
 
-/* ─── Desktop: stretch full width, keep stacked layout ────── */
 @media (min-width: 1024px) {
   .other-page {
     max-width: 100%;
@@ -34,7 +33,7 @@
   }
   .other-page .other-menu-item:hover {
     transform: translateY(-2px);
-    box-shadow: 0 8px 30px rgba(108, 60, 225, 0.15);
+    box-shadow: 0 8px 30px var(--shadow-color);
   }
   .other-page .other-icon-wrapper {
     width: 52px;
@@ -50,10 +49,9 @@
 }
 
 .other-header {
-  text-align: center; /* ✅ Center the header on all devices */
+  text-align: center;
   margin-bottom: 24px;
 }
-
 .other-title {
   font-size: 24px;
   font-weight: 700;
@@ -63,15 +61,14 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
-
 .other-subtitle {
   font-size: 14px;
-  color: #888;
+  color: var(--text-muted);
 }
 
 .other-menu {
   display: flex;
-  flex-direction: column; /* ✅ Always stacked, never grid */
+  flex-direction: column;
   gap: 10px;
   width: 100%;
 }
@@ -81,26 +78,23 @@
   align-items: center;
   gap: 16px;
   padding: 16px 18px;
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.06);
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
   border-radius: 16px;
   cursor: pointer;
   transition: all 0.25s ease;
   width: 100%;
   box-sizing: border-box;
 }
-
 .other-menu-item:hover {
-  background: rgba(108,60,225,0.08);
-  border-color: rgba(108,60,225,0.25);
+  background: var(--border-color);
   transform: translateX(4px);
 }
-
 .other-icon-wrapper {
   width: 44px;
   height: 44px;
   border-radius: 12px;
-  background: rgba(108,60,225,0.12);
+  background: rgba(108, 60, 225, 0.12);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -108,24 +102,20 @@
   color: #8B5CF6;
   flex-shrink: 0;
 }
-
 .other-item-content {
   flex: 1;
 }
-
 .other-item-label {
   font-size: 16px;
   font-weight: 600;
-  color: #fff;
+  color: var(--text-primary);
 }
-
 .other-item-desc {
   font-size: 13px;
-  color: #666;
+  color: var(--text-muted);
   margin-top: 2px;
 }
-
 .other-item-arrow {
-  color: #444;
+  color: var(--text-muted);
   font-size: 14px;
 }

@@ -4,19 +4,19 @@
   align-items: center;
   justify-content: center;
   min-height: 100vh;
-  background: #0A0A0F;
+  background: var(--bg-primary);
   padding: 20px;
 }
 
 .ban-card {
-  background: #1a1a24;
+  background: var(--bg-secondary);
   border-radius: 24px;
   padding: 40px 32px;
   max-width: 400px;
   width: 100%;
   text-align: center;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.8);
+  border: 1px solid var(--border-color);
+  box-shadow: 0 24px 80px var(--shadow-color);
 }
 
 .ban-icon {
@@ -26,7 +26,7 @@
 }
 
 .ban-card h1 {
-  color: #fff;
+  color: var(--text-primary);
   font-size: 24px;
   font-weight: 700;
   margin: 0 0 12px;
@@ -39,7 +39,7 @@
 }
 
 .ban-message {
-  color: #aaa;
+  color: var(--text-secondary);
   font-size: 14px;
   line-height: 1.6;
   margin: 8px 0 24px;
@@ -59,7 +59,6 @@
   align-items: center;
   gap: 8px;
 }
-
 .ban-logout-btn:hover {
   transform: scale(1.02);
 }
