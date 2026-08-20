@@ -1,4 +1,5 @@
 // src/index.js
+import './utils/versionCheck'; // ✅ auto‑runs the check
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { HelmetProvider } from 'react-helmet-async';
@@ -13,7 +14,6 @@ root.render(
   </HelmetProvider>
 );
 
-// Register service worker – the function handles NODE_ENV internally
 serviceWorkerRegistration.register({
   onUpdate: () => {
     console.log('🔄 Service worker updated – reloading...');
