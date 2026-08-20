@@ -46,13 +46,13 @@ const NotificationModal = ({ isOpen, onClose, title, body, timestamp }) => {
           animation: notifFadeIn 0.2s ease;
         }
         .notif-modal-content {
-          background: #1a1a24;
+          background: var(--bg-secondary);
           border-radius: 20px;
           padding: 32px 28px 24px;
           max-width: 420px;
           width: 90%;
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          box-shadow: 0 24px 80px rgba(0, 0, 0, 0.8);
+          border: 1px solid var(--border-color);
+          box-shadow: 0 24px 80px var(--shadow-color);
           animation: notifScaleIn 0.2s ease;
           position: relative;
         }
@@ -62,32 +62,32 @@ const NotificationModal = ({ isOpen, onClose, title, body, timestamp }) => {
           right: 16px;
           background: none;
           border: none;
-          color: #666;
+          color: var(--text-muted);
           font-size: 20px;
           cursor: pointer;
           transition: color 0.2s, transform 0.15s;
         }
         .notif-modal-close:hover {
-          color: #fff;
+          color: var(--text-primary);
           transform: rotate(90deg);
         }
         .notif-modal-title {
           font-size: 20px;
           font-weight: 700;
-          color: #fff;
+          color: var(--text-primary);
           margin-bottom: 12px;
           padding-right: 30px;
         }
         .notif-modal-body {
           font-size: 15px;
-          color: #ccc;
+          color: var(--text-secondary);
           line-height: 1.6;
           margin-bottom: 16px;
           word-break: break-word;
         }
         .notif-modal-time {
           font-size: 12px;
-          color: #666;
+          color: var(--text-muted);
           display: flex;
           align-items: center;
           gap: 6px;

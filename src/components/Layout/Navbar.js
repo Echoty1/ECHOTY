@@ -99,7 +99,7 @@ const Navbar = memo(() => {
     if (!user?.uid || notifications.length === 0) return;
     openConfirmModal({
       title: 'Clear All Messages',
-      message: 'Are you sure you want to delete all admin messages? This cannot be undone.',
+      message: 'Are you sure you want to delete all notifications? This cannot be undone.',
       confirmText: 'Clear All',
       cancelText: 'Cancel',
       onConfirm: async () => {
@@ -396,7 +396,7 @@ const Navbar = memo(() => {
             >
               <div style={{ padding: '10px 16px', borderBottom: '1px solid var(--border-color)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ color: 'var(--text-primary)', fontSize: '14px', fontWeight: 600 }}>
-                  Admin Messages
+                  Notifications
                 </span>
                 {notifications.length > 0 && (
                   <button
@@ -422,7 +422,7 @@ const Navbar = memo(() => {
 
               {notifications.length === 0 ? (
                 <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
-                  No messages from admin
+                  No notifications
                 </div>
               ) : (
                 notifications.map((msg) => (

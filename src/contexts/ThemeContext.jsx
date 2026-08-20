@@ -7,17 +7,17 @@ const THEME_STORAGE_KEY = 'echo_theme_preference';
 const SYSTEM_THEME_MEDIA = window.matchMedia('(prefers-color-scheme: dark)');
 
 export const ThemeProvider = ({ children }) => {
-  // Read stored preference or default to 'system'
+  // ─── Default to 'light' for new users ──────────────────────
   const getStoredTheme = () => {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
     if (stored === 'dark' || stored === 'light' || stored === 'system') {
       return stored;
     }
-    return 'system'; // default
+    return 'light'; // ✅ default is now LIGHT
   };
 
   const [themePreference, setThemePreference] = useState(getStoredTheme);
-  const [resolvedTheme, setResolvedTheme] = useState('dark'); // 'dark' or 'light'
+  const [resolvedTheme, setResolvedTheme] = useState('light');
 
   // Resolve actual theme based on preference and system
   const resolveTheme = useCallback((pref) => {
@@ -30,11 +30,8 @@ export const ThemeProvider = ({ children }) => {
   // Apply theme to DOM
   const applyTheme = useCallback((theme) => {
     const html = document.documentElement;
-    // Remove any existing theme classes
     html.classList.remove('theme-dark', 'theme-light');
-    // Add the resolved theme class
     html.classList.add(`theme-${theme}`);
-    // Also set a data attribute for CSS hooks
     html.setAttribute('data-theme', theme);
   }, []);
 

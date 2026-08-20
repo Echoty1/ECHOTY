@@ -78,8 +78,6 @@ const Login = () => {
         lastUpdated: Date.now(),
         unreadCount: 0,
       });
-
-      // ✅ REMOVED: setting support user's chat entry (avoid permission error)
     } catch (err) {
       alert('Demo login failed: ' + err.message);
     }
@@ -91,18 +89,20 @@ const Login = () => {
       display: 'flex',
       justifyContent: 'center',
       alignItems: 'center',
-      background: 'radial-gradient(ellipse at center, #12121A, #0A0A0F)',
+      background: 'var(--bg-primary)',
       padding: '20px',
+      transition: 'background 0.3s ease',
     }}>
       <div style={{
-        background: '#12121A',
+        background: 'var(--bg-secondary)',
         borderRadius: '24px',
         padding: '40px 32px',
         maxWidth: '400px',
         width: '100%',
-        border: '1px solid rgba(255,255,255,0.06)',
-        boxShadow: '0 24px 80px rgba(0,0,0,0.6)',
+        border: '1px solid var(--border-color)',
+        boxShadow: '0 24px 80px var(--shadow-color)',
         textAlign: 'center',
+        transition: 'background 0.3s ease, border-color 0.3s ease',
       }}>
         <div style={{ marginBottom: '32px' }}>
           <div style={{
@@ -112,7 +112,9 @@ const Login = () => {
             WebkitBackgroundClip: 'text',
             WebkitTextFillColor: 'transparent',
           }}>ECHO</div>
-          <p style={{ color: '#888', fontSize: '14px', marginTop: '4px' }}>The future of conversations</p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginTop: '4px' }}>
+            The future of conversations
+          </p>
         </div>
 
         <button
@@ -137,9 +139,9 @@ const Login = () => {
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
-          <hr style={{ flex: 1, border: 'none', borderTop: '1px solid rgba(255,255,255,0.06)' }} />
-          <span style={{ padding: '0 12px', color: '#666', fontSize: '12px' }}>or</span>
-          <hr style={{ flex: 1, border: 'none', borderTop: '1px solid rgba(255,255,255,0.06)' }} />
+          <hr style={{ flex: 1, border: 'none', borderTop: '1px solid var(--border-color)' }} />
+          <span style={{ padding: '0 12px', color: 'var(--text-muted)', fontSize: '12px' }}>or</span>
+          <hr style={{ flex: 1, border: 'none', borderTop: '1px solid var(--border-color)' }} />
         </div>
 
         <button
@@ -150,7 +152,7 @@ const Login = () => {
             borderRadius: '50px',
             background: '#ffffff',
             color: '#1a1a2e',
-            border: 'none',
+            border: '1px solid #ddd',
             fontSize: '16px',
             fontWeight: 600,
             display: 'flex',
@@ -173,9 +175,9 @@ const Login = () => {
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', margin: '20px 0' }}>
-          <hr style={{ flex: 1, border: 'none', borderTop: '1px solid rgba(255,255,255,0.06)' }} />
-          <span style={{ padding: '0 12px', color: '#888', fontSize: '12px' }}>or</span>
-          <hr style={{ flex: 1, border: 'none', borderTop: '1px solid rgba(255,255,255,0.06)' }} />
+          <hr style={{ flex: 1, border: 'none', borderTop: '1px solid var(--border-color)' }} />
+          <span style={{ padding: '0 12px', color: 'var(--text-muted)', fontSize: '12px' }}>or</span>
+          <hr style={{ flex: 1, border: 'none', borderTop: '1px solid var(--border-color)' }} />
         </div>
 
         <form onSubmit={handleSubmit}>
@@ -187,14 +189,15 @@ const Login = () => {
             style={{
               width: '100%',
               padding: '12px 16px',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.06)',
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border-color)',
               borderRadius: '12px',
-              color: 'white',
+              color: 'var(--text-primary)',
               fontSize: '14px',
               outline: 'none',
               marginBottom: '12px',
               fontFamily: 'inherit',
+              transition: 'border-color 0.2s, background 0.2s, color 0.2s',
             }}
             required
           />
@@ -206,14 +209,15 @@ const Login = () => {
             style={{
               width: '100%',
               padding: '12px 16px',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.06)',
+              background: 'var(--bg-input)',
+              border: '1px solid var(--border-color)',
               borderRadius: '12px',
-              color: 'white',
+              color: 'var(--text-primary)',
               fontSize: '14px',
               outline: 'none',
               marginBottom: '16px',
               fontFamily: 'inherit',
+              transition: 'border-color 0.2s, background 0.2s, color 0.2s',
             }}
             required
           />
@@ -238,7 +242,12 @@ const Login = () => {
           </button>
         </form>
 
-        <p style={{ textAlign: 'center', marginTop: '16px', color: '#888', fontSize: '14px' }}>
+        <p style={{
+          textAlign: 'center',
+          marginTop: '16px',
+          color: 'var(--text-secondary)',
+          fontSize: '14px',
+        }}>
           {isSignup ? 'Already have an account? ' : "No account? "}
           <span
             style={{ color: '#8B5CF6', cursor: 'pointer' }}

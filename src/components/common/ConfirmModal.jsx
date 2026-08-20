@@ -21,7 +21,6 @@ const ConfirmModal = ({
 
   const handleConfirm = () => {
     if (!loading) {
-      // ✅ Pass the input value to onConfirm if showInput is true
       onConfirm(showInput ? inputValue : undefined);
     }
   };
@@ -82,13 +81,13 @@ const ConfirmModal = ({
           animation: confirmFadeIn 0.2s ease;
         }
         .confirm-modal-content {
-          background: #1a1a24;
+          background: var(--bg-secondary);
           border-radius: 20px;
           padding: 28px 24px 24px;
           max-width: 420px;
           width: 90%;
-          border: 1px solid rgba(255, 255, 255, 0.06);
-          box-shadow: 0 24px 80px rgba(0, 0, 0, 0.8);
+          border: 1px solid var(--border-color);
+          box-shadow: 0 24px 80px var(--shadow-color);
           animation: confirmScaleIn 0.2s ease;
           position: relative;
           z-index: 1000000;
@@ -100,14 +99,14 @@ const ConfirmModal = ({
           margin-bottom: 12px;
         }
         .confirm-modal-header h3 {
-          color: #fff;
+          color: var(--text-primary);
           font-size: 18px;
           margin: 0;
         }
         .confirm-modal-close {
           background: none;
           border: none;
-          color: #888;
+          color: var(--text-muted);
           font-size: 20px;
           cursor: pointer;
           padding: 4px 8px;
@@ -115,14 +114,14 @@ const ConfirmModal = ({
           transition: background 0.2s;
         }
         .confirm-modal-close:hover {
-          background: rgba(255, 255, 255, 0.08);
-          color: #fff;
+          background: var(--bg-input);
+          color: var(--text-primary);
         }
         .confirm-modal-body {
           margin-bottom: 20px;
         }
         .confirm-modal-message {
-          color: #ccc;
+          color: var(--text-secondary);
           font-size: 14px;
           line-height: 1.6;
           margin: 0 0 12px 0;
@@ -131,9 +130,9 @@ const ConfirmModal = ({
           width: 100%;
           padding: 10px 14px;
           border-radius: 10px;
-          border: 1px solid rgba(255, 255, 255, 0.1);
-          background: rgba(255, 255, 255, 0.06);
-          color: #fff;
+          border: 1px solid var(--border-color);
+          background: var(--bg-input);
+          color: var(--text-primary);
           font-size: 14px;
           outline: none;
           transition: border-color 0.2s;
@@ -158,11 +157,11 @@ const ConfirmModal = ({
           min-width: 80px;
         }
         .confirm-modal-btn.cancel {
-          background: rgba(255, 255, 255, 0.08);
-          color: #ccc;
+          background: var(--bg-input);
+          color: var(--text-secondary);
         }
         .confirm-modal-btn.cancel:hover:not(:disabled) {
-          background: rgba(255, 255, 255, 0.15);
+          background: var(--border-color);
         }
         .confirm-modal-btn.confirm {
           background: linear-gradient(135deg, #6C3CE1, #EC4899);
@@ -177,7 +176,7 @@ const ConfirmModal = ({
           cursor: not-allowed;
         }
         .confirm-modal-btn.confirm.loading {
-          background: #444;
+          background: var(--text-muted);
         }
         .confirm-modal-spinner {
           display: inline-block;

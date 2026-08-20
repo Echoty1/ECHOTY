@@ -14,8 +14,8 @@ import {
 import { removeAllReferencesToUser } from '../../../services/accountCleanup';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
-import './Settings.css';
 import { useTheme } from '../../../contexts/ThemeContext';
+import './Settings.css';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
@@ -151,11 +151,18 @@ const Settings = () => {
           </button>
           <h1>Settings</h1>
         </div>
+
         <div className="settings-content">
+          {/* ─── THEME CARD ─────────────────────────────────────── */}
           <div className="settings-card">
             <h2><i className="fas fa-palette" /> Theme</h2>
             <p>Choose your preferred app appearance.</p>
-            <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              marginTop: '12px',
+              flexWrap: 'wrap',
+            }}>
               {['dark', 'light', 'system'].map((mode) => (
                 <button
                   key={mode}
@@ -182,10 +189,18 @@ const Settings = () => {
                 </button>
               ))}
             </div>
-            <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px' }}>
-              {themePreference === 'system' ? 'Auto-detects from your device settings.' : `Currently using ${themePreference} mode.`}
+            <p style={{
+              fontSize: '13px',
+              color: 'var(--text-muted)',
+              marginTop: '8px',
+            }}>
+              {themePreference === 'system'
+                ? 'Auto-detects from your device settings.'
+                : `Currently using ${themePreference} mode.`}
             </p>
           </div>
+
+          {/* ─── DANGER ZONE CARD ────────────────────────────────── */}
           <div className="settings-card danger-zone">
             <h2><i className="fas fa-exclamation-triangle" /> Danger Zone</h2>
             <p>This action is irreversible. Deleting your account will permanently remove all your data, including messages, profile, and Echoes.</p>

@@ -69,14 +69,15 @@ const CoinPurchase = () => {
         margin: '0 auto',
         padding: '80px 16px 80px',
         minHeight: '100vh',
-        background: '#0A0A0F',
+        background: 'var(--bg-primary)',
+        color: 'var(--text-primary)',
       }}>
         <button
           onClick={() => navigate(-1)}
           style={{
             background: 'none',
             border: 'none',
-            color: '#888',
+            color: 'var(--text-muted)',
             fontSize: '20px',
             cursor: 'pointer',
             marginBottom: '16px',
@@ -88,30 +89,53 @@ const CoinPurchase = () => {
           <i className="fas fa-arrow-left"></i> Back
         </button>
 
-        <h2 style={{ fontSize: '24px', fontWeight: 700, marginBottom: '4px' }}>
+        <h2 style={{
+          fontSize: '24px',
+          fontWeight: 700,
+          marginBottom: '4px',
+          color: 'var(--text-primary)',
+        }}>
           💰 Get More Coins
         </h2>
-        <p style={{ color: '#888', fontSize: '14px', marginBottom: '24px' }}>
+        <p style={{
+          color: 'var(--text-secondary)',
+          fontSize: '14px',
+          marginBottom: '24px',
+        }}>
           Choose a package and send payment to the details below.
         </p>
 
+        {/* ─── Bank Details Card ──────────────────────────────────── */}
         <div style={{
-          background: 'rgba(18,18,26,0.8)',
+          background: 'var(--bg-card)',
           backdropFilter: 'blur(8px)',
           borderRadius: '16px',
           padding: '20px',
-          border: '1px solid rgba(255,255,255,0.06)',
+          border: '1px solid var(--border-color)',
           marginBottom: '24px',
+          boxShadow: '0 4px 20px var(--shadow-color)',
         }}>
-          <div style={{ fontSize: '14px', color: '#888', marginBottom: '12px' }}>
+          <div style={{
+            fontSize: '14px',
+            color: 'var(--text-secondary)',
+            marginBottom: '12px',
+          }}>
             💳 Send payment to:
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '8px 0',
+              borderBottom: '1px solid var(--border-color)',
+            }}>
               <div>
-                <div style={{ fontSize: '12px', color: '#888' }}>Account Name</div>
-                <div style={{ fontSize: '16px', fontWeight: 600 }}>{bankDetails.accountName}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Account Name</div>
+                <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {bankDetails.accountName}
+                </div>
               </div>
               <button
                 onClick={() => handleCopy(bankDetails.accountName, 'accountName')}
@@ -132,10 +156,18 @@ const CoinPurchase = () => {
               </button>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,0.04)' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '8px 0',
+              borderBottom: '1px solid var(--border-color)',
+            }}>
               <div>
-                <div style={{ fontSize: '12px', color: '#888' }}>Bank</div>
-                <div style={{ fontSize: '16px', fontWeight: 600 }}>{bankDetails.bankName}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Bank</div>
+                <div style={{ fontSize: '16px', fontWeight: 600, color: 'var(--text-primary)' }}>
+                  {bankDetails.bankName}
+                </div>
               </div>
               <button
                 onClick={() => handleCopy(bankDetails.bankName, 'bankName')}
@@ -156,10 +188,17 @@ const CoinPurchase = () => {
               </button>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0' }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              padding: '8px 0',
+            }}>
               <div>
-                <div style={{ fontSize: '12px', color: '#888' }}>Account Number</div>
-                <div style={{ fontSize: '20px', fontWeight: 700, color: '#6C3CE1' }}>{bankDetails.accountNumber}</div>
+                <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>Account Number</div>
+                <div style={{ fontSize: '20px', fontWeight: 700, color: '#6C3CE1' }}>
+                  {bankDetails.accountNumber}
+                </div>
               </div>
               <button
                 onClick={() => handleCopy(bankDetails.accountNumber, 'accountNumber')}
@@ -182,37 +221,55 @@ const CoinPurchase = () => {
           </div>
         </div>
 
+        {/* ─── Package Grid ─────────────────────────────────────────── */}
         <div style={{
-          background: 'rgba(18,18,26,0.8)',
+          background: 'var(--bg-card)',
           backdropFilter: 'blur(8px)',
           borderRadius: '16px',
           padding: '20px',
-          border: '1px solid rgba(255,255,255,0.06)',
+          border: '1px solid var(--border-color)',
           marginBottom: '24px',
+          boxShadow: '0 4px 20px var(--shadow-color)',
         }}>
-          <div style={{ fontSize: '14px', color: '#888', marginBottom: '12px' }}>
+          <div style={{
+            fontSize: '14px',
+            color: 'var(--text-secondary)',
+            marginBottom: '12px',
+          }}>
             📦 Choose a package:
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: '1fr 1fr',
+            gap: '10px',
+          }}>
             {packages.map((pkg) => (
               <div
                 key={pkg.coins}
                 style={{
-                  background: 'rgba(255,255,255,0.04)',
+                  background: 'var(--bg-input)',
                   borderRadius: '12px',
                   padding: '12px',
                   textAlign: 'center',
-                  border: '1px solid rgba(255,255,255,0.06)',
+                  border: '1px solid var(--border-color)',
                   transition: 'all 0.2s ease',
                 }}
                 onMouseEnter={(e) => e.currentTarget.style.borderColor = '#6C3CE1'}
-                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(255,255,255,0.06)'}
+                onMouseLeave={(e) => e.currentTarget.style.borderColor = 'var(--border-color)'}
               >
-                <div style={{ fontSize: '20px', fontWeight: 700, color: '#F59E0B' }}>
+                <div style={{
+                  fontSize: '20px',
+                  fontWeight: 700,
+                  color: '#F59E0B',
+                }}>
                   🪙 {pkg.coins}
                 </div>
-                <div style={{ fontSize: '14px', color: '#fff', marginTop: '4px' }}>
+                <div style={{
+                  fontSize: '14px',
+                  color: 'var(--text-primary)',
+                  marginTop: '4px',
+                }}>
                   ₦{pkg.price.toLocaleString()}
                 </div>
               </div>
@@ -220,18 +277,29 @@ const CoinPurchase = () => {
           </div>
         </div>
 
+        {/* ─── WhatsApp Action ───────────────────────────────────── */}
         <div style={{
-          background: 'rgba(18,18,26,0.8)',
+          background: 'var(--bg-card)',
           backdropFilter: 'blur(8px)',
           borderRadius: '16px',
           padding: '20px',
-          border: '1px solid rgba(255,255,255,0.06)',
+          border: '1px solid var(--border-color)',
           textAlign: 'center',
+          boxShadow: '0 4px 20px var(--shadow-color)',
         }}>
-          <div style={{ fontSize: '14px', color: '#888', marginBottom: '8px' }}>
+          <div style={{
+            fontSize: '14px',
+            color: 'var(--text-secondary)',
+            marginBottom: '8px',
+          }}>
             📤 After payment, send your receipt and UID (you can find it in your profile page) to:
           </div>
-          <div style={{ fontSize: '18px', fontWeight: 700, color: '#10B981', marginBottom: '12px' }}>
+          <div style={{
+            fontSize: '18px',
+            fontWeight: 700,
+            color: '#10B981',
+            marginBottom: '12px',
+          }}>
             {WHATSAPP_NUMBER}
           </div>
           <button
@@ -256,7 +324,11 @@ const CoinPurchase = () => {
             <i className="fab fa-whatsapp" style={{ fontSize: '20px' }} />
             Send Receipt and UID on WhatsApp
           </button>
-          <div style={{ fontSize: '12px', color: '#555', marginTop: '12px' }}>
+          <div style={{
+            fontSize: '12px',
+            color: 'var(--text-muted)',
+            marginTop: '12px',
+          }}>
             Your coins will be added within 24 hours after verification.
           </div>
         </div>
