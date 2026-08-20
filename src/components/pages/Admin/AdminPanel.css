@@ -605,3 +605,62 @@
 .toast {
   bottom: 100px !important;
 }
+
+/* ─── Admin Message Card ────────────────────────────────────── */
+.admin-message-card .admin-message-input,
+.admin-message-card .admin-message-textarea {
+  width: 100%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 14px;
+  outline: none;
+  transition: border-color 0.2s, background 0.2s;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.admin-message-card .admin-message-input:focus,
+.admin-message-card .admin-message-textarea:focus {
+  border-color: #6C3CE1;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.admin-message-card .admin-message-input::placeholder,
+.admin-message-card .admin-message-textarea::placeholder {
+  color: #666;
+}
+
+.admin-message-card .admin-message-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+.admin-message-card .admin-message-send-btn {
+  width: 100%;
+  padding: 10px;
+  border-radius: 10px;
+  border: none;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  font-weight: 600;
+  font-size: 15px;
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.admin-message-card .admin-message-send-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: scale(1.01);
+}
+
+.admin-message-card .admin-message-send-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

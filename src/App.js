@@ -202,6 +202,19 @@ function AppContent() {
   const [appVersion] = useState(process.env.REACT_APP_VERSION || '1.0');
   const [showDbClearedPopup, setShowDbClearedPopup] = useState(false);
 
+  // ─── Hard refresh on version change ──────────────────────────────
+  useEffect(() => {
+    const currentVersion = process.env.REACT_APP_VERSION || '1.0';
+    const storedVersion = localStorage.getItem('echo_installed_version');
+
+    if (storedVersion && storedVersion !== currentVersion) {
+      localStorage.setItem('echo_installed_version', currentVersion);
+      window.location.reload(true);
+    } else if (!storedVersion) {
+      localStorage.setItem('echo_installed_version', currentVersion);
+    }
+  }, []);
+
   // ─── Minimum loading time (2s) ──────────────────────────────
   useEffect(() => {
     const timer = setTimeout(() => setMinTimePassed(true), 2000);
@@ -363,6 +376,15 @@ function AppContent() {
       cleanup();
     }
   }, [user?.uid, fetchProfile]);
+
+  // ─── Check for service worker updates on app start ────────────
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.update();
+      }).catch(() => {});
+    }
+  }, []);
 
   const showLoading = loading || !minTimePassed;
 

@@ -14,7 +14,7 @@ import {
   checkIsSupport,
 } from '../../../services/adminService';
 import { db } from '../../../services/firebase';
-import { ref, onValue, get } from 'firebase/database';
+import { ref, onValue, get, push, set } from 'firebase/database';
 import { getAdminUserList, setAdminUserList } from '../../../services/indexedDBService';
 import Toast from '../../Toast/Toast';
 import LoginAnalyticsChart from './LoginAnalyticsChart';
@@ -36,6 +36,10 @@ const AdminPanel = () => {
   const [isBanned, setIsBanned] = useState(false);
   const [banReason, setBanReason] = useState('');
   const [uidNotFound, setUidNotFound] = useState(false);
+
+  // ─── Admin Message State ──────────────────────────────────────
+  const [adminMessageTitle, setAdminMessageTitle] = useState('');
+  const [adminMessageBody, setAdminMessageBody] = useState('');
 
   // ─── Confirm Modal State ─────────────────────────────────────
   const [confirmModal, setConfirmModal] = useState({
@@ -264,6 +268,33 @@ const AdminPanel = () => {
       .catch(() => showToast('Failed to copy UID', 'error'));
   };
 
+  // ─── Send Admin Message ──────────────────────────────────────
+  const handleSendAdminMessage = async () => {
+    if (!uid.trim() || uidNotFound) return showToast('Select a valid user.', 'error');
+    if (!adminMessageTitle.trim() || !adminMessageBody.trim()) {
+      return showToast('Please fill in both title and body.', 'error');
+    }
+    setLoading(true);
+    try {
+      const notifRef = ref(db, `adminNotifications/${uid.trim()}/messages`);
+      const newMsgRef = push(notifRef);
+      await set(newMsgRef, {
+        title: adminMessageTitle.trim(),
+        body: adminMessageBody.trim(),
+        timestamp: Date.now(),
+        read: false,
+      });
+      showToast(`Message sent to ${uid.trim()}!`, 'success');
+      setAdminMessageTitle('');
+      setAdminMessageBody('');
+    } catch (err) {
+      showToast(`Failed to send: ${err.message}`, 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ─── Admin actions ────────────────────────────────────────────
   const handleCheckCoins = async () => {
     if (!uid.trim()) return showToast('Please enter a UID.', 'error');
     if (uidNotFound) return showToast('User not found. Please check the UID.', 'error');
@@ -410,7 +441,6 @@ const AdminPanel = () => {
         },
       });
     } else {
-      // Reset input value for each ban attempt
       setConfirmModal(prev => ({
         ...prev,
         isOpen: true,
@@ -420,9 +450,9 @@ const AdminPanel = () => {
         cancelText: 'Cancel',
         showInput: true,
         inputPlaceholder: 'Enter ban reason...',
-        inputValue: '', // ✅ reset value
+        inputValue: '',
         loading: false,
-        onConfirm: async (reason) => { // ✅ now receives reason as parameter
+        onConfirm: async (reason) => {
           if (!reason || !reason.trim()) {
             showToast('Please enter a reason for the ban.', 'error');
             return;
@@ -623,8 +653,43 @@ const AdminPanel = () => {
                 </button>
               </div>
             </div>
+
+            {/* ─── Send Admin Message Card (Styled) ────────────────── */}
+            <div className="admin-card admin-message-card">
+              <h2><i className="fas fa-bullhorn" /> Send Admin Message</h2>
+              <div className="admin-input-group">
+                <label>Message Title</label>
+                <input
+                  type="text"
+                  className="admin-message-input"
+                  placeholder="e.g. Important Notice"
+                  value={adminMessageTitle}
+                  onChange={(e) => setAdminMessageTitle(e.target.value)}
+                  disabled={loading || !uid.trim() || uidNotFound}
+                />
+              </div>
+              <div className="admin-input-group">
+                <label>Message Body</label>
+                <textarea
+                  className="admin-message-textarea"
+                  placeholder="Enter your message..."
+                  value={adminMessageBody}
+                  onChange={(e) => setAdminMessageBody(e.target.value)}
+                  disabled={loading || !uid.trim() || uidNotFound}
+                  rows="4"
+                />
+              </div>
+              <button
+                className="admin-message-send-btn"
+                onClick={handleSendAdminMessage}
+                disabled={loading || !uid.trim() || uidNotFound || !adminMessageTitle.trim() || !adminMessageBody.trim()}
+              >
+                <i className="fas fa-paper-plane" /> Send Message
+              </button>
+            </div>
           </div>
         </div>
+
         {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
 
         <ConfirmModal
