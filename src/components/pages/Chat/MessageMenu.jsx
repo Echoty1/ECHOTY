@@ -2,7 +2,15 @@
 import React, { useState, useRef, useEffect } from 'react';
 import DeleteConfirmationModal from './DeleteConfirmationModal';
 
-const MessageMenu = ({ children, isOwn, onDelete, onReply, onEdit, copyText }) => {
+const MessageMenu = ({
+  children,
+  isOwn,
+  canDelete = false, // new prop: controls delete button visibility
+  onDelete,
+  onReply,
+  onEdit,
+  copyText,
+}) => {
   const [showActions, setShowActions] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -14,7 +22,8 @@ const MessageMenu = ({ children, isOwn, onDelete, onReply, onEdit, copyText }) =
   const handleCopy = (e) => {
     e.stopPropagation();
     if (!copyText) return;
-    navigator.clipboard.writeText(copyText)
+    navigator.clipboard
+      .writeText(copyText)
       .then(() => {
         setCopied(true);
         if (copyTimeout.current) clearTimeout(copyTimeout.current);
@@ -54,14 +63,11 @@ const MessageMenu = ({ children, isOwn, onDelete, onReply, onEdit, copyText }) =
     };
   }, [isTouchDevice]);
 
-  // Only show copy if copyText is a non-empty string
+  // ─── Determine which buttons to show ──────────────────────────
   const showCopy = !!copyText && typeof copyText === 'string' && copyText.trim().length > 0;
-
-  // For own messages: show edit, delete, copy (if text)
-  // For partner messages: show reply, copy (if text)
-  const showDelete = isOwn && typeof onDelete === 'function';
-  const showEdit = isOwn && typeof onEdit === 'function';
   const showReply = !isOwn && typeof onReply === 'function';
+  const showEdit = isOwn && typeof onEdit === 'function';
+  const showDelete = canDelete && typeof onDelete === 'function';
 
   const hasActions = showDelete || showEdit || showReply || showCopy;
 

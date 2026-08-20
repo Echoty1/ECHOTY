@@ -1674,3 +1674,48 @@
   opacity: 0.4;
   cursor: not-allowed;
 }
+
+/* ─── Markdown table styles ────────────────────────────────── */
+.message-bubble.partner .markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  font-size: 13px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+.message-bubble.partner .markdown-body th,
+.message-bubble.partner .markdown-body td {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  padding: 8px 12px;
+  text-align: left;
+}
+.message-bubble.partner .markdown-body th {
+  background: rgba(108, 60, 225, 0.25);
+  font-weight: 600;
+  color: #c4b5fd;
+}
+.message-bubble.partner .markdown-body tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.04);
+}
+.message-bubble.partner .markdown-body tr:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.message-bubble.own .markdown-body table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 12px 0;
+  font-size: 13px;
+}
+.message-bubble.own .markdown-body th,
+.message-bubble.own .markdown-body td {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  padding: 6px 10px;
+}
+.message-bubble.own .markdown-body th {
+  background: rgba(108, 60, 225, 0.3);
+  font-weight: 600;
+}
+.message-bubble.own .markdown-body tr:nth-child(even) {
+  background: rgba(255, 255, 255, 0.06);
+}

@@ -1,4 +1,4 @@
-// src/App.js
+// src/App.js (with persistent db‑cleared flag)
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ref, get } from 'firebase/database';
@@ -224,6 +224,7 @@ function AppContent() {
   // ─── Check for one‑time database cleared notification ────────
   useEffect(() => {
     if (user?.uid) {
+      // Use native localStorage to avoid any custom service issues
       const hasSeen = localStorage.getItem('echo_db_cleared_notification');
       if (!hasSeen) {
         setShowDbClearedPopup(true);
@@ -487,6 +488,7 @@ function App() {
         'echo_update_shown',
         'echo_changelog_version',
         'firebase:host',
+        'echo_db_cleared_notification', // ✅ keep this so the popup doesn't reappear
       ];
       const allKeys = Object.keys(localStorage);
       for (const key of allKeys) {
