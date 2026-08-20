@@ -565,8 +565,14 @@ const Profile = () => {
               ) : (
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
                   <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={48} interactive={false} animated={true} />
-                  <span style={{ fontSize: '13px', color: '#888', fontWeight: 500 }}>
-                    Mood: <strong style={{ color: '#FFF', textTransform: 'capitalize' }}>{profile?.mood || 'happy'}</strong>
+                  <span style={{
+                    fontSize: '13px',
+                    color: 'var(--text-secondary)',  // ✅ changed from #888
+                    fontWeight: 500,
+                  }}>
+                    Mood: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>
+                      {profile?.mood || 'happy'}
+                    </strong>
                   </span>
                 </div>
               )}
