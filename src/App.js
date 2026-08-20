@@ -1,4 +1,4 @@
-// src/App.js (with persistent db‑cleared flag)
+// src/App.js
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ref, get } from 'firebase/database';
@@ -224,7 +224,6 @@ function AppContent() {
   // ─── Check for one‑time database cleared notification ────────
   useEffect(() => {
     if (user?.uid) {
-      // Use native localStorage to avoid any custom service issues
       const hasSeen = localStorage.getItem('echo_db_cleared_notification');
       if (!hasSeen) {
         setShowDbClearedPopup(true);
@@ -331,9 +330,18 @@ function AppContent() {
         const snapshot = await get(ref(db, 'appConfig/version'));
         if (!snapshot.exists()) return;
         const data = snapshot.val();
-        const latestVersion = data.latest || '1.0';
 
-        const currentParts = appVersion.split('.').map(Number);
+        // ─── Ensure latestVersion is a string ──────────────────
+        const latestVersion = data?.latest ?? '1.0';
+        if (typeof latestVersion !== 'string') {
+          console.warn('Latest version is not a string:', latestVersion);
+          return;
+        }
+
+        // ─── Ensure appVersion is a string ──────────────────────
+        const currentVersion = typeof appVersion === 'string' ? appVersion : '1.0';
+
+        const currentParts = currentVersion.split('.').map(Number);
         const latestParts = latestVersion.split('.').map(Number);
         let needsUpdate = false;
         for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i++) {
@@ -488,7 +496,7 @@ function App() {
         'echo_update_shown',
         'echo_changelog_version',
         'firebase:host',
-        'echo_db_cleared_notification', // ✅ keep this so the popup doesn't reappear
+        'echo_db_cleared_notification',
       ];
       const allKeys = Object.keys(localStorage);
       for (const key of allKeys) {

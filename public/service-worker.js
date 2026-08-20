@@ -23,12 +23,19 @@ self.addEventListener('activate', (event) => {
   );
 });
 
-// ─── Fetch: network‑first on navigation, cache‑first for assets ──
+// ─── Fetch: skip non-GET requests; network-first for navigation ──
 self.addEventListener('fetch', (event) => {
   const request = event.request;
+
+  // ─── Skip non‑GET requests (POST, PUT, DELETE, etc.) ──
+  if (request.method !== 'GET') {
+    event.respondWith(fetch(request));
+    return;
+  }
+
   const url = new URL(request.url);
 
-  // ─── For navigation requests (HTML pages) – always go to network ──
+  // ─── For navigation requests (HTML pages) – network first ──
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
