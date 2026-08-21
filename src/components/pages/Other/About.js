@@ -5,7 +5,6 @@ import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import './LegalPages.css';
 
-// ─── Brand description used for both SEO & page content ────────
 const BRAND_DESCRIPTION =
   'ECHO is a visual identity app where every user can express who they are and how they feel through animated avatars (ECHOMOJI), custom skins, real‑time presence, and communities. Discover, connect, and echo.';
 
@@ -30,7 +29,6 @@ const About = () => {
         </div>
 
         <div className="legal-content">
-          {/* ─── Existing brand intro ──────────────────────────────── */}
           <div className="legal-section">
             <h2><i className="fas fa-bullhorn" /> The Future of Conversations</h2>
             <p>
@@ -38,12 +36,12 @@ const About = () => {
               <span style={{ fontSize: '1.1em' }}>🔊 <em>Discover. Connect. Echo.</em></span>
             </p>
             <p>
-              We believe every person has something worth sharing, and every conversation 
+              We believe every person has something worth sharing, and every conversation
               has the potential to become something more.
             </p>
             <p>
-              So we built <strong>ECHO</strong>, a space centred on helping you express, 
-              connect, discover and belong. A place where voices can meet, ideas can grow, 
+              So we built <strong>ECHO</strong>, a space centred on helping you express,
+              connect, discover and belong. A place where voices can meet, ideas can grow,
               identities can be felt beyond the screen, and communities can take shape.
             </p>
             <p>
@@ -56,7 +54,6 @@ const About = () => {
             </p>
           </div>
 
-          {/* ─── NEW: Our Story section ────────────────────────────── */}
           <div className="legal-section">
             <h2><i className="fas fa-history" /> Our Story</h2>
             <p>
@@ -73,26 +70,24 @@ const About = () => {
             </p>
           </div>
 
-          {/* ─── Existing "More Than a Chat App" ────────────────────── */}
           <div className="legal-section">
             <h2><i className="fas fa-users" /> More Than a Chat App</h2>
             <p>
-              We're more than your average chatting app; we bring value to your conversations 
-              and give you access to build communities at an international level, 
+              We're more than your average chatting app; we bring value to your conversations
+              and give you access to build communities at an international level,
               allowing your thoughts to <strong>ECHO</strong>.
             </p>
             <p>
-              We aim to build an app where users can express themselves and build a community; 
-              we want our subscribers to have the ability to interact freely in an environment 
+              We aim to build an app where users can express themselves and build a community;
+              we want our subscribers to have the ability to interact freely in an environment
               that's built for productivity and togetherness.
             </p>
           </div>
 
-          {/* ─── Existing "Your Visual Identity" ────────────────────── */}
           <div className="legal-section">
             <h2><i className="fas fa-paint-brush" /> Your Visual Identity</h2>
             <p>
-              ECHO is a visual identity app where every user can communicate who they are 
+              ECHO is a visual identity app where every user can communicate who they are
               and how they feel, seamlessly. This is possible through:
             </p>
             <ul>
@@ -106,7 +101,6 @@ const About = () => {
             </p>
           </div>
 
-          {/* ─── Existing "Every Voice Matters" ──────────────────────── */}
           <div className="legal-section">
             <h2><i className="fas fa-heart" /> Every Voice Matters</h2>
             <p style={{ fontStyle: 'italic', fontSize: '1.05em', lineHeight: '1.8' }}>

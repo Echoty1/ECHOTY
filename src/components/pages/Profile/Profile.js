@@ -1,9 +1,10 @@
 // src/components/pages/Profile/Profile.js
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { db } from '../../../services/firebase';
-import { ref, onValue, update, set } from 'firebase/database';
+import { ref, onValue, update, set, get, query, orderByChild, equalTo, limitToFirst } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import GifLibraryModal from '../../GifLibrary/GifLibraryModal';
@@ -71,6 +72,7 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { refreshProfile } = useProfile();
 
   const [showGifLibrary, setShowGifLibrary] = useState(false);
@@ -119,6 +121,63 @@ const Profile = () => {
 
   const imageInputRef = useRef(null);
 
+  // ─── Name availability state ──────────────────────────────────
+  const [nameAvailable, setNameAvailable] = useState(true);
+  const [nameCheckLoading, setNameCheckLoading] = useState(false);
+
+  // ─── Check if the typed name is already taken (case‑insensitive) ──
+  const checkNameAvailability = useCallback(async (newName) => {
+    const trimmed = newName.trim();
+    if (!trimmed) {
+      setNameAvailable(true);
+      return;
+    }
+
+    // If the name is the same as the current profile name, it's available (it's yours)
+    if (profile?.name && trimmed.toLowerCase() === profile.name.toLowerCase()) {
+      setNameAvailable(true);
+      return;
+    }
+
+    setNameCheckLoading(true);
+    try {
+      const searchTerm = trimmed.toLowerCase();
+      const profilesRef = ref(db, 'profiles');
+      const q = query(profilesRef, orderByChild('searchName'), equalTo(searchTerm), limitToFirst(1));
+      const snapshot = await get(q);
+      const exists = snapshot.exists();
+      setNameAvailable(!exists);
+    } catch (err) {
+      console.warn('Name check failed:', err);
+      setNameAvailable(true); // Assume available on error
+    } finally {
+      setNameCheckLoading(false);
+    }
+  }, [profile]);
+
+  // ─── Debounce name check ──────────────────────────────────────
+  const debounceTimer = useRef(null);
+
+  useEffect(() => {
+    if (!editing) return;
+    const newName = editData.name || '';
+    // Clear previous timer
+    if (debounceTimer.current) {
+      clearTimeout(debounceTimer.current);
+    }
+    // Debounce 400ms
+    debounceTimer.current = setTimeout(() => {
+      checkNameAvailability(newName);
+    }, 400);
+
+    return () => {
+      if (debounceTimer.current) {
+        clearTimeout(debounceTimer.current);
+      }
+    };
+  }, [editData.name, editing, checkNameAvailability]);
+
+  // ─── Profile listeners ─────────────────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -199,6 +258,29 @@ const Profile = () => {
       return;
     }
 
+    // Check name availability again before saving (in case the user typed quickly)
+    const trimmedName = name.trim();
+    const searchTerm = trimmedName.toLowerCase();
+    // If the name is unchanged and it's the user's own name, skip check
+    if (profile?.name && trimmedName.toLowerCase() !== profile.name.toLowerCase()) {
+      try {
+        const profilesRef = ref(db, 'profiles');
+        const q = query(profilesRef, orderByChild('searchName'), equalTo(searchTerm), limitToFirst(1));
+        const snapshot = await get(q);
+        if (snapshot.exists()) {
+          // Check if the found profile is the user themselves (shouldn't happen but just in case)
+          const foundUid = Object.keys(snapshot.val())[0];
+          if (foundUid !== user.uid) {
+            setToast({ message: 'Name already taken. Please choose another.', type: 'error' });
+            return;
+          }
+        }
+      } catch (err) {
+        console.warn('Final name check failed:', err);
+        // Proceed anyway (network error)
+      }
+    }
+
     const bio = editData.bio?.trim() || '';
     if (bio.length > BIO_MAX_LENGTH) {
       setToast({ message: `Bio must be ${BIO_MAX_LENGTH} characters or less.`, type: 'error' });
@@ -208,7 +290,7 @@ const Profile = () => {
     try {
       const cacheKey = `profile_${user.uid}`;
       const profileRef = ref(db, `profiles/${user.uid}`);
-      const updates = { ...editData, name, bio };
+      const updates = { ...editData, name, bio, searchName: name.toLowerCase() };
       await update(profileRef, updates);
       setFastLocal(cacheKey, updates);
       setProfile(updates);
@@ -404,6 +486,14 @@ const Profile = () => {
       <div className="profile-page">
         <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleImageFile} />
 
+        {/* ─── Sticky Back Header ─────────────────────────────── */}
+        <div className="page-back-header">
+          <button className="page-back-btn" onClick={() => navigate('/other')}>
+            <i className="fas fa-arrow-left" /> Back
+          </button>
+          <span className="page-back-title">Profile</span>
+        </div>
+
         <div className="profile-card">
           <div
             className="profile-avatar"
@@ -442,7 +532,12 @@ const Profile = () => {
                   }}
                   placeholder="Your name"
                   maxLength={NAME_MAX_LENGTH}
-                  style={{ flex: 1, paddingLeft: '40px', paddingRight: '50px' }}
+                  style={{
+                    flex: 1,
+                    paddingLeft: '40px',
+                    paddingRight: '50px',
+                    borderColor: (!nameAvailable && editData.name?.trim()) ? '#EF4444' : 'var(--border-color)',
+                  }}
                   onFocus={() => handleInputFocus('name')}
                   onMouseDown={handleInputMouseDown}
                   onTouchStart={handleInputMouseDown}
@@ -477,6 +572,44 @@ const Profile = () => {
                 }}>
                   {editData.name?.length || 0}/{NAME_MAX_LENGTH}
                 </span>
+                {!nameAvailable && editData.name?.trim() && (
+                  <span style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    fontSize: '12px',
+                    color: '#EF4444',
+                    fontWeight: 600,
+                  }}>
+                    Taken
+                  </span>
+                )}
+                {nameAvailable && editData.name?.trim() && editData.name?.trim() !== profile?.name && (
+                  <span style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    fontSize: '12px',
+                    color: '#10B981',
+                    fontWeight: 600,
+                  }}>
+                    Available
+                  </span>
+                )}
+                {nameCheckLoading && (
+                  <span style={{
+                    position: 'absolute',
+                    right: '12px',
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    fontSize: '12px',
+                    color: '#888',
+                  }}>
+                    checking...
+                  </span>
+                )}
               </div>
             </div>
           ) : loading ? (
@@ -567,7 +700,7 @@ const Profile = () => {
                   <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={48} interactive={false} animated={true} />
                   <span style={{
                     fontSize: '13px',
-                    color: 'var(--text-secondary)',  // ✅ changed from #888
+                    color: 'var(--text-secondary)',
                     fontWeight: 500,
                   }}>
                     Mood: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>
@@ -612,10 +745,29 @@ const Profile = () => {
             {editing ? (
               isDemoUser ? null : (
                 <>
-                  <button className="save-btn" onClick={handleSave} style={{ background: '#6C3CE1', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer', fontWeight: 600 }}>
+                  <button
+                    className="save-btn"
+                    onClick={handleSave}
+                    style={{
+                      background: '#6C3CE1',
+                      color: '#fff',
+                      border: 'none',
+                      padding: '10px 24px',
+                      borderRadius: '20px',
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      opacity: (!nameAvailable && editData.name?.trim()) ? 0.5 : 1,
+                      pointerEvents: (!nameAvailable && editData.name?.trim()) ? 'none' : 'auto',
+                    }}
+                    disabled={!nameAvailable && editData.name?.trim()}
+                  >
                     Save
                   </button>
-                  <button className="cancel-btn" onClick={() => { setEditing(false); setEditData(profile); }} style={{ background: '#333', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer' }}>
+                  <button
+                    className="cancel-btn"
+                    onClick={() => { setEditing(false); setEditData(profile); }}
+                    style={{ background: '#333', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer' }}
+                  >
                     Cancel
                   </button>
                 </>

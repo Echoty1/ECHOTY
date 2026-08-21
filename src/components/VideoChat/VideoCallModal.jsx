@@ -117,21 +117,24 @@ const VideoCallModal = ({
         clearInterval(timerRef.current);
         timerRef.current = null;
       }
-      cleanupSignals();
 
       if (reason === 'declined') {
         if (isCaller) {
           setCallDeclined(true);
           setCallStatus('Declined');
+          // Delay cleanup so declined status stays readable; then close
           setTimeout(() => {
+            cleanupSignals();
             if (isMounted.current) onClose();
-          }, 2000);
+          }, 2500);
         } else {
+          cleanupSignals();
           onClose();
         }
         return;
       }
 
+      cleanupSignals();
       setEndedByName(byName || partnerProfile.name || 'User');
       setCallEnded(true);
       setCallStatus('Call Ended');
@@ -291,18 +294,24 @@ const VideoCallModal = ({
       if (!snap.exists() || !isMounted.current) return;
       const data = snap.val();
       if (data.status === 'declined') {
+        console.log('[Call] Received declined status');
         stopRingtone();
         endEverything('declined');
       } else if (data.status === 'busy') {
         stopRingtone();
-        setCallStatus('On another call right now');
+        if (!answeredRef.current) {
+          setCallStatus('On another call right now');
+        }
       } else if (data.status === 'ended') {
         const name =
           data.endedByName ||
           (data.by === theirUid ? partnerProfile.name : partnerProfile.name);
         endEverything('ended', name);
+      } else if (data.status === 'connecting') {
+        setCallStatus('Connecting…');
+        stopRingtone();
       } else if (data.status === 'connected') {
-        setCallStatus((s) => (s === 'Ringing…' ? 'Connecting…' : s));
+        setCallStatus('Connected');
         stopRingtone();
       }
     });
@@ -310,40 +319,96 @@ const VideoCallModal = ({
   }, [myUid, theirUid, endEverything, stopRingtone, partnerProfile.name]);
 
 
-  // Caller: detect if recipient goes offline while ringing
+
+  // Caller backup: also listen on the invite node under recipient's tree
+  useEffect(() => {
+    if (!isCaller || !myUid || !theirUid) return;
+    const inviteRef = ref(db, `calls/${theirUid}/${myUid}`);
+    const unsub = onValue(inviteRef, (snap) => {
+      if (!snap.exists() || !isMounted.current) return;
+      const data = snap.val();
+      if (data.status === 'declined') {
+        console.log('[Call] Invite path declined');
+        stopRingtone();
+        endEverything('declined');
+      } else if (data.status === 'busy') {
+        stopRingtone();
+        if (!answeredRef.current) {
+          setCallStatus('On another call right now');
+        }
+      } else if (data.status === 'ended') {
+        endEverything('ended', data.endedByName || partnerProfile.name);
+      }
+    });
+    return () => off(inviteRef);
+  }, [isCaller, myUid, theirUid, endEverything, stopRingtone, partnerProfile.name]);
+
+  // Caller: if they go offline before we connect, end the call
   useEffect(() => {
     if (!isCaller || !theirUid || connected) return;
+    let seenOnline = false;
     const pRef = ref(db, `presence/online/${theirUid}`);
     const unsub = onValue(pRef, (snap) => {
+      if (!isMounted.current || connected) return;
       const val = snap.val();
+      if (val === true) {
+        seenOnline = true;
+        return;
+      }
+      // false / null → offline. Only cut after we know they were online or after a short grace.
       if (val === false || val === null) {
-        // Only show if we have been ringing for a moment
-        setCallStatus('They appear to be offline');
+        if (!seenOnline) {
+          // Give a moment for presence to load
+          return;
+        }
+        stopRingtone();
+        setCallStatus(`${partnerProfile.name || 'User'} went offline`);
+        setTimeout(() => {
+          if (isMounted.current && !connected) {
+            endEverything('ended', `${partnerProfile.name || 'User'} went offline`);
+          }
+        }, 1800);
       }
     });
     return () => off(pRef);
-  }, [isCaller, theirUid, connected]);
+  }, [isCaller, theirUid, connected, endEverything, stopRingtone, partnerProfile.name]);
 
-  // Caller: detect busy (recipient already in another call)
+  // One-time busy check at call start only (NOT continuous – accepting marks busy too)
   useEffect(() => {
-    if (!isCaller || !theirUid || connected) return;
-    const bRef = ref(db, `busy/${theirUid}`);
-    const unsub = onValue(bRef, (snap) => {
-      if (snap.exists() && snap.val() === true) {
-        setCallStatus('On another call right now');
-      }
-    });
-    return () => off(bRef);
-  }, [isCaller, theirUid, connected]);
+    if (!isCaller || !theirUid) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const snap = await get(ref(db, `busy/${theirUid}`));
+        if (cancelled || !isMounted.current) return;
+        // Only if already busy BEFORE our invite is answered
+        if (snap.exists() && snap.val() === true) {
+          // Re-check after 1.5s: if they accepted us, status will move past ringing
+          setTimeout(async () => {
+            if (cancelled || !isMounted.current || connected || answeredRef.current) return;
+            const again = await get(ref(db, `busy/${theirUid}`));
+            // Still busy and we never got connecting/connected → treat as other call
+            if (again.exists() && again.val() === true && callStatus === 'Ringing…') {
+              setCallStatus('On another call right now');
+            }
+          }, 1500);
+        }
+      } catch (_) {}
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isCaller, theirUid]); // intentionally not callStatus/connected
 
-  // Mark ourselves busy while this modal is open
+  // Mark ourselves busy only while connected (not while still ringing as caller)
   useEffect(() => {
     if (!myUid) return;
+    if (isCaller && !connected) return; // callers: don't mark busy until connected
     set(ref(db, `busy/${myUid}`), true).catch(() => {});
     return () => {
       remove(ref(db, `busy/${myUid}`)).catch(() => {});
     };
-  }, [myUid]);
+  }, [myUid, isCaller, connected]);
 
   // Start media + signaling
   useEffect(() => {
@@ -561,7 +626,6 @@ const VideoCallModal = ({
   const switchCamera = async () => {
     const next = facingModeRef.current === 'user' ? 'environment' : 'user';
     facingModeRef.current = next;
-    setFacingMode(next);
     try {
       const newStream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: { ideal: next }, width: { ideal: 640 }, height: { ideal: 480 } },
@@ -612,8 +676,8 @@ const VideoCallModal = ({
       }
     } catch (err) {
       console.warn('[Call] switchCamera failed', err);
-      facingModeRef.current = facingModeRef.current === 'user' ? 'environment' : 'user';
-      setFacingMode(facingModeRef.current);
+      // revert ref on failure
+      facingModeRef.current = next === 'user' ? 'environment' : 'user';
     }
   };
 
@@ -629,10 +693,7 @@ const VideoCallModal = ({
         <div className="echo-call-result">
           <div className="echo-call-result-icon declined">📵</div>
           <h2 style={{ color: '#f87171' }}>Call Declined</h2>
-          <p>This call has been declined.</p>
-          <p style={{ marginTop: 4, opacity: 0.7 }}>
-            {partnerProfile.name} did not answer.
-          </p>
+          <p>{partnerProfile.name || 'This person'} declined your call.</p>
           <button className="echo-call-result-btn" onClick={onClose}>
             Back to ECHO
           </button>
@@ -647,7 +708,11 @@ const VideoCallModal = ({
         <div className="echo-call-result">
           <div className="echo-call-result-icon ended">📡</div>
           <h2>Call Ended</h2>
-          <p>{endedByName || partnerProfile.name} ended the call.</p>
+          <p>
+            {endedByName && String(endedByName).toLowerCase().includes('offline')
+              ? endedByName
+              : `${endedByName || partnerProfile.name} ended the call.`}
+          </p>
           <button className="echo-call-result-btn" onClick={onClose}>
             Back to ECHO
           </button>
@@ -755,13 +820,15 @@ const VideoCallModal = ({
         >
           <i className={`fas ${isMuted ? 'fa-microphone-slash' : 'fa-microphone'}`} />
         </button>
-        <button
-          className="echo-call-btn"
-          onClick={switchCamera}
-          title="Flip camera"
-        >
-          <i className="fas fa-sync-alt" />
-        </button>
+        {isMobile && (
+          <button
+            className="echo-call-btn"
+            onClick={switchCamera}
+            title="Flip camera"
+          >
+            <i className="fas fa-sync-alt" />
+          </button>
+        )}
         <button
           className={`echo-call-btn ${isVideoOff ? 'video-off' : ''}`}
           onClick={toggleVideo}

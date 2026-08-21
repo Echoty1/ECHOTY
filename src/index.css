@@ -332,3 +332,41 @@ body.hide-bottom-nav .bottom-nav-container {
   background: #6C3CE1;
   flex-shrink: 0;
 }
+
+/* ─── Reusable Page Back Header ─────────────────────────────── */
+.page-back-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-primary);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: blur(8px);
+  margin-bottom: 16px;
+}
+.page-back-btn {
+  background: none;
+  border: none;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.2s, color 0.2s;
+}
+.page-back-btn:hover {
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
+.page-back-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  flex: 1;
+}

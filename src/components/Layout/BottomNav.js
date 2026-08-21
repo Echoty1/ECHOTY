@@ -29,23 +29,27 @@ const BottomNav = () => {
 
   // ─── Define tabs based on user role ──────────────────────────
   const getTabs = () => {
-    // Common tabs for all users (Home, Chats, Communities, Other)
     const commonTabs = [
       { to: '/', label: 'Home', icon: 'fa-house' },
       { to: '/chats', label: 'Chats', icon: 'fa-comment-dots' },
       { to: '/communities', label: 'Communities', icon: 'fa-users' },
-      { to: '/other', label: 'Other', icon: 'fa-ellipsis-h' },
     ];
 
     if (isSupport) {
-      // Admin: insert Control after Chats
-      const controlTab = { to: '/control', label: 'Control', icon: 'fa-sliders-h' };
-      // Insert at index 2 (after Home and Chats)
-      return [commonTabs[0], commonTabs[1], controlTab, commonTabs[2], commonTabs[3]];
+      // Admin: Home → Chats → Control → Communities → Other
+      return [
+        ...commonTabs,
+        { to: '/control', label: 'Control', icon: 'fa-sliders-h' },
+        { to: '/other', label: 'Other', icon: 'fa-ellipsis-h' },
+      ];
+    } else {
+      // Normal users: Home → Chats → Communities → Shop → Other
+      return [
+        ...commonTabs,
+        { to: '/shop', label: 'Shop', icon: 'fa-store' },
+        { to: '/other', label: 'Other', icon: 'fa-ellipsis-h' },
+      ];
     }
-
-    // Non-admin: Home, Chats, Communities, Other
-    return commonTabs;
   };
 
   const tabs = getTabs();

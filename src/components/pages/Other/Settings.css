@@ -8,6 +8,7 @@
   color: var(--text-primary);
 }
 
+/* ─── Desktop: stretch full width ───────────────────────────── */
 @media (min-width: 1024px) {
   .settings-page {
     max-width: 100%;
@@ -38,25 +39,49 @@
   }
 }
 
+/* src/components/pages/Other/Settings.css */
 .settings-header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bg-primary);
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 16px;
+  backdrop-filter: blur(8px);
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 24px;
+  gap: 14px;
 }
 .settings-back {
   background: none;
   border: none;
-  color: var(--text-muted);
-  font-size: 18px;
+  color: var(--text-secondary);
+  font-size: 16px;
   cursor: pointer;
-  transition: color 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: 8px;
+  transition: background 0.2s, color 0.2s;
 }
 .settings-back:hover {
+  background: var(--bg-input);
   color: var(--text-primary);
 }
+.settings-header h1 {
+  font-size: 18px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
+  flex: 1;
+}
+/* rest unchanged */
+
 .settings-header h1 {
   font-size: 24px;
   font-weight: 700;

@@ -1,27 +1,26 @@
 // src/components/pages/Other/Other.js
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../../hooks/useAuth';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import './Other.css';
 
+const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
+
 const Other = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const isSupport = user?.uid === SUPPORT_UID;
 
-  const menuItems = [
+  // Base menu for everyone
+  const baseMenu = [
     {
       id: 'profile',
       label: 'Profile',
       icon: 'fa-user',
       path: '/profile',
       description: 'View and edit your profile',
-    },
-    {
-      id: 'shop',
-      label: 'Shop',
-      icon: 'fa-store',
-      path: '/shop',
-      description: 'Buy skins and premium GIFs',
     },
     {
       id: 'settings',
@@ -59,6 +58,21 @@ const Other = () => {
       description: 'Report inappropriate behavior',
     },
   ];
+
+  // Admin: add Shop to the top (after Profile)
+  const menuItems = isSupport
+    ? [
+        baseMenu[0], // Profile
+        {
+          id: 'shop',
+          label: 'Shop',
+          icon: 'fa-store',
+          path: '/shop',
+          description: 'Buy skins and premium GIFs',
+        },
+        ...baseMenu.slice(1), // rest
+      ]
+    : baseMenu; // non-admin: no Shop here
 
   return (
     <>
