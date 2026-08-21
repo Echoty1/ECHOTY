@@ -255,7 +255,12 @@ const VideoCallModal = ({
       console.log('[Call] Peer ready:', id);
     });
 
-    peer.on('error', (err) => console.error('[Call] Peer error:', err?.type || err));
+    peer.on('error', (err) => {
+      console.error('[Call] Peer error:', err?.type || err);
+      if (err?.type === 'peer-unavailable' && isMounted.current) {
+        setCallStatus('Could not reach the other person. Try again.');
+      }
+    });
     peer.on('disconnected', () => {
       if (isMounted.current && !callEnded && !callDeclined) {
         try { peer.reconnect(); } catch (_) {}
@@ -271,7 +276,7 @@ const VideoCallModal = ({
         peerRef.current = null;
       }
     };
-  }, [myUid]);
+  }, [myUid, isCaller]);
 
   // Listen for THEIR media under MY tree
   useEffect(() => {
@@ -455,26 +460,14 @@ const VideoCallModal = ({
           });
           await publishStatus('ringing', { callerPeerId: myPeerId });
           publishMediaState(false, true);
-
-          const peerIdRef = ref(db, `peerIds/${theirUid}`);
-          let hasCalled = false;
-          const tryCall = (recipientPeerId) => {
-            if (hasCalled || !recipientPeerId || recipientPeerId === myPeerId) return;
-            if (!peerRef.current || callRef.current) return;
-            hasCalled = true;
-            console.log('[Call] Dialing', recipientPeerId);
-            const call = peerRef.current.call(recipientPeerId, stream);
-            callRef.current = call;
-            setupCallEvents(call);
-          };
-          get(peerIdRef).then((s) => { if (s.exists()) tryCall(s.val()); });
-          onValue(peerIdRef, (s) => { if (s.exists()) tryCall(s.val()); });
-          unsubsRef.current.push(() => off(peerIdRef));
+          // Do not dial peerIds/{them} – that ID is often stale (Home peer).
+          // Receiver dials our callerPeerId after Accept; we answer in peer.on('call').
+          console.log('[Call] Invite written with callerPeerId', myPeerId);
         }
 
         if (isReceiver) {
           publishMediaState(false, true);
-          await publishStatus('connecting');
+          await publishStatus('connecting', { receiverPeerId: myPeerId });
         }
       } catch (err) {
         const msg = String(err?.message || err || '');
@@ -519,49 +512,69 @@ const VideoCallModal = ({
       setCallStatus('Camera not ready…');
       return;
     }
+    if (!peerRef.current) {
+      setCallStatus('Connection not ready…');
+      return;
+    }
+    if (answeredRef.current) return;
 
+    // If caller already dialed us (rare), just answer
     const existing = callRef.current || pendingCallRef.current;
     if (existing) {
       answerCall(existing, stream);
       return;
     }
 
-    const waited = await new Promise((resolve) => {
-      const t0 = Date.now();
-      const iv = setInterval(() => {
-        const c = callRef.current || pendingCallRef.current;
-        if (c) {
-          clearInterval(iv);
-          resolve(c);
-        } else if (Date.now() - t0 > 4000) {
-          clearInterval(iv);
-          resolve(null);
-        }
-      }, 200);
-    });
-    if (waited) {
-      answerCall(waited, stream);
-      return;
-    }
-
+    // Primary path: receiver dials the caller's live PeerJS id from the invite
     try {
       let callerPeerId = null;
+
+      // From invite under our tree: calls/{me}/{caller}
       if (invitePath) {
         const inviteSnap = await get(ref(db, invitePath));
-        if (inviteSnap.exists()) callerPeerId = inviteSnap.val().callerPeerId || null;
+        if (inviteSnap.exists()) {
+          callerPeerId = inviteSnap.val()?.callerPeerId || null;
+        }
       }
+      // From signals (caller published callerPeerId with ringing status)
+      if (!callerPeerId) {
+        const sigSnap = await get(ref(db, `calls/${myUid}/signals/${theirUid}`));
+        if (sigSnap.exists()) {
+          callerPeerId = sigSnap.val()?.callerPeerId || null;
+        }
+      }
+      // Last resort: peerIds (may be stale – avoid if possible)
       if (!callerPeerId) {
         const pidSnap = await get(ref(db, `peerIds/${theirUid}`));
         if (pidSnap.exists()) callerPeerId = pidSnap.val();
       }
-      if (!callerPeerId || !peerRef.current) {
-        setCallStatus('Could not connect. Try again.');
+
+      if (!callerPeerId) {
+        console.error('[Call] No callerPeerId found');
+        setCallStatus('Could not reach caller. Try again.');
         return;
       }
+
+      console.log('[Call] Receiver dialing caller peer', callerPeerId);
       const call = peerRef.current.call(callerPeerId, stream);
-      answerCall(call, stream);
+      if (!call) {
+        setCallStatus('Could not start connection.');
+        return;
+      }
+      callRef.current = call;
+      answeredRef.current = true;
+      setupCallEvents(call);
+      // Mark connecting; on stream we'll set Connected
+      setCallStatus('Connecting…');
+      publishStatus('connecting', { receiverPeerId: myPeerId });
+      publishMediaState(isMuted, isVideoOff);
+
+      call.on('error', (err) => {
+        console.error('[Call] Outgoing call error', err);
+        if (isMounted.current) setCallStatus('Could not connect. Try again.');
+      });
     } catch (err) {
-      console.error('[Call] Reverse-call failed:', err);
+      console.error('[Call] Accept dial failed:', err);
       setCallStatus('Connection failed');
     }
   };

@@ -20,6 +20,7 @@ const About = () => {
       />
       <StructuredData />
       <div className="legal-page">
+        {/* ─── Compact Sticky Header ───────────────────────────── */}
         <div className="legal-header">
           <button className="legal-back" onClick={() => navigate('/other')}>
             ← Back
@@ -29,6 +30,7 @@ const About = () => {
         </div>
 
         <div className="legal-content">
+          {/* ... rest of the content (unchanged) ... */}
           <div className="legal-section">
             <h2><i className="fas fa-bullhorn" /> The Future of Conversations</h2>
             <p>

@@ -764,3 +764,17 @@
     margin-bottom: 24px;
   }
 }
+
+.page-back-header {
+  position: sticky;
+  top: 60px;
+  z-index: 10;
+  background: var(--bg-primary);
+  padding: 6px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid var(--border-color);
+  backdrop-filter: blur(8px);
+  margin-bottom: 8px;
+}
