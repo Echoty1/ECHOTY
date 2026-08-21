@@ -1,5 +1,5 @@
 // src/index.js
-import './utils/versionCheck'; // ✅ auto‑runs the check
+import './utils/forceRefresh'; // ✅ auto‑runs on app load
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { HelmetProvider } from 'react-helmet-async';

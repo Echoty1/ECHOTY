@@ -5,7 +5,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { useCall } from '../../../contexts/CallContext';
 import { db } from '../../../services/firebase';
-import { ref, set, onValue, onDisconnect, remove, off, get } from 'firebase/database';
+import { ref, set, onValue, onDisconnect, remove, off, get, update } from 'firebase/database';
 import Peer from 'peerjs';
 import Avatar from '../../common/Avatar';
 import UserPreviewModal from '../../common/UserPreviewModal';
@@ -62,6 +62,7 @@ const Home = () => {
   const { startVideoCall } = useCall();
   const [onlineUids, setOnlineUids] = useState([]);
   const [liveUids, setLiveUids] = useState([]);
+  const [liveMeta, setLiveMeta] = useState({}); // uid -> {name, avatar}
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState(null);
   const [viewingLive, setViewingLive] = useState(null);
@@ -103,12 +104,26 @@ const Home = () => {
 
       const peer = new Peer(null, config);
       peerInstance = peer;
+      peerRef.current = peer;
 
       peer.on('open', (id) => {
         peerIdSet.current = true;
         set(ref(db, `peerIds/${user.uid}`), id)
           .catch((err) => console.warn('Failed to store peer ID:', err));
+        if (streamRef.current) {
+          update(ref(db, 'live/' + user.uid), { peerId: id }).catch(() => {});
+        }
         console.log('✅ PeerJS connected with ID:', id);
+      });
+
+      // Multi-viewer live: answer each viewer with our camera stream
+      peer.on('call', (call) => {
+        if (streamRef.current) {
+          console.log('[Live] Viewer joining');
+          call.answer(streamRef.current);
+        } else {
+          try { call.close(); } catch (_) {}
+        }
       });
 
       peer.on('error', (err) => {
@@ -131,6 +146,7 @@ const Home = () => {
       if (peerInstance) {
         peerInstance.destroy();
       }
+      peerRef.current = null;
       remove(ref(db, `peerIds/${user.uid}`)).catch(() => {});
     };
   }, [user]);
@@ -144,24 +160,32 @@ const Home = () => {
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.onloadedmetadata = () => videoRef.current.play();
-      }
-      setIsLive(true);
+      setIsLive(true); // mounts <video>, effect below attaches stream
       setCameraError(null);
 
       if (user) {
-        const peerId = peerRef.current ? peerRef.current.id : null;
-        set(ref(db, 'live/' + user.uid), {
-          name: user.displayName || 'User',
-          avatar: user.photoURL || '',
+        let name = user.displayName || profiles[user.uid]?.name || 'User';
+        let avatar = user.photoURL || profiles[user.uid]?.avatar || '';
+        try {
+          const snap = await get(ref(db, `profiles/${user.uid}`));
+          if (snap.exists()) {
+            const p = snap.val() || {};
+            if (p.name) name = p.name;
+            if (p.avatar) avatar = p.avatar;
+          }
+        } catch (_) {}
+        const peerId = peerRef.current?.id || null;
+        await set(ref(db, 'live/' + user.uid), {
+          name,
+          avatar,
           timestamp: Date.now(),
-          peerId: peerId,
+          peerId,
+          viewers: 0,
         });
         onDisconnect(ref(db, 'live/' + user.uid)).remove();
       }
     } catch (err) {
+      console.error('[Live] camera error', err);
       setCameraError('Allow camera access to go live.');
       setIsLive(false);
     }
@@ -187,14 +211,27 @@ const Home = () => {
     }
   };
 
+  // Attach camera stream once the <video> is mounted (after isLive=true)
+  useEffect(() => {
+    if (!isLive || !streamRef.current) return;
+    const el = videoRef.current;
+    if (!el) return;
+    el.srcObject = streamRef.current;
+    el.play().catch(() => {});
+  }, [isLive]);
+
   // Stop camera when component unmounts
   useEffect(() => {
     return () => {
-      if (isLive) {
-        stopCamera();
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
+      if (user) {
+        remove(ref(db, 'live/' + user.uid)).catch(() => {});
       }
     };
-  }, [isLive]);
+  }, [user]);
 
   // ─── 3. Firebase Presence Logic (FIXED) ──────────────────────
   useEffect(() => {
@@ -207,7 +244,10 @@ const Home = () => {
         const data = snapshot.val() || {};
         console.log('🔴 Presence data:', data); // DEBUG
 
-        let online = Object.keys(data).filter((uid) => data[uid] === true && uid !== user.uid);
+        // true or any truthy value counts as online
+        let online = Object.keys(data).filter(
+          (uid) => uid !== user.uid && data[uid] !== false && data[uid] != null && data[uid] !== 0
+        );
 
         // Apply demo/support filters
         if (isDemoUser) {
@@ -252,9 +292,19 @@ const Home = () => {
       const data = snapshot.val() || {};
       const live = Object.keys(data).filter((uid) => uid !== user.uid);
       setLiveUids(live);
+      const meta = {};
+      live.forEach((uid) => {
+        const entry = data[uid] || {};
+        meta[uid] = {
+          name: entry.name || '',
+          avatar: entry.avatar || '',
+        };
+        fetchProfile?.(uid);
+      });
+      setLiveMeta(meta);
     });
     return () => unsubLive();
-  }, [user]);
+  }, [user, fetchProfile]);
 
   // ─── 6. Handlers ──────────────────────────────────────────────
   const openUserPreview = (uid) => {
@@ -277,37 +327,47 @@ const Home = () => {
     });
   };
 
+
   const handleJoinLive = (uid, name) => {
     closeUserPreview();
-    setViewingLive({ uid, name });
+    setViewingLive({ uid, name, avatar: profiles[uid]?.avatar || '' });
   };
+
+
+
 
   const closeLiveView = () => {
     setViewingLive(null);
   };
 
-  // ─── 7. Build Online Users List ──────────────────────────────
-  const onlineUsers = onlineUids
+  // ─── 7. Build Online + Live Users List ───────────────────────
+  // Include everyone online OR live (so a live user always appears)
+  const combinedUids = Array.from(new Set([...onlineUids, ...liveUids]));
+  const onlineUsers = combinedUids
     .map((uid) => {
       const profile = profiles[uid];
+      const isLiveUser = liveUids.includes(uid);
+      const fromLive = liveMeta[uid] || {};
       if (!profile) {
-        // If profile not loaded yet, return a placeholder with UID as name
         return {
           uid,
-          name: uid.slice(0, 8),
-          avatar: '',
-          online: true,
-          isLive: liveUids.includes(uid),
+          name: fromLive.name || uid.slice(0, 8),
+          avatar: fromLive.avatar || '',
+          online: onlineUids.includes(uid),
+          isLive: isLiveUser,
         };
       }
       return {
         uid,
         ...profile,
-        online: true,
-        isLive: liveUids.includes(uid),
+        name: profile.name || fromLive.name || 'User',
+        avatar: profile.avatar || fromLive.avatar || '',
+        online: onlineUids.includes(uid),
+        isLive: isLiveUser,
       };
     })
-    .filter(Boolean);
+    // Live users first, then online
+    .sort((a, b) => (b.isLive ? 1 : 0) - (a.isLive ? 1 : 0));
 
   // If still loading, show skeleton
   if (loading) {
@@ -385,11 +445,46 @@ const Home = () => {
               width: '100vw',
               height: '100vh',
               background:
-                'linear-gradient(180deg, rgba(10, 10, 15, 0.9) 0%, rgba(60, 30, 100, 0.3) 40%, rgba(10, 10, 15, 0.8) 100%)',
+                'linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 75%, transparent) 0%, color-mix(in srgb, var(--bg-primary) 25%, transparent) 45%, color-mix(in srgb, var(--bg-primary) 70%, transparent) 100%)',
               zIndex: 1,
               pointerEvents: 'none',
             }}
           />
+        )}
+
+        {isLive && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 16,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              zIndex: 5,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 16px',
+              borderRadius: 24,
+              background: 'rgba(239, 68, 68, 0.92)',
+              color: '#fff',
+              fontWeight: 800,
+              fontSize: 13,
+              letterSpacing: '0.5px',
+              boxShadow: '0 8px 28px rgba(239, 68, 68, 0.45)',
+              pointerEvents: 'none',
+            }}
+          >
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: '#fff',
+                animation: 'liveRingPulse 1s ease-in-out infinite',
+              }}
+            />
+            YOU ARE LIVE
+          </div>
         )}
 
         <div
@@ -471,15 +566,22 @@ const Home = () => {
             />
 
             <section
-              className="home-section live-section"
+              className={`home-section live-section ${isLive ? 'is-broadcasting' : ''}`}
               style={{
-                background: 'var(--bg-card)',
-                backdropFilter: 'blur(20px)',
-                WebkitBackdropFilter: 'blur(20px)',
+                background: isLive
+                  ? 'color-mix(in srgb, var(--bg-card) 55%, transparent)'
+                  : 'var(--bg-card)',
+                backdropFilter: isLive ? 'blur(28px) saturate(1.2)' : 'blur(20px)',
+                WebkitBackdropFilter: isLive ? 'blur(28px) saturate(1.2)' : 'blur(20px)',
                 borderRadius: '24px',
                 padding: '24px',
-                border: '1px solid var(--border-color)',
-                boxShadow: '0 20px 60px var(--shadow-color)',
+                border: isLive
+                  ? '1px solid color-mix(in srgb, #ef4444 40%, var(--border-color))'
+                  : '1px solid var(--border-color)',
+                boxShadow: isLive
+                  ? '0 20px 60px color-mix(in srgb, #ef4444 15%, transparent)'
+                  : '0 20px 60px var(--shadow-color)',
+                transition: 'background 0.35s ease, border 0.35s ease, box-shadow 0.35s ease',
               }}
             >
               <div
@@ -536,7 +638,7 @@ const Home = () => {
                     color: '#4ade80',
                   }}
                 >
-                  {onlineUsers.length} online
+                  {liveUids.length > 0 ? `${liveUids.length} live · ` : ''}{onlineUsers.length} online
                 </span>
               </div>
 
@@ -550,8 +652,119 @@ const Home = () => {
                   letterSpacing: '0.3px',
                 }}
               >
-                Tap any profile to view and chat instantly
+                {liveUids.length > 0
+                  ? 'Tap a live user or press Join Live to watch'
+                  : 'Tap any profile to view and chat instantly'}
               </p>
+
+              {/* Clear JOIN LIVE row – only when someone is broadcasting */}
+              {liveUids.length > 0 && (
+                <div
+                  style={{
+                    marginBottom: 16,
+                    padding: '12px',
+                    borderRadius: 16,
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                  }}
+                >
+                  <div
+                    style={{
+                      fontSize: 12,
+                      fontWeight: 800,
+                      letterSpacing: '1px',
+                      color: '#ef4444',
+                      marginBottom: 10,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: '#ef4444',
+                        boxShadow: '0 0 10px #ef4444',
+                        animation: 'liveRingPulse 1.2s ease-in-out infinite',
+                      }}
+                    />
+                    WATCH LIVE NOW
+                  </div>
+                  <div
+                    style={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: 10,
+                    }}
+                  >
+                    {onlineUsers
+                      .filter((p) => p.isLive)
+                      .map((p) => (
+                        <div
+                          key={`live-row-${p.uid}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 12,
+                            padding: '10px 12px',
+                            borderRadius: 14,
+                            background: 'color-mix(in srgb, var(--bg-card) 80%, transparent)',
+                            border: '1px solid rgba(239, 68, 68, 0.25)',
+                          }}
+                        >
+                          <div
+                            style={{
+                              borderRadius: '50%',
+                              padding: 2,
+                              background: 'linear-gradient(135deg, #ef4444, #f97316)',
+                              lineHeight: 0,
+                              flexShrink: 0,
+                            }}
+                          >
+                            <Avatar src={p.avatar} name={p.name} size={44} />
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div
+                              style={{
+                                fontWeight: 700,
+                                color: 'var(--text-primary)',
+                                fontSize: 15,
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                              }}
+                            >
+                              {p.name}
+                            </div>
+                            <div style={{ fontSize: 12, color: '#ef4444', fontWeight: 600 }}>
+                              ● Broadcasting now
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleJoinLive(p.uid, p.name)}
+                            style={{
+                              flexShrink: 0,
+                              padding: '10px 16px',
+                              border: 'none',
+                              borderRadius: 20,
+                              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
+                              color: '#fff',
+                              fontWeight: 800,
+                              fontSize: 13,
+                              cursor: 'pointer',
+                              boxShadow: '0 4px 16px rgba(239, 68, 68, 0.35)',
+                            }}
+                          >
+                            Join Live
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
 
               <div
                 className="live-users-scroll"
@@ -582,7 +795,14 @@ const Home = () => {
                   onlineUsers.map((profile) => (
                     <div
                       key={profile.uid}
-                      onClick={() => openUserPreview(profile.uid)}
+                      onClick={() => {
+                        if (profile.isLive) {
+                          // Tap live user → join stream directly
+                          handleJoinLive(profile.uid, profile.name);
+                        } else {
+                          openUserPreview(profile.uid);
+                        }
+                      }}
                       style={{
                         display: 'flex',
                         flexDirection: 'column',
@@ -593,52 +813,51 @@ const Home = () => {
                         transition: 'all 0.2s ease',
                         padding: '12px 8px',
                         borderRadius: '16px',
-                        backgroundColor: 'rgba(255,255,255,0.03)',
+                        backgroundColor: profile.isLive
+                          ? 'rgba(239, 68, 68, 0.12)'
+                          : 'rgba(255,255,255,0.03)',
+                        boxShadow: profile.isLive
+                          ? '0 0 0 1px rgba(239, 68, 68, 0.35)'
+                          : 'none',
                       }}
                       className="live-user-card-hover"
                     >
                       <div
                         className="live-avatar"
-                        style={{ position: 'relative', transition: 'transform 0.2s' }}
+                        style={{
+                          position: 'relative',
+                          transition: 'transform 0.2s',
+                          borderRadius: '50%',
+                          padding: profile.isLive ? 3 : 0,
+                          background: profile.isLive
+                            ? 'linear-gradient(135deg, #ef4444, #f97316)'
+                            : 'transparent',
+                          boxShadow: profile.isLive
+                            ? '0 0 18px rgba(239, 68, 68, 0.55)'
+                            : 'none',
+                          animation: profile.isLive ? 'liveRingPulse 1.6s ease-in-out infinite' : 'none',
+                        }}
                       >
                         <Avatar
                           src={profile.avatar}
                           name={profile.name}
                           size={window.innerWidth < 600 ? 64 : 80}
                         />
-                        <span
-                          className="online-indicator"
-                          style={{
-                            position: 'absolute',
-                            bottom: '2px',
-                            right: '2px',
-                            width: '14px',
-                            height: '14px',
-                            background: '#4ade80',
-                            borderRadius: '50%',
-                            border: '3px solid var(--bg-primary)',
-                            boxShadow: '0 0 15px rgba(74, 222, 128, 0.5)',
-                          }}
-                        />
-                        {profile.isLive && (
+                        {!profile.isLive && (
                           <span
+                            className="online-indicator"
                             style={{
                               position: 'absolute',
-                              top: '-4px',
-                              right: '-4px',
-                              background: '#ef4444',
-                              color: '#fff',
-                              fontSize: '9px',
-                              fontWeight: 'bold',
-                              padding: '2px 6px',
-                              borderRadius: '10px',
-                              border: '2px solid var(--bg-primary)',
-                              boxShadow: '0 0 10px rgba(239, 68, 68, 0.4)',
-                              animation: 'pulse-dot 1.5s infinite',
+                              bottom: '2px',
+                              right: '2px',
+                              width: '14px',
+                              height: '14px',
+                              background: '#4ade80',
+                              borderRadius: '50%',
+                              border: '3px solid var(--bg-primary)',
+                              boxShadow: '0 0 15px rgba(74, 222, 128, 0.5)',
                             }}
-                          >
-                            LIVE
-                          </span>
+                          />
                         )}
                       </div>
                       <span
@@ -648,7 +867,7 @@ const Home = () => {
                           fontWeight: 600,
                           color: 'var(--text-primary)',
                           textAlign: 'center',
-                          maxWidth: '70px',
+                          maxWidth: '80px',
                           whiteSpace: 'nowrap',
                           overflow: 'hidden',
                           textOverflow: 'ellipsis',
@@ -656,6 +875,22 @@ const Home = () => {
                       >
                         {profile.name}
                       </span>
+                      {profile.isLive && (
+                        <span
+                          style={{
+                            background: '#ef4444',
+                            color: '#fff',
+                            fontSize: '10px',
+                            fontWeight: 800,
+                            letterSpacing: '0.6px',
+                            padding: '3px 10px',
+                            borderRadius: '10px',
+                            boxShadow: '0 0 12px rgba(239, 68, 68, 0.5)',
+                          }}
+                        >
+                          ● LIVE
+                        </span>
+                      )}
                     </div>
                   ))
                 )}
@@ -716,6 +951,7 @@ const Home = () => {
             onVideoCall={() =>
               startVideoCall(selectedUser.uid, selectedUser.name, selectedUser.avatar)
             }
+            callerIsLive={isLive}
             onJoinLive={() =>
               handleJoinLive(selectedUser.uid, selectedUser.name)
             }
@@ -726,6 +962,7 @@ const Home = () => {
           <LiveViewModal
             broadcasterId={viewingLive.uid}
             broadcasterName={viewingLive.name}
+            broadcasterAvatar={viewingLive.avatar || profiles[viewingLive.uid]?.avatar || ''}
             onClose={closeLiveView}
           />
         )}

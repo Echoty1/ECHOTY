@@ -35,6 +35,8 @@ jobs:
 
       - name: Build React app
         run: npm run build
+        env:
+          REACT_APP_BUILD_VERSION: ${{ github.sha }}
 
       - name: Create capacitor.config.json
         run: |

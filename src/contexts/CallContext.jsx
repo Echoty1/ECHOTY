@@ -123,9 +123,28 @@ export const CallProvider = ({ children }) => {
   }, [incomingCallData, activeVideoCall]);
 
   const startVideoCall = useCallback(
-    (uid, name, avatar) => {
+    async (uid, name, avatar) => {
       if (!user) return alert('You must be logged in to call.');
       if (uid === user.uid) return alert('You cannot call yourself!');
+
+      // Block calls while YOU are live
+      try {
+        const myLive = await get(ref(db, `live/${user.uid}`));
+        if (myLive.exists()) {
+          alert('End your live stream before starting a call.');
+          return;
+        }
+      } catch (_) {}
+
+      // Block calling someone who is live – join their stream instead
+      try {
+        const theirLive = await get(ref(db, `live/${uid}`));
+        if (theirLive.exists()) {
+          alert('This user is live right now. Join their stream from Home instead of calling.');
+          return;
+        }
+      } catch (_) {}
+
       setIncomingCallData(null);
       setActiveVideoCall({
         uid,
