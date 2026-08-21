@@ -17,6 +17,13 @@ const Other = () => {
       description: 'View and edit your profile',
     },
     {
+      id: 'shop',
+      label: 'Shop',
+      icon: 'fa-store',
+      path: '/shop',
+      description: 'Buy skins and premium GIFs',
+    },
+    {
       id: 'settings',
       label: 'Settings',
       icon: 'fa-gear',
@@ -62,7 +69,7 @@ const Other = () => {
       <StructuredData />
       <div className="other-page">
         <div className="other-header">
-          <h2 className="other-title">⚙️ Settings & Legal</h2>
+          <h2 className="other-title">⚙️ More</h2>
           <p className="other-subtitle">Explore additional features and policies</p>
         </div>
         <div className="other-menu">

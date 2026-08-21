@@ -50,6 +50,7 @@ const VideoCallModal = ({
   const unsubsRef = useRef([]);
   const answeredRef = useRef(false);
   const handleAcceptRef = useRef(null);
+  const facingModeRef = useRef('user');
   const myUid = currentUser?.uid;
   const theirUid = targetUser?.uid;
 
@@ -292,6 +293,9 @@ const VideoCallModal = ({
       if (data.status === 'declined') {
         stopRingtone();
         endEverything('declined');
+      } else if (data.status === 'busy') {
+        stopRingtone();
+        setCallStatus('On another call right now');
       } else if (data.status === 'ended') {
         const name =
           data.endedByName ||
@@ -305,6 +309,42 @@ const VideoCallModal = ({
     return () => off(sigRef);
   }, [myUid, theirUid, endEverything, stopRingtone, partnerProfile.name]);
 
+
+  // Caller: detect if recipient goes offline while ringing
+  useEffect(() => {
+    if (!isCaller || !theirUid || connected) return;
+    const pRef = ref(db, `presence/online/${theirUid}`);
+    const unsub = onValue(pRef, (snap) => {
+      const val = snap.val();
+      if (val === false || val === null) {
+        // Only show if we have been ringing for a moment
+        setCallStatus('They appear to be offline');
+      }
+    });
+    return () => off(pRef);
+  }, [isCaller, theirUid, connected]);
+
+  // Caller: detect busy (recipient already in another call)
+  useEffect(() => {
+    if (!isCaller || !theirUid || connected) return;
+    const bRef = ref(db, `busy/${theirUid}`);
+    const unsub = onValue(bRef, (snap) => {
+      if (snap.exists() && snap.val() === true) {
+        setCallStatus('On another call right now');
+      }
+    });
+    return () => off(bRef);
+  }, [isCaller, theirUid, connected]);
+
+  // Mark ourselves busy while this modal is open
+  useEffect(() => {
+    if (!myUid) return;
+    set(ref(db, `busy/${myUid}`), true).catch(() => {});
+    return () => {
+      remove(ref(db, `busy/${myUid}`)).catch(() => {});
+    };
+  }, [myUid]);
+
   // Start media + signaling
   useEffect(() => {
     if (!myPeerId || !myUid || !theirUid) return;
@@ -313,7 +353,7 @@ const VideoCallModal = ({
     const start = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          video: { facingMode: facingModeRef.current || 'user', width: { ideal: 640 }, height: { ideal: 480 } },
           audio: true,
         });
         if (cancelled || !isMounted.current) {
@@ -372,8 +412,13 @@ const VideoCallModal = ({
           await publishStatus('connecting');
         }
       } catch (err) {
-        console.error('[Call] getUserMedia failed:', err);
-        alert('Please allow camera and microphone to make a call.');
+        const msg = String(err?.message || err || '');
+        console.error('[Call] start failed:', err);
+        if (msg.includes('PERMISSION_DENIED') || msg.includes('Permission denied')) {
+          alert('Could not start the call (database permission). Check Firebase rules for calls.');
+        } else {
+          alert('Please allow camera and microphone to make a call.');
+        }
         onClose();
       }
     };
@@ -481,7 +526,8 @@ const VideoCallModal = ({
     if (peerRef.current) {
       try { peerRef.current.destroy(); } catch (_) {}
     }
-    setTimeout(() => cleanupSignals(), 1500);
+    // Clean up immediately so the other side does not see a ghost re-ring
+    cleanupSignals();
     onClose();
   };
 
@@ -508,6 +554,66 @@ const VideoCallModal = ({
     if (!videoOff && localVideoRef.current) {
       localVideoRef.current.srcObject = stream;
       localVideoRef.current.play().catch(() => {});
+    }
+  };
+
+
+  const switchCamera = async () => {
+    const next = facingModeRef.current === 'user' ? 'environment' : 'user';
+    facingModeRef.current = next;
+    setFacingMode(next);
+    try {
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: next }, width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: true,
+      });
+      const oldStream = localStreamRef.current;
+      const newVideoTrack = newStream.getVideoTracks()[0];
+      if (!newVideoTrack) return;
+
+      // Keep mute / video-off state
+      const oldAudio = oldStream?.getAudioTracks()[0];
+      const newAudio = newStream.getAudioTracks()[0];
+      if (newAudio && oldAudio) newAudio.enabled = oldAudio.enabled;
+      if (isVideoOff) newVideoTrack.enabled = false;
+
+      // Replace track on PeerJS media connection if possible
+      const call = callRef.current;
+      if (call && call.peerConnection) {
+        const sender = call.peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
+        if (sender) {
+          await sender.replaceTrack(newVideoTrack);
+        }
+      }
+
+      // Stop old video track only
+      if (oldStream) {
+        oldStream.getVideoTracks().forEach((t) => t.stop());
+        // Keep old stream, replace video track in local stream
+        const cloned = new MediaStream([
+          newVideoTrack,
+          ...(oldStream.getAudioTracks().length
+            ? oldStream.getAudioTracks()
+            : newStream.getAudioTracks()),
+        ]);
+        localStreamRef.current = cloned;
+        setLocalStream(cloned);
+        if (localVideoRef.current) {
+          localVideoRef.current.srcObject = cloned;
+        }
+      } else {
+        localStreamRef.current = newStream;
+        setLocalStream(newStream);
+      }
+
+      // Stop unused audio from newStream if we kept old audio
+      if (oldStream?.getAudioTracks().length) {
+        newStream.getAudioTracks().forEach((t) => t.stop());
+      }
+    } catch (err) {
+      console.warn('[Call] switchCamera failed', err);
+      facingModeRef.current = facingModeRef.current === 'user' ? 'environment' : 'user';
+      setFacingMode(facingModeRef.current);
     }
   };
 
@@ -591,7 +697,7 @@ const VideoCallModal = ({
             <div className="echo-call-name">{partnerProfile.name}</div>
             <div className="echo-call-status">
               <span className={`echo-call-status-dot ${connected ? 'live' : ''}`} />
-              {connected && remoteVideoOff ? 'Camera off' : callStatus}
+              {connected ? 'Connected' : callStatus}
             </div>
             {!connected && (
               <div className="echo-call-sub">
@@ -648,6 +754,13 @@ const VideoCallModal = ({
           title={isMuted ? 'Unmute' : 'Mute'}
         >
           <i className={`fas ${isMuted ? 'fa-microphone-slash' : 'fa-microphone'}`} />
+        </button>
+        <button
+          className="echo-call-btn"
+          onClick={switchCamera}
+          title="Flip camera"
+        >
+          <i className="fas fa-sync-alt" />
         </button>
         <button
           className={`echo-call-btn ${isVideoOff ? 'video-off' : ''}`}

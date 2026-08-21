@@ -25,6 +25,13 @@ export const CallProvider = ({ children }) => {
   const [incomingCallData, setIncomingCallData] = useState(null);
   const bannerAudioRef = useRef(null);
 
+  // Track recently handled calls so ending a call does not re-show the banner
+  const recentCallsRef = useRef(new Set());
+  const activeCallRef = useRef(null);
+  useEffect(() => {
+    activeCallRef.current = activeVideoCall;
+  }, [activeVideoCall]);
+
   // ─── Incoming calls (global – works on every page) ─────────────
   useEffect(() => {
     if (!user?.uid) return;
@@ -36,18 +43,33 @@ export const CallProvider = ({ children }) => {
 
       const callData = snapshot.val();
       if (!callData || typeof callData !== 'object') return;
-      if (activeVideoCall) return;
 
-      // Real invite has callerId or is under calls/{me}/{callerUid}
       const callerUid = callData.callerId || snapshot.key;
       if (!callerUid || callerUid === user.uid || callerUid === 'signals') return;
-      // Skip non-ringing status updates
+
+      // Only brand-new ringing invites
       if (callData.status && callData.status !== 'ringing') return;
+      const ts = callData.timestamp || callData.updatedAt || 0;
+      if (ts && Date.now() - ts > 90_000) return; // older than 90s – ignore
+
+      // Ignore if we already handled this caller recently (ghost re-ring after hangup)
+      if (recentCallsRef.current.has(callerUid)) return;
+
+      // Already in a call → respond busy, do not show banner
+      if (activeCallRef.current) {
+        const payload = { status: 'busy', updatedAt: Date.now(), by: user.uid };
+        update(ref(db, `calls/${user.uid}/${callerUid}`), payload).catch(() => {});
+        update(ref(db, `calls/${callerUid}/signals/${user.uid}`), payload).catch(() => {});
+        return;
+      }
+
+      recentCallsRef.current.add(callerUid);
+      // Allow this caller to ring again after 2 minutes
+      setTimeout(() => recentCallsRef.current.delete(callerUid), 120_000);
 
       let name = (callData.name || '').trim();
       let avatar = callData.avatar || '';
 
-      // Always load from profiles so banner is never "Someone"
       try {
         const snap = await get(ref(db, `profiles/${callerUid}`));
         if (snap.exists()) {
@@ -85,7 +107,8 @@ export const CallProvider = ({ children }) => {
       off(callsRef);
       unsub();
     };
-  }, [user?.uid, activeVideoCall, profiles, fetchProfile]);
+    // Do NOT re-subscribe when activeVideoCall changes (that re-fires onChildAdded)
+  }, [user?.uid, profiles, fetchProfile]);
 
   // Enrich banner when profile loads
   useEffect(() => {
@@ -193,8 +216,13 @@ export const CallProvider = ({ children }) => {
   }, [incomingCallData, user]);
 
   const closeVideoCall = useCallback(() => {
+    if (activeVideoCall?.uid) {
+      recentCallsRef.current.add(activeVideoCall.uid);
+      setTimeout(() => recentCallsRef.current.delete(activeVideoCall.uid), 120_000);
+    }
+    setIncomingCallData(null);
     setActiveVideoCall(null);
-  }, []);
+  }, [activeVideoCall]);
 
   const value = {
     activeVideoCall,

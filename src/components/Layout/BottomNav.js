@@ -27,22 +27,30 @@ const BottomNav = () => {
 
   const isSupport = user?.uid === SUPPORT_UID;
 
+  // ─── Define tabs based on user role ──────────────────────────
   const getTabs = () => {
+    // Common tabs for all users (Home, Chats, Communities, Other)
     const commonTabs = [
+      { to: '/', label: 'Home', icon: 'fa-house' },
       { to: '/chats', label: 'Chats', icon: 'fa-comment-dots' },
       { to: '/communities', label: 'Communities', icon: 'fa-users' },
-      { to: '/shop', label: 'Shop', icon: 'fa-store' },
       { to: '/other', label: 'Other', icon: 'fa-ellipsis-h' },
     ];
+
     if (isSupport) {
-      return [{ to: '/control', label: 'Control', icon: 'fa-sliders-h' }, ...commonTabs];
-    } else {
-      return [{ to: '/', label: 'Home', icon: 'fa-house' }, ...commonTabs];
+      // Admin: insert Control after Chats
+      const controlTab = { to: '/control', label: 'Control', icon: 'fa-sliders-h' };
+      // Insert at index 2 (after Home and Chats)
+      return [commonTabs[0], commonTabs[1], controlTab, commonTabs[2], commonTabs[3]];
     }
+
+    // Non-admin: Home, Chats, Communities, Other
+    return commonTabs;
   };
 
   const tabs = getTabs();
 
+  // ─── Real‑time unread contacts count ──────────────────────────
   useEffect(() => {
     if (!user?.uid) {
       setUnreadChatsCount(0);
@@ -69,6 +77,7 @@ const BottomNav = () => {
     return () => unsubscribe();
   }, [user?.uid]);
 
+  // ─── Dragging handlers ──────────────────────────────────────
   const handleStart = (e) => {
     if (isMinimized) return;
     const touch = e.touches ? e.touches[0] : e;
@@ -148,6 +157,7 @@ const BottomNav = () => {
       onMouseDown={handleStart}
       onTouchStart={handleStart}
     >
+      {/* ─── Toggle Button ────────────────────────────────────── */}
       <button
         onClick={toggleMinimize}
         style={{
@@ -162,13 +172,13 @@ const BottomNav = () => {
           cursor: 'pointer',
           padding: '2px 8px',
           zIndex: 10,
-          transition: 'transform 0.3s ease',
         }}
         aria-label={isMinimized ? 'Expand navigation' : 'Minimize navigation'}
       >
         <i className={`fas fa-chevron-${isMinimized ? 'up' : 'down'}`} />
       </button>
 
+      {/* ─── Nav Links ────────────────────────────────────────── */}
       <div
         style={{
           display: 'flex',
