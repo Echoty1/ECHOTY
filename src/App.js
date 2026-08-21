@@ -7,6 +7,7 @@ import { AuthProvider } from './contexts/AuthContext';
 import { ProfileProvider, useProfile } from './contexts/ProfileContext';
 import { PresenceProvider } from './contexts/PresenceContext';
 import { CacheProvider } from './contexts/CacheContext';
+import { CallProvider } from './contexts/CallContext';
 import { ThemeProvider } from './contexts/ThemeContext'; // ✅ ADD THIS
 import Home from './components/pages/Home/Home';
 import Chats from './components/pages/Chats/Chats';
@@ -531,7 +532,9 @@ function App() {
           <PresenceProvider>
             <ProfileProvider>
               <CacheProvider>
-                <AppContent />
+                <CallProvider>
+                  <AppContent />
+                </CallProvider>
               </CacheProvider>
             </ProfileProvider>
           </PresenceProvider>

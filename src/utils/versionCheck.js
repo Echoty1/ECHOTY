@@ -3,29 +3,27 @@
  * Checks for a new version of the app and performs a hard refresh if one is found.
  * Uses localStorage to track the current version and a timestamp to avoid excessive checks.
  *
- * On every page load, it fetches the latest version from Firebase and compares it
+ * On every page load, it fetches the latest versionName from Firebase and compares it
  * with the stored version. If they differ, it stores the new version and reloads.
  */
 
 const VERSION_STORAGE_KEY = 'echo_app_version';
 const LAST_CHECK_KEY = 'echo_version_last_check';
-const CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes – avoid hammering Firebase
+const CHECK_INTERVAL = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Fetches the latest version from Firebase.
- * Uses the REST API for simplicity (no Firebase SDK dependency here).
- * Handles both string and number values for `latest`.
+ * Fetches the versionName from Firebase (appConfig/version/versionName).
+ * Uses the REST API for simplicity.
  */
-async function fetchLatestVersion() {
+async function fetchVersionName() {
   try {
     const response = await fetch(
-      'https://echoty-fa3ca-default-rtdb.firebaseio.com/appConfig/version.json'
+      'https://echoty-fa3ca-default-rtdb.firebaseio.com/appConfig/version/versionName.json'
     );
     if (!response.ok) throw new Error(`HTTP ${response.status}`);
     const data = await response.json();
-    const latest = data?.latest;
-    // ─── Convert to string if number (or any non-string) ──────
-    return latest !== undefined && latest !== null ? String(latest) : null;
+    // versionName is stored as a string like "1.1", "1.2", etc.
+    return data !== null && data !== undefined ? String(data) : null;
   } catch (err) {
     console.warn('Version check failed:', err.message);
     return null;
@@ -35,11 +33,11 @@ async function fetchLatestVersion() {
 /**
  * Main check function.
  * - Reads stored version and last check timestamp.
- * - If enough time has passed since last check, fetches remote version.
+ * - If enough time has passed since last check, fetches remote versionName.
  * - If remote version differs from stored, stores the new version and reloads.
  */
 export async function checkVersionAndReload() {
-  // Skip if we're in development (optional – you can remove this line)
+  // Skip in development
   if (process.env.NODE_ENV === 'development') {
     console.log('🔧 Version check skipped in development');
     return;
@@ -49,15 +47,12 @@ export async function checkVersionAndReload() {
   const lastCheck = localStorage.getItem(LAST_CHECK_KEY);
   const now = Date.now();
   if (lastCheck && now - parseInt(lastCheck, 10) < CHECK_INTERVAL) {
-    // Not enough time passed – skip
     return;
   }
-
-  // Update last check timestamp
   localStorage.setItem(LAST_CHECK_KEY, String(now));
 
   const storedVersion = localStorage.getItem(VERSION_STORAGE_KEY);
-  const remoteVersion = await fetchLatestVersion();
+  const remoteVersion = await fetchVersionName();
 
   if (!remoteVersion) {
     // No remote version – maybe network issue, skip
@@ -66,24 +61,18 @@ export async function checkVersionAndReload() {
 
   if (storedVersion !== remoteVersion) {
     console.log(`🔄 New version detected: ${remoteVersion} (was ${storedVersion || 'none'})`);
-    // Store the new version to prevent loops
     localStorage.setItem(VERSION_STORAGE_KEY, remoteVersion);
-    // Also store a flag to indicate we're reloading
     sessionStorage.setItem('echo_reloading', 'true');
-    // Perform a hard refresh (bypass cache)
+    // Hard refresh (bypass cache)
     window.location.reload(true);
   } else {
-    // Versions match – nothing to do
     console.log(`✅ App is up‑to‑date (v${remoteVersion})`);
   }
 }
 
-// ─── Auto‑run on module import ──────────────────────────────
-// If you import this file, it will run immediately.
-// To avoid running on every hot‑reload in dev, we check that we're not in a reload loop.
+// Auto‑run on module import
 if (!sessionStorage.getItem('echo_reloading')) {
   checkVersionAndReload();
 } else {
-  // We just reloaded – clear the flag so future checks work normally.
   sessionStorage.removeItem('echo_reloading');
 }
