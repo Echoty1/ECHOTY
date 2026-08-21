@@ -8,7 +8,6 @@ const NetworkStatus = () => {
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // ─── Browser online/offline events ──────────────────────
     const handleOnline = () => {
       setStatus('online');
       setIsVisible(false);
@@ -21,7 +20,6 @@ const NetworkStatus = () => {
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
 
-    // ─── Firebase connection state ──────────────────────────
     const connectedRef = ref(db, '.info/connected');
     const unsubscribe = onValue(connectedRef, (snap) => {
       const isConnected = snap.val() === true;
@@ -34,7 +32,6 @@ const NetworkStatus = () => {
       }
     });
 
-    // ─── Check initial state ──────────────────────────────────
     if (!navigator.onLine) {
       setStatus('offline');
       setIsVisible(true);
@@ -70,71 +67,97 @@ const NetworkStatus = () => {
   const info = statusMessages[status] || statusMessages.connecting;
 
   return (
-    <div
-      style={{
-        position: 'fixed',
-        top: '56px',
-        left: 0,
-        right: 0,
-        zIndex: 9999,
-        background: info.color,
-        color: '#fff',
-        padding: '8px 16px',
-        textAlign: 'center',
-        fontSize: '13px',
-        fontWeight: 500,
-        animation: 'slideDown 0.3s ease-out',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: '8px',
-        flexWrap: 'wrap',
-      }}
-    >
-      <span style={{ fontSize: '18px' }}>{info.icon}</span>
-      <span>{info.message}</span>
+    <div className="network-toast" style={{
+      position: 'fixed',
+      top: '60px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: 9999,
+      background: info.color,
+      color: '#fff',
+      padding: '12px 20px',
+      borderRadius: '12px',
+      boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
+      display: 'flex',
+      alignItems: 'center',
+      gap: '12px',
+      fontSize: '14px',
+      fontWeight: 500,
+      width: 'auto',
+      maxWidth: '90%',
+      backdropFilter: 'blur(4px)',
+      flexWrap: 'wrap',
+      justifyContent: 'center',
+      textAlign: 'center',
+      lineHeight: '1.4',
+      animation: 'slideDown 0.3s ease-out',
+    }}>
+      <span style={{ fontSize: '20px', flexShrink: 0 }}>{info.icon}</span>
+      <span style={{ flex: 1, minWidth: '120px' }}>{info.message}</span>
       {status === 'connecting' && (
-        <span
-          style={{
-            display: 'inline-block',
-            width: '16px',
-            height: '16px',
-            border: '2px solid rgba(255,255,255,0.3)',
-            borderTopColor: '#fff',
-            borderRadius: '50%',
-            animation: 'spin 0.8s linear infinite',
-            marginLeft: '4px',
-          }}
-        />
+        <span style={{
+          display: 'inline-block',
+          width: '18px',
+          height: '18px',
+          border: '2px solid rgba(255,255,255,0.3)',
+          borderTopColor: '#fff',
+          borderRadius: '50%',
+          animation: 'spin 0.8s linear infinite',
+          flexShrink: 0,
+        }} />
       )}
-      {/* ✅ Retry button – only for offline state */}
       {status === 'offline' && (
         <button
           onClick={() => window.location.reload()}
           style={{
-            background: 'rgba(255,255,255,0.15)',
+            background: 'rgba(255,255,255,0.2)',
             border: '1px solid rgba(255,255,255,0.3)',
             borderRadius: '20px',
-            padding: '4px 16px',
+            padding: '6px 18px',
             color: '#fff',
             cursor: 'pointer',
-            fontSize: '12px',
+            fontSize: '13px',
             fontWeight: 600,
             transition: 'background 0.2s',
+            pointerEvents: 'auto',
+            whiteSpace: 'nowrap',
           }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.25)')}
-          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.15)')}
+          onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.3)')}
+          onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.2)')}
         >
           Retry
         </button>
       )}
       <style>{`
         @keyframes slideDown {
-          from { transform: translateY(-100%); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
+          from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+          to { opacity: 1; transform: translateX(-50%) translateY(0); }
         }
         @keyframes spin {
           to { transform: rotate(360deg); }
+        }
+        /* ─── Mobile tweaks ──────────────────────────────────── */
+        @media (max-width: 480px) {
+          .network-toast {
+            top: 56px;
+            padding: 10px 14px;
+            font-size: 13px;
+            max-width: 95%;
+            gap: 8px;
+            flex-wrap: wrap;
+          }
+          .network-toast span:first-of-type {
+            font-size: 18px;
+          }
+          .network-toast span:last-of-type {
+            min-width: 0;
+            flex: 1 1 100%;
+            text-align: center;
+          }
+          .network-toast button {
+            font-size: 12px;
+            padding: 4px 14px;
+          }
         }
       `}</style>
     </div>

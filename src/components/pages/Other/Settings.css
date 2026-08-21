@@ -41,7 +41,7 @@
 
 .settings-header {
   position: sticky;
-  top: 60px;
+  top: 0px;
   z-index: 10;
   background: var(--bg-primary);
   padding: 6px 12px;

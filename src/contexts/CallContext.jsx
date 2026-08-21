@@ -3,7 +3,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { useAuth } from '../hooks/useAuth';
 import { useProfile } from './ProfileContext';
 import { db } from '../services/firebase';
-import { ref, onChildAdded, off, update, remove, onValue, get } from 'firebase/database';
+import { ref, onChildAdded, onChildChanged, off, update, remove, get, onValue } from 'firebase/database';
 import Avatar from '../components/common/Avatar';
 import VideoCallModal from '../components/VideoChat/VideoCallModal';
 import ringtoneSound from '../utils/assets/ringtone.mp3';
@@ -13,7 +13,20 @@ const CallContext = createContext(null);
 
 export const useCall = () => {
   const ctx = useContext(CallContext);
-  if (!ctx) throw new Error('useCall must be used within CallProvider');
+  if (!ctx) {
+    console.error(
+      '[Call] useCall used outside CallProvider. Wrap App with <CallProvider> in App.js'
+    );
+    return {
+      activeVideoCall: null,
+      incomingCallData: null,
+      startVideoCall: () =>
+        alert('Call system is not ready. Please refresh the page.'),
+      acceptIncomingCall: () => {},
+      declineIncomingCall: () => {},
+      closeVideoCall: () => {},
+    };
+  }
   return ctx;
 };
 
@@ -26,11 +39,12 @@ export const CallProvider = ({ children }) => {
 
   const bannerAudioRef = useRef(null);
   const audioUnlockedRef = useRef(false);
-  const recentCallsRef = useRef(new Set());
+  const recentCallsRef = useRef(new Map()); // uid -> timestamp when we finished with them
   const activeCallRef = useRef(null);
   const profilesRef = useRef(profiles);
   const fetchProfileRef = useRef(fetchProfile);
   const ringingUidRef = useRef(null);
+  const handledInviteAtRef = useRef(new Map()); // callerUid -> timestamp of invite we already showed
 
   useEffect(() => {
     activeCallRef.current = activeVideoCall;
@@ -44,7 +58,7 @@ export const CallProvider = ({ children }) => {
     fetchProfileRef.current = fetchProfile;
   }, [fetchProfile]);
 
-  // Unlock audio on first gesture (autoplay policy)
+  // Unlock audio on first user gesture
   useEffect(() => {
     const unlock = () => {
       if (audioUnlockedRef.current) return;
@@ -53,7 +67,7 @@ export const CallProvider = ({ children }) => {
           bannerAudioRef.current = new Audio(ringtoneSound);
           bannerAudioRef.current.loop = true;
           bannerAudioRef.current.preload = 'auto';
-          bannerAudioRef.current.volume = 0.7;
+          bannerAudioRef.current.volume = 0.85;
         }
         const a = bannerAudioRef.current;
         a.muted = true;
@@ -69,9 +83,9 @@ export const CallProvider = ({ children }) => {
         }
       } catch (_) {}
     };
-    document.addEventListener('click', unlock, { once: true, capture: true });
-    document.addEventListener('touchstart', unlock, { once: true, capture: true });
-    document.addEventListener('keydown', unlock, { once: true, capture: true });
+    document.addEventListener('click', unlock, { capture: true });
+    document.addEventListener('touchstart', unlock, { capture: true });
+    document.addEventListener('keydown', unlock, { capture: true });
     return () => {
       document.removeEventListener('click', unlock, { capture: true });
       document.removeEventListener('touchstart', unlock, { capture: true });
@@ -94,17 +108,17 @@ export const CallProvider = ({ children }) => {
         bannerAudioRef.current = new Audio(ringtoneSound);
         bannerAudioRef.current.loop = true;
         bannerAudioRef.current.preload = 'auto';
-        bannerAudioRef.current.volume = 0.7;
+        bannerAudioRef.current.volume = 0.85;
       }
       const a = bannerAudioRef.current;
       a.loop = true;
-      a.volume = 0.7;
+      a.volume = 0.85;
       a.muted = false;
       a.currentTime = 0;
       const p = a.play();
       if (p && typeof p.catch === 'function') {
         p.catch((err) => {
-          console.warn('[Call] Ringtone blocked by browser:', err?.message || err);
+          console.warn('[Call] Ringtone blocked:', err?.message || err);
         });
       }
     } catch (e) {
@@ -126,35 +140,34 @@ export const CallProvider = ({ children }) => {
     return () => stopBannerRingtone();
   }, [incomingCallData, activeVideoCall, playBannerRingtone, stopBannerRingtone]);
 
-  // Stable listener – no profiles in deps (that was killing the ring)
-  useEffect(() => {
-    if (!user?.uid) return;
+  // Core: process a ringing invite from any source
+  const processIncomingInvite = useCallback(
+    async (callerUid, callData) => {
+      if (!user?.uid || !callerUid || callerUid === user.uid || callerUid === 'signals') return;
 
-    const callsRef = ref(db, 'calls/' + user.uid);
-    console.log('[Call] Listening for incoming on calls/' + user.uid);
+      const status = (callData && callData.status) || 'ringing';
+      if (status !== 'ringing') return;
 
-    const unsub = onChildAdded(callsRef, async (snapshot) => {
-      if (snapshot.key === 'signals') return;
+      const ts = callData.timestamp || callData.updatedAt || Date.now();
+      // Ignore invites older than 2 minutes
+      if (Date.now() - ts > 120_000) return;
 
-      const callData = snapshot.val();
-      if (!callData || typeof callData !== 'object') return;
+      // Same invite (same timestamp) already shown
+      const prevTs = handledInviteAtRef.current.get(callerUid);
+      if (prevTs && prevTs === ts) return;
 
-      const callerUid = callData.callerId || snapshot.key;
-      if (!callerUid || callerUid === user.uid || callerUid === 'signals') return;
-
-      const status = callData.status || 'ringing';
-      if (status !== 'ringing') {
-        console.log('[Call] Ignore non-ringing:', status);
-        return;
-      }
-
-      const ts = callData.timestamp || callData.updatedAt || 0;
-      if (ts && Date.now() - ts > 120_000) {
-        console.log('[Call] Ignore stale invite');
-        return;
-      }
-
+      // Already showing this caller on banner
       if (ringingUidRef.current === callerUid) return;
+
+      // Ghost guard: only block for 20s after we ended/declined with them
+      const recentAt = recentCallsRef.current.get(callerUid);
+      if (recentAt && Date.now() - recentAt < 20_000) {
+        // Allow if this invite is NEWER than when we closed
+        if (ts <= recentAt) {
+          console.log('[Call] Ghost guard skip', callerUid);
+          return;
+        }
+      }
 
       if (activeCallRef.current) {
         console.log('[Call] Busy – reject', callerUid);
@@ -164,12 +177,8 @@ export const CallProvider = ({ children }) => {
         return;
       }
 
-      if (recentCallsRef.current.has(callerUid)) {
-        console.log('[Call] Ghost guard – skip', callerUid);
-        return;
-      }
-
-      console.log('[Call] Incoming ring from', callerUid);
+      console.log('[Call] Incoming ring from', callerUid, callData);
+      handledInviteAtRef.current.set(callerUid, ts);
       ringingUidRef.current = callerUid;
 
       let name = (callData.name || '').trim();
@@ -186,9 +195,7 @@ export const CallProvider = ({ children }) => {
           if (p.name) name = p.name;
           if (p.avatar) avatar = p.avatar;
         }
-      } catch (e) {
-        console.warn('[Call] profile fetch failed', e);
-      }
+      } catch (_) {}
 
       if (!name) name = 'Someone';
       fetchProfileRef.current?.(callerUid);
@@ -202,16 +209,43 @@ export const CallProvider = ({ children }) => {
         } catch (_) {}
       }
 
-      setIncomingCallData({ uid: callerUid, name, avatar });
+      setIncomingCallData({
+        uid: callerUid,
+        name,
+        avatar,
+        callerPeerId: callData.callerPeerId || null,
+      });
       playBannerRingtone();
-    });
+    },
+    [user?.uid, playBannerRingtone]
+  );
+
+  // Listen with onChildAdded + onChildChanged so RE-calls on same path still ring
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    const callsRef = ref(db, 'calls/' + user.uid);
+    console.log('[Call] Listening on calls/' + user.uid);
+
+    const handleSnap = (snapshot) => {
+      if (snapshot.key === 'signals') return;
+      const callData = snapshot.val();
+      if (!callData || typeof callData !== 'object') return;
+      const callerUid = callData.callerId || snapshot.key;
+      processIncomingInvite(callerUid, callData);
+    };
+
+    const unsubAdd = onChildAdded(callsRef, handleSnap);
+    const unsubChange = onChildChanged(callsRef, handleSnap);
 
     return () => {
       off(callsRef);
-      unsub();
+      unsubAdd();
+      unsubChange();
     };
-  }, [user?.uid, playBannerRingtone]);
+  }, [user?.uid, processIncomingInvite]);
 
+  // Enrich banner when profile loads
   useEffect(() => {
     if (!incomingCallData?.uid) return;
     const p = profiles[incomingCallData.uid];
@@ -241,7 +275,7 @@ export const CallProvider = ({ children }) => {
       try {
         const theirLive = await get(ref(db, `live/${uid}`));
         if (theirLive.exists()) {
-          alert('This user is live right now. Join their stream from Home instead of calling.');
+          alert('This user is live. Join their stream from Home instead.');
           return;
         }
       } catch (_) {}
@@ -262,10 +296,16 @@ export const CallProvider = ({ children }) => {
   const acceptIncomingCall = useCallback(() => {
     if (!incomingCallData) return;
     stopBannerRingtone();
-    const { uid, name, avatar } = incomingCallData;
+    const { uid, name, avatar, callerPeerId } = incomingCallData;
     ringingUidRef.current = null;
     setIncomingCallData(null);
-    setActiveVideoCall({ uid, name, avatar, role: 'receiver' });
+    setActiveVideoCall({
+      uid,
+      name,
+      avatar,
+      role: 'receiver',
+      callerPeerId: callerPeerId || null,
+    });
   }, [incomingCallData, stopBannerRingtone]);
 
   const declineIncomingCall = useCallback(() => {
@@ -279,23 +319,20 @@ export const CallProvider = ({ children }) => {
         updatedAt: Date.now(),
         by: recipientUid,
       };
-
-      console.log('[Call] Declining – notifying caller', callerUid);
+      console.log('[Call] Declining – notify', callerUid);
       Promise.all([
         update(ref(db, invitePath), payload),
         update(ref(db, `calls/${callerUid}/signals/${recipientUid}`), payload),
         update(ref(db, `calls/${recipientUid}/signals/${callerUid}`), payload),
       ]).catch((e) => console.warn('[Call] decline write failed', e));
 
-      // Keep nodes so caller can read declined
       setTimeout(() => {
         remove(ref(db, invitePath)).catch(() => {});
         remove(ref(db, `calls/${callerUid}/signals/${recipientUid}`)).catch(() => {});
         remove(ref(db, `calls/${recipientUid}/signals/${callerUid}`)).catch(() => {});
       }, 5000);
 
-      recentCallsRef.current.add(callerUid);
-      setTimeout(() => recentCallsRef.current.delete(callerUid), 30_000);
+      recentCallsRef.current.set(callerUid, Date.now());
     }
     ringingUidRef.current = null;
     setIncomingCallData(null);
@@ -304,8 +341,7 @@ export const CallProvider = ({ children }) => {
   const closeVideoCall = useCallback(() => {
     stopBannerRingtone();
     if (activeVideoCall?.uid) {
-      recentCallsRef.current.add(activeVideoCall.uid);
-      setTimeout(() => recentCallsRef.current.delete(activeVideoCall.uid), 30_000);
+      recentCallsRef.current.set(activeVideoCall.uid, Date.now());
     }
     ringingUidRef.current = null;
     setIncomingCallData(null);
@@ -369,6 +405,7 @@ export const CallProvider = ({ children }) => {
             uid: activeVideoCall.uid,
             name: activeVideoCall.name,
             avatar: activeVideoCall.avatar,
+            callerPeerId: activeVideoCall.callerPeerId || null,
           }}
           currentUser={{
             uid: user.uid,

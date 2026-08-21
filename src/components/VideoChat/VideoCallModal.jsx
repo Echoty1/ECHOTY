@@ -1,5 +1,4 @@
 // src/components/VideoChat/VideoCallModal.jsx
-// ECHO video call – dual-path signaling (both users can read under their own calls/{uid}/…)
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import Peer from 'peerjs';
 import { db } from '../../services/firebase';
@@ -47,15 +46,16 @@ const VideoCallModal = ({
   const audioRef = useRef(null);
   const timerRef = useRef(null);
   const isMounted = useRef(true);
-  const unsubsRef = useRef([]);
   const answeredRef = useRef(false);
   const handleAcceptRef = useRef(null);
   const facingModeRef = useRef('user');
+  const connectedRef = useRef(false);
+
   const myUid = currentUser?.uid;
   const theirUid = targetUser?.uid;
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
-  // invite: calls/{recipient}/{caller} – banner for recipient
-  // signals: calls/{readerUid}/signals/{otherUid} – each user reads under their own uid
+  // Invite lives under recipient: calls/{recipient}/{caller}
   const invitePath =
     myUid && theirUid
       ? isCaller
@@ -63,43 +63,66 @@ const VideoCallModal = ({
         : `calls/${myUid}/${theirUid}`
       : null;
 
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-
-  // Partner profile from DB
+  // Profiles
   useEffect(() => {
     if (!theirUid) return;
-    const pRef = ref(db, `profiles/${theirUid}`);
-    onValue(pRef, (snap) => {
-      if (!snap.exists()) return;
-      const d = snap.val();
-      setPartnerProfile({
-        name: d.name || targetUser?.name || 'User',
-        avatar: d.avatar || '',
-      });
+    const r = ref(db, `profiles/${theirUid}`);
+    const unsub = onValue(r, (snap) => {
+      if (snap.exists()) {
+        const d = snap.val() || {};
+        setPartnerProfile({
+          name: d.name || targetUser?.name || 'User',
+          avatar: d.avatar || targetUser?.avatar || '',
+        });
+      }
     });
-    return () => off(pRef);
-  }, [theirUid, targetUser?.name]);
+    return () => off(r);
+  }, [theirUid, targetUser?.name, targetUser?.avatar]);
 
-  // My profile from DB (for PiP when camera off)
   useEffect(() => {
     if (!myUid) return;
-    const pRef = ref(db, `profiles/${myUid}`);
-    onValue(pRef, (snap) => {
-      if (!snap.exists()) return;
-      const d = snap.val();
-      setMyProfile({
-        name: d.name || currentUser?.name || 'You',
-        avatar: d.avatar || currentUser?.avatar || '',
-      });
+    const r = ref(db, `profiles/${myUid}`);
+    const unsub = onValue(r, (snap) => {
+      if (snap.exists()) {
+        const d = snap.val() || {};
+        setMyProfile({
+          name: d.name || currentUser?.name || 'You',
+          avatar: d.avatar || currentUser?.avatar || '',
+        });
+      }
     });
-    return () => off(pRef);
+    return () => off(r);
   }, [myUid, currentUser?.name, currentUser?.avatar]);
+
+  useEffect(() => {
+    if (localVideoRef.current && localStream) {
+      localVideoRef.current.srcObject = localStream;
+    }
+  }, [localStream]);
+
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+    }
+  }, [remoteStream]);
 
   const stopRingtone = useCallback(() => {
     if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
+      try {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      } catch (_) {}
     }
+  }, []);
+
+  const playRingtone = useCallback(() => {
+    if (!audioRef.current) return;
+    try {
+      audioRef.current.loop = true;
+      audioRef.current.volume = 0.85;
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(() => {});
+    } catch (_) {}
   }, []);
 
   const cleanupSignals = useCallback(() => {
@@ -122,7 +145,6 @@ const VideoCallModal = ({
         if (isCaller) {
           setCallDeclined(true);
           setCallStatus('Declined');
-          // Delay cleanup so declined status stays readable; then close
           setTimeout(() => {
             cleanupSignals();
             if (isMounted.current) onClose();
@@ -145,37 +167,20 @@ const VideoCallModal = ({
     [onClose, stopRingtone, isCaller, cleanupSignals, partnerProfile.name]
   );
 
-  useEffect(() => {
-    if (remoteStream && remoteVideoRef.current) {
-      remoteVideoRef.current.srcObject = remoteStream;
-      remoteVideoRef.current.play().catch(() => {});
-    }
-  }, [remoteStream]);
-
-  useEffect(() => {
-    if (localStream && localVideoRef.current) {
-      localVideoRef.current.srcObject = localStream;
-    }
-  }, [localStream]);
-
-  useEffect(() => {
-    localStreamRef.current = localStream;
-  }, [localStream]);
-
-  // Write MY media where THEY can read it: calls/{theirUid}/signals/{myUid}/media
   const publishMediaState = useCallback(
     (muted, videoOff) => {
       if (!myUid || !theirUid) return;
-      set(ref(db, `calls/${theirUid}/signals/${myUid}/media`), {
+      const payload = {
         muted: !!muted,
         videoOff: !!videoOff,
         updatedAt: Date.now(),
-      }).catch((e) => console.warn('[Call] media publish failed', e));
+      };
+      update(ref(db, `calls/${myUid}/signals/${theirUid}/media`), payload).catch(() => {});
+      update(ref(db, `calls/${theirUid}/signals/${myUid}/media`), payload).catch(() => {});
     },
     [myUid, theirUid]
   );
 
-  // Status on both signal nodes so either side can read under their own uid
   const publishStatus = useCallback(
     async (status, extra = {}) => {
       if (!myUid || !theirUid) return;
@@ -194,6 +199,7 @@ const VideoCallModal = ({
         console.log('[Call] Remote stream received');
         setRemoteStream(stream);
         setConnected(true);
+        connectedRef.current = true;
         setCallStatus('Connected');
         stopRingtone();
         if (timerRef.current) clearInterval(timerRef.current);
@@ -202,13 +208,16 @@ const VideoCallModal = ({
           seconds += 1;
           if (isMounted.current) setCallDuration(seconds);
         }, 1000);
+        publishStatus('connected');
       });
       call.on('close', () => {
-        if (isMounted.current) endEverything('ended', partnerProfile.name);
+        if (isMounted.current && connectedRef.current) {
+          endEverything('ended', partnerProfile.name);
+        }
       });
       call.on('error', (err) => console.error('[Call] MediaConnection error:', err));
     },
-    [endEverything, stopRingtone, partnerProfile.name]
+    [endEverything, stopRingtone, partnerProfile.name, publishStatus]
   );
 
   // Peer setup
@@ -216,6 +225,7 @@ const VideoCallModal = ({
     if (!myUid) return;
     isMounted.current = true;
     answeredRef.current = false;
+    connectedRef.current = false;
 
     const peer = new Peer(null, {
       host: '0.peerjs.com',
@@ -232,27 +242,37 @@ const VideoCallModal = ({
     });
     peerRef.current = peer;
 
-    peer.on('call', (incomingCall) => {
-      console.log('[Call] PeerJS incoming call');
-      if (answeredRef.current) return;
-      if (isCaller && localStreamRef.current) {
-        answeredRef.current = true;
-        callRef.current = incomingCall;
-        incomingCall.answer(localStreamRef.current);
-        setupCallEvents(incomingCall);
-        return;
-      }
-      if (!callRef.current) {
-        pendingCallRef.current = incomingCall;
-        callRef.current = incomingCall;
-      }
-    });
-
     peer.on('open', (id) => {
       if (!isMounted.current) return;
+      console.log('[Call] Peer ready:', id);
       setMyPeerId(id);
       set(ref(db, `peerIds/${myUid}`), id).catch(() => {});
-      console.log('[Call] Peer ready:', id);
+    });
+
+    peer.on('call', (incomingCall) => {
+      console.log('[Call] PeerJS incoming call from', incomingCall.peer);
+      if (answeredRef.current) {
+        try { incomingCall.close(); } catch (_) {}
+        return;
+      }
+      // Caller: answer immediately (receiver dials us after Accept)
+      if (isCaller) {
+        const stream = localStreamRef.current;
+        if (stream) {
+          answeredRef.current = true;
+          callRef.current = incomingCall;
+          incomingCall.answer(stream);
+          setupCallEvents(incomingCall);
+          stopRingtone();
+          setCallStatus('Connecting…');
+        } else {
+          pendingCallRef.current = incomingCall;
+          callRef.current = incomingCall;
+        }
+        return;
+      }
+      pendingCallRef.current = incomingCall;
+      callRef.current = incomingCall;
     });
 
     peer.on('error', (err) => {
@@ -261,57 +281,51 @@ const VideoCallModal = ({
         setCallStatus('Could not reach the other person. Try again.');
       }
     });
+
     peer.on('disconnected', () => {
-      if (isMounted.current && !callEnded && !callDeclined) {
+      if (isMounted.current && !connectedRef.current) {
         try { peer.reconnect(); } catch (_) {}
       }
     });
 
     return () => {
       isMounted.current = false;
-      unsubsRef.current.forEach((fn) => { try { fn(); } catch (_) {} });
-      unsubsRef.current = [];
       if (peerRef.current) {
         try { peerRef.current.destroy(); } catch (_) {}
         peerRef.current = null;
       }
     };
-  }, [myUid, isCaller]);
+  }, [myUid, isCaller, setupCallEvents, stopRingtone]);
 
-  // Listen for THEIR media under MY tree
+  // Remote media state
   useEffect(() => {
     if (!myUid || !theirUid) return;
     const mediaRef = ref(db, `calls/${myUid}/signals/${theirUid}/media`);
-    onValue(mediaRef, (snap) => {
-      if (!snap.exists()) return;
-      const m = snap.val();
-      setRemoteMuted(!!m.muted);
-      setRemoteVideoOff(m.videoOff !== false); // default true if missing
+    const unsub = onValue(mediaRef, (snap) => {
+      if (!snap.exists() || !isMounted.current) return;
+      const d = snap.val() || {};
+      if (typeof d.muted === 'boolean') setRemoteMuted(d.muted);
+      if (typeof d.videoOff === 'boolean') setRemoteVideoOff(d.videoOff);
     });
     return () => off(mediaRef);
   }, [myUid, theirUid]);
 
-  // Listen for status under MY signal path
+  // Status under our signals path
   useEffect(() => {
     if (!myUid || !theirUid) return;
-    const sigRef = ref(db, `calls/${myUid}/signals/${theirUid}`);
-    onValue(sigRef, (snap) => {
+    const statusRef = ref(db, `calls/${myUid}/signals/${theirUid}`);
+    const unsub = onValue(statusRef, (snap) => {
       if (!snap.exists() || !isMounted.current) return;
-      const data = snap.val();
+      const data = snap.val() || {};
       if (data.status === 'declined') {
-        console.log('[Call] Received declined status');
+        console.log('[Call] Received declined');
         stopRingtone();
         endEverything('declined');
       } else if (data.status === 'busy') {
         stopRingtone();
-        if (!answeredRef.current) {
-          setCallStatus('On another call right now');
-        }
+        if (!answeredRef.current) setCallStatus('On another call right now');
       } else if (data.status === 'ended') {
-        const name =
-          data.endedByName ||
-          (data.by === theirUid ? partnerProfile.name : partnerProfile.name);
-        endEverything('ended', name);
+        endEverything('ended', data.endedByName || partnerProfile.name);
       } else if (data.status === 'connecting') {
         setCallStatus('Connecting…');
         stopRingtone();
@@ -320,27 +334,22 @@ const VideoCallModal = ({
         stopRingtone();
       }
     });
-    return () => off(sigRef);
+    return () => off(statusRef);
   }, [myUid, theirUid, endEverything, stopRingtone, partnerProfile.name]);
 
-
-
-  // Caller backup: also listen on the invite node under recipient's tree
+  // Caller also listens on invite path (decline/busy backup)
   useEffect(() => {
     if (!isCaller || !myUid || !theirUid) return;
     const inviteRef = ref(db, `calls/${theirUid}/${myUid}`);
     const unsub = onValue(inviteRef, (snap) => {
       if (!snap.exists() || !isMounted.current) return;
-      const data = snap.val();
+      const data = snap.val() || {};
       if (data.status === 'declined') {
-        console.log('[Call] Invite path declined');
         stopRingtone();
         endEverything('declined');
       } else if (data.status === 'busy') {
         stopRingtone();
-        if (!answeredRef.current) {
-          setCallStatus('On another call right now');
-        }
+        if (!answeredRef.current) setCallStatus('On another call right now');
       } else if (data.status === 'ended') {
         endEverything('ended', data.endedByName || partnerProfile.name);
       }
@@ -348,74 +357,50 @@ const VideoCallModal = ({
     return () => off(inviteRef);
   }, [isCaller, myUid, theirUid, endEverything, stopRingtone, partnerProfile.name]);
 
-  // Caller: if they go offline before we connect, end the call
+  // Offline while ringing → end
   useEffect(() => {
     if (!isCaller || !theirUid || connected) return;
     let seenOnline = false;
+    let offlineTimer = null;
     const pRef = ref(db, `presence/online/${theirUid}`);
     const unsub = onValue(pRef, (snap) => {
-      if (!isMounted.current || connected) return;
+      if (!isMounted.current || connectedRef.current) return;
       const val = snap.val();
       if (val === true) {
         seenOnline = true;
+        if (offlineTimer) {
+          clearTimeout(offlineTimer);
+          offlineTimer = null;
+        }
         return;
       }
-      // false / null → offline. Only cut after we know they were online or after a short grace.
-      if (val === false || val === null) {
-        if (!seenOnline) {
-          // Give a moment for presence to load
-          return;
-        }
-        stopRingtone();
-        setCallStatus(`${partnerProfile.name || 'User'} went offline`);
-        setTimeout(() => {
-          if (isMounted.current && !connected) {
-            endEverything('ended', `${partnerProfile.name || 'User'} went offline`);
-          }
-        }, 1800);
+      if ((val === false || val === null) && seenOnline) {
+        if (offlineTimer) return;
+        offlineTimer = setTimeout(() => {
+          if (!isMounted.current || connectedRef.current) return;
+          stopRingtone();
+          const msg = `${partnerProfile.name || 'User'} went offline`;
+          setCallStatus(msg);
+          setTimeout(() => endEverything('ended', msg), 1500);
+        }, 1500);
       }
     });
-    return () => off(pRef);
+    return () => {
+      off(pRef);
+      if (offlineTimer) clearTimeout(offlineTimer);
+    };
   }, [isCaller, theirUid, connected, endEverything, stopRingtone, partnerProfile.name]);
 
-  // One-time busy check at call start only (NOT continuous – accepting marks busy too)
+  // Mark busy only when connected
   useEffect(() => {
-    if (!isCaller || !theirUid) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const snap = await get(ref(db, `busy/${theirUid}`));
-        if (cancelled || !isMounted.current) return;
-        // Only if already busy BEFORE our invite is answered
-        if (snap.exists() && snap.val() === true) {
-          // Re-check after 1.5s: if they accepted us, status will move past ringing
-          setTimeout(async () => {
-            if (cancelled || !isMounted.current || connected || answeredRef.current) return;
-            const again = await get(ref(db, `busy/${theirUid}`));
-            // Still busy and we never got connecting/connected → treat as other call
-            if (again.exists() && again.val() === true && callStatus === 'Ringing…') {
-              setCallStatus('On another call right now');
-            }
-          }, 1500);
-        }
-      } catch (_) {}
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isCaller, theirUid]); // intentionally not callStatus/connected
-
-  // Mark ourselves busy only while connected (not while still ringing as caller)
-  useEffect(() => {
-    if (!myUid) return;
-    if (isCaller && !connected) return; // callers: don't mark busy until connected
+    if (!myUid || !connected) return;
     set(ref(db, `busy/${myUid}`), true).catch(() => {});
     return () => {
       remove(ref(db, `busy/${myUid}`)).catch(() => {});
     };
-  }, [myUid, isCaller, connected]);
+  }, [myUid, connected]);
 
-  // Start media + signaling
+  // Start media + write invite (caller) once peer is ready
   useEffect(() => {
     if (!myPeerId || !myUid || !theirUid) return;
     let cancelled = false;
@@ -423,7 +408,11 @@ const VideoCallModal = ({
     const start = async () => {
       try {
         const stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: facingModeRef.current || 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+          video: {
+            facingMode: facingModeRef.current || 'user',
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          },
           audio: true,
         });
         if (cancelled || !isMounted.current) {
@@ -437,8 +426,16 @@ const VideoCallModal = ({
         setLocalStream(stream);
         setIsVideoOff(true);
 
+        // Answer any pending PeerJS call that arrived before getUserMedia
+        if (pendingCallRef.current && isCaller && !answeredRef.current) {
+          answeredRef.current = true;
+          callRef.current = pendingCallRef.current;
+          pendingCallRef.current.answer(stream);
+          setupCallEvents(pendingCallRef.current);
+          setCallStatus('Connecting…');
+        }
+
         if (isCaller) {
-          // Resolve our real name + avatar from profiles before writing invite
           let callerName = myProfile.name || currentUser?.name || 'User';
           let callerAvatar = myProfile.avatar || currentUser?.avatar || '';
           try {
@@ -450,24 +447,28 @@ const VideoCallModal = ({
             }
           } catch (_) {}
 
-          await set(ref(db, invitePath), {
+          // IMPORTANT: remove old invite first so onChildAdded fires again on re-call
+          try {
+            await remove(ref(db, invitePath));
+          } catch (_) {}
+
+          const invitePayload = {
             callerId: myUid,
             callerPeerId: myPeerId,
             name: callerName,
             avatar: callerAvatar,
             status: 'ringing',
             timestamp: Date.now(),
-          });
+          };
+          await set(ref(db, invitePath), invitePayload);
           await publishStatus('ringing', { callerPeerId: myPeerId });
           publishMediaState(false, true);
-          // Do not dial peerIds/{them} – that ID is often stale (Home peer).
-          // Receiver dials our callerPeerId after Accept; we answer in peer.on('call').
-          console.log('[Call] Invite written with callerPeerId', myPeerId);
+          playRingtone();
+          console.log('[Call] Invite written', invitePath, 'peer', myPeerId);
         }
 
         if (isReceiver) {
           publishMediaState(false, true);
-          await publishStatus('connecting', { receiverPeerId: myPeerId });
         }
       } catch (err) {
         const msg = String(err?.message || err || '');
@@ -486,6 +487,7 @@ const VideoCallModal = ({
       cancelled = true;
       stopRingtone();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [myPeerId, isCaller, isReceiver, myUid, theirUid]);
 
   const answerCall = useCallback(
@@ -495,10 +497,9 @@ const VideoCallModal = ({
       callRef.current = call;
       call.answer(stream);
       setupCallEvents(call);
-      setConnected(true);
-      setCallStatus('Connected');
+      setCallStatus('Connecting…');
       stopRingtone();
-      publishStatus('connected');
+      publishStatus('connecting');
       publishMediaState(isMuted, isVideoOff);
     },
     [setupCallEvents, stopRingtone, publishStatus, publishMediaState, isMuted, isVideoOff]
@@ -518,39 +519,30 @@ const VideoCallModal = ({
     }
     if (answeredRef.current) return;
 
-    // If caller already dialed us (rare), just answer
     const existing = callRef.current || pendingCallRef.current;
     if (existing) {
       answerCall(existing, stream);
       return;
     }
 
-    // Primary path: receiver dials the caller's live PeerJS id from the invite
     try {
-      let callerPeerId = null;
+      let callerPeerId = targetUser?.callerPeerId || null;
 
-      // From invite under our tree: calls/{me}/{caller}
-      if (invitePath) {
+      if (!callerPeerId && invitePath) {
         const inviteSnap = await get(ref(db, invitePath));
-        if (inviteSnap.exists()) {
-          callerPeerId = inviteSnap.val()?.callerPeerId || null;
-        }
+        if (inviteSnap.exists()) callerPeerId = inviteSnap.val()?.callerPeerId || null;
       }
-      // From signals (caller published callerPeerId with ringing status)
       if (!callerPeerId) {
         const sigSnap = await get(ref(db, `calls/${myUid}/signals/${theirUid}`));
-        if (sigSnap.exists()) {
-          callerPeerId = sigSnap.val()?.callerPeerId || null;
-        }
+        if (sigSnap.exists()) callerPeerId = sigSnap.val()?.callerPeerId || null;
       }
-      // Last resort: peerIds (may be stale – avoid if possible)
       if (!callerPeerId) {
         const pidSnap = await get(ref(db, `peerIds/${theirUid}`));
         if (pidSnap.exists()) callerPeerId = pidSnap.val();
       }
 
       if (!callerPeerId) {
-        console.error('[Call] No callerPeerId found');
+        console.error('[Call] No callerPeerId');
         setCallStatus('Could not reach caller. Try again.');
         return;
       }
@@ -564,7 +556,6 @@ const VideoCallModal = ({
       callRef.current = call;
       answeredRef.current = true;
       setupCallEvents(call);
-      // Mark connecting; on stream we'll set Connected
       setCallStatus('Connecting…');
       publishStatus('connecting', { receiverPeerId: myPeerId });
       publishMediaState(isMuted, isVideoOff);
@@ -581,10 +572,11 @@ const VideoCallModal = ({
 
   handleAcceptRef.current = handleAccept;
 
+  // Auto-connect after Accept (receiver role means they already tapped Accept on banner)
   useEffect(() => {
     if (!isReceiver || connected || answeredRef.current) return;
     if (!myPeerId || !localStream) return;
-    const t = setTimeout(() => handleAcceptRef.current?.(), 300);
+    const t = setTimeout(() => handleAcceptRef.current?.(), 400);
     return () => clearTimeout(t);
   }, [isReceiver, connected, myPeerId, localStream]);
 
@@ -604,7 +596,6 @@ const VideoCallModal = ({
     if (peerRef.current) {
       try { peerRef.current.destroy(); } catch (_) {}
     }
-    // Clean up immediately so the other side does not see a ghost re-ring
     cleanupSignals();
     onClose();
   };
@@ -626,15 +617,10 @@ const VideoCallModal = ({
     const track = stream.getVideoTracks()[0];
     if (!track) return;
     track.enabled = !track.enabled;
-    const videoOff = !track.enabled;
-    setIsVideoOff(videoOff);
-    publishMediaState(isMuted, videoOff);
-    if (!videoOff && localVideoRef.current) {
-      localVideoRef.current.srcObject = stream;
-      localVideoRef.current.play().catch(() => {});
-    }
+    const off = !track.enabled;
+    setIsVideoOff(off);
+    publishMediaState(isMuted, off);
   };
-
 
   const switchCamera = async () => {
     const next = facingModeRef.current === 'user' ? 'environment' : 'user';
@@ -647,26 +633,18 @@ const VideoCallModal = ({
       const oldStream = localStreamRef.current;
       const newVideoTrack = newStream.getVideoTracks()[0];
       if (!newVideoTrack) return;
-
-      // Keep mute / video-off state
-      const oldAudio = oldStream?.getAudioTracks()[0];
-      const newAudio = newStream.getAudioTracks()[0];
-      if (newAudio && oldAudio) newAudio.enabled = oldAudio.enabled;
       if (isVideoOff) newVideoTrack.enabled = false;
 
-      // Replace track on PeerJS media connection if possible
       const call = callRef.current;
       if (call && call.peerConnection) {
-        const sender = call.peerConnection.getSenders().find((s) => s.track && s.track.kind === 'video');
-        if (sender) {
-          await sender.replaceTrack(newVideoTrack);
-        }
+        const sender = call.peerConnection
+          .getSenders()
+          .find((s) => s.track && s.track.kind === 'video');
+        if (sender) await sender.replaceTrack(newVideoTrack);
       }
 
-      // Stop old video track only
       if (oldStream) {
         oldStream.getVideoTracks().forEach((t) => t.stop());
-        // Keep old stream, replace video track in local stream
         const cloned = new MediaStream([
           newVideoTrack,
           ...(oldStream.getAudioTracks().length
@@ -675,21 +653,16 @@ const VideoCallModal = ({
         ]);
         localStreamRef.current = cloned;
         setLocalStream(cloned);
-        if (localVideoRef.current) {
-          localVideoRef.current.srcObject = cloned;
-        }
+        if (localVideoRef.current) localVideoRef.current.srcObject = cloned;
       } else {
         localStreamRef.current = newStream;
         setLocalStream(newStream);
       }
-
-      // Stop unused audio from newStream if we kept old audio
       if (oldStream?.getAudioTracks().length) {
         newStream.getAudioTracks().forEach((t) => t.stop());
       }
     } catch (err) {
       console.warn('[Call] switchCamera failed', err);
-      // revert ref on failure
       facingModeRef.current = next === 'user' ? 'environment' : 'user';
     }
   };
@@ -699,6 +672,22 @@ const VideoCallModal = ({
     const s = seconds % 60;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
   };
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      isMounted.current = false;
+      stopRingtone();
+      if (localStreamRef.current) {
+        localStreamRef.current.getTracks().forEach((t) => t.stop());
+      }
+      if (timerRef.current) clearInterval(timerRef.current);
+      if (peerRef.current) {
+        try { peerRef.current.destroy(); } catch (_) {}
+      }
+      remove(ref(db, `busy/${myUid}`)).catch(() => {});
+    };
+  }, [myUid, stopRingtone]);
 
   if (callDeclined && isCaller) {
     return (
@@ -740,36 +729,33 @@ const VideoCallModal = ({
   return (
     <div className="echo-call">
       <audio ref={audioRef} src={ringtoneSound} preload="auto" loop />
-      <div className="echo-call-brand">ECHO</div>
 
       <div className="echo-call-stage">
-        {remoteStream && (
-          <video
-            ref={remoteVideoRef}
-            className="echo-call-remote-video"
-            autoPlay
-            playsInline
-            style={{
-              opacity: remoteVideoOff ? 0 : 1,
-              position: remoteVideoOff ? 'absolute' : 'relative',
-            }}
-          />
-        )}
+        <video
+          ref={remoteVideoRef}
+          autoPlay
+          playsInline
+          className="echo-call-remote-video"
+          style={{
+            opacity: remoteVideoOff ? 0 : 1,
+            position: remoteVideoOff ? 'absolute' : 'relative',
+          }}
+        />
 
         {showPlaceholder && (
           <div className="echo-call-placeholder">
             {showRings && (
-              <div className="echo-call-rings" aria-hidden>
-                <div className="echo-call-ring" />
-                <div className="echo-call-ring" />
-                <div className="echo-call-ring" />
-              </div>
+              <>
+                <div className="echo-call-ring echo-call-ring-1" />
+                <div className="echo-call-ring echo-call-ring-2" />
+                <div className="echo-call-ring echo-call-ring-3" />
+              </>
             )}
             <div className="echo-call-avatar-wrap">
               <Avatar
                 src={partnerProfile.avatar}
                 name={partnerProfile.name}
-                size={isMobile ? 100 : 128}
+                size={isMobile ? 100 : 130}
               />
             </div>
             <div className="echo-call-name">{partnerProfile.name}</div>
@@ -834,11 +820,7 @@ const VideoCallModal = ({
           <i className={`fas ${isMuted ? 'fa-microphone-slash' : 'fa-microphone'}`} />
         </button>
         {isMobile && (
-          <button
-            className="echo-call-btn"
-            onClick={switchCamera}
-            title="Flip camera"
-          >
+          <button className="echo-call-btn" onClick={switchCamera} title="Flip camera">
             <i className="fas fa-sync-alt" />
           </button>
         )}

@@ -50,7 +50,7 @@
 
 .legal-header {
   position: sticky;
-  top: 60px;          /* ✅ below the navbar */
+  top: 0px;          /* ✅ below the navbar */
   z-index: 10;
   background: var(--bg-primary);
   padding: 6px 12px;
