@@ -8,7 +8,7 @@ import { ProfileProvider, useProfile } from './contexts/ProfileContext';
 import { PresenceProvider } from './contexts/PresenceContext';
 import { CacheProvider } from './contexts/CacheContext';
 import { CallProvider } from './contexts/CallContext';
-import { ThemeProvider } from './contexts/ThemeContext'; // ✅ ADD THIS
+import { ThemeProvider } from './contexts/ThemeContext';
 import Home from './components/pages/Home/Home';
 import Chats from './components/pages/Chats/Chats';
 import ChatView from './components/pages/Chat/ChatView';
@@ -32,14 +32,16 @@ import { cleanAllCachedMessages } from './services/messageCleanup';
 import { getChatList } from './services/indexedDBService';
 import { db } from './services/firebase';
 import Shop from './components/pages/Shop/Shop';
-import { clearAllIndexedDB } from './services/indexedDBService';
 import AdminPanel from './components/pages/Admin/AdminPanel';
 import BanScreen from './components/BanScreen/BanScreen';
 import Communities from './components/pages/Communities/Communities';
 
+// ─── NEW: Import version number ──────────────────────────────
+import { APP_VERSION } from './version';
+
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
-// ─── ScrollToTop ──────────────────────────────────────────────────
+// ─── ScrollToTop ────────────────────────────────────────────────
 function ScrollToTop() {
   const { pathname } = useLocation();
 
@@ -123,7 +125,6 @@ function LoadingScreen() {
           viewBox="0 0 512 512"
           style={{ width: '100%', height: '100%' }}
         >
-          {/* ─── Background rectangle uses theme variable ────── */}
           <rect width="512" height="512" rx="96" fill="var(--bg-secondary)" />
           <path
             d="M 120 120 H 280 V 176 H 180 V 228 H 260 V 284 H 180 V 336 H 280 V 392 H 120 Z"
@@ -218,16 +219,18 @@ function AppContent() {
   const [appVersion] = useState(process.env.REACT_APP_VERSION || '1.0');
   const [showDbClearedPopup, setShowDbClearedPopup] = useState(false);
 
-  // ─── Hard refresh on version change ──────────────────────────────
+  // ─── NEW: Version Check (Force Refresh) ──────────────────────
   useEffect(() => {
-    const currentVersion = process.env.REACT_APP_VERSION || '1.0';
-    const storedVersion = localStorage.getItem('echo_installed_version');
+    const key = 'echo_v';
+    const saved = localStorage.getItem(key);
+    const current = String(APP_VERSION);
 
-    if (storedVersion && storedVersion !== currentVersion) {
-      localStorage.setItem('echo_installed_version', currentVersion);
+    if (saved && saved !== current) {
+      localStorage.setItem(key, current);
+      // Hard refresh to bypass cache
       window.location.reload(true);
-    } else if (!storedVersion) {
-      localStorage.setItem('echo_installed_version', currentVersion);
+    } else if (!saved) {
+      localStorage.setItem(key, current);
     }
   }, []);
 
@@ -448,6 +451,7 @@ function AppContent() {
         id="main-content"
         style={{
           paddingBottom: '72px',
+          paddingTop: '60px',
           height: '100vh',
           overflowY: 'auto',
           overflowX: 'hidden',
@@ -498,34 +502,11 @@ function AppContent() {
 
 // ─── App ────────────────────────────────────────────────────────
 function App() {
-  // ─── Version check: clear localStorage & IndexedDB on first visit after update ──
-  useEffect(() => {
-    const CURRENT_VERSION = '2.0.0';
-    const storedVersion = localStorage.getItem('echo_app_version');
-
-    if (storedVersion !== CURRENT_VERSION) {
-      const keysToKeep = [
-        'echo_install_popup_dismissed_until',
-        'echo_update_shown',
-        'echo_changelog_version',
-        'firebase:host',
-        'echo_db_cleared_notification',
-      ];
-      const allKeys = Object.keys(localStorage);
-      for (const key of allKeys) {
-        if (!keysToKeep.includes(key) && !key.startsWith('echo_has_recovered_')) {
-          localStorage.removeItem(key);
-        }
-      }
-      clearAllIndexedDB().catch(() => {});
-      localStorage.setItem('echo_app_version', CURRENT_VERSION);
-      console.log('🧹 Cleared localStorage and IndexedDB for new version');
-    }
-  }, []);
+  // ─── REMOVED the old version‑clearing useEffect ──────────────
+  // ─── Keep only the providers ────────────────────────────────────
 
   return (
     <BrowserRouter>
-      {/* ─── ThemeProvider MUST wrap everything ─────────────────── */}
       <ThemeProvider>
         <AuthProvider>
           <PresenceProvider>
