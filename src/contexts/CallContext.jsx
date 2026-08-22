@@ -3,7 +3,16 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import { useAuth } from '../hooks/useAuth';
 import { useProfile } from './ProfileContext';
 import { db } from '../services/firebase';
-import { ref, onChildAdded, onChildChanged, off, update, remove, get, onValue } from 'firebase/database';
+import {
+  ref,
+  onChildAdded,
+  onChildChanged,
+  onChildRemoved,
+  off,
+  update,
+  remove,
+  get,
+} from 'firebase/database';
 import Avatar from '../components/common/Avatar';
 import VideoCallModal from '../components/VideoChat/VideoCallModal';
 import ringtoneSound from '../utils/assets/ringtone.mp3';
@@ -39,12 +48,13 @@ export const CallProvider = ({ children }) => {
 
   const bannerAudioRef = useRef(null);
   const audioUnlockedRef = useRef(false);
-  const recentCallsRef = useRef(new Map()); // uid -> timestamp when we finished with them
+  const recentCallsRef = useRef(new Map()); // callerUid -> endedAt
   const activeCallRef = useRef(null);
   const profilesRef = useRef(profiles);
   const fetchProfileRef = useRef(fetchProfile);
   const ringingUidRef = useRef(null);
-  const handledInviteAtRef = useRef(new Map()); // callerUid -> timestamp of invite we already showed
+  const handledInviteAtRef = useRef(new Map()); // callerUid -> invite timestamp already shown
+  const incomingRef = useRef(null); // mirror of incomingCallData for listeners
 
   useEffect(() => {
     activeCallRef.current = activeVideoCall;
@@ -58,7 +68,11 @@ export const CallProvider = ({ children }) => {
     fetchProfileRef.current = fetchProfile;
   }, [fetchProfile]);
 
-  // Unlock audio on first user gesture
+  useEffect(() => {
+    incomingRef.current = incomingCallData;
+  }, [incomingCallData]);
+
+  // Unlock audio on first gesture
   useEffect(() => {
     const unlock = () => {
       if (audioUnlockedRef.current) return;
@@ -78,7 +92,6 @@ export const CallProvider = ({ children }) => {
             a.currentTime = 0;
             a.muted = false;
             audioUnlockedRef.current = true;
-            console.log('[Call] Audio unlocked');
           }).catch(() => {});
         }
       } catch (_) {}
@@ -140,30 +153,60 @@ export const CallProvider = ({ children }) => {
     return () => stopBannerRingtone();
   }, [incomingCallData, activeVideoCall, playBannerRingtone, stopBannerRingtone]);
 
-  // Core: process a ringing invite from any source
+  /** Stop banner + ringtone for a specific caller (multi-device / status change) */
+  const dismissIncoming = useCallback(
+    (callerUid, reason = '') => {
+      if (callerUid && ringingUidRef.current && ringingUidRef.current !== callerUid) {
+        return; // different caller still ringing
+      }
+      console.log('[Call] Dismiss incoming', callerUid, reason);
+      stopBannerRingtone();
+      if (callerUid) {
+        recentCallsRef.current.set(callerUid, Date.now());
+      }
+      ringingUidRef.current = null;
+      setIncomingCallData((prev) => {
+        if (!prev) return null;
+        if (callerUid && prev.uid !== callerUid) return prev;
+        return null;
+      });
+    },
+    [stopBannerRingtone]
+  );
+
+  // Show banner only for true ringing invites
   const processIncomingInvite = useCallback(
     async (callerUid, callData) => {
       if (!user?.uid || !callerUid || callerUid === user.uid || callerUid === 'signals') return;
 
       const status = (callData && callData.status) || 'ringing';
-      if (status !== 'ringing') return;
+
+      // ── Multi-device: if this invite is no longer ringing, stop banner on this device ──
+      if (status !== 'ringing') {
+        if (
+          ringingUidRef.current === callerUid ||
+          incomingRef.current?.uid === callerUid
+        ) {
+          dismissIncoming(callerUid, `status=${status}`);
+        }
+        return;
+      }
 
       const ts = callData.timestamp || callData.updatedAt || Date.now();
-      // Ignore invites older than 2 minutes
-      if (Date.now() - ts > 120_000) return;
+      if (Date.now() - ts > 90_000) return; // stale
 
-      // Same invite (same timestamp) already shown
+      // Same invite already shown
       const prevTs = handledInviteAtRef.current.get(callerUid);
       if (prevTs && prevTs === ts) return;
 
-      // Already showing this caller on banner
+      // Already showing this caller
       if (ringingUidRef.current === callerUid) return;
 
-      // Ghost guard: only block for 20s after we ended/declined with them
+      // Ghost guard after end/decline/accept on this or another device
       const recentAt = recentCallsRef.current.get(callerUid);
-      if (recentAt && Date.now() - recentAt < 20_000) {
-        // Allow if this invite is NEWER than when we closed
-        if (ts <= recentAt) {
+      if (recentAt && Date.now() - recentAt < 45_000) {
+        // Only allow if invite is clearly NEWER than when we finished
+        if (ts <= recentAt + 500) {
           console.log('[Call] Ghost guard skip', callerUid);
           return;
         }
@@ -177,13 +220,12 @@ export const CallProvider = ({ children }) => {
         return;
       }
 
-      console.log('[Call] Incoming ring from', callerUid, callData);
+      console.log('[Call] Incoming ring from', callerUid);
       handledInviteAtRef.current.set(callerUid, ts);
       ringingUidRef.current = callerUid;
 
       let name = (callData.name || '').trim();
       let avatar = callData.avatar || '';
-
       const cached = profilesRef.current?.[callerUid];
       if (cached?.name) name = cached.name;
       if (cached?.avatar) avatar = cached.avatar;
@@ -214,20 +256,21 @@ export const CallProvider = ({ children }) => {
         name,
         avatar,
         callerPeerId: callData.callerPeerId || null,
+        inviteTs: ts,
       });
       playBannerRingtone();
     },
-    [user?.uid, playBannerRingtone]
+    [user?.uid, playBannerRingtone, dismissIncoming]
   );
 
-  // Listen with onChildAdded + onChildChanged so RE-calls on same path still ring
+  // Listen: added / changed / removed
   useEffect(() => {
     if (!user?.uid) return;
 
     const callsRef = ref(db, 'calls/' + user.uid);
     console.log('[Call] Listening on calls/' + user.uid);
 
-    const handleSnap = (snapshot) => {
+    const onSnap = (snapshot) => {
       if (snapshot.key === 'signals') return;
       const callData = snapshot.val();
       if (!callData || typeof callData !== 'object') return;
@@ -235,15 +278,27 @@ export const CallProvider = ({ children }) => {
       processIncomingInvite(callerUid, callData);
     };
 
-    const unsubAdd = onChildAdded(callsRef, handleSnap);
-    const unsubChange = onChildChanged(callsRef, handleSnap);
+    // When invite node is deleted (call ended / cleaned up) → stop ring on all devices
+    const onRemoved = (snapshot) => {
+      if (snapshot.key === 'signals') return;
+      const callerUid = snapshot.key;
+      console.log('[Call] Invite removed', callerUid);
+      dismissIncoming(callerUid, 'removed');
+      // Prevent immediate re-ring of same finished call
+      recentCallsRef.current.set(callerUid, Date.now());
+    };
+
+    const unsubAdd = onChildAdded(callsRef, onSnap);
+    const unsubChange = onChildChanged(callsRef, onSnap);
+    const unsubRemove = onChildRemoved(callsRef, onRemoved);
 
     return () => {
       off(callsRef);
       unsubAdd();
       unsubChange();
+      unsubRemove();
     };
-  }, [user?.uid, processIncomingInvite]);
+  }, [user?.uid, processIncomingInvite, dismissIncoming]);
 
   // Enrich banner when profile loads
   useEffect(() => {
@@ -294,9 +349,22 @@ export const CallProvider = ({ children }) => {
   );
 
   const acceptIncomingCall = useCallback(() => {
-    if (!incomingCallData) return;
+    if (!incomingCallData || !user) return;
     stopBannerRingtone();
-    const { uid, name, avatar, callerPeerId } = incomingCallData;
+    const { uid, name, avatar, callerPeerId, inviteTs } = incomingCallData;
+
+    // Mark handled so this invite never re-rings (this device or after refresh)
+    if (inviteTs) handledInviteAtRef.current.set(uid, inviteTs);
+    recentCallsRef.current.set(uid, Date.now());
+
+    // Tell OTHER devices (same account) to stop ringing
+    const invitePath = `calls/${user.uid}/${uid}`;
+    update(ref(db, invitePath), {
+      status: 'accepted',
+      updatedAt: Date.now(),
+      by: user.uid,
+    }).catch(() => {});
+
     ringingUidRef.current = null;
     setIncomingCallData(null);
     setActiveVideoCall({
@@ -306,7 +374,7 @@ export const CallProvider = ({ children }) => {
       role: 'receiver',
       callerPeerId: callerPeerId || null,
     });
-  }, [incomingCallData, stopBannerRingtone]);
+  }, [incomingCallData, user, stopBannerRingtone]);
 
   const declineIncomingCall = useCallback(() => {
     stopBannerRingtone();
@@ -319,19 +387,23 @@ export const CallProvider = ({ children }) => {
         updatedAt: Date.now(),
         by: recipientUid,
       };
-      console.log('[Call] Declining – notify', callerUid);
+      console.log('[Call] Declining – notify caller + other devices', callerUid);
       Promise.all([
         update(ref(db, invitePath), payload),
         update(ref(db, `calls/${callerUid}/signals/${recipientUid}`), payload),
         update(ref(db, `calls/${recipientUid}/signals/${callerUid}`), payload),
       ]).catch((e) => console.warn('[Call] decline write failed', e));
 
+      // Keep declined status long enough for other devices + caller to see it
       setTimeout(() => {
         remove(ref(db, invitePath)).catch(() => {});
         remove(ref(db, `calls/${callerUid}/signals/${recipientUid}`)).catch(() => {});
         remove(ref(db, `calls/${recipientUid}/signals/${callerUid}`)).catch(() => {});
-      }, 5000);
+      }, 6000);
 
+      if (incomingCallData.inviteTs) {
+        handledInviteAtRef.current.set(callerUid, incomingCallData.inviteTs);
+      }
       recentCallsRef.current.set(callerUid, Date.now());
     }
     ringingUidRef.current = null;
@@ -341,12 +413,29 @@ export const CallProvider = ({ children }) => {
   const closeVideoCall = useCallback(() => {
     stopBannerRingtone();
     if (activeVideoCall?.uid) {
-      recentCallsRef.current.set(activeVideoCall.uid, Date.now());
+      const otherUid = activeVideoCall.uid;
+      recentCallsRef.current.set(otherUid, Date.now());
+      // Ensure invite is gone so other devices cannot keep ringing
+      if (user?.uid) {
+        const paths =
+          activeVideoCall.role === 'caller'
+            ? [
+                `calls/${otherUid}/${user.uid}`,
+                `calls/${user.uid}/signals/${otherUid}`,
+                `calls/${otherUid}/signals/${user.uid}`,
+              ]
+            : [
+                `calls/${user.uid}/${otherUid}`,
+                `calls/${user.uid}/signals/${otherUid}`,
+                `calls/${otherUid}/signals/${user.uid}`,
+              ];
+        paths.forEach((p) => remove(ref(db, p)).catch(() => {}));
+      }
     }
     ringingUidRef.current = null;
     setIncomingCallData(null);
     setActiveVideoCall(null);
-  }, [activeVideoCall, stopBannerRingtone]);
+  }, [activeVideoCall, user, stopBannerRingtone]);
 
   const value = {
     activeVideoCall,
