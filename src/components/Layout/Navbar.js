@@ -1,8 +1,9 @@
-// src/components/Layout/Navbar.js (theme‑aware)
+// src/components/Layout/Navbar.js
 import React, { useEffect, memo, useState, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useProfile } from '../../contexts/ProfileContext';
+import { useCommunity } from '../../contexts/CommunityContext';
 import { db } from '../../services/firebase';
 import { ref, onValue, update, remove } from 'firebase/database';
 import ECHOMOJI from '../UI/ECHOMOJI';
@@ -31,6 +32,7 @@ const Navbar = memo(() => {
   const location = useLocation();
   const navigate = useNavigate();
   const { fetchProfile, getProfile, isOnline } = useProfile();
+  const { currentCommunity } = useCommunity();
 
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -50,23 +52,16 @@ const Navbar = memo(() => {
     onConfirm: null,
   });
 
-  const closeConfirmModal = () => {
-    setConfirmModal(prev => ({ ...prev, isOpen: false }));
-  };
-
-  const openConfirmModal = (config) => {
-    setConfirmModal({
-      isOpen: true,
-      loading: false,
-      ...config,
-    });
-  };
+  const closeConfirmModal = () => setConfirmModal(prev => ({ ...prev, isOpen: false }));
+  const openConfirmModal = (config) => setConfirmModal({ isOpen: true, loading: false, ...config });
 
   const pathParts = location.pathname.split('/');
   const targetUserId = pathParts[1] === 'chat' ? pathParts[2] : undefined;
   const isChatRoute = location.pathname.startsWith('/chat/');
   const isEchoAiRoute = targetUserId === 'echo_ai_assistant';
+  const isCommunityRoute = location.pathname.startsWith('/community/');
 
+  // ─── Notifications ────────────────────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
     const notifRef = ref(db, `adminNotifications/${user.uid}/messages`);
@@ -83,36 +78,32 @@ const Navbar = memo(() => {
       }));
       msgs.sort((a, b) => b.timestamp - a.timestamp);
       setNotifications(msgs);
-      const unread = msgs.filter((m) => !m.read).length;
-      setUnreadCount(unread);
+      setUnreadCount(msgs.filter(m => !m.read).length);
     });
     return () => unsubscribe();
   }, [user?.uid]);
 
   const markAsRead = (msgId) => {
     if (!user?.uid) return;
-    const notifRef = ref(db, `adminNotifications/${user.uid}/messages/${msgId}`);
-    update(notifRef, { read: true });
+    update(ref(db, `adminNotifications/${user.uid}/messages/${msgId}`), { read: true });
   };
 
   const handleClearAll = () => {
     if (!user?.uid || notifications.length === 0) return;
     openConfirmModal({
       title: 'Clear All Messages',
-      message: 'Are you sure you want to delete all notifications? This cannot be undone.',
+      message: 'Delete all notifications?',
       confirmText: 'Clear All',
-      cancelText: 'Cancel',
       onConfirm: async () => {
         setConfirmModal(prev => ({ ...prev, loading: true }));
         try {
-          const notifRef = ref(db, `adminNotifications/${user.uid}/messages`);
-          await remove(notifRef);
+          await remove(ref(db, `adminNotifications/${user.uid}/messages`));
           setNotifications([]);
           setUnreadCount(0);
           setShowNotifications(false);
           setConfirmModal(prev => ({ ...prev, loading: false, isOpen: false }));
         } catch (err) {
-          console.error('Failed to clear messages:', err);
+          console.error(err);
           setConfirmModal(prev => ({ ...prev, loading: false }));
         }
       },
@@ -124,28 +115,18 @@ const Navbar = memo(() => {
     setModalOpen(true);
     if (!msg.read) {
       markAsRead(msg.id);
-      setNotifications((prev) =>
-        prev.map((n) =>
-          n.id === msg.id ? { ...n, read: true } : n
-        )
-      );
-      setUnreadCount((prev) => Math.max(prev - 1, 0));
+      setNotifications(prev => prev.map(n => n.id === msg.id ? { ...n, read: true } : n));
+      setUnreadCount(prev => Math.max(prev - 1, 0));
     }
     setShowNotifications(false);
   };
 
-  const toggleDropdown = () => {
-    setShowNotifications((prev) => !prev);
-  };
+  const toggleDropdown = () => setShowNotifications(prev => !prev);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      if (
-        bellRef.current &&
-        !bellRef.current.contains(e.target) &&
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target)
-      ) {
+      if (bellRef.current && !bellRef.current.contains(e.target) &&
+          dropdownRef.current && !dropdownRef.current.contains(e.target)) {
         setShowNotifications(false);
       }
     };
@@ -153,181 +134,131 @@ const Navbar = memo(() => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // ─── Fetch profiles ──────────────────────────────────────────
   useEffect(() => {
     if (user?.uid) {
       const cleanup = fetchProfile(user.uid);
-      return () => {
-        if (typeof cleanup === 'function') cleanup();
-      };
+      return () => { if (typeof cleanup === 'function') cleanup(); };
     }
   }, [user?.uid, fetchProfile]);
 
   useEffect(() => {
     if (isChatRoute && targetUserId && !isEchoAiRoute) {
       const cleanup = fetchProfile(targetUserId);
-      return () => {
-        if (typeof cleanup === 'function') cleanup();
-      };
+      return () => { if (typeof cleanup === 'function') cleanup(); };
     }
   }, [isChatRoute, targetUserId, isEchoAiRoute, fetchProfile]);
 
-  const targetProfile = isChatRoute && targetUserId && !isEchoAiRoute
-    ? getProfile(targetUserId)
-    : null;
-
+  const targetProfile = isChatRoute && targetUserId && !isEchoAiRoute ? getProfile(targetUserId) : null;
   const ownProfile = user?.uid ? getProfile(user.uid) : null;
-
-  const chatAvatar = isEchoAiRoute
-    ? ECHO_AI_GIF
-    : location.state?.userAvatar || targetProfile?.avatar || '';
-
-  const chatName = isEchoAiRoute
-    ? 'ECHO AI'
-    : sanitizeName(location.state?.userName || targetProfile?.name, targetUserId);
-
-  useEffect(() => {
-    if (chatAvatar) {
-      preloadMedia(chatAvatar);
-    }
-  }, [chatAvatar]);
+  const chatAvatar = isEchoAiRoute ? ECHO_AI_GIF : (location.state?.userAvatar || targetProfile?.avatar || '');
+  const chatName = isEchoAiRoute ? 'ECHO AI' : sanitizeName(location.state?.userName || targetProfile?.name, targetUserId);
+  useEffect(() => { if (chatAvatar) preloadMedia(chatAvatar); }, [chatAvatar]);
 
   const isTargetOnline = targetUserId && !isEchoAiRoute ? isOnline(targetUserId) : false;
-
-  const statusText = isEchoAiRoute
-    ? 'AI Assistant'
-    : isTargetOnline
-    ? 'Online'
-    : 'Offline';
-
-  const statusColor = isEchoAiRoute
-    ? '#a78bfa'
-    : isTargetOnline
-    ? '#10B981'
-    : '#6B7280';
-
+  const statusText = isEchoAiRoute ? 'AI Assistant' : (isTargetOnline ? 'Online' : 'Offline');
+  const statusColor = isEchoAiRoute ? '#a78bfa' : (isTargetOnline ? '#10B981' : '#6B7280');
   const partnerMood = targetProfile?.mood || 'happy';
   const partnerSkinId = targetProfile?.activeSkin || null;
   const partnerSkin = partnerSkinId ? getSkinById(partnerSkinId) : null;
-
   const ownSkin = ownProfile?.activeSkin ? getSkinById(ownProfile.activeSkin) : null;
   const ownName = sanitizeName(ownProfile?.name || ownProfile?.displayName || 'User', user?.uid);
 
-  return (
-    <nav
-      style={{
-        position: 'sticky',
-        top: 0,
-        left: 0,
-        right: 0,
-        height: '60px',
-        backgroundColor: 'var(--bg-primary)',
-        borderBottom: '1px solid var(--border-color)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        padding: '0 16px',
-        zIndex: 1000,
-        boxSizing: 'border-box',
-        color: 'var(--text-primary)',
-      }}
-    >
-      {/* LEFT SECTION */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {isChatRoute ? (
+  // ─── Center content ──────────────────────────────────────────
+  let centerContent;
+
+  if (isCommunityRoute) {
+    if (currentCommunity) {
+      centerContent = (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           <button
-            onClick={() => navigate('/chats')}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'var(--text-primary)',
-              fontSize: '18px',
-              cursor: 'pointer',
-              padding: '4px',
-              display: 'flex',
-              alignItems: 'center',
-            }}
+            onClick={() => navigate('/communities')}
+            style={{ background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '20px', cursor: 'pointer', padding: '4px' }}
           >
             <i className="fas fa-arrow-left" />
           </button>
-        ) : (
-          <span
-            style={{
-              fontSize: '20px',
-              fontWeight: 800,
-              letterSpacing: '1px',
-              color: 'var(--text-primary)',
-            }}
-          >
-            ECHO
-          </span>
-        )}
-
-        {isChatRoute && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div
-              style={{
-                width: '38px',
-                height: '38px',
-                borderRadius: '50%',
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '1px solid var(--border-color)',
-                flexShrink: 0,
-                position: 'relative',
-              }}
-            >
-              <Avatar src={chatAvatar} name={chatName} size={38} />
-              {partnerSkin && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: -6,
-                    right: -6,
-                    width: 22,
-                    height: 22,
-                    borderRadius: '50%',
-                    background: 'var(--bg-primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '2px solid var(--bg-primary)',
-                  }}
-                >
-                  <ECHOMOJI
-                    mood={partnerMood}
-                    skin={partnerSkin}
-                    size={18}
-                    interactive={false}
-                    animated={false}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '14px', lineHeight: '1.2' }}>
-                  {chatName}
-                </span>
-                <ECHOMOJI
-                  mood={partnerMood}
-                  skin={partnerSkin}
-                  size={20}
-                  interactive={false}
-                  animated={false}
-                />
-              </div>
-              <span style={{ color: statusColor, fontSize: '11px', marginTop: '1px' }}>
-                {statusText}
-              </span>
-            </div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontWeight: 700, fontSize: '16px', color: 'var(--text-primary)', lineHeight: '1.2' }}>
+              {currentCommunity.name}
+            </span>
+            <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+              {currentCommunity.memberCount || 0} members
+            </span>
           </div>
-        )}
+        </div>
+      );
+    } else {
+      // Loading state – show spinner to avoid flicker
+      centerContent = (
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <button
+            onClick={() => navigate('/communities')}
+            style={{ background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '20px', cursor: 'pointer', padding: '4px' }}
+          >
+            <i className="fas fa-arrow-left" />
+          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div className="spinner-small" style={{ width: 16, height: 16, border: '2px solid var(--border-color)', borderTopColor: '#6C3CE1', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }} />
+            <span style={{ color: 'var(--text-muted)', fontSize: '14px' }}>Loading…</span>
+          </div>
+        </div>
+      );
+    }
+  } else if (isChatRoute) {
+    centerContent = (
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <button onClick={() => navigate('/chats')} style={{ background: 'none', border: 'none', color: 'var(--text-primary)', fontSize: '18px', cursor: 'pointer', padding: '4px' }}>
+          <i className="fas fa-arrow-left" />
+        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <div style={{ width: 38, height: 38, borderRadius: '50%', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid var(--border-color)', flexShrink: 0, position: 'relative' }}>
+            <Avatar src={chatAvatar} name={chatName} size={38} />
+            {partnerSkin && (
+              <div style={{ position: 'absolute', bottom: -6, right: -6, width: 22, height: 22, borderRadius: '50%', background: 'var(--bg-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '2px solid var(--bg-primary)' }}>
+                <ECHOMOJI mood={partnerMood} skin={partnerSkin} size={18} interactive={false} animated={false} />
+              </div>
+            )}
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+              <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '14px', lineHeight: '1.2' }}>{chatName}</span>
+              <ECHOMOJI mood={partnerMood} skin={partnerSkin} size={20} interactive={false} animated={false} />
+            </div>
+            <span style={{ color: statusColor, fontSize: '11px', marginTop: '1px' }}>{statusText}</span>
+          </div>
+        </div>
       </div>
+    );
+  } else {
+    centerContent = (
+      <span style={{ fontSize: '20px', fontWeight: 800, letterSpacing: '1px', color: 'var(--text-primary)' }}>
+        ECHO
+      </span>
+    );
+  }
 
-      {/* RIGHT SECTION */}
+  // ─── Render ──────────────────────────────────────────────────
+  return (
+    <nav style={{
+      position: 'sticky',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: '60px',
+      backgroundColor: 'var(--bg-primary)',
+      borderBottom: '1px solid var(--border-color)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: '0 16px',
+      zIndex: 1000,
+      boxSizing: 'border-box',
+      color: 'var(--text-primary)',
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: '60px' }} />
+      <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+        {centerContent}
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         {/* Notification Bell */}
         <div ref={bellRef} className="notification-bell-wrapper" style={{ position: 'relative' }}>
@@ -372,7 +303,6 @@ const Navbar = memo(() => {
               </span>
             )}
           </button>
-
           {showNotifications && (
             <div
               ref={dropdownRef}
@@ -419,7 +349,6 @@ const Navbar = memo(() => {
                   </button>
                 )}
               </div>
-
               {notifications.length === 0 ? (
                 <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-muted)' }}>
                   No notifications
@@ -478,7 +407,7 @@ const Navbar = memo(() => {
           )}
         </div>
 
-        {/* User Info */}
+        {/* User info */}
         {ownSkin && (
           <ECHOMOJI
             mood={ownProfile?.mood || 'happy'}
