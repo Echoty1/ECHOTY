@@ -1,2 +1,2 @@
 // Bump this number every time you push an update
-export const APP_VERSION = 5;
+export const APP_VERSION = 6;
