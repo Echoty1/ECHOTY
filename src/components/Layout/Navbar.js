@@ -3,6 +3,7 @@ import React, { useEffect, memo, useState, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useProfile } from '../../contexts/ProfileContext';
+import { useCall } from '../../contexts/CallContext'; // ✅ Import for video calls
 import { db } from '../../services/firebase';
 import { ref, onValue, update, remove } from 'firebase/database';
 import ECHOMOJI from '../UI/ECHOMOJI';
@@ -31,6 +32,7 @@ const Navbar = memo(() => {
   const location = useLocation();
   const navigate = useNavigate();
   const { fetchProfile, getProfile, isOnline } = useProfile();
+  const { startVideoCall } = useCall(); // ✅ Use call context
 
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -329,6 +331,30 @@ const Navbar = memo(() => {
 
       {/* RIGHT SECTION */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+        {/* ✅ Video Call Button – only if in chat with an online user */}
+        {isChatRoute && targetUserId && !isEchoAiRoute && isTargetOnline && (
+          <button
+            onClick={() => startVideoCall(targetUserId, chatName, chatAvatar)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-secondary)',
+              fontSize: '20px',
+              cursor: 'pointer',
+              padding: '4px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'color 0.2s',
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
+            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+            title="Start video call"
+          >
+            <i className="fas fa-video" />
+          </button>
+        )}
+
         {/* Notification Bell */}
         <div ref={bellRef} className="notification-bell-wrapper" style={{ position: 'relative' }}>
           <button
