@@ -85,13 +85,21 @@ chatsRef.on('child_added', (chatSnapshot) => {
     const subsSnapshot = await db.ref(`pushSubscriptions/${recipientId}`).once('value');
     const subs = subsSnapshot.val();
     if (!subs) return;
+    let title = message.senderName || 'User';
+    let body = message.text || 'New message';
+    let url = `/chat/${senderId}`;
+    if (message.type === 'system' && message.endedBy) {
+      title = 'ECHO ended';
+      body = message.text || 'This ECHO was ended.';
+      url = `/chat/${message.endedBy}`;
+    }
     const payload = JSON.stringify({
-      title: message.senderName || 'User',
-      body: message.text || 'New message',
+      title,
+      body,
       tag: chatId,
       chatId,
       messageId: msgSnapshot.key,
-      url: `/chat/${senderId}`,
+      url,
     });
     const promises = Object.values(subs).map((sub) =>
       webpush.sendNotification(sub, payload).catch((err) => {

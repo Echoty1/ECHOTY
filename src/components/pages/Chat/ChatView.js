@@ -1,4 +1,4 @@
-// src/components/pages/Chat/ChatView.js (with scroll fix v2)
+// src/components/pages/Chat/ChatView.js
 import React, { useState, useEffect, useRef } from 'react';
 import ReactDOM from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
@@ -37,6 +37,7 @@ import { cleanCachedMessagesForChat } from '../../../services/messageCleanup';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import EchoAI from './EchoAI';
+import ConfirmModal from '../../common/ConfirmModal';
 import './ChatView.css';
 
 const ECHO_AI_ID = 'echo_ai_assistant';
@@ -61,9 +62,7 @@ const getBackendUrl = (path) => {
              (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
                ? 'http://localhost:3000'
                : 'https://echoty-pdcy.onrender.com/');
-  // Remove trailing slash from base
   base = base.replace(/\/+$/, '');
-  // Ensure path starts with a slash
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${base}${normalizedPath}`;
 };
@@ -87,6 +86,16 @@ const ChatView = () => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isAILoading, setIsAILoading] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const [ended, setEnded] = useState(false);
+  const [endedByName, setEndedByName] = useState('');
+
+  const [showMoreOptions, setShowMoreOptions] = useState(false);
+  const moreOptionsRef = useRef(null);
+
+  const [confirmEndState, setConfirmEndState] = useState({
+    isOpen: false,
+    partnerName: '',
+  });
 
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
@@ -120,9 +129,9 @@ const ChatView = () => {
   const [minLoadingTimePassed, setMinLoadingTimePassed] = useState(false);
   const loadingTimerRef = useRef(null);
 
-  // ─── Cooldown for scroll to prevent multiple triggers ──────
   const scrollCooldownRef = useRef(false);
 
+  // ─── Clear unread / mark read ──────────────────────────────────
   const clearUnreadInstantly = () => {
     if (!userId) return;
     sessionStorage.setItem(`chat_read_${userId}`, 'true');
@@ -408,7 +417,6 @@ const ChatView = () => {
       }
       clearMessageCache(cId);
       setEditingMessage(null);
-      // Scroll to the edited message if near bottom
       if (isNearBottom && !scrollCooldownRef.current) {
         scrollCooldownRef.current = true;
         setTimeout(() => {
@@ -482,12 +490,101 @@ const ChatView = () => {
     }
   };
 
+  // ─── handleScroll function ──────────────────────────────────
   const handleScroll = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    const threshold = 15; // much smaller – only when truly at bottom
+    const threshold = 15;
     const isNear = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
     setIsNearBottom(isNear);
+  };
+
+  // ─── Listen for ended ECHO flag ──────────────────────────────
+  useEffect(() => {
+    if (!user?.uid || !userId) {
+      setEnded(false);
+      return;
+    }
+    const cId = [user.uid, userId].sort().join('_');
+    const endedRef = ref(db, `chats/${cId}/ended`);
+    const unsub = onValue(endedRef, (snap) => {
+      const val = snap.val();
+      if (val === true || (val && (val.by || val === true))) {
+        setEnded(true);
+        setEndedByName((val && val.byName) || '');
+      } else {
+        setEnded(false);
+        setEndedByName('');
+      }
+    });
+    return () => unsub();
+  }, [user?.uid, userId]);
+
+  // ─── Clear ended flag ──────────────────────────────────────────
+  const clearEndedFlag = async () => {
+    if (!user?.uid || !userId) return;
+    const cId = [user.uid, userId].sort().join('_');
+    try {
+      await remove(ref(db, `chats/${cId}/ended`));
+      await remove(ref(db, `userChats/${user.uid}/${userId}/ended`));
+      await remove(ref(db, `userChats/${userId}/${user.uid}/ended`));
+      setEnded(false);
+      setEndedByName('');
+    } catch (err) {
+      console.warn('clearEndedFlag:', err.message);
+    }
+  };
+
+  // ─── End ECHO (opens custom confirm modal) ────────────────────
+  const handleEndEcho = () => {
+    if (!user?.uid || !userId) return;
+    const partnerName = sanitizeName(location.state?.userName || partnerProfile?.name, userId);
+    setConfirmEndState({
+      isOpen: true,
+      partnerName,
+    });
+    setShowMoreOptions(false);
+  };
+
+  const confirmEndEcho = async () => {
+    setConfirmEndState({ isOpen: false, partnerName: '' });
+    if (!user?.uid || !userId) return;
+    const cId = [user.uid, userId].sort().join('_');
+    const myName =
+      (currentUserProfile && currentUserProfile.name) ||
+      user.displayName ||
+      'User';
+    try {
+      await set(ref(db, `chats/${cId}/ended`), {
+        by: user.uid,
+        byName: myName,
+        at: Date.now(),
+      });
+      const messagesRef = ref(db, `chats/${cId}/messages`);
+      const newMsgRef = push(messagesRef);
+      await set(newMsgRef, {
+        senderId: 'system',
+        type: 'system',
+        text: `${myName} ended this ECHO.`,
+        timestamp: Date.now(),
+        endedBy: user.uid,
+      });
+      await update(ref(db, `userChats/${user.uid}/${userId}`), {
+        ended: true,
+        lastMessage: `${myName} ended this ECHO.`,
+        lastSenderId: 'system',
+        lastUpdated: Date.now(),
+      });
+      await update(ref(db, `userChats/${userId}/${user.uid}`), {
+        ended: true,
+        lastMessage: `${myName} ended this ECHO.`,
+        lastSenderId: 'system',
+        lastUpdated: Date.now(),
+      });
+    } catch (err) {
+      console.error('Failed to end ECHO:', err);
+      alert('Failed to end ECHO. Please try again.');
+    }
   };
 
   // ─── Real‑time listener ──────────────────────────────────────
@@ -504,7 +601,6 @@ const ChatView = () => {
       if (isMounted.current && cachedMessages.length > 0) {
         setMessages(cachedMessages);
         setLoadingMessages(false);
-        // Initial scroll – always go to bottom when opening chat
         setTimeout(() => scrollToBottom(false), 50);
       }
     });
@@ -524,7 +620,6 @@ const ChatView = () => {
         setMessages(newMessages);
         setLoadingMessages(false);
 
-        // ─── Only scroll if near bottom and cooldown not active ──
         if (isNearBottom && !scrollCooldownRef.current) {
           scrollCooldownRef.current = true;
           setTimeout(() => {
@@ -611,6 +706,7 @@ const ChatView = () => {
       .catch(console.error);
   }, [user?.uid]);
 
+  // ─── File / media handlers ──────────────────────────────────
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -620,6 +716,7 @@ const ChatView = () => {
     setCaptionText('');
     e.target.value = '';
     setTimeout(() => captionInputRef.current?.focus(), 100);
+    setShowMoreOptions(false);
   };
 
   const uploadToCloudinary = (file, onProgress) => {
@@ -652,6 +749,7 @@ const ChatView = () => {
   };
 
   const sendMediaMessage = async () => {
+    if (ended) await clearEndedFlag();
     if (!selectedFile || !user?.uid || !userId) return;
     setIsUploading(true);
     setUploadProgress(0);
@@ -687,7 +785,6 @@ const ChatView = () => {
       setReplyTo(null);
     }
     setMessages((prev) => [...prev, optimisticMsg]);
-    // No scroll here – will be handled by listener
     setPreviewUrl(null);
     setSelectedFile(null);
     setCaptionText('');
@@ -790,6 +887,7 @@ const ChatView = () => {
   };
 
   const handleVoiceSend = async (audioBlob, duration) => {
+    if (ended) await clearEndedFlag();
     setShowVoiceRecorder(false);
     const cId = [user.uid, userId].sort().join('_');
     const tempId = `temp_${Date.now()}`;
@@ -819,7 +917,6 @@ const ChatView = () => {
       setReplyTo(null);
     }
     setMessages((prev) => [...prev, optimisticMsg]);
-    // No scroll here – will be handled by listener
     try {
       const formData = new FormData();
       formData.append('file', audioBlob);
@@ -942,6 +1039,10 @@ const ChatView = () => {
     const replyToSave = currentReply;
     setReplyTo(null);
 
+    if (ended) {
+      await clearEndedFlag();
+    }
+
     const cId = [user.uid, userId].sort().join('_');
     const messagesRef = ref(db, `chats/${cId}/messages`);
     const newMsgRef = push(messagesRef);
@@ -996,12 +1097,19 @@ const ChatView = () => {
     });
 
     clearMessageCache(cId);
-    // No scroll here – listener will handle it
   };
 
   const displayName = sanitizeName(location.state?.userName || partnerProfile?.name, userId);
 
+  // ─── Render message ──────────────────────────────────────────
   const renderMessage = (msg) => {
+    if (msg.type === 'system') {
+      return (
+        <div className="message-bubble system" key={msg.id}>
+          {msg.text}
+        </div>
+      );
+    }
     const isOwn = msg.senderId === user?.uid;
     const isDeleting = msg.id === deletingMessageId;
     const isAi = msg.senderId === 'echo_ai_assistant';
@@ -1246,6 +1354,26 @@ const ChatView = () => {
     }
   }, [newMessage]);
 
+  // ─── Click outside to close more-options popup ───────────────
+  useEffect(() => {
+    if (!showMoreOptions) return;
+    const handleClickOutside = (e) => {
+      if (moreOptionsRef.current && !moreOptionsRef.current.contains(e.target)) {
+        setShowMoreOptions(false);
+      }
+    };
+    // Delay so the same tap that opens the menu does not immediately close it
+    const t = setTimeout(() => {
+      document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('touchstart', handleClickOutside);
+    }, 10);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+    };
+  }, [showMoreOptions]);
+
   return (
     <>
       <SEO
@@ -1256,6 +1384,14 @@ const ChatView = () => {
       <StructuredData />
       <div className="chat-view">
         <VideoAudioProvider>
+          <div
+            className={`echo-rings-bg ${ended ? 'is-ended' : 'is-active'}`}
+            aria-hidden="true"
+          >
+            <span className="echo-bg-ring r1" />
+            <span className="echo-bg-ring r2" />
+            <span className="echo-bg-ring r3" />
+          </div>
           <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll}>
             {(loadingMessages || !minLoadingTimePassed) && messages.length === 0 ? (
               <div className="chat-skeleton-list">
@@ -1295,14 +1431,7 @@ const ChatView = () => {
         <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
           {replyTo && <ReplyPreview replyTo={replyTo} onCancel={cancelReply} />}
           <div className="chat-input-row">
-            <button
-              type="button"
-              className="chat-attach-btn"
-              onClick={() => fileInputRef.current?.click()}
-              title="Attach image or video"
-            >
-              <i className="fas fa-paperclip" />
-            </button>
+            {/* ─── Emoji button ────────────────────────────────── */}
             <button
               type="button"
               className="chat-emoji-btn"
@@ -1311,6 +1440,52 @@ const ChatView = () => {
             >
               <i className="fas fa-smile" />
             </button>
+
+            {/* ─── More options button (three dots) ──────────── */}
+            <div className="chat-more-wrapper" ref={moreOptionsRef}>
+              <button
+                type="button"
+                className="chat-more-btn"
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setShowMoreOptions((v) => !v);
+                }}
+                title="More options"
+              >
+                <i className="fas fa-ellipsis-h" />
+              </button>
+              {showMoreOptions && (
+                <div className="chat-more-options-popup" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
+                    className="chat-more-option"
+                    onClick={() => {
+                      fileInputRef.current?.click();
+                      setShowMoreOptions(false);
+                    }}
+                  >
+                    <i className="fas fa-paperclip" />
+                    <span>Attach</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="chat-more-option danger"
+                    onClick={() => {
+                      setShowMoreOptions(false);
+                      handleEndEcho();
+                    }}
+                    disabled={ended}
+                    style={ended ? { opacity: 0.4, pointerEvents: 'none' } : undefined}
+                  >
+                    <i className="fas fa-stop-circle" />
+                    <span>End ECHO</span>
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* ─── Voice button ────────────────────────────────── */}
             <button
               type="button"
               className="chat-voice-btn"
@@ -1319,6 +1494,8 @@ const ChatView = () => {
             >
               <i className="fas fa-microphone" />
             </button>
+
+            {/* ─── Text input ──────────────────────────────────── */}
             <textarea
               ref={inputRef}
               className="chat-input"
@@ -1340,7 +1517,7 @@ const ChatView = () => {
                 borderRadius: '24px',
                 border: '1px solid var(--border-color)',
                 background: 'var(--bg-input)',
-                color: 'var(--text-primary)',  // ✅ changed from '#fff'
+                color: 'var(--text-primary)',
                 fontSize: '14px',
                 outline: 'none',
                 boxSizing: 'border-box',
@@ -1348,6 +1525,8 @@ const ChatView = () => {
               onFocus={() => { focusedField.current = 'main'; }}
               onBlur={() => { /* keep last known focus */ }}
             />
+
+            {/* ─── Hidden file input ──────────────────────────── */}
             <input
               type="file"
               ref={fileInputRef}
@@ -1355,6 +1534,8 @@ const ChatView = () => {
               style={{ display: 'none' }}
               onChange={handleFileSelect}
             />
+
+            {/* ─── Send button ─────────────────────────────────── */}
             <button
               type="submit"
               className="chat-send-btn"
@@ -1387,6 +1568,17 @@ const ChatView = () => {
           currentCaption={editingMediaMessage?.caption || ''}
           mediaType={editingMediaMessage?.mediaType}
           onSave={saveMediaCaption}
+        />
+
+        {/* ─── Custom Confirm Modal for ending ECHO ───────────── */}
+        <ConfirmModal
+          isOpen={confirmEndState.isOpen}
+          onClose={() => setConfirmEndState({ isOpen: false, partnerName: '' })}
+          onConfirm={confirmEndEcho}
+          title="End ECHO"
+          message={`Are you sure you want to end this ECHO with ${confirmEndState.partnerName}?`}
+          confirmText="End ECHO"
+          cancelText="Cancel"
         />
       </div>
     </>

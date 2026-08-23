@@ -14,6 +14,7 @@
   flex-direction: column;
   background: var(--bg-primary);
   overflow: hidden;
+  /* rings are absolute inside this fixed shell */
   margin: 0 !important;
   padding: 0 !important;
   width: 100%;
@@ -34,6 +35,9 @@
   box-sizing: border-box;
   -webkit-overflow-scrolling: touch;
   transition: padding-bottom 0.25s ease;
+  position: relative;
+  z-index: 2; /* above rings – no blur on messages */
+  background: transparent;
 }
 
 .empty-chat-state {
@@ -73,6 +77,8 @@
 }
 
 .message-bubble {
+  position: relative;
+  z-index: 2;
   max-width: 85%;
   padding: 10px 14px;
   border-radius: 16px;
@@ -539,6 +545,8 @@
 }
 
 .chat-input-container {
+  position: relative;
+  z-index: 20;
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
@@ -1718,4 +1726,262 @@
 }
 .message-bubble.own .markdown-body tr:nth-child(even) {
   background: rgba(255, 255, 255, 0.06);
+}
+
+.message-bubble.system {
+  align-self: center;
+  max-width: 85%;
+  background: var(--bg-input);
+  color: var(--text-muted);
+  border-radius: 20px;
+  padding: 6px 18px;
+  font-size: 13px;
+  text-align: center;
+  border: 1px solid var(--border-color);
+  box-shadow: none;
+  margin: 8px auto;
+}
+
+.chat-end-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: color 0.2s, transform 0.15s;
+  flex-shrink: 0;
+}
+.chat-end-btn:hover {
+  color: #f87171;
+  transform: scale(1.08);
+}
+
+@media (max-width: 480px) {
+  .chat-end-btn {
+    font-size: 18px !important;
+    padding: 2px 6px !important;
+  }
+}
+
+/* ─── ECHO pulsing rings (full background, calm motion) ─── */
+.echo-rings-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.echo-bg-ring {
+  position: absolute;
+  border-radius: 50%;
+  box-sizing: border-box;
+  will-change: transform, opacity;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.echo-rings-bg.is-active .echo-bg-ring {
+  border-style: solid;
+  animation: echoRingCalm 6s ease-in-out infinite;
+}
+
+.echo-rings-bg.is-active .echo-bg-ring.r1 {
+  width: min(90vw, 520px);
+  height: min(90vw, 520px);
+  border-width: 4px;
+  border-color: rgba(108, 60, 225, 0.5);
+  animation-delay: 0s;
+}
+.echo-rings-bg.is-active .echo-bg-ring.r2 {
+  width: min(120vw, 720px);
+  height: min(120vw, 720px);
+  border-width: 3px;
+  border-color: rgba(236, 72, 153, 0.32);
+  animation-delay: 2s;
+}
+.echo-rings-bg.is-active .echo-bg-ring.r3 {
+  width: min(150vw, 920px);
+  height: min(150vw, 920px);
+  border-width: 2.5px;
+  border-color: rgba(108, 60, 225, 0.22);
+  animation-delay: 4s;
+}
+
+html[data-theme="light"] .echo-rings-bg.is-active .echo-bg-ring.r1,
+body.light .echo-rings-bg.is-active .echo-bg-ring.r1 {
+  border-color: rgba(108, 60, 225, 0.55);
+  border-width: 4.5px;
+}
+html[data-theme="light"] .echo-rings-bg.is-active .echo-bg-ring.r2,
+body.light .echo-rings-bg.is-active .echo-bg-ring.r2 {
+  border-color: rgba(236, 72, 153, 0.4);
+}
+html[data-theme="light"] .echo-rings-bg.is-active .echo-bg-ring.r3,
+body.light .echo-rings-bg.is-active .echo-bg-ring.r3 {
+  border-color: rgba(108, 60, 225, 0.28);
+}
+
+.echo-rings-bg.is-ended .echo-bg-ring {
+  border-style: solid;
+  animation: echoRingCalm 10s ease-in-out infinite;
+}
+
+.echo-rings-bg.is-ended .echo-bg-ring.r1 {
+  width: min(90vw, 520px);
+  height: min(90vw, 520px);
+  border-width: 2px;
+  border-color: rgba(108, 60, 225, 0.16);
+  animation-delay: 0s;
+}
+.echo-rings-bg.is-ended .echo-bg-ring.r2 {
+  width: min(120vw, 720px);
+  height: min(120vw, 720px);
+  border-width: 1.5px;
+  border-color: rgba(236, 72, 153, 0.1);
+  animation-delay: 3.3s;
+}
+.echo-rings-bg.is-ended .echo-bg-ring.r3 {
+  width: min(150vw, 920px);
+  height: min(150vw, 920px);
+  border-width: 1.5px;
+  border-color: rgba(108, 60, 225, 0.08);
+  animation-delay: 6.6s;
+}
+
+html[data-theme="light"] .echo-rings-bg.is-ended .echo-bg-ring.r1,
+body.light .echo-rings-bg.is-ended .echo-bg-ring.r1 {
+  border-color: rgba(108, 60, 225, 0.22);
+}
+html[data-theme="light"] .echo-rings-bg.is-ended .echo-bg-ring.r2,
+body.light .echo-rings-bg.is-ended .echo-bg-ring.r2 {
+  border-color: rgba(236, 72, 153, 0.14);
+}
+html[data-theme="light"] .echo-rings-bg.is-ended .echo-bg-ring.r3,
+body.light .echo-rings-bg.is-ended .echo-bg-ring.r3 {
+  border-color: rgba(108, 60, 225, 0.1);
+}
+
+@keyframes echoRingCalm {
+  0% {
+    transform: translate(-50%, -50%) scale(0.92);
+    opacity: 0.85;
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.08);
+    opacity: 0.45;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(0.92);
+    opacity: 0.85;
+  }
+}
+
+/* system message stays readable above rings */
+.message-bubble.system {
+  position: relative;
+  z-index: 2;
+}
+
+/* ─── More options (⋯ next to emoji) ─────────────────────────── */
+.chat-more-wrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  z-index: 30;
+}
+
+.chat-more-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 22px;
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: color 0.2s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.chat-more-btn:hover {
+  color: #a78bfa;
+}
+
+/* Opens upward, aligned to the left of the ⋯ so it stays on-screen */
+.chat-more-options-popup {
+  position: absolute;
+  bottom: calc(100% + 10px);
+  left: 0;
+  right: auto;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  padding: 6px 0;
+  min-width: 168px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.45);
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  animation: moreMenuIn 0.15s ease-out;
+  overflow: visible;
+}
+
+@keyframes moreMenuIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.chat-more-option {
+  background: none;
+  border: none;
+  padding: 12px 18px;
+  color: var(--text-primary);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  transition: background 0.15s;
+  width: 100%;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.chat-more-option i {
+  width: 18px;
+  text-align: center;
+  font-size: 15px;
+  color: var(--text-muted);
+}
+.chat-more-option:hover {
+  background: var(--bg-input);
+}
+.chat-more-option.danger {
+  color: #ef4444;
+}
+.chat-more-option.danger i {
+  color: #ef4444;
+}
+.chat-more-option.danger:hover {
+  background: rgba(239, 68, 68, 0.1);
+}
+
+@media (max-width: 480px) {
+  .chat-more-btn {
+    font-size: 18px;
+    padding: 2px 6px;
+  }
+  .chat-more-options-popup {
+    min-width: 150px;
+    bottom: calc(100% + 8px);
+  }
+  .chat-more-option {
+    font-size: 13px;
+    padding: 10px 14px;
+  }
 }

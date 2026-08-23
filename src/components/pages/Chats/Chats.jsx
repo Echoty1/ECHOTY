@@ -165,6 +165,7 @@ const processChatItem = async (chat, user, onlineUsers) => {
       unreadCount: unreadCount,
       isDeleted,
       online: isOnline,
+      ended: chat.ended === true,
     };
   } catch (err) {
     let unreadCount = chat.unreadCount || 0;
@@ -183,6 +184,7 @@ const processChatItem = async (chat, user, onlineUsers) => {
       unreadCount: unreadCount,
       isDeleted: false,
       online: !!onlineUsers[chat.id],
+      ended: chat.ended === true,
     };
   }
 };
@@ -219,6 +221,7 @@ const ChatItem = memo(({ chat, onStartChat }) => {
           <span className="chat-name">
             {chat.name}
             {chat.isDeleted && <span className="archived-label"> (archived)</span>}
+            {chat.ended && <span className="ended-badge">Ended</span>}
           </span>
         </div>
         <div className="chat-last" style={{ fontWeight: hasUnread ? 700 : 400 }}>

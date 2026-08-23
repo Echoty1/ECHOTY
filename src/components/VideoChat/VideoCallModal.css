@@ -506,3 +506,165 @@
     height: 60px;
   }
 }
+
+
+/* ─── Call stage progress: Ringing → Connecting → Connected ─── */
+.echo-stage-line {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
+  margin-top: 22px;
+  width: min(92vw, 340px);
+  padding: 0 4px;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.echo-stage-step {
+  position: relative;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  padding: 8px 4px 4px;
+  cursor: pointer;
+  color: rgba(255, 255, 255, 0.35);
+  transition: color 0.25s ease, transform 0.2s ease;
+}
+
+.echo-stage-step.done {
+  color: #a78bfa;
+}
+.echo-stage-step.current {
+  color: #e9d5ff;
+}
+.echo-stage-step.tapped {
+  transform: scale(1.08);
+}
+
+.echo-stage-dot {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  background: rgba(10, 10, 15, 0.6);
+  transition: all 0.3s ease;
+  z-index: 2;
+}
+
+.echo-stage-step.done .echo-stage-dot {
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 0 16px rgba(108, 60, 225, 0.45);
+}
+
+.echo-stage-step.current .echo-stage-dot {
+  border-color: #c4b5fd;
+  color: #c4b5fd;
+  box-shadow: 0 0 0 4px rgba(108, 60, 225, 0.2);
+  animation: stagePulse 1.6s ease-in-out infinite;
+}
+
+.echo-stage-step.tapped .echo-stage-dot {
+  transform: scale(1.15);
+  box-shadow: 0 0 20px rgba(236, 72, 153, 0.5);
+}
+
+.echo-stage-label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.echo-stage-bar {
+  position: absolute;
+  top: 20px; /* center of dot */
+  left: calc(50% + 16px);
+  right: calc(-50% + 16px);
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  z-index: 1;
+  overflow: hidden;
+}
+
+.echo-stage-bar.filled {
+  background: linear-gradient(90deg, #6C3CE1, #EC4899);
+}
+
+.echo-stage-bar.active::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, #c4b5fd, transparent);
+  animation: stageShimmer 1.4s ease-in-out infinite;
+}
+
+@keyframes stagePulse {
+  0%, 100% { box-shadow: 0 0 0 4px rgba(108, 60, 225, 0.15); }
+  50% { box-shadow: 0 0 0 8px rgba(108, 60, 225, 0.28); }
+}
+
+@keyframes stageShimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+@media (max-width: 380px) {
+  .echo-stage-label {
+    font-size: 9px;
+  }
+  .echo-stage-dot {
+    width: 24px;
+    height: 24px;
+    font-size: 10px;
+  }
+  .echo-stage-bar {
+    top: 18px;
+  }
+}
+
+
+.echo-call-timer-large {
+  margin-top: 16px;
+  font-size: 28px;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 2px;
+  color: #4ade80;
+  text-shadow: 0 0 20px rgba(74, 222, 128, 0.35);
+}
+
+.echo-stage-line.stage-2 .echo-stage-step.done .echo-stage-dot {
+  box-shadow: 0 0 18px rgba(74, 222, 128, 0.35);
+}
+
+.echo-stage-step.current .echo-stage-dot .fa-circle {
+  font-size: 8px;
+  animation: stageDotBlink 1s ease-in-out infinite;
+}
+
+@keyframes stageDotBlink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+
+.echo-stage-step:active {
+  transform: scale(0.94);
+}
+
+.echo-stage-line:active {
+  filter: brightness(1.15);
+}

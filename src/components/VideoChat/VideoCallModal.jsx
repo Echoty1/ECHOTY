@@ -27,6 +27,7 @@ const VideoCallModal = ({
   const [callDeclined, setCallDeclined] = useState(false);
   const [endedByName, setEndedByName] = useState('');
   const [connected, setConnected] = useState(false);
+  const [hasAnswered, setHasAnswered] = useState(false);
   const [myPeerId, setMyPeerId] = useState(null);
 
   const [partnerProfile, setPartnerProfile] = useState({
@@ -182,7 +183,7 @@ const VideoCallModal = ({
       }
 
       // Other person hung up / ended — go straight home (no intermediate screen)
-      setTimeout(() => cleanupSignals(), 800);
+      setTimeout(() => cleanupSignals(), 400);
       if (isMounted.current) onClose();
     },
     [onClose, stopRingtone, cleanupSignals, partnerProfile.name]
@@ -235,6 +236,7 @@ const VideoCallModal = ({
     setRemoteStream(stream);
     setConnected(true);
     connectedRef.current = true;
+    setHasAnswered(true);
     setCallStatus('Connected');
     stopRingtoneRef.current?.();
     playConnectSound();
@@ -322,6 +324,7 @@ const VideoCallModal = ({
           setupCallEventsRef.current?.(incomingCall);
           stopRingtoneRef.current?.();
           setCallStatus('Connecting…');
+          setHasAnswered(true);
         } else {
           pendingCallRef.current = incomingCall;
           callRef.current = incomingCall;
@@ -391,6 +394,7 @@ const VideoCallModal = ({
         endEverything('ended', who);
       } else if (data.status === 'connecting') {
         setCallStatus('Connecting…');
+        setHasAnswered(true);
         stopRingtone();
       } else if (data.status === 'connected') {
         setCallStatus('Connected');
@@ -506,6 +510,7 @@ const VideoCallModal = ({
           pendingCallRef.current.answer(stream);
           setupCallEventsRef.current?.(pendingCallRef.current);
           setCallStatus('Connecting…');
+          setHasAnswered(true);
         }
 
         if (isCaller) {
@@ -570,6 +575,7 @@ const VideoCallModal = ({
     call.answer(stream);
     setupCallEventsRef.current?.(call);
     setCallStatus('Connecting…');
+    setHasAnswered(true);
     stopRingtone();
     publishStatusRef.current?.('connecting');
     publishMediaRef.current?.(isMutedRef.current, isVideoOffRef.current);
@@ -578,6 +584,7 @@ const VideoCallModal = ({
   const handleAccept = async () => {
     stopRingtone();
     setCallStatus('Connecting…');
+    setHasAnswered(true);
     const stream = localStreamRef.current;
     if (!stream) {
       setCallStatus('Camera not ready…');
@@ -627,6 +634,7 @@ const VideoCallModal = ({
       answeredRef.current = true;
       setupCallEventsRef.current?.(call);
       setCallStatus('Connecting…');
+      setHasAnswered(true);
       publishStatusRef.current?.('connecting', { receiverPeerId: myPeerId });
       publishMediaRef.current?.(isMutedRef.current, isVideoOffRef.current);
 
@@ -646,7 +654,7 @@ const VideoCallModal = ({
   useEffect(() => {
     if (!isReceiver || connected || answeredRef.current) return;
     if (!myPeerId || !localStream) return;
-    const t = setTimeout(() => handleAcceptRef.current?.(), 80);
+    const t = setTimeout(() => handleAcceptRef.current?.(), 30);
     return () => clearTimeout(t);
   }, [isReceiver, connected, myPeerId, localStream]);
 
@@ -677,7 +685,7 @@ const VideoCallModal = ({
     }
 
     // Keep Firebase nodes briefly so the other device can read status=ended
-    setTimeout(() => cleanupSignals(), 800);
+    setTimeout(() => cleanupSignals(), 400);
 
     // Person who hangs up goes straight back to Home (no intermediate screen)
     onClose();
@@ -757,6 +765,63 @@ const VideoCallModal = ({
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  };
+
+  // 0 = Ringing, 1 = Connecting, 2 = Connected
+  const callStage = connected
+    ? 2
+    : hasAnswered || /connect/i.test(callStatus || '')
+    ? 1
+    : 0;
+
+  const [stageTap, setStageTap] = useState(null);
+  const bounceStage = (idx) => {
+    setStageTap(idx);
+    try {
+      if (navigator.vibrate) navigator.vibrate(12);
+    } catch (_) {}
+    setTimeout(() => setStageTap(null), 280);
+  };
+
+  const CallStageLine = () => {
+    const stages = ['Ringing', 'Connecting', 'Connected'];
+    return (
+      <div
+        className={`echo-stage-line stage-${callStage}`}
+        role="list"
+        aria-label="Call progress"
+        onClick={() => bounceStage(callStage)}
+      >
+        {stages.map((label, i) => {
+          const done = callStage > i;
+          const current = callStage === i;
+          const tapped = stageTap === i;
+          return (
+            <button
+              type="button"
+              key={label}
+              role="listitem"
+              className={`echo-stage-step ${done ? 'done' : ''} ${current ? 'current' : ''} ${tapped ? 'tapped' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                bounceStage(i);
+              }}
+              aria-current={current ? 'step' : undefined}
+            >
+              <span className="echo-stage-dot">
+                {done ? <i className="fas fa-check" /> : current ? <i className="fas fa-circle" /> : i + 1}
+              </span>
+              <span className="echo-stage-label">{label}</span>
+              {i < stages.length - 1 && (
+                <span
+                  className={`echo-stage-bar ${callStage > i ? 'filled' : callStage === i ? 'active' : ''}`}
+                />
+              )}
+            </button>
+          );
+        })}
+      </div>
+    );
   };
 
   useEffect(() => {
@@ -859,21 +924,30 @@ const VideoCallModal = ({
               <span className={`echo-call-status-dot ${connected ? 'live' : ''}`} />
               {connected ? 'Connected' : callStatus}
             </div>
+            <CallStageLine />
+            {connected && (
+              <div className="echo-call-timer-large">
+                {formatDuration(callDuration)}
+              </div>
+            )}
             {!connected && (
               <div className="echo-call-sub">
-                {isCaller ? 'Waiting for them to join…' : 'Connecting…'}
+                {isCaller
+                  ? callStage === 0
+                    ? 'Waiting for them to pick up…'
+                    : 'Almost there…'
+                  : 'Connecting to the call…'}
               </div>
             )}
           </div>
         )}
 
-        {remoteStream && !remoteVideoOff && (
+        {/* Timer always visible when connected; with name when video is on */}
+        {connected && remoteStream && !remoteVideoOff && (
           <div className="echo-call-live-chip">
             <Avatar src={partnerProfile.avatar} name={partnerProfile.name} size={26} />
             <span>{partnerProfile.name}</span>
-            {connected && (
-              <span className="duration">{formatDuration(callDuration)}</span>
-            )}
+            <span className="duration">{formatDuration(callDuration)}</span>
           </div>
         )}
 
