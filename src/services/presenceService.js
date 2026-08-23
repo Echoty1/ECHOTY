@@ -1,39 +1,54 @@
 // src/services/presenceService.js
-import { ref, onValue, set, onDisconnect, remove } from 'firebase/database';
+import { ref, onValue, set, onDisconnect, remove, get } from 'firebase/database';
 import { db } from './firebase';
+import { isRealDisplayName } from '../utils/userIntegrity';
 
 /**
  * Marks the user online while connected; sets offline on disconnect.
- * Correct order: onDisconnect first, then set true (avoids race).
+ * Skips presence if profile was wiped / has no real name.
  */
 export const initPresence = (uid) => {
   if (!uid) return () => {};
 
   const presenceRef = ref(db, `presence/online/${uid}`);
   const connectedRef = ref(db, '.info/connected');
+  let heartbeat = null;
 
-  const unsub = onValue(connectedRef, (snap) => {
+  const unsub = onValue(connectedRef, async (snap) => {
     if (snap.val() !== true) return;
 
-    // Register disconnect BEFORE marking online
+    // Don't go online if profile is missing or placeholder
+    try {
+      const prof = await get(ref(db, `profiles/${uid}`));
+      if (!prof.exists() || !isRealDisplayName((prof.val() || {}).name)) {
+        console.warn('[Presence] No real profile – staying offline');
+        await remove(presenceRef).catch(() => {});
+        return;
+      }
+    } catch (_) {}
+
     onDisconnect(presenceRef)
       .set(false)
       .then(() => set(presenceRef, true))
-      .catch((err) => {
-        console.warn('[Presence] onDisconnect failed, still marking online', err);
+      .catch(() => {
         set(presenceRef, true).catch(() => {});
       });
   });
 
-  // Heartbeat every 25s so presence stays fresh if tab is backgrounded
-  const heartbeat = setInterval(() => {
-    set(presenceRef, true).catch(() => {});
+  heartbeat = setInterval(async () => {
+    try {
+      const prof = await get(ref(db, `profiles/${uid}`));
+      if (!prof.exists() || !isRealDisplayName((prof.val() || {}).name)) {
+        await remove(presenceRef).catch(() => {});
+        return;
+      }
+      await set(presenceRef, true);
+    } catch (_) {}
   }, 25000);
 
   return () => {
-    clearInterval(heartbeat);
+    if (heartbeat) clearInterval(heartbeat);
     unsub();
-    // Mark offline immediately on logout / unmount
     set(presenceRef, false).catch(() => {});
   };
 };

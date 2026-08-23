@@ -13,6 +13,7 @@ import LiveViewModal from '../../VideoChat/LiveViewModal';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import './Home.css';
+import { isRealDisplayName, filterVisibleUsers } from '../../../utils/userIntegrity';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
@@ -349,33 +350,31 @@ const Home = () => {
   };
 
   // ─── 7. Build Online + Live Users List ───────────────────────
-  // Include everyone online OR live (so a live user always appears)
+  // Only show accounts with a real profile name (hide wiped / "User" ghosts)
   const combinedUids = Array.from(new Set([...onlineUids, ...liveUids]));
-  const onlineUsers = combinedUids
-    .map((uid) => {
-      const profile = profiles[uid];
-      const isLiveUser = liveUids.includes(uid);
-      const fromLive = liveMeta[uid] || {};
-      if (!profile) {
+  const onlineUsers = filterVisibleUsers(
+    combinedUids
+      .map((uid) => {
+        const profile = profiles[uid];
+        const isLiveUser = liveUids.includes(uid);
+        const fromLive = liveMeta[uid] || {};
+        if (!profile) {
+          // Wait until profile loads – do not show UID fragments as "User"
+          return null;
+        }
+        const name = (profile.name || fromLive.name || '').trim();
+        if (!isRealDisplayName(name)) return null;
         return {
           uid,
-          name: fromLive.name || uid.slice(0, 8),
-          avatar: fromLive.avatar || '',
+          ...profile,
+          name,
+          avatar: profile.avatar || fromLive.avatar || '',
           online: onlineUids.includes(uid),
           isLive: isLiveUser,
         };
-      }
-      return {
-        uid,
-        ...profile,
-        name: profile.name || fromLive.name || 'User',
-        avatar: profile.avatar || fromLive.avatar || '',
-        online: onlineUids.includes(uid),
-        isLive: isLiveUser,
-      };
-    })
-    // Live users first, then online
-    .sort((a, b) => (b.isLive ? 1 : 0) - (a.isLive ? 1 : 0));
+      })
+      .filter(Boolean)
+  ).sort((a, b) => (b.isLive ? 1 : 0) - (a.isLive ? 1 : 0));
 
   // If still loading, show skeleton
   if (loading) {
@@ -629,7 +628,7 @@ const Home = () => {
               >
                 {liveUids.length > 0
                   ? 'Tap a live user or press Join Live to watch'
-                  : 'Tap any profile to view, chat and call instantly'}
+                  : 'Tap any profile to view and chat instantly'}
               </p>
 
               {/* Clear JOIN LIVE row – only when someone is broadcasting */}
