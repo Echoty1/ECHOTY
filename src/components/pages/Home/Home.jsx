@@ -59,7 +59,7 @@ const Home = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { profiles, fetchProfile } = useProfile();
-  const { startVideoCall } = useCall();
+  const { startVideoCall, activeVideoCall } = useCall();
   const [onlineUids, setOnlineUids] = useState([]);
   const [liveUids, setLiveUids] = useState([]);
   const [liveMeta, setLiveMeta] = useState({}); // uid -> {name, avatar}
@@ -320,6 +320,14 @@ const Home = () => {
 
   const closeUserPreview = () => setSelectedUser(null);
 
+  // When a video call is open (or just closed), never leave the user card on screen
+  useEffect(() => {
+    if (activeVideoCall) {
+      setSelectedUser(null);
+    }
+  }, [activeVideoCall]);
+
+
   const startChat = (uid, name, avatar) => {
     closeUserPreview();
     navigate(`/chat/${uid}`, {
@@ -501,48 +509,7 @@ const Home = () => {
             overflowY: 'auto',
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-              marginBottom: '30px',
-              width: '100%',
-            }}
-          >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span style={{ fontSize: '28px', color: 'var(--text-primary)' }}>
-                <i className="fas fa-broadcast" />
-              </span>
-              <h1
-                style={{
-                  margin: 0,
-                  fontSize: 'clamp(24px, 4vw, 32px)',
-                  fontWeight: 900,
-                  letterSpacing: '-0.5px',
-                  background: 'linear-gradient(135deg, var(--text-primary) 60%, #a78bfa)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                }}
-              >
-                ECHO
-              </h1>
-            </div>
-            <div
-              style={{
-                background: 'var(--bg-input)',
-                padding: '8px 18px',
-                borderRadius: '30px',
-                fontSize: 'clamp(13px, 2vw, 15px)',
-                border: '1px solid var(--border-color)',
-                backdropFilter: 'blur(5px)',
-                fontWeight: 600,
-                color: 'var(--text-primary)',
-              }}
-            >
-              {user?.displayName || 'Demo User'}
-            </div>
-          </div>
+          {/* top brand header removed */}
 
           <div
             style={{
@@ -591,6 +558,8 @@ const Home = () => {
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   marginBottom: '16px',
+                  gap: '10px',
+                  flexWrap: 'wrap',
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -629,16 +598,22 @@ const Home = () => {
                 <span
                   className="live-count"
                   style={{
-                    fontSize: 'clamp(13px, 1.5vw, 15px)',
-                    opacity: 0.9,
-                    background: 'rgba(74, 222, 128, 0.1)',
-                    padding: '4px 12px',
-                    borderRadius: '20px',
-                    border: '1px solid rgba(74, 222, 128, 0.2)',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    opacity: 0.95,
+                    background: 'rgba(74, 222, 128, 0.12)',
+                    padding: '6px 10px',
+                    borderRadius: '14px',
+                    border: '1px solid rgba(74, 222, 128, 0.25)',
                     color: '#4ade80',
+                    whiteSpace: 'nowrap',
+                    flexShrink: 0,
+                    lineHeight: 1.2,
                   }}
                 >
-                  {liveUids.length > 0 ? `${liveUids.length} live · ` : ''}{onlineUsers.length} online
+                  {liveUids.length > 0
+                    ? `${liveUids.length} live · ${onlineUsers.length} online`
+                    : `${onlineUsers.length} online`}
                 </span>
               </div>
 
@@ -654,7 +629,7 @@ const Home = () => {
               >
                 {liveUids.length > 0
                   ? 'Tap a live user or press Join Live to watch'
-                  : 'Tap any profile to view and chat instantly'}
+                  : 'Tap any profile to view, chat and call instantly'}
               </p>
 
               {/* Clear JOIN LIVE row – only when someone is broadcasting */}
@@ -948,9 +923,11 @@ const Home = () => {
             onChat={() =>
               startChat(selectedUser.uid, selectedUser.name, selectedUser.avatar)
             }
-            onVideoCall={() =>
-              startVideoCall(selectedUser.uid, selectedUser.name, selectedUser.avatar)
-            }
+            onVideoCall={() => {
+              const u = selectedUser;
+              setSelectedUser(null);
+              startVideoCall(u.uid, u.name, u.avatar);
+            }}
             callerIsLive={isLive}
             onJoinLive={() =>
               handleJoinLive(selectedUser.uid, selectedUser.name)

@@ -1,0 +1,258 @@
+/* src/components/pages/Communities/Communities.css */
+
+.communities-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 20px 16px 100px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;  /* ✅ Center the entire page content */
+}
+
+.communities-header {
+  width: 100%;
+  text-align: center;   /* ✅ Center the header text */
+  margin-bottom: 28px;
+}
+
+.communities-header h1 {
+  font-size: 28px;
+  font-weight: 800;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin-bottom: 4px;
+}
+
+.communities-header p {
+  color: var(--text-muted);
+  font-size: 14px;
+}
+
+.communities-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 24px;
+  width: 100%;          /* ✅ Full width so it doesn't shrink */
+  max-width: 1200px;    /* ✅ Constrain to keep cards neat */
+  justify-content: center;  /* ✅ Center the grid when fewer items */
+  align-items: start;
+}
+
+/* ─── Card ────────────────────────────────────────────────────── */
+.community-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 20px;
+  overflow: hidden;
+  cursor: pointer;
+  transition: transform 0.25s ease, box-shadow 0.3s ease;
+  box-shadow: 0 4px 16px var(--shadow-color);
+  opacity: 0;
+  animation: fadeUp 0.5s ease forwards;
+  width: 100%;          /* ✅ Fill grid cell */
+  max-width: 340px;     /* ✅ Prevent cards from stretching too wide */
+  justify-self: center; /* ✅ Center each card in its cell */
+}
+
+/* Staggered delays – now using inline style for flexibility */
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Hover and active states ────────────────────────────────── */
+.community-card:hover {
+  transform: translateY(-6px);
+  box-shadow: 0 12px 40px rgba(108, 60, 225, 0.2);
+  border-color: rgba(108, 60, 225, 0.3);
+}
+
+.community-card:active {
+  transform: scale(0.97);
+}
+
+/* ─── Card Image ──────────────────────────────────────────────── */
+.community-card-image {
+  height: 160px;
+  background: var(--bg-input);
+  overflow: hidden;
+}
+
+.community-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.3s ease;
+}
+
+.community-card:hover .community-card-image img {
+  transform: scale(1.04);
+}
+
+/* ─── Card Body ────────────────────────────────────────────────── */
+.community-card-body {
+  padding: 16px 18px 20px;
+  text-align: left;     /* ✅ Keep text left inside the card */
+}
+
+.community-card-body h3 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 4px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.community-description {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0 0 12px;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.community-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.community-avatars {
+  display: flex;
+  align-items: center;
+}
+
+.community-member-avatar {
+  margin-right: -6px;
+  border: 2px solid var(--bg-primary);
+  border-radius: 50%;
+  transition: transform 0.15s;
+}
+
+.community-member-avatar:hover {
+  transform: scale(1.08);
+  z-index: 2;
+}
+
+.community-more-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--bg-input);
+  border: 2px solid var(--bg-primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-left: -6px;
+}
+
+.community-member-count {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  color: var(--text-secondary);
+}
+
+.count-badge {
+  display: inline-block;
+  background: rgba(108, 60, 225, 0.15);
+  color: #8B5CF6;
+  font-weight: 700;
+  padding: 2px 10px;
+  border-radius: 12px;
+  transition: transform 0.2s ease;
+}
+
+.count-badge.bounce {
+  animation: bounceCount 0.4s ease;
+}
+
+@keyframes bounceCount {
+  0% { transform: scale(1); }
+  30% { transform: scale(1.3); }
+  60% { transform: scale(0.9); }
+  100% { transform: scale(1); }
+}
+
+.community-join-btn {
+  width: 100%;
+  padding: 10px;
+  border: none;
+  border-radius: 30px;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  font-weight: 700;
+  font-size: 15px;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 4px 16px rgba(108, 60, 225, 0.2);
+}
+
+.community-join-btn:hover {
+  transform: scale(1.02);
+  box-shadow: 0 6px 24px rgba(108, 60, 225, 0.35);
+}
+
+.community-join-btn:active {
+  transform: scale(0.96);
+}
+
+/* ─── Skeleton ──────────────────────────────────────────────── */
+.skeleton-grid .community-card {
+  background: var(--bg-input);
+  border-color: var(--border-color);
+  animation: pulse-skeleton 1.5s infinite;
+}
+
+@keyframes pulse-skeleton {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 0.9; }
+}
+
+.skeleton-grid .community-card .community-card-image {
+  background: var(--bg-input);
+}
+
+/* ─── Empty state ────────────────────────────────────────────── */
+.empty-state {
+  grid-column: 1 / -1;
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--text-muted);
+}
+
+/* ─── Responsive ────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .communities-grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+    justify-items: center;  /* ✅ Center single column */
+  }
+  .community-card {
+    max-width: 400px;       /* ✅ Allow wider on small screens */
+  }
+  .community-card-image {
+    height: 120px;
+  }
+}
+
+/* ─── Small screens, very narrow ───────────────────────────── */
+@media (max-width: 400px) {
+  .community-card {
+    max-width: 100%;
+  }
+}

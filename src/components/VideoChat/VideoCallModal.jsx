@@ -173,7 +173,7 @@ const VideoCallModal = ({
           setTimeout(() => {
             cleanupSignals();
             if (isMounted.current) onClose();
-          }, 2500);
+          }, 1200);
         } else {
           cleanupSignals();
           onClose();
@@ -181,15 +181,11 @@ const VideoCallModal = ({
         return;
       }
 
-      cleanupSignals();
-      setEndedByName(byName || 'User');
-      setCallEnded(true);
-      setCallStatus('Call Ended');
-      setTimeout(() => {
-        if (isMounted.current) onClose();
-      }, 2000);
+      // Other person hung up / ended — go straight home (no intermediate screen)
+      setTimeout(() => cleanupSignals(), 800);
+      if (isMounted.current) onClose();
     },
-    [onClose, stopRingtone, cleanupSignals]
+    [onClose, stopRingtone, cleanupSignals, partnerProfile.name]
   );
   endEverythingRef.current = endEverything;
 
@@ -389,9 +385,10 @@ const VideoCallModal = ({
         endEverything('declined');
       } else if (data.status === 'busy') {
         stopRingtone();
-        if (!answeredRef.current) setCallStatus('On another call right now');
+        if (!answeredRef.current) setCallStatus('This person is on another call');
       } else if (data.status === 'ended') {
-        endEverything('ended', data.endedByName || partnerProfile.name);
+        const who = (data.endedByName || partnerProfile.name || 'User').trim() || 'User';
+        endEverything('ended', who);
       } else if (data.status === 'connecting') {
         setCallStatus('Connecting…');
         stopRingtone();
@@ -415,9 +412,9 @@ const VideoCallModal = ({
         endEverything('declined');
       } else if (data.status === 'busy') {
         stopRingtone();
-        if (!answeredRef.current) setCallStatus('On another call right now');
+        if (!answeredRef.current) setCallStatus('This person is on another call');
       } else if (data.status === 'ended') {
-        endEverything('ended', data.endedByName || partnerProfile.name);
+        endEverything('ended', (data.endedByName || partnerProfile.name || 'User').trim() || 'User');
       }
     });
     return () => off(inviteRef);
@@ -447,8 +444,8 @@ const VideoCallModal = ({
           stopRingtone();
           const msg = `${partnerProfile.name || 'User'} went offline`;
           setCallStatus(msg);
-          setTimeout(() => endEverything('ended', msg), 1500);
-        }, 1500);
+          setTimeout(() => endEverything('ended', msg), 600);
+        }, 800);
       }
     });
     return () => {
@@ -649,16 +646,21 @@ const VideoCallModal = ({
   useEffect(() => {
     if (!isReceiver || connected || answeredRef.current) return;
     if (!myPeerId || !localStream) return;
-    const t = setTimeout(() => handleAcceptRef.current?.(), 400);
+    const t = setTimeout(() => handleAcceptRef.current?.(), 80);
     return () => clearTimeout(t);
   }, [isReceiver, connected, myPeerId, localStream]);
 
   const handleEndCall = () => {
     stopRingtone();
+    // Prefer real profile name so the other side sees exact name
+    const myName = (myProfile.name || currentUser?.name || 'User').trim() || 'User';
+    // Publish BEFORE tearing down so the other side receives "ended" while connecting or connected
     publishStatus('ended', {
-      endedByName: myProfile.name || 'User',
+      endedByName: myName,
       by: myUid,
+      hungUp: true,
     });
+
     if (callRef.current) {
       try {
         callRef.current.close();
@@ -673,7 +675,11 @@ const VideoCallModal = ({
         peerRef.current.destroy();
       } catch (_) {}
     }
-    cleanupSignals();
+
+    // Keep Firebase nodes briefly so the other device can read status=ended
+    setTimeout(() => cleanupSignals(), 800);
+
+    // Person who hangs up goes straight back to Home (no intermediate screen)
     onClose();
   };
 
@@ -790,10 +796,12 @@ const VideoCallModal = ({
       <div className="echo-call">
         <div className="echo-call-result">
           <div className="echo-call-result-icon ended">📡</div>
-          <h2>Call Ended</h2>
+          <h2>{callStatus === 'Call cancelled' ? 'Call cancelled' : 'Call Ended'}</h2>
           <p>
             {endedByName && String(endedByName).toLowerCase().includes('offline')
               ? endedByName
+              : callStatus === 'Call cancelled'
+              ? `${endedByName || partnerProfile.name} hung up.`
               : `${endedByName || partnerProfile.name} ended the call.`}
           </p>
           <button className="echo-call-result-btn" onClick={onClose}>

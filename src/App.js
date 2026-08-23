@@ -15,6 +15,7 @@ import ChatView from './components/pages/Chat/ChatView';
 import Profile from './components/pages/Profile/Profile';
 import Other from './components/pages/Other/Other';
 import Terms from './components/pages/Other/Terms';
+import DesktopInstallPrompt from './components/common/DesktopInstallPrompt';
 import Privacy from './components/pages/Other/Privacy';
 import Report from './components/pages/Other/Report';
 import Settings from './components/pages/Other/Settings';
@@ -446,6 +447,7 @@ function AppContent() {
     <>
       <Navbar />
       <NetworkStatus />
+      <DesktopInstallPrompt />
       <ScrollToTop />
       <div
         id="main-content"
