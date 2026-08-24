@@ -36,6 +36,8 @@ import Shop from './components/pages/Shop/Shop';
 import AdminPanel from './components/pages/Admin/AdminPanel';
 import BanScreen from './components/BanScreen/BanScreen';
 import Communities from './components/pages/Communities/Communities';
+import { CommunityProvider } from './contexts/CommunityContext';
+import CommunityChat from './components/pages/CommunityChat/CommunityChat';
 
 // ─── NEW: Import version number ──────────────────────────────
 import { APP_VERSION } from './version';
@@ -401,7 +403,7 @@ function AppContent() {
               console.log(`🧹 Cleaned ${removed} stale messages from cache`);
             }
           }
-        } catch (_) {}
+        } catch (_) { }
       };
       cleanup();
     }
@@ -412,7 +414,7 @@ function AppContent() {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then((registration) => {
         registration.update();
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, []);
 
@@ -479,6 +481,7 @@ function AppContent() {
           <Route path="*" element={<Navigate to="/" />} />
           <Route path="/communities" element={<Communities />} />
           <Route path="/shop" element={<Shop />} />
+          <Route path="/community/:communityId" element={<CommunityChat />} />
         </Routes>
       </div>
       <BottomNav />
@@ -515,7 +518,9 @@ function App() {
             <ProfileProvider>
               <CacheProvider>
                 <CallProvider>
-                  <AppContent />
+                  <CommunityProvider>
+                    <AppContent />
+                  </CommunityProvider>
                 </CallProvider>
               </CacheProvider>
             </ProfileProvider>
