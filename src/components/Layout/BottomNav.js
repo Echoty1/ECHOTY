@@ -1,4 +1,3 @@
-// src/components/Layout/BottomNav.js
 import React, { useState, useRef, useEffect } from 'react';
 import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
@@ -6,6 +5,7 @@ import { db } from '../../services/firebase';
 import { ref, onValue } from 'firebase/database';
 
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
+const AD_ZONE_ID = '12035158';
 
 const BottomNav = () => {
   const { user } = useAuth();
@@ -16,7 +16,9 @@ const BottomNav = () => {
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
 
   const [isMinimized, setIsMinimized] = useState(() => {
-    return localStorage.getItem('bottomNavMinimized') === 'true';
+    // If previously minimised, reset it for now so we can see it.
+    // You can change this back to localStorage later.
+    return false;
   });
 
   const toggleMinimize = () => {
@@ -25,36 +27,31 @@ const BottomNav = () => {
     localStorage.setItem('bottomNavMinimized', String(newState));
   };
 
+  useEffect(() => {
+    // Reset drag position on mount to avoid being pushed off‑screen
+    setPosition({ x: 0, y: 0 });
+    // Also clear the minimised flag if you want to force it open
+    // localStorage.removeItem('bottomNavMinimized');
+  }, []);
+
   const isSupport = user?.uid === SUPPORT_UID;
 
-  // ─── Define tabs based on user role ──────────────────────────
   const getTabs = () => {
     const commonTabs = [
-      { to: '/', label: 'Home', icon: 'fa-house' },
       { to: '/chats', label: 'Chats', icon: 'fa-comment-dots' },
       { to: '/communities', label: 'Communities', icon: 'fa-users' },
+      { to: '/shop', label: 'Shop', icon: 'fa-store' },
+      { to: '/other', label: 'Other', icon: 'fa-ellipsis-h' },
     ];
-
     if (isSupport) {
-      // Admin: Home → Chats → Control → Communities → Other
-      return [
-        ...commonTabs,
-        { to: '/control', label: 'Control', icon: 'fa-sliders-h' },
-        { to: '/other', label: 'Other', icon: 'fa-ellipsis-h' },
-      ];
+      return [{ to: '/control', label: 'Control', icon: 'fa-sliders-h' }, ...commonTabs];
     } else {
-      // Normal users: Home → Chats → Communities → Shop → Other
-      return [
-        ...commonTabs,
-        { to: '/shop', label: 'Shop', icon: 'fa-store' },
-        { to: '/other', label: 'Other', icon: 'fa-ellipsis-h' },
-      ];
+      return [{ to: '/', label: 'Home', icon: 'fa-house' }, ...commonTabs];
     }
   };
 
   const tabs = getTabs();
 
-  // ─── Real‑time unread contacts count ──────────────────────────
   useEffect(() => {
     if (!user?.uid) {
       setUnreadChatsCount(0);
@@ -68,7 +65,6 @@ const BottomNav = () => {
         setUnreadChatsCount(0);
         return;
       }
-
       let count = 0;
       Object.values(data).forEach((chat) => {
         if (chat.unreadCount && chat.unreadCount > 0) {
@@ -81,7 +77,7 @@ const BottomNav = () => {
     return () => unsubscribe();
   }, [user?.uid]);
 
-  // ─── Dragging handlers ──────────────────────────────────────
+  // ─── Drag handlers ──────────────────────────────────────────
   const handleStart = (e) => {
     if (isMinimized) return;
     const touch = e.touches ? e.touches[0] : e;
@@ -97,8 +93,10 @@ const BottomNav = () => {
     const dy = touch.clientY - startPos.current.y;
     let newX = startOffset.current.x + dx;
     let newY = startOffset.current.y + dy;
-    const maxX = 600;
-    const maxY = 400;
+
+    // Capped limits to keep the nav on screen
+    const maxX = 200;
+    const maxY = 100;
     newX = Math.max(-maxX, Math.min(maxX, newX));
     newY = Math.max(-maxY, Math.min(maxY, newY));
     setPosition({ x: newX, y: newY });
@@ -126,6 +124,88 @@ const BottomNav = () => {
     };
   }, [isDragging]);
 
+  // ─── AdCash loader ──────────────────────────────────────────
+  useEffect(() => {
+    if (isMinimized) return;
+
+    const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+
+    const loadLibrary = () => {
+      return new Promise((resolve) => {
+        if (window.aclib) {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.id = 'aclib';
+        script.type = 'text/javascript';
+        script.src = '//acscdn.com/script/aclib.js';
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = () => resolve();
+        document.head.appendChild(script);
+      });
+    };
+
+    const runAd = async () => {
+      try {
+        await loadLibrary();
+        const container = document.getElementById('ad-bg-container');
+        if (!container) return;
+        container.innerHTML = '';
+
+        if (isLocalhost) {
+          const placeholder = document.createElement('div');
+          placeholder.style.width = '100%';
+          placeholder.style.height = '100%';
+          placeholder.style.background = 'linear-gradient(135deg, #6C3CE1, #EC4899)';
+          placeholder.style.display = 'flex';
+          placeholder.style.alignItems = 'center';
+          placeholder.style.justifyContent = 'center';
+          placeholder.style.color = '#fff';
+          placeholder.style.fontSize = '14px';
+          placeholder.style.fontWeight = '700';
+          placeholder.style.letterSpacing = '0.5px';
+          placeholder.textContent = '📢 Ad (localhost)';
+          container.appendChild(placeholder);
+          return;
+        }
+
+        const zoneScript = document.createElement('script');
+        zoneScript.type = 'text/javascript';
+        zoneScript.innerHTML = `
+          try {
+            aclib.runBanner({
+              zoneId: '${AD_ZONE_ID}',
+            });
+          } catch (e) {
+            console.warn('AdCash banner error:', e);
+          }
+        `;
+        container.appendChild(zoneScript);
+      } catch (err) {
+        const container = document.getElementById('ad-bg-container');
+        if (container) {
+          container.innerHTML = '';
+          const fallback = document.createElement('div');
+          fallback.style.width = '100%';
+          fallback.style.height = '100%';
+          fallback.style.background = 'var(--bg-input, #222)';
+          fallback.style.display = 'flex';
+          fallback.style.alignItems = 'center';
+          fallback.style.justifyContent = 'center';
+          fallback.style.color = 'var(--text-muted, #888)';
+          fallback.style.fontSize = '12px';
+          fallback.textContent = 'Ad unavailable';
+          container.appendChild(fallback);
+        }
+      }
+    };
+
+    const timer = setTimeout(runAd, 300);
+    return () => clearTimeout(timer);
+  }, [isMinimized]);
+
   const navHeight = isMinimized ? '32px' : '72px';
   const tabOpacity = isMinimized ? 0 : 1;
   const pointerEvents = isMinimized ? 'none' : 'auto';
@@ -134,34 +214,63 @@ const BottomNav = () => {
     <div
       style={{
         position: 'fixed',
-        bottom: '16px',
+        bottom: 0,
         left: '50%',
         transform: `translateX(calc(-50% + ${position.x}px)) translateY(${position.y}px)`,
-        zIndex: 50,
-        background: 'var(--bg-primary)',
-        backdropFilter: 'blur(16px)',
-        border: '1px solid var(--border-color)',
-        borderRadius: '28px',
+        zIndex: 9999,
+        borderRadius: '28px 28px 0 0',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        padding: '4px 0',
+        padding: '0',
         height: navHeight,
         width: 'calc(100% - 16px)',
         maxWidth: '440px',
-        boxShadow: '0 8px 40px var(--shadow-color)',
+        boxShadow: '0 -4px 20px var(--shadow-color)',
         cursor: isDragging ? 'grabbing' : isMinimized ? 'default' : 'grab',
         touchAction: 'none',
         transition: 'height 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease',
         userSelect: 'none',
         willChange: 'transform, height',
         overflow: 'hidden',
+        background: 'var(--bg-secondary, #1a1a2e)',
+        border: '1px solid var(--border-color, rgba(255,255,255,0.08))',
       }}
       onMouseDown={handleStart}
       onTouchStart={handleStart}
     >
-      {/* ─── Toggle Button ────────────────────────────────────── */}
+      {/* ─── Ad Background Container ───────────────────────────── */}
+      {!isMinimized && (
+        <div
+          id="ad-bg-container"
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            overflow: 'hidden',
+            zIndex: 0,
+            borderRadius: '28px 28px 0 0',
+          }}
+        />
+      )}
+
+      {/* ─── Dark overlay for icon readability ─────────────────── */}
+      {!isMinimized && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(0, 0, 0, 0.35)',
+            borderRadius: '28px 28px 0 0',
+            pointerEvents: 'none',
+            zIndex: 1,
+          }}
+        />
+      )}
+
+      {/* ─── Minimize toggle ──────────────────────────────────── */}
       <button
         onClick={toggleMinimize}
         style={{
@@ -171,29 +280,32 @@ const BottomNav = () => {
           transform: 'translateX(-50%)',
           background: 'none',
           border: 'none',
-          color: 'var(--text-muted)',
-          fontSize: '14px',
+          color: isMinimized ? 'var(--text-muted, #666)' : 'rgba(255,255,255,0.8)',
+          fontSize: '12px',
           cursor: 'pointer',
           padding: '2px 8px',
           zIndex: 10,
         }}
         aria-label={isMinimized ? 'Expand navigation' : 'Minimize navigation'}
       >
-        <i className={`fas fa-chevron-${isMinimized ? 'up' : 'down'}`} />
+        <i className={`fas fa-chevron-${isMinimized ? 'up' : 'down'}`} style={{ fontSize: '12px' }} />
       </button>
 
-      {/* ─── Nav Links ────────────────────────────────────────── */}
+      {/* ─── Icons row ────────────────────────────────────────── */}
       <div
         style={{
           display: 'flex',
           justifyContent: 'space-around',
           alignItems: 'center',
           width: '100%',
-          padding: isMinimized ? '0 12px' : '8px 12px',
+          padding: isMinimized ? '0 12px' : '4px 12px 0 12px',
           opacity: tabOpacity,
           pointerEvents: pointerEvents,
           transition: 'opacity 0.25s ease, pointer-events 0.25s ease',
-          flex: 1,
+          flex: '0 0 auto',
+          position: 'relative',
+          zIndex: 2,
+          height: isMinimized ? '32px' : '68px',
         }}
       >
         {tabs.map((tab) => {
@@ -203,12 +315,13 @@ const BottomNav = () => {
             <NavLink
               key={tab.to}
               to={tab.to}
+              className="nav-link"
               style={({ isActive }) => ({
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 justifyContent: 'center',
-                color: isActive ? 'var(--text-primary)' : 'var(--text-muted)',
+                color: isActive ? 'var(--text-primary, #fff)' : 'var(--text-muted, #aaa)',
                 fontSize: '10px',
                 padding: '4px 8px',
                 borderRadius: '16px',
@@ -219,27 +332,28 @@ const BottomNav = () => {
                 transition: 'all 0.15s ease',
                 position: 'relative',
               })}
+              onClick={(e) => e.stopPropagation()}
             >
               <div style={{ position: 'relative', display: 'inline-flex' }}>
-                <i className={`fas ${tab.icon}`} style={{ fontSize: '22px', marginBottom: '2px' }} />
+                <i className={`fas ${tab.icon}`} style={{ fontSize: '20px', marginBottom: '1px' }} />
                 {isChatTab && unreadChatsCount > 0 && (
                   <span
                     style={{
                       position: 'absolute',
-                      top: '-6px',
+                      top: '-4px',
                       right: '-10px',
-                      minWidth: '18px',
-                      height: '18px',
+                      minWidth: '16px',
+                      height: '16px',
                       borderRadius: '50%',
                       backgroundColor: '#EF4444',
                       color: '#fff',
-                      fontSize: '10px',
+                      fontSize: '9px',
                       fontWeight: 700,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       padding: '0 4px',
-                      border: '2px solid var(--bg-primary)',
+                      border: '2px solid var(--bg-primary, #0A0A0F)',
                       boxShadow: '0 0 8px rgba(239,68,68,0.3)',
                       lineHeight: 1,
                     }}
@@ -251,19 +365,19 @@ const BottomNav = () => {
                   <span
                     style={{
                       position: 'absolute',
-                      top: '-6px',
+                      top: '-4px',
                       right: '-10px',
-                      minWidth: '16px',
-                      height: '16px',
+                      minWidth: '14px',
+                      height: '14px',
                       borderRadius: '50%',
                       backgroundColor: '#10B981',
                       color: '#fff',
-                      fontSize: '8px',
+                      fontSize: '7px',
                       fontWeight: 700,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
-                      border: '2px solid var(--bg-primary)',
+                      border: '2px solid var(--bg-primary, #0A0A0F)',
                       lineHeight: 1,
                     }}
                   >
@@ -271,11 +385,30 @@ const BottomNav = () => {
                   </span>
                 )}
               </div>
-              <span style={{ fontSize: '9px', opacity: 0.8, fontWeight: 500 }}>{tab.label}</span>
+              <span style={{ fontSize: '8px', opacity: 0.8, fontWeight: 500, marginTop: '1px' }}>{tab.label}</span>
             </NavLink>
           );
         })}
       </div>
+
+      {/* ─── "Ad" label ────────────────────────────────────────── */}
+      {!isMinimized && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '4px',
+            right: '14px',
+            fontSize: '7px',
+            color: 'rgba(255,255,255,0.3)',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            zIndex: 3,
+            pointerEvents: 'none',
+          }}
+        >
+          Ad
+        </div>
+      )}
 
       {isMinimized && (
         <div
@@ -287,7 +420,7 @@ const BottomNav = () => {
             width: '30px',
             height: '3px',
             borderRadius: '2px',
-            background: 'var(--border-color)',
+            background: 'var(--border-color, rgba(255,255,255,0.08))',
             pointerEvents: 'none',
           }}
         />
