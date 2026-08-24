@@ -15,10 +15,9 @@ const BottomNav = () => {
   const startOffset = useRef({ x: 0, y: 0 });
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
 
+  // ─── Minimised state ────────────────────────────────────────
   const [isMinimized, setIsMinimized] = useState(() => {
-    // If previously minimised, reset it for now so we can see it.
-    // You can change this back to localStorage later.
-    return false;
+    return localStorage.getItem('bottomNavMinimized') === 'true';
   });
 
   const toggleMinimize = () => {
@@ -28,10 +27,8 @@ const BottomNav = () => {
   };
 
   useEffect(() => {
-    // Reset drag position on mount to avoid being pushed off‑screen
+    // Reset drag position on mount
     setPosition({ x: 0, y: 0 });
-    // Also clear the minimised flag if you want to force it open
-    // localStorage.removeItem('bottomNavMinimized');
   }, []);
 
   const isSupport = user?.uid === SUPPORT_UID;
@@ -52,6 +49,7 @@ const BottomNav = () => {
 
   const tabs = getTabs();
 
+  // ─── Unread count listener ──────────────────────────────────
   useEffect(() => {
     if (!user?.uid) {
       setUnreadChatsCount(0);
@@ -93,8 +91,6 @@ const BottomNav = () => {
     const dy = touch.clientY - startPos.current.y;
     let newX = startOffset.current.x + dx;
     let newY = startOffset.current.y + dy;
-
-    // Capped limits to keep the nav on screen
     const maxX = 200;
     const maxY = 100;
     newX = Math.max(-maxX, Math.min(maxX, newX));
@@ -124,10 +120,8 @@ const BottomNav = () => {
     };
   }, [isDragging]);
 
-  // ─── AdCash loader ──────────────────────────────────────────
+  // ─── AdCash loader – ALWAYS runs, even when minimised ──────
   useEffect(() => {
-    if (isMinimized) return;
-
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
     const loadLibrary = () => {
@@ -204,7 +198,7 @@ const BottomNav = () => {
 
     const timer = setTimeout(runAd, 300);
     return () => clearTimeout(timer);
-  }, [isMinimized]);
+  }, []);
 
   const navHeight = isMinimized ? '32px' : '72px';
   const tabOpacity = isMinimized ? 0 : 1;
@@ -241,20 +235,18 @@ const BottomNav = () => {
       onTouchStart={handleStart}
     >
       {/* ─── Ad Background Container ───────────────────────────── */}
-      {!isMinimized && (
-        <div
-          id="ad-bg-container"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            width: '100%',
-            height: '100%',
-            overflow: 'hidden',
-            zIndex: 0,
-            borderRadius: '28px 28px 0 0',
-          }}
-        />
-      )}
+      <div
+        id="ad-bg-container"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          overflow: 'hidden',
+          zIndex: 0,
+          borderRadius: '28px 28px 0 0',
+        }}
+      />
 
       {/* ─── Dark overlay for icon readability ─────────────────── */}
       {!isMinimized && (
@@ -331,11 +323,19 @@ const BottomNav = () => {
                 minWidth: '44px',
                 transition: 'all 0.15s ease',
                 position: 'relative',
+                fontWeight: 900, // 💥 Bold label
               })}
               onClick={(e) => e.stopPropagation()}
             >
               <div style={{ position: 'relative', display: 'inline-flex' }}>
-                <i className={`fas ${tab.icon}`} style={{ fontSize: '20px', marginBottom: '1px' }} />
+                <i
+                  className={`fas ${tab.icon}`}
+                  style={{
+                    fontSize: '24px', // 💥 Larger icon
+                    marginBottom: '1px',
+                    fontWeight: 900, // 💥 Bold icon
+                  }}
+                />
                 {isChatTab && unreadChatsCount > 0 && (
                   <span
                     style={{
@@ -385,7 +385,16 @@ const BottomNav = () => {
                   </span>
                 )}
               </div>
-              <span style={{ fontSize: '8px', opacity: 0.8, fontWeight: 500, marginTop: '1px' }}>{tab.label}</span>
+              <span
+                style={{
+                  fontSize: '11px', // 💥 Slightly larger text
+                  opacity: 0.9,
+                  fontWeight: 900, // 💥 Bold text
+                  marginTop: '1px',
+                }}
+              >
+                {tab.label}
+              </span>
             </NavLink>
           );
         })}
