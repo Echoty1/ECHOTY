@@ -1,5 +1,6 @@
+// src/components/Layout/BottomNav.js
 import React, { useState, useRef, useEffect } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom'; // ✅ useLocation added
 import { useAuth } from '../../hooks/useAuth';
 import { db } from '../../services/firebase';
 import { ref, onValue } from 'firebase/database';
@@ -9,13 +10,13 @@ const AD_ZONE_ID = '12035158';
 
 const BottomNav = () => {
   const { user } = useAuth();
+  const location = useLocation(); // ✅ get current route
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const startPos = useRef({ x: 0, y: 0 });
   const startOffset = useRef({ x: 0, y: 0 });
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
 
-  // ─── Minimised state ────────────────────────────────────────
   const [isMinimized, setIsMinimized] = useState(() => {
     return localStorage.getItem('bottomNavMinimized') === 'true';
   });
@@ -27,7 +28,6 @@ const BottomNav = () => {
   };
 
   useEffect(() => {
-    // Reset drag position on mount
     setPosition({ x: 0, y: 0 });
   }, []);
 
@@ -120,8 +120,8 @@ const BottomNav = () => {
     };
   }, [isDragging]);
 
-  // ─── AdCash loader – ALWAYS runs, even when minimised ──────
-  useEffect(() => {
+  // ─── Ad loading function ────────────────────────────────────
+  const runAd = async () => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
     const loadLibrary = () => {
@@ -141,64 +141,67 @@ const BottomNav = () => {
       });
     };
 
-    const runAd = async () => {
-      try {
-        await loadLibrary();
-        const container = document.getElementById('ad-bg-container');
-        if (!container) return;
-        container.innerHTML = '';
+    try {
+      await loadLibrary();
+      const container = document.getElementById('ad-bg-container');
+      if (!container) return;
+      container.innerHTML = '';
 
-        if (isLocalhost) {
-          const placeholder = document.createElement('div');
-          placeholder.style.width = '100%';
-          placeholder.style.height = '100%';
-          placeholder.style.background = 'linear-gradient(135deg, #6C3CE1, #EC4899)';
-          placeholder.style.display = 'flex';
-          placeholder.style.alignItems = 'center';
-          placeholder.style.justifyContent = 'center';
-          placeholder.style.color = '#fff';
-          placeholder.style.fontSize = '14px';
-          placeholder.style.fontWeight = '700';
-          placeholder.style.letterSpacing = '0.5px';
-          placeholder.textContent = '📢 Ad (localhost)';
-          container.appendChild(placeholder);
-          return;
-        }
-
-        const zoneScript = document.createElement('script');
-        zoneScript.type = 'text/javascript';
-        zoneScript.innerHTML = `
-          try {
-            aclib.runBanner({
-              zoneId: '${AD_ZONE_ID}',
-            });
-          } catch (e) {
-            console.warn('AdCash banner error:', e);
-          }
-        `;
-        container.appendChild(zoneScript);
-      } catch (err) {
-        const container = document.getElementById('ad-bg-container');
-        if (container) {
-          container.innerHTML = '';
-          const fallback = document.createElement('div');
-          fallback.style.width = '100%';
-          fallback.style.height = '100%';
-          fallback.style.background = 'var(--bg-input, #222)';
-          fallback.style.display = 'flex';
-          fallback.style.alignItems = 'center';
-          fallback.style.justifyContent = 'center';
-          fallback.style.color = 'var(--text-muted, #888)';
-          fallback.style.fontSize = '12px';
-          fallback.textContent = 'Ad unavailable';
-          container.appendChild(fallback);
-        }
+      if (isLocalhost) {
+        const placeholder = document.createElement('div');
+        placeholder.style.width = '100%';
+        placeholder.style.height = '100%';
+        placeholder.style.background = 'linear-gradient(135deg, #6C3CE1, #EC4899)';
+        placeholder.style.display = 'flex';
+        placeholder.style.alignItems = 'center';
+        placeholder.style.justifyContent = 'center';
+        placeholder.style.color = '#fff';
+        placeholder.style.fontSize = '14px';
+        placeholder.style.fontWeight = '700';
+        placeholder.style.letterSpacing = '0.5px';
+        placeholder.textContent = '📢 Ad (localhost)';
+        container.appendChild(placeholder);
+        return;
       }
-    };
 
-    const timer = setTimeout(runAd, 300);
+      const zoneScript = document.createElement('script');
+      zoneScript.type = 'text/javascript';
+      zoneScript.innerHTML = `
+        try {
+          aclib.runBanner({
+            zoneId: '${AD_ZONE_ID}',
+          });
+        } catch (e) {
+          console.warn('AdCash banner error:', e);
+        }
+      `;
+      container.appendChild(zoneScript);
+    } catch (err) {
+      const container = document.getElementById('ad-bg-container');
+      if (container) {
+        container.innerHTML = '';
+        const fallback = document.createElement('div');
+        fallback.style.width = '100%';
+        fallback.style.height = '100%';
+        fallback.style.background = 'var(--bg-input, #222)';
+        fallback.style.display = 'flex';
+        fallback.style.alignItems = 'center';
+        fallback.style.justifyContent = 'center';
+        fallback.style.color = 'var(--text-muted, #888)';
+        fallback.style.fontSize = '12px';
+        fallback.textContent = 'Ad unavailable';
+        container.appendChild(fallback);
+      }
+    }
+  };
+
+  // ─── Load ad on mount and on route change ───────────────────
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      runAd();
+    }, 300);
     return () => clearTimeout(timer);
-  }, []);
+  }, [location.pathname]); // ✅ reload when URL changes
 
   const navHeight = isMinimized ? '32px' : '72px';
   const tabOpacity = isMinimized ? 0 : 1;
@@ -323,7 +326,7 @@ const BottomNav = () => {
                 minWidth: '44px',
                 transition: 'all 0.15s ease',
                 position: 'relative',
-                fontWeight: 900, // 💥 Bold label
+                fontWeight: 900,
               })}
               onClick={(e) => e.stopPropagation()}
             >
@@ -331,9 +334,9 @@ const BottomNav = () => {
                 <i
                   className={`fas ${tab.icon}`}
                   style={{
-                    fontSize: '24px', // 💥 Larger icon
+                    fontSize: '24px',
                     marginBottom: '1px',
-                    fontWeight: 900, // 💥 Bold icon
+                    fontWeight: 900,
                   }}
                 />
                 {isChatTab && unreadChatsCount > 0 && (
@@ -387,9 +390,9 @@ const BottomNav = () => {
               </div>
               <span
                 style={{
-                  fontSize: '11px', // 💥 Slightly larger text
+                  fontSize: '11px',
                   opacity: 0.9,
-                  fontWeight: 900, // 💥 Bold text
+                  fontWeight: 900,
                   marginTop: '1px',
                 }}
               >
