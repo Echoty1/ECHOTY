@@ -26,7 +26,7 @@ import Navbar from './components/Layout/Navbar';
 import BottomNav from './components/Layout/BottomNav';
 import { useAuth } from './hooks/useAuth';
 import NetworkStatus from './components/common/NetworkStatus';
-import ScrollRestoration from './components/common/ScrollRestoration'; // ✅ Custom component
+import ScrollRestoration from './components/common/ScrollRestoration';
 import UpdatePopup from './components/UpdatePopup/UpdatePopup';
 import InstallPopup from './components/InstallPopup/InstallPopup';
 import InstallBanner from './components/common/InstallBanner';
@@ -214,7 +214,6 @@ function AppContent() {
   const [showInstallPopup, setShowInstallPopup] = useState(false);
   const [playStoreUrl, setPlayStoreUrl] = useState('');
   const [appVersion] = useState(process.env.REACT_APP_VERSION || '1.0');
-  const [showDbClearedPopup, setShowDbClearedPopup] = useState(false);
 
   useEffect(() => {
     const key = 'echo_v';
@@ -233,21 +232,6 @@ function AppContent() {
     const timer = setTimeout(() => setMinTimePassed(true), 2000);
     return () => clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    if (user?.uid) {
-      const hasSeen = localStorage.getItem('echo_db_cleared_notification');
-      if (!hasSeen) {
-        setShowDbClearedPopup(true);
-      }
-    }
-  }, [user]);
-
-  const handleDbClearedDismiss = () => {
-    localStorage.setItem('echo_db_cleared_notification', 'true');
-    setShowDbClearedPopup(false);
-    window.location.reload();
-  };
 
   const cleanLocalStorage = () => {
     try {
@@ -408,22 +392,6 @@ function AppContent() {
     return <BanScreen />;
   }
 
-  if (!showLoading && user && showDbClearedPopup) {
-    return (
-      <div className="db-cleared-overlay">
-        <div className="db-cleared-modal">
-          <div className="db-cleared-icon">🗄️</div>
-          <h2>Database Update</h2>
-          <p>We have cleared and reset your data to improve performance and reliability.</p>
-          <p>Please refresh to continue using ECHO.</p>
-          <button className="db-cleared-btn" onClick={handleDbClearedDismiss}>
-            Refresh Now
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   if (showLoading) return <LoadingScreen />;
   if (!user) return <Login />;
 
@@ -498,7 +466,7 @@ function App() {
               <CacheProvider>
                 <CallProvider>
                   <CommunityProvider>
-                    <ScrollRestoration />  {/* ✅ Custom component */}
+                    <ScrollRestoration />
                     <AppContent />
                   </CommunityProvider>
                 </CallProvider>
