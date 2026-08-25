@@ -1,15 +1,16 @@
 // src/components/Layout/BottomNav.js
 import React, { useState, useRef, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom'; // ✅ useLocation added
 import { useAuth } from '../../hooks/useAuth';
 import { db } from '../../services/firebase';
 import { ref, onValue } from 'firebase/database';
 
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
+const AD_ZONE_ID = '12035158';
 
 const BottomNav = () => {
   const { user } = useAuth();
-  const location = useLocation();
+  const location = useLocation(); // ✅ get current route
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const startPos = useRef({ x: 0, y: 0 });
@@ -119,53 +120,66 @@ const BottomNav = () => {
     };
   }, [isDragging]);
 
-  // ─── New Ad loading function (High Revenue Format) ──────────
-  const runAd = () => {
-    const container = document.getElementById('ad-bg-container');
-    if (!container) return;
-
-    // Clear previous content
-    container.innerHTML = '';
-
+  // ─── Ad loading function ────────────────────────────────────
+  const runAd = async () => {
     const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
 
-    if (isLocalhost) {
-      // Localhost placeholder
-      const placeholder = document.createElement('div');
-      placeholder.style.width = '100%';
-      placeholder.style.height = '100%';
-      placeholder.style.background = 'linear-gradient(135deg, #6C3CE1, #EC4899)';
-      placeholder.style.display = 'flex';
-      placeholder.style.alignItems = 'center';
-      placeholder.style.justifyContent = 'center';
-      placeholder.style.color = '#fff';
-      placeholder.style.fontSize = '14px';
-      placeholder.style.fontWeight = '700';
-      placeholder.style.letterSpacing = '0.5px';
-      placeholder.textContent = '📢 Ad (localhost)';
-      container.appendChild(placeholder);
-      return;
-    }
+    const loadLibrary = () => {
+      return new Promise((resolve) => {
+        if (window.aclib) {
+          resolve();
+          return;
+        }
+        const script = document.createElement('script');
+        script.id = 'aclib';
+        script.type = 'text/javascript';
+        script.src = '//acscdn.com/script/aclib.js';
+        script.async = true;
+        script.onload = () => resolve();
+        script.onerror = () => resolve();
+        document.head.appendChild(script);
+      });
+    };
 
-    // ─── Production: inject the ad script ──────────────────────
     try {
-      // Set global atOptions as required by the network
-      window.atOptions = {
-        key: '98098c32f57fd64275186e36fc161188',
-        format: 'iframe',
-        height: 60,
-        width: 468,
-        params: {},
-      };
+      await loadLibrary();
+      const container = document.getElementById('ad-bg-container');
+      if (!container) return;
+      container.innerHTML = '';
 
-      // Load the invoke.js script
-      const script = document.createElement('script');
-      script.src = 'https://www.highrevenueformat.com/98098c32f57fd64275186e36fc161188/invoke.js';
-      script.async = true;
-      script.type = 'text/javascript';
-      script.onerror = () => {
-        console.warn('High Revenue Format ad failed to load.');
-        // Fallback display (optional)
+      if (isLocalhost) {
+        const placeholder = document.createElement('div');
+        placeholder.style.width = '100%';
+        placeholder.style.height = '100%';
+        placeholder.style.background = 'linear-gradient(135deg, #6C3CE1, #EC4899)';
+        placeholder.style.display = 'flex';
+        placeholder.style.alignItems = 'center';
+        placeholder.style.justifyContent = 'center';
+        placeholder.style.color = '#fff';
+        placeholder.style.fontSize = '14px';
+        placeholder.style.fontWeight = '700';
+        placeholder.style.letterSpacing = '0.5px';
+        placeholder.textContent = '📢 Ad (localhost)';
+        container.appendChild(placeholder);
+        return;
+      }
+
+      const zoneScript = document.createElement('script');
+      zoneScript.type = 'text/javascript';
+      zoneScript.innerHTML = `
+        try {
+          aclib.runBanner({
+            zoneId: '${AD_ZONE_ID}',
+          });
+        } catch (e) {
+          console.warn('AdCash banner error:', e);
+        }
+      `;
+      container.appendChild(zoneScript);
+    } catch (err) {
+      const container = document.getElementById('ad-bg-container');
+      if (container) {
+        container.innerHTML = '';
         const fallback = document.createElement('div');
         fallback.style.width = '100%';
         fallback.style.height = '100%';
@@ -177,22 +191,7 @@ const BottomNav = () => {
         fallback.style.fontSize = '12px';
         fallback.textContent = 'Ad unavailable';
         container.appendChild(fallback);
-      };
-      container.appendChild(script);
-    } catch (err) {
-      console.warn('Ad injection error:', err);
-      // Fallback
-      const fallback = document.createElement('div');
-      fallback.style.width = '100%';
-      fallback.style.height = '100%';
-      fallback.style.background = 'var(--bg-input, #222)';
-      fallback.style.display = 'flex';
-      fallback.style.alignItems = 'center';
-      fallback.style.justifyContent = 'center';
-      fallback.style.color = 'var(--text-muted, #888)';
-      fallback.style.fontSize = '12px';
-      fallback.textContent = 'Ad unavailable';
-      container.appendChild(fallback);
+      }
     }
   };
 
@@ -202,7 +201,7 @@ const BottomNav = () => {
       runAd();
     }, 300);
     return () => clearTimeout(timer);
-  }, [location.pathname]);
+  }, [location.pathname]); // ✅ reload when URL changes
 
   const navHeight = isMinimized ? '32px' : '72px';
   const tabOpacity = isMinimized ? 0 : 1;
