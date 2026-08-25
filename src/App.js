@@ -26,6 +26,7 @@ import Navbar from './components/Layout/Navbar';
 import BottomNav from './components/Layout/BottomNav';
 import { useAuth } from './hooks/useAuth';
 import NetworkStatus from './components/common/NetworkStatus';
+import ScrollRestoration from './components/common/ScrollRestoration'; // ✅ Custom component
 import UpdatePopup from './components/UpdatePopup/UpdatePopup';
 import InstallPopup from './components/InstallPopup/InstallPopup';
 import InstallBanner from './components/common/InstallBanner';
@@ -36,8 +37,8 @@ import Shop from './components/pages/Shop/Shop';
 import AdminPanel from './components/pages/Admin/AdminPanel';
 import BanScreen from './components/BanScreen/BanScreen';
 import Communities from './components/pages/Communities/Communities';
-
-// ─── NEW: Import version number ──────────────────────────────
+import { CommunityProvider } from './contexts/CommunityContext';
+import CommunityChat from './components/pages/CommunityChat/CommunityChat';
 import { APP_VERSION } from './version';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
@@ -57,7 +58,7 @@ function ScrollToTop() {
   return null;
 }
 
-// ─── Loading Screen (Theme‑aware + mobile friendly) ────────────
+// ─── Loading Screen ──────────────────────────────────────────────
 function LoadingScreen() {
   const isMobile = window.innerWidth <= 480;
 
@@ -75,7 +76,6 @@ function LoadingScreen() {
         transition: 'background 0.3s ease',
       }}
     >
-      {/* ─── Decorative rings (use theme variables) ────────────── */}
       <div
         style={{
           position: 'absolute',
@@ -110,7 +110,6 @@ function LoadingScreen() {
         }}
       />
 
-      {/* Logo */}
       <div
         style={{
           width: '100px',
@@ -149,7 +148,6 @@ function LoadingScreen() {
         </svg>
       </div>
 
-      {/* ─── ECHO Text ──────────────────────────────────────────── */}
       <div
         style={{
           fontSize: isMobile ? '32px' : '40px',
@@ -167,7 +165,6 @@ function LoadingScreen() {
         ECHO
       </div>
 
-      {/* ─── Tagline ────────────────────────────────────────────── */}
       <div
         style={{
           color: 'var(--text-muted)',
@@ -182,7 +179,6 @@ function LoadingScreen() {
         Discover. Connect. Echo.
       </div>
 
-      {/* ─── Progress bar ───────────────────────────────────────── */}
       <div
         style={{
           width: '200px',
@@ -220,7 +216,6 @@ function AppContent() {
   const [appVersion] = useState(process.env.REACT_APP_VERSION || '1.0');
   const [showDbClearedPopup, setShowDbClearedPopup] = useState(false);
 
-  // ─── NEW: Version Check (Force Refresh) ──────────────────────
   useEffect(() => {
     const key = 'echo_v';
     const saved = localStorage.getItem(key);
@@ -228,20 +223,17 @@ function AppContent() {
 
     if (saved && saved !== current) {
       localStorage.setItem(key, current);
-      // Hard refresh to bypass cache
       window.location.reload(true);
     } else if (!saved) {
       localStorage.setItem(key, current);
     }
   }, []);
 
-  // ─── Minimum loading time (2s) ──────────────────────────────
   useEffect(() => {
     const timer = setTimeout(() => setMinTimePassed(true), 2000);
     return () => clearTimeout(timer);
   }, []);
 
-  // ─── Check for one‑time database cleared notification ────────
   useEffect(() => {
     if (user?.uid) {
       const hasSeen = localStorage.getItem('echo_db_cleared_notification');
@@ -257,7 +249,6 @@ function AppContent() {
     window.location.reload();
   };
 
-  // ─── Clean up ALL cache keys from localStorage ──────────────
   const cleanLocalStorage = () => {
     try {
       const keys = Object.keys(localStorage);
@@ -299,7 +290,6 @@ function AppContent() {
     }
   }, [user]);
 
-  // ─── Fetch Play Store URL ──────────────────────────────────────
   useEffect(() => {
     const fetchConfig = async () => {
       try {
@@ -317,7 +307,6 @@ function AppContent() {
     fetchConfig();
   }, []);
 
-  // ─── Show install popup (only mobile, 5‑day snooze) ────────
   useEffect(() => {
     if (!isAndroid && !isIOS) return;
     if (!playStoreUrl || !minTimePassed) return;
@@ -340,7 +329,6 @@ function AppContent() {
     setShowInstallPopup(false);
   };
 
-  // ─── Update check (only mobile, once per version) ───────────
   useEffect(() => {
     if (!user) return;
     if (!isAndroid && !isIOS) return;
@@ -387,7 +375,6 @@ function AppContent() {
     checkForUpdate();
   }, [user, appVersion]);
 
-  // ─── Fetch profile and clean messages ─────────────────────────
   useEffect(() => {
     if (user?.uid) {
       fetchProfile(user.uid);
@@ -401,29 +388,26 @@ function AppContent() {
               console.log(`🧹 Cleaned ${removed} stale messages from cache`);
             }
           }
-        } catch (_) {}
+        } catch (_) { }
       };
       cleanup();
     }
   }, [user?.uid, fetchProfile]);
 
-  // ─── Check for service worker updates on app start ────────────
   useEffect(() => {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.ready.then((registration) => {
         registration.update();
-      }).catch(() => {});
+      }).catch(() => { });
     }
   }, []);
 
   const showLoading = loading || !minTimePassed;
 
-  // ─── Show BanScreen if user is banned ──────────────────────
   if (!showLoading && user && banInfo.isBanned) {
     return <BanScreen />;
   }
 
-  // ─── Show Database Cleared Popup ──────────────────────────
   if (!showLoading && user && showDbClearedPopup) {
     return (
       <div className="db-cleared-overlay">
@@ -452,6 +436,7 @@ function AppContent() {
       <div
         id="main-content"
         style={{
+          paddingTop: '60px',
           paddingBottom: '72px',
           height: '100vh',
           overflowY: 'auto',
@@ -475,9 +460,10 @@ function AppContent() {
           <Route path="/coins" element={<CoinPurchase />} />
           <Route path="/about" element={<About />} />
           <Route path="/control" element={<AdminPanel />} />
-          <Route path="*" element={<Navigate to="/" />} />
           <Route path="/communities" element={<Communities />} />
+          <Route path="/community/:communityId" element={<CommunityChat />} />
           <Route path="/shop" element={<Shop />} />
+          <Route path="*" element={<Navigate to="/" />} />
         </Routes>
       </div>
       <BottomNav />
@@ -503,9 +489,6 @@ function AppContent() {
 
 // ─── App ────────────────────────────────────────────────────────
 function App() {
-  // ─── REMOVED the old version‑clearing useEffect ──────────────
-  // ─── Keep only the providers ────────────────────────────────────
-
   return (
     <BrowserRouter>
       <ThemeProvider>
@@ -514,7 +497,10 @@ function App() {
             <ProfileProvider>
               <CacheProvider>
                 <CallProvider>
-                  <AppContent />
+                  <CommunityProvider>
+                    <ScrollRestoration />  {/* ✅ Custom component */}
+                    <AppContent />
+                  </CommunityProvider>
                 </CallProvider>
               </CacheProvider>
             </ProfileProvider>

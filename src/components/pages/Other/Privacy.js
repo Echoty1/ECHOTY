@@ -44,13 +44,6 @@ const Privacy = () => {
       <SEO title="Privacy Policy" description="How we handle your data on ECHO." />
       <StructuredData />
       <div className="legal-page">
-        <div className="legal-header">
-          <button className="legal-back" onClick={() => navigate('/other')}>
-            ← Back
-          </button>
-          <h1>Privacy Policy</h1>
-          <span className="legal-badge">v4.0</span>
-        </div>
 
         <div className="legal-content">
           <div className="legal-section">

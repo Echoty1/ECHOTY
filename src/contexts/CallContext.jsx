@@ -242,14 +242,33 @@ export const CallProvider = ({ children }) => {
       if (!name) name = 'Someone';
       fetchProfileRef.current?.(callerUid);
 
+      // System notification (works when tab/app is in background if SW/WebView is alive)
       if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
         try {
-          new Notification(`Incoming call from ${name}`, {
-            body: 'Tap to answer',
-            icon: avatar || undefined,
+          const n = new Notification(`Incoming call from ${name}`, {
+            body: 'Open ECHO to answer',
+            icon: avatar || '/logo192.png',
+            tag: `echo-call-${callerUid}`,
+            requireInteraction: true,
+            silent: false,
           });
+          n.onclick = () => {
+            try { window.focus(); } catch (_) {}
+            n.close();
+          };
         } catch (_) {}
       }
+      // Ask service worker to show notification too (better on Android WebView / PWA)
+      try {
+        if (navigator.serviceWorker?.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'ECHO_INCOMING_CALL',
+            title: `Incoming call from ${name}`,
+            body: 'Open ECHO to answer',
+            callerUid,
+          });
+        }
+      } catch (_) {}
 
       setIncomingCallData({
         uid: callerUid,
@@ -258,6 +277,7 @@ export const CallProvider = ({ children }) => {
         callerPeerId: callData.callerPeerId || null,
         inviteTs: ts,
       });
+      // Ringtone only plays if the WebView is running (foreground or recent background)
       playBannerRingtone();
     },
     [user?.uid, playBannerRingtone, dismissIncoming]

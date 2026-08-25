@@ -18,7 +18,7 @@ import { loadMessagesFromCache, upsertMessageInCache, deleteMessageFromCache, sa
 import { useAuth } from '../../../hooks/useAuth';
 import { SkeletonMessage } from '../../common/SkeletonLoader';
 import { getCache, setCache } from '../../../services/cacheService';
-import { clearMessageCache, storeMessageInCache } from '../../../services/messageCache';
+import { clearMessageCache } from '../../../services/messageCache';
 import ChatMediaMessage from './ChatMediaMessage';
 import AudioPlayer from './AudioPlayer';
 import VoiceRecorder from './VoiceRecorder';
@@ -67,6 +67,38 @@ const getBackendUrl = (path) => {
   return `${base}${normalizedPath}`;
 };
 
+const msgTime = (m) => {
+  if (!m) return 0;
+  const t = m.timestamp;
+  if (typeof t === 'number' && !Number.isNaN(t)) return t;
+  if (t && typeof t === 'object') {
+    if (typeof t.toMillis === 'function') return t.toMillis();
+    if (typeof t.seconds === 'number') return t.seconds * 1000;
+  }
+  if (typeof m.clientTs === 'number') return m.clientTs;
+  return 0;
+};
+
+const sortMessages = (list) =>
+  (list || [])
+    .slice()
+    .sort((a, b) => {
+      const d = msgTime(a) - msgTime(b);
+      if (d !== 0) return d;
+      return String(a.id || a.key || '').localeCompare(String(b.id || b.key || ''));
+    });
+
+// ─── Format reaction count ─────────────────────────────────────
+const formatReactionCount = (count) => {
+  if (count < 1000) return String(count);
+  if (count < 1000000) {
+    const k = count / 1000;
+    return k >= 10 ? Math.round(k) + 'K' : k.toFixed(1) + 'K';
+  }
+  const m = count / 1000000;
+  return m >= 10 ? Math.round(m) + 'M' : m.toFixed(1) + 'M';
+};
+
 const ChatView = () => {
   const { userId } = useParams();
   const { user } = useAuth();
@@ -86,8 +118,40 @@ const ChatView = () => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isAILoading, setIsAILoading] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
+  const isNearBottomRef = useRef(true);
+  const initialScrollDoneRef = useRef(false);
+  const prevMsgCountRef = useRef(0);
   const [ended, setEnded] = useState(false);
   const [endedByName, setEndedByName] = useState('');
+  const [clearedAt, setClearedAt] = useState(0);
+  const [chatBgEnabled, setChatBgEnabled] = useState(() => {
+    try {
+      const v = localStorage.getItem('echo_chat_bg');
+      return v === null ? true : v === '1';
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    const onBg = (e) => {
+      if (e?.detail && typeof e.detail.enabled === 'boolean') {
+        setChatBgEnabled(e.detail.enabled);
+      } else {
+        try {
+          const v = localStorage.getItem('echo_chat_bg');
+          setChatBgEnabled(v === null ? true : v === '1');
+        } catch (_) {}
+      }
+    };
+    window.addEventListener('echo-chat-bg-changed', onBg);
+    window.addEventListener('storage', onBg);
+    return () => {
+      window.removeEventListener('echo-chat-bg-changed', onBg);
+      window.removeEventListener('storage', onBg);
+    };
+  }, []);
+  const clearedAtRef = useRef(0);
 
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const moreOptionsRef = useRef(null);
@@ -131,11 +195,32 @@ const ChatView = () => {
 
   const scrollCooldownRef = useRef(false);
 
-  // ─── Clear unread / mark read ──────────────────────────────────
+  // ─── Reactions state ──────────────────────────────────────────
+  const [reactingMessageId, setReactingMessageId] = useState(null);
+  const [showReactionPicker, setShowReactionPicker] = useState(false);
+
+  // ─── Helper functions ──────────────────────────────────────────
+  const notifyChatListUpdate = (partnerId, patch) => {
+    window.dispatchEvent(
+      new CustomEvent('chat-list-update', {
+        detail: { partnerId, patch },
+      })
+    );
+  };
+
+  const patchMyUserChat = async (partnerId, fields) => {
+    if (!user?.uid || !partnerId) return;
+    await update(ref(db, `userChats/${user.uid}/${partnerId}`), {
+      id: partnerId,
+      ...fields,
+    });
+  };
+
   const clearUnreadInstantly = () => {
     if (!userId) return;
     sessionStorage.setItem(`chat_read_${userId}`, 'true');
     window.dispatchEvent(new CustomEvent('chat-read', { detail: { userId } }));
+    notifyChatListUpdate(userId, { unreadCount: 0 });
     hasMarkedRead.current = true;
   };
 
@@ -153,8 +238,7 @@ const ChatView = () => {
       let latestSender = '';
       let latestTimestamp = Date.now();
 
-      const msgs = Object.entries(data).map(([key, val]) => ({ key, ...val }));
-      msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+      let msgs = sortMessages(Object.entries(data).map(([key, val]) => ({ id: key, key, ...val })));
       const latest = msgs[msgs.length - 1];
       if (latest) {
         if (latest.type === 'media') {
@@ -177,9 +261,7 @@ const ChatView = () => {
 
       if (!hasUnread) return;
       await update(ref(db), updates);
-      const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-      await set(myChatRef, {
-        id: userId,
+      await patchMyUserChat(userId, {
         partnerName: partnerProfile?.name || location.state?.userName || 'User',
         partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
         lastMessage: latestMsg,
@@ -245,10 +327,14 @@ const ChatView = () => {
 
   useEffect(() => {
     setMinLoadingTimePassed(false);
+    initialScrollDoneRef.current = false;
+    prevMsgCountRef.current = 0;
+    isNearBottomRef.current = true;
+    setIsNearBottom(true);
     if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
     loadingTimerRef.current = setTimeout(() => {
       setMinLoadingTimePassed(true);
-    }, 300);
+    }, 80);
     return () => {
       if (loadingTimerRef.current) clearTimeout(loadingTimerRef.current);
     };
@@ -314,8 +400,7 @@ const ChatView = () => {
       let latestTimestamp = Date.now();
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const msgs = Object.entries(data).map(([key, val]) => ({ key, ...val }));
-        msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        let msgs = sortMessages(Object.entries(data).map(([key, val]) => ({ id: key, key, ...val })));
         const latest = msgs[msgs.length - 1];
         if (latest) {
           if (latest.type === 'media') {
@@ -329,9 +414,7 @@ const ChatView = () => {
           latestTimestamp = latest.timestamp || Date.now();
         }
       }
-      const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-      await set(myChatRef, {
-        id: userId,
+      await patchMyUserChat(userId, {
         partnerName: location.state?.userName || partnerProfile?.name || 'User',
         partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
         lastMessage: latestMsg,
@@ -371,6 +454,7 @@ const ChatView = () => {
     setEditingMessage(msg);
   };
 
+  // ─── FIXED: saveEditedMessage ──────────────────────────────────
   const saveEditedMessage = async (newText) => {
     if (!editingMessage || !user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -381,20 +465,31 @@ const ChatView = () => {
         isEdited: true,
         lastEditedAt: serverTimestamp(),
       });
+
       const updatedMsg = { ...editingMessage, text: newText, isEdited: true };
       await upsertMessageInCache(cId, updatedMsg);
-      await saveMessagesToCache(cId, newMessages);
+
+      setMessages((prev) => {
+        const next = prev.map((m) =>
+          m.id === messageId ? { ...m, text: newText, isEdited: true } : m
+        );
+        saveMessagesToCache(
+          cId,
+          next.filter((m) => !String(m.id).startsWith('temp_'))
+        ).catch(() => {});
+        return next;
+      });
+
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const snapshot = await get(messagesRef);
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const msgs = Object.entries(data).map(([key, val]) => ({ key, ...val }));
-        msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        const msgs = sortMessages(
+          Object.entries(data).map(([key, val]) => ({ id: key, key, ...val }))
+        );
         const latest = msgs[msgs.length - 1];
         if (latest && latest.key === messageId) {
-          const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-          await set(myChatRef, {
-            id: userId,
+          await patchMyUserChat(userId, {
             partnerName: partnerProfile?.name || location.state?.userName || 'User',
             partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
             lastMessage: newText,
@@ -402,34 +497,36 @@ const ChatView = () => {
             lastUpdated: Date.now(),
             unreadCount: 0,
           });
-          const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
-          const partnerSnapshot = await get(partnerChatRef);
-          if (partnerSnapshot.exists()) {
-            const partnerData = partnerSnapshot.val();
-            await set(partnerChatRef, {
-              ...partnerData,
-              lastMessage: newText,
-              lastSenderId: user.uid,
-              lastUpdated: Date.now(),
-            });
+          notifyChatListUpdate(userId, {
+            lastMessage: `You: ${newText}`.slice(0, 80),
+            lastSenderId: user.uid,
+            timestamp: Date.now(),
+            unreadCount: 0,
+          });
+          try {
+            const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+            const partnerSnapshot = await get(partnerChatRef);
+            if (partnerSnapshot.exists()) {
+              await update(partnerChatRef, {
+                lastMessage: newText,
+                lastSenderId: user.uid,
+                lastUpdated: Date.now(),
+              });
+            }
+          } catch (e) {
+            console.warn('[Edit] partner userChats update skipped:', e.message);
           }
         }
       }
       clearMessageCache(cId);
       setEditingMessage(null);
-      if (isNearBottom && !scrollCooldownRef.current) {
-        scrollCooldownRef.current = true;
-        setTimeout(() => {
-          scrollCooldownRef.current = false;
-        }, 500);
-        setTimeout(() => scrollToBottom(true), 100);
-      }
     } catch (err) {
       console.error('Failed to edit message:', err);
       alert('Failed to edit message. Please try again.');
     }
   };
 
+  // ─── FIXED: saveMediaCaption ──────────────────────────────────
   const saveMediaCaption = async (newCaption) => {
     if (!editingMediaMessage || !user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -440,22 +537,40 @@ const ChatView = () => {
         isEdited: true,
         lastEditedAt: serverTimestamp(),
       });
-      const updatedMsg = { ...editingMediaMessage, caption: newCaption, isEdited: true };
+
+      const updatedMsg = {
+        ...editingMediaMessage,
+        caption: newCaption,
+        isEdited: true,
+      };
       await upsertMessageInCache(cId, updatedMsg);
-      await saveMessagesToCache(cId, newMessages);
+
+      setMessages((prev) => {
+        const next = prev.map((m) =>
+          m.id === messageId ? { ...m, caption: newCaption, isEdited: true } : m
+        );
+        saveMessagesToCache(
+          cId,
+          next.filter((m) => !String(m.id).startsWith('temp_'))
+        ).catch(() => {});
+        return next;
+      });
+
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const snapshot = await get(messagesRef);
       if (snapshot.exists()) {
         const data = snapshot.val();
-        const msgs = Object.entries(data).map(([key, val]) => ({ key, ...val }));
-        msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        const msgs = sortMessages(
+          Object.entries(data).map(([key, val]) => ({ id: key, key, ...val }))
+        );
         const latest = msgs[msgs.length - 1];
         if (latest && latest.key === messageId) {
-          const mediaIcon = editingMediaMessage.mediaType === 'video' ? '🎬 Video' : '📷 Image';
-          const displayText = newCaption ? `${mediaIcon}: ${newCaption}` : mediaIcon;
-          const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-          await set(myChatRef, {
-            id: userId,
+          const mediaIcon =
+            editingMediaMessage.mediaType === 'video' ? '🎬 Video' : '📷 Image';
+          const displayText = newCaption
+            ? `${mediaIcon}: ${newCaption}`
+            : mediaIcon;
+          await patchMyUserChat(userId, {
             partnerName: partnerProfile?.name || location.state?.userName || 'User',
             partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
             lastMessage: displayText,
@@ -463,16 +578,18 @@ const ChatView = () => {
             lastUpdated: Date.now(),
             unreadCount: 0,
           });
-          const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
-          const partnerSnapshot = await get(partnerChatRef);
-          if (partnerSnapshot.exists()) {
-            const partnerData = partnerSnapshot.val();
-            await set(partnerChatRef, {
-              ...partnerData,
-              lastMessage: displayText,
-              lastSenderId: user.uid,
-              lastUpdated: Date.now(),
-            });
+          try {
+            const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+            const partnerSnapshot = await get(partnerChatRef);
+            if (partnerSnapshot.exists()) {
+              await update(partnerChatRef, {
+                lastMessage: displayText,
+                lastSenderId: user.uid,
+                lastUpdated: Date.now(),
+              });
+            }
+          } catch (e) {
+            console.warn('[Edit caption] partner update skipped:', e.message);
           }
         }
       }
@@ -490,16 +607,99 @@ const ChatView = () => {
     }
   };
 
-  // ─── handleScroll function ──────────────────────────────────
   const handleScroll = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
-    const threshold = 15;
+    const threshold = 80;
     const isNear = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    isNearBottomRef.current = isNear;
     setIsNearBottom(isNear);
   };
 
-  // ─── Listen for ended ECHO flag ──────────────────────────────
+  // ─── Reactions ──────────────────────────────────────────────
+  const handleReact = (msg) => {
+    setReactingMessageId(msg.id);
+    setShowReactionPicker(true);
+  };
+
+  const handleReactionSelect = async (emoji) => {
+    setShowReactionPicker(false);
+    if (!reactingMessageId || !user?.uid || !userId) return;
+    const cId = [user.uid, userId].sort().join('_');
+    const reactionRef = ref(db, `chats/${cId}/messages/${reactingMessageId}/reactions/${user.uid}`);
+    try {
+      const currentMsg = messages.find(m => m.id === reactingMessageId);
+      const currentReaction = currentMsg?.reactions?.[user.uid];
+      if (currentReaction === emoji) {
+        await remove(reactionRef);
+      } else {
+        await set(reactionRef, emoji);
+      }
+      setReactingMessageId(null);
+    } catch (err) {
+      console.warn('Reaction error:', err);
+    }
+  };
+
+  const closeReactionPicker = () => {
+    setShowReactionPicker(false);
+    setReactingMessageId(null);
+  };
+
+  // ─── Render reactions (grouped, below bubble) ────────────────
+  const renderReactions = (reactions) => {
+    if (!reactions || typeof reactions !== 'object') return null;
+    const entries = Object.entries(reactions);
+    if (entries.length === 0) return null;
+
+    const groups = {};
+    entries.forEach(([uid, emoji]) => {
+      if (!groups[emoji]) groups[emoji] = [];
+      groups[emoji].push(uid);
+    });
+
+    return (
+      <div className="message-reactions">
+        {Object.entries(groups).map(([emoji, uids]) => (
+          <span key={emoji} className="reaction-badge">
+            {emoji}
+            {uids.length > 1 && (
+              <span className="reaction-count">{formatReactionCount(uids.length)}</span>
+            )}
+          </span>
+        ))}
+      </div>
+    );
+  };
+
+  // ─── Respect "Clear History" ────────────────────────────────────
+  useEffect(() => {
+    if (!user?.uid || !userId) {
+      setClearedAt(0);
+      return;
+    }
+    const clearedRef = ref(db, `userChats/${user.uid}/${userId}/clearedAt`);
+    const unsub = onValue(clearedRef, (snap) => {
+      const val = snap.val();
+      const n = typeof val === 'number' ? val : 0;
+      clearedAtRef.current = n;
+      setClearedAt(n);
+    });
+    const onLocalClear = (e) => {
+      if (e.detail?.partnerId === userId) {
+        clearedAtRef.current = Date.now();
+        setClearedAt(clearedAtRef.current);
+        setMessages([]);
+      }
+    };
+    window.addEventListener('chat-history-cleared', onLocalClear);
+    return () => {
+      unsub();
+      window.removeEventListener('chat-history-cleared', onLocalClear);
+    };
+  }, [user?.uid, userId]);
+
+  // ─── Listen for ended ECHO flag ────────────────────────────────
   useEffect(() => {
     if (!user?.uid || !userId) {
       setEnded(false);
@@ -520,7 +720,6 @@ const ChatView = () => {
     return () => unsub();
   }, [user?.uid, userId]);
 
-  // ─── Clear ended flag ──────────────────────────────────────────
   const clearEndedFlag = async () => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -535,7 +734,6 @@ const ChatView = () => {
     }
   };
 
-  // ─── End ECHO (opens custom confirm modal) ────────────────────
   const handleEndEcho = () => {
     if (!user?.uid || !userId) return;
     const partnerName = sanitizeName(location.state?.userName || partnerProfile?.name, userId);
@@ -549,16 +747,18 @@ const ChatView = () => {
   const confirmEndEcho = async () => {
     setConfirmEndState({ isOpen: false, partnerName: '' });
     if (!user?.uid || !userId) return;
+    if (ended) return;
     const cId = [user.uid, userId].sort().join('_');
     const myName =
       (currentUserProfile && currentUserProfile.name) ||
       user.displayName ||
       'User';
+    const endTs = Date.now();
     try {
       await set(ref(db, `chats/${cId}/ended`), {
         by: user.uid,
         byName: myName,
-        at: Date.now(),
+        at: endTs,
       });
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const newMsgRef = push(messagesRef);
@@ -566,7 +766,8 @@ const ChatView = () => {
         senderId: 'system',
         type: 'system',
         text: `${myName} ended this ECHO.`,
-        timestamp: Date.now(),
+        timestamp: endTs,
+        clientTs: endTs,
         endedBy: user.uid,
       });
       await update(ref(db, `userChats/${user.uid}/${userId}`), {
@@ -587,7 +788,7 @@ const ChatView = () => {
     }
   };
 
-  // ─── Real‑time listener ──────────────────────────────────────
+  // ─── Real‑time listener ─────────────────────────────────────────
   useEffect(() => {
     if (!user?.uid || !userId) {
       setLoadingMessages(false);
@@ -599,9 +800,21 @@ const ChatView = () => {
 
     loadMessagesFromCache(cId).then((cachedMessages) => {
       if (isMounted.current && cachedMessages.length > 0) {
-        setMessages(cachedMessages);
+        const cut = clearedAtRef.current || 0;
+        const visible = cut
+          ? cachedMessages.filter((m) => {
+              const ts = typeof m.timestamp === 'number' ? m.timestamp : 0;
+              return !ts || ts >= cut;
+            })
+          : cachedMessages;
+        setMessages(visible);
         setLoadingMessages(false);
-        setTimeout(() => scrollToBottom(false), 50);
+        setMinLoadingTimePassed(true);
+        prevMsgCountRef.current = visible.length;
+        if (!initialScrollDoneRef.current) {
+          initialScrollDoneRef.current = true;
+          requestAnimationFrame(() => scrollToBottom(false));
+        }
       }
     });
 
@@ -613,31 +826,68 @@ const ChatView = () => {
         const data = snapshot.val();
         let newMessages = [];
         if (data) {
-          newMessages = Object.entries(data)
-            .map(([id, val]) => ({ id, ...val }))
-            .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+          newMessages = sortMessages(
+            Object.entries(data).map(([id, val]) => ({ id, ...val }))
+          );
         }
-        setMessages(newMessages);
+        const cut = clearedAtRef.current || 0;
+        let visible = cut
+          ? newMessages.filter((m) => {
+              if (m.pending) return true;
+              const ts = msgTime(m);
+              if (!ts) return true;
+              return ts >= cut;
+            })
+          : newMessages;
+        visible = sortMessages(visible);
+
+        setMessages((prev) => {
+          const pending = (prev || []).filter(
+            (m) => m.pending && !visible.some((v) => v.id === m.id || (v.text === m.text && v.senderId === m.senderId && Math.abs(msgTime(v) - msgTime(m)) < 5000))
+          );
+          const serverOwnTexts = new Set(
+            visible.filter((v) => v.senderId === user.uid).map((v) => v.text)
+          );
+          const stillPending = pending.filter((p) => !serverOwnTexts.has(p.text));
+          return sortMessages([...visible, ...stillPending]);
+        });
         setLoadingMessages(false);
 
-        if (isNearBottom && !scrollCooldownRef.current) {
-          scrollCooldownRef.current = true;
-          setTimeout(() => {
-            scrollCooldownRef.current = false;
-          }, 500);
-          setTimeout(() => scrollToBottom(true), 100);
+        const prevCount = prevMsgCountRef.current;
+        const grew = visible.length > prevCount;
+        const newest = visible[visible.length - 1];
+        const isIncoming =
+          newest && newest.senderId && newest.senderId !== user.uid;
+        prevMsgCountRef.current = visible.length;
+
+        if (!initialScrollDoneRef.current) {
+          initialScrollDoneRef.current = true;
+          requestAnimationFrame(() => scrollToBottom(false));
+        } else if (grew && isNearBottomRef.current) {
+          requestAnimationFrame(() => scrollToBottom(true));
+        } else if (grew && isIncoming && isNearBottomRef.current) {
+          requestAnimationFrame(() => scrollToBottom(true));
         }
 
-        for (const msg of newMessages) {
-          await upsertMessageInCache(cId, msg);
-          await saveMessagesToCache(cId, newMessages);
-          if (msg.type === 'media' && msg.mediaUrl && msg.mediaUrl.startsWith('http')) {
-            cacheMedia(msg.mediaUrl);
-          }
-        }
-        setCache(cacheKey, newMessages).catch(() => {});
+        // Persist in background
+        Promise.resolve().then(async () => {
+          try {
+            for (const msg of visible) {
+              await upsertMessageInCache(cId, msg);
+              if (msg.type === 'media' && msg.mediaUrl && msg.mediaUrl.startsWith('http')) {
+                cacheMedia(msg.mediaUrl);
+              }
+            }
+            await saveMessagesToCache(cId, visible);
+            setCache(cacheKey, visible).catch(() => {});
+          } catch (_) {}
+        });
         clearMessageCache(cId);
-        const hasUnread = newMessages.some(msg => msg.receiverId === user.uid && msg.isRead === false);
+
+        const hasUnread = visible.some(
+          (msg) => msg.receiverId === user.uid && msg.isRead === false
+        );
+
         if (hasUnread && isMounted.current) {
           clearUnreadInstantly();
           if (markReadTimeout.current) clearTimeout(markReadTimeout.current);
@@ -651,6 +901,7 @@ const ChatView = () => {
       (error) => {
         console.error('❌ [ChatView] Firebase listener error:', error);
         setLoadingMessages(false);
+        setMinLoadingTimePassed(true);
         if (messages.length === 0) {
           setMessages([{
             id: 'error',
@@ -678,7 +929,7 @@ const ChatView = () => {
     };
   }, [user?.uid, userId, cacheKey, isNearBottom]);
 
-  // ─── Partner profile loading ──────────────────────────────────
+  // ─── Partner profile loading ────────────────────────────────────
   useEffect(() => {
     if (!userId) return;
     const cached = getProfile(userId);
@@ -706,7 +957,7 @@ const ChatView = () => {
       .catch(console.error);
   }, [user?.uid]);
 
-  // ─── File / media handlers ──────────────────────────────────
+  // ─── File / media handlers ─────────────────────────────────────
   const handleFileSelect = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -824,7 +1075,7 @@ const ChatView = () => {
         mediaType,
         mediaUrl: downloadURL,
         caption: captionText.trim(),
-        timestamp: serverTimestamp(),
+        timestamp: Date.now(),
         isRead: false,
       };
       if (currentReply) {
@@ -844,9 +1095,7 @@ const ChatView = () => {
         )
       );
       URL.revokeObjectURL(blobUrl);
-      const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-      await set(myChatRef, {
-        id: userId,
+      await patchMyUserChat(userId, {
         partnerName: location.state?.userName || partnerProfile?.name || 'User',
         partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
         lastMessage: mediaIcon,
@@ -955,7 +1204,7 @@ const ChatView = () => {
         mediaType: 'audio',
         mediaUrl: downloadURL,
         duration: duration,
-        timestamp: serverTimestamp(),
+        timestamp: Date.now(),
         isRead: false,
       };
       if (currentReply) {
@@ -975,14 +1224,18 @@ const ChatView = () => {
         )
       );
       URL.revokeObjectURL(blobUrl);
-      const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-      await set(myChatRef, {
-        id: userId,
+      await patchMyUserChat(userId, {
         partnerName: location.state?.userName || partnerProfile?.name || 'User',
         partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
         lastMessage: '🎤 Voice note',
         lastSenderId: user.uid,
         lastUpdated: Date.now(),
+        unreadCount: 0,
+      });
+      notifyChatListUpdate(userId, {
+        lastMessage: 'You: 🎤 Voice note',
+        lastSenderId: user.uid,
+        timestamp: Date.now(),
         unreadCount: 0,
       });
       const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
@@ -1027,14 +1280,7 @@ const ChatView = () => {
     const textToSend = newMessage.trim();
     if (!textToSend || !user?.uid || !userId) return;
 
-    let userMessageText = textToSend;
     let currentReply = replyTo;
-    if (currentReply && currentReply.originalMessage) {
-      const originalText = currentReply.originalMessage.text ||
-                        (currentReply.originalMessage.type === 'media' ? '📎 Media' : '');
-      userMessageText = `In reply to: "${originalText}"\n\n${textToSend}`;
-    }
-
     setNewMessage('');
     const replyToSave = currentReply;
     setReplyTo(null);
@@ -1044,14 +1290,41 @@ const ChatView = () => {
     }
 
     const cId = [user.uid, userId].sort().join('_');
+    const tempId = `temp_${Date.now()}`;
+    const optimisticMsg = {
+      id: tempId,
+      senderId: user.uid,
+      receiverId: userId,
+      type: 'text',
+      text: textToSend,
+      timestamp: Date.now(),
+      isRead: false,
+      pending: true,
+    };
+    if (replyToSave) {
+      optimisticMsg.replyTo = {
+        messageId: replyToSave.messageId,
+        senderName: replyToSave.senderName,
+        messageType: replyToSave.messageType,
+        textSnippet: replyToSave.textSnippet,
+      };
+    }
+    setMessages((prev) => [...prev, optimisticMsg]);
+    prevMsgCountRef.current += 1;
+    if (isNearBottomRef.current) {
+      requestAnimationFrame(() => scrollToBottom(true));
+    }
+
     const messagesRef = ref(db, `chats/${cId}/messages`);
     const newMsgRef = push(messagesRef);
+    const sentAt = Date.now();
     const msgData = {
       senderId: user.uid,
       receiverId: userId,
       type: 'text',
       text: textToSend,
-      timestamp: serverTimestamp(),
+      timestamp: sentAt,
+      clientTs: sentAt,
       isRead: false,
     };
     if (replyToSave) {
@@ -1062,16 +1335,26 @@ const ChatView = () => {
         textSnippet: replyToSave.textSnippet,
       };
     }
-    await set(newMsgRef, msgData);
+    try {
+      await set(newMsgRef, msgData);
+    } catch (err) {
+      console.error('Send failed:', err);
+      setMessages((prev) => prev.filter((m) => m.id !== tempId));
+      return;
+    }
 
-    const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-    await set(myChatRef, {
-      id: userId,
+    await patchMyUserChat(userId, {
       partnerName: location.state?.userName || partnerProfile?.name || 'User',
       partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
       lastMessage: textToSend,
       lastSenderId: user.uid,
       lastUpdated: Date.now(),
+      unreadCount: 0,
+    });
+    notifyChatListUpdate(userId, {
+      lastMessage: `You: ${textToSend}`.slice(0, 40),
+      lastSenderId: user.uid,
+      timestamp: Date.now(),
       unreadCount: 0,
     });
 
@@ -1101,7 +1384,7 @@ const ChatView = () => {
 
   const displayName = sanitizeName(location.state?.userName || partnerProfile?.name, userId);
 
-  // ─── Render message ──────────────────────────────────────────
+  // ─── Render message with reactions ─────────────────────────────
   const renderMessage = (msg) => {
     if (msg.type === 'system') {
       return (
@@ -1110,6 +1393,7 @@ const ChatView = () => {
         </div>
       );
     }
+
     const isOwn = msg.senderId === user?.uid;
     const isDeleting = msg.id === deletingMessageId;
     const isAi = msg.senderId === 'echo_ai_assistant';
@@ -1127,99 +1411,89 @@ const ChatView = () => {
 
     let copyText = null;
     if (msg.type === 'text' && msg.text) copyText = msg.text;
-
     const allowDelete = isOwn;
 
-    if (msg.type === 'echomoji') {
-      const skinObj = msg.skinId ? getSkinById(msg.skinId) : null;
-      return (
-        <div
-          className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
-          ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
-        >
-          <MessageMenu
-            isOwn={isOwn}
-            canDelete={allowDelete}
-            onDelete={() => handleDeleteMessage(msg.id)}
-            onReply={showReply ? () => handleReply(msg) : null}
-            onEdit={null}
-            copyText={null}
-          >
-            {replyToDisplay && (
-              <RepliedMessage replyTo={replyToDisplay} onTap={() => scrollToMessage(replyToDisplay.messageId)} />
-            )}
-            <ECHOMOJI mood={msg.mood || 'neutral'} skin={skinObj} size={56} interactive={false} animated={true} />
-          </MessageMenu>
-        </div>
-      );
-    }
+    // Reactions
+    const reactions = msg.reactions || {};
 
-    if (msg.type === 'media') {
-      let content;
-      if (msg.mediaType === 'audio') {
-        if (msg.isUploading) {
-          content = (
-            <div className="media-upload-overlay">
-              <div className="upload-spinner">
-                <svg className="spinner-ring" viewBox="0 0 50 50">
-                  <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
-                </svg>
-              </div>
-            </div>
-          );
-        } else {
-          content = <AudioPlayer src={msg.mediaUrl} />;
-        }
-      } else {
-        content = <ChatMediaMessage message={msg} isUploading={msg.isUploading} uploadProgress={msg.uploadProgress} />;
-      }
-      return (
-        <div
-          className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
-          ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
-        >
+    // ─── Shared shell: OUTER row does left/right alignment ──────
+    const shell = (content) => (
+      <div
+        key={msg.id}
+        className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
+        ref={(el) => {
+          if (el) messageRefs.current[msg.id] = el;
+        }}
+        style={msg.pending ? { opacity: 0.75 } : undefined}
+      >
+        <div className={`message-bubble ${isOwn ? 'own' : 'partner'}`}>
           <MessageMenu
             isOwn={isOwn}
             canDelete={allowDelete}
             onDelete={() => handleDeleteMessage(msg.id)}
             onReply={showReply ? () => handleReply(msg) : null}
             onEdit={allowEdit ? () => handleEditMessage(msg) : null}
-            copyText={null}
+            onReact={() => handleReact(msg)}
+            copyText={copyText}
           >
             {replyToDisplay && (
-              <RepliedMessage replyTo={replyToDisplay} onTap={() => scrollToMessage(replyToDisplay.messageId)} />
+              <RepliedMessage
+                replyTo={replyToDisplay}
+                onTap={() => scrollToMessage(replyToDisplay.messageId)}
+              />
             )}
             {content}
           </MessageMenu>
         </div>
-      );
-    }
-
-    const messageContent = (
-      <div className="message-text" style={{ whiteSpace: 'pre-wrap' }}>
-        {msg.text}
-        {msg.isEdited && <span className="message-edited-badge">(edited)</span>}
+        {/* ─── Reactions rendered BELOW the bubble ─────────────── */}
+        {renderReactions(reactions)}
       </div>
     );
 
-    return (
-      <div
-        className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
-        ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
-      >
-        <MessageMenu
-          isOwn={isOwn}
-          canDelete={allowDelete}
-          onDelete={() => handleDeleteMessage(msg.id)}
-          onReply={showReply ? () => handleReply(msg) : null}
-          onEdit={allowEdit ? () => handleEditMessage(msg) : null}
-          copyText={copyText}
-        >
-          {replyToDisplay && (
-            <RepliedMessage replyTo={replyToDisplay} onTap={() => scrollToMessage(replyToDisplay.messageId)} />
-          )}
-          {messageContent}
-        </MessageMenu>
+    if (msg.type === 'echomoji') {
+      const skinObj = msg.skinId ? getSkinById(msg.skinId) : null;
+      return shell(
+        <ECHOMOJI
+          mood={msg.mood || 'neutral'}
+          skin={skinObj}
+          size={56}
+          interactive={false}
+          animated={true}
+        />
+      );
+    }
+
+    if (msg.type === 'media') {
+      let content;
+      if (msg.mediaType === 'audio') {
+        content = msg.isUploading ? (
+          <div className="media-upload-overlay">
+            <div className="upload-spinner">
+              <svg className="spinner-ring" viewBox="0 0 50 50">
+                <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
+              </svg>
+            </div>
+          </div>
+        ) : (
+          <AudioPlayer src={msg.mediaUrl} />
+        );
+      } else {
+        content = (
+          <ChatMediaMessage
+            message={msg}
+            isUploading={msg.isUploading}
+            uploadProgress={msg.uploadProgress}
+          />
+        );
+      }
+      return shell(content);
+    }
+
+    // text
+    return shell(
+      <div className="message-text" style={{ whiteSpace: 'pre-wrap' }}>
+        {msg.text}
+        {msg.isEdited && <span className="message-edited-badge">(edited)</span>}
       </div>
     );
   };
@@ -1319,6 +1593,13 @@ const ChatView = () => {
     }
   };
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendText(e);
+    }
+  };
+
   const handlePaste = (e) => {
     const items = e.clipboardData.items;
     let mediaFile = null;
@@ -1339,11 +1620,16 @@ const ChatView = () => {
     }
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendText(e);
+  const formatTime = (timestamp) => {
+    if (!timestamp) return '';
+    const date = new Date(timestamp);
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const msgDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    if (msgDate.getTime() === today.getTime()) {
+      return date.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     }
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
   useEffect(() => {
@@ -1354,7 +1640,6 @@ const ChatView = () => {
     }
   }, [newMessage]);
 
-  // ─── Click outside to close more-options popup ───────────────
   useEffect(() => {
     if (!showMoreOptions) return;
     const handleClickOutside = (e) => {
@@ -1362,7 +1647,6 @@ const ChatView = () => {
         setShowMoreOptions(false);
       }
     };
-    // Delay so the same tap that opens the menu does not immediately close it
     const t = setTimeout(() => {
       document.addEventListener('mousedown', handleClickOutside);
       document.addEventListener('touchstart', handleClickOutside);
@@ -1382,16 +1666,20 @@ const ChatView = () => {
         url={`https://echoty.xyz/chat/${userId}`}
       />
       <StructuredData />
+
       <div className="chat-view">
         <VideoAudioProvider>
-          <div
-            className={`echo-rings-bg ${ended ? 'is-ended' : 'is-active'}`}
-            aria-hidden="true"
-          >
-            <span className="echo-bg-ring r1" />
-            <span className="echo-bg-ring r2" />
-            <span className="echo-bg-ring r3" />
-          </div>
+          {chatBgEnabled && (
+            <div
+              className={`echo-rings-bg ${ended ? 'is-ended' : 'is-active'}`}
+              aria-hidden="true"
+            >
+              <span className="echo-bg-ring r1" />
+              <span className="echo-bg-ring r2" />
+              <span className="echo-bg-ring r3" />
+            </div>
+          )}
+
           <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll}>
             {(loadingMessages || !minLoadingTimePassed) && messages.length === 0 ? (
               <div className="chat-skeleton-list">
@@ -1405,7 +1693,7 @@ const ChatView = () => {
                 <p>No messages yet. Say hello!</p>
               </div>
             ) : (
-              messages.map((msg) => <React.Fragment key={msg.id}>{renderMessage(msg)}</React.Fragment>)
+              messages.map((msg) => renderMessage(msg))
             )}
             {isAILoading && (
               <div className="message-bubble partner">
@@ -1431,7 +1719,6 @@ const ChatView = () => {
         <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
           {replyTo && <ReplyPreview replyTo={replyTo} onCancel={cancelReply} />}
           <div className="chat-input-row">
-            {/* ─── Emoji button ────────────────────────────────── */}
             <button
               type="button"
               className="chat-emoji-btn"
@@ -1441,7 +1728,6 @@ const ChatView = () => {
               <i className="fas fa-smile" />
             </button>
 
-            {/* ─── More options button (three dots) ──────────── */}
             <div className="chat-more-wrapper" ref={moreOptionsRef}>
               <button
                 type="button"
@@ -1485,7 +1771,6 @@ const ChatView = () => {
               )}
             </div>
 
-            {/* ─── Voice button ────────────────────────────────── */}
             <button
               type="button"
               className="chat-voice-btn"
@@ -1495,7 +1780,6 @@ const ChatView = () => {
               <i className="fas fa-microphone" />
             </button>
 
-            {/* ─── Text input ──────────────────────────────────── */}
             <textarea
               ref={inputRef}
               className="chat-input"
@@ -1505,28 +1789,8 @@ const ChatView = () => {
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               rows={1}
-              style={{
-                resize: 'none',
-                overflow: 'hidden',
-                minHeight: '44px',
-                maxHeight: '120px',
-                lineHeight: '1.4',
-                fontFamily: 'inherit',
-                flex: 1,
-                padding: '10px 16px',
-                borderRadius: '24px',
-                border: '1px solid var(--border-color)',
-                background: 'var(--bg-input)',
-                color: 'var(--text-primary)',
-                fontSize: '14px',
-                outline: 'none',
-                boxSizing: 'border-box',
-              }}
-              onFocus={() => { focusedField.current = 'main'; }}
-              onBlur={() => { /* keep last known focus */ }}
             />
 
-            {/* ─── Hidden file input ──────────────────────────── */}
             <input
               type="file"
               ref={fileInputRef}
@@ -1535,7 +1799,6 @@ const ChatView = () => {
               onChange={handleFileSelect}
             />
 
-            {/* ─── Send button ─────────────────────────────────── */}
             <button
               type="submit"
               className="chat-send-btn"
@@ -1570,7 +1833,6 @@ const ChatView = () => {
           onSave={saveMediaCaption}
         />
 
-        {/* ─── Custom Confirm Modal for ending ECHO ───────────── */}
         <ConfirmModal
           isOpen={confirmEndState.isOpen}
           onClose={() => setConfirmEndState({ isOpen: false, partnerName: '' })}
@@ -1581,6 +1843,18 @@ const ChatView = () => {
           cancelText="Cancel"
         />
       </div>
+
+      {/* ─── Reaction Picker ────────────────────────────────────── */}
+      {showReactionPicker && (
+        <div className="reaction-picker-overlay" onClick={closeReactionPicker}>
+          <div className="reaction-picker-container" onClick={(e) => e.stopPropagation()}>
+            <ChatEmojiPicker
+              onClose={closeReactionPicker}
+              onSelect={handleReactionSelect}
+            />
+          </div>
+        </div>
+      )}
     </>
   );
 };

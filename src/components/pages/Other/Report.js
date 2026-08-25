@@ -18,13 +18,6 @@ const Report = () => {
       <SEO title="Report a User" description="Report inappropriate behavior on ECHO." />
       <StructuredData />
       <div className="legal-page">
-        <div className="legal-header">
-          <button className="legal-back" onClick={() => navigate('/other')}>
-            ← Back
-          </button>
-          <h1>Report a User</h1>
-          <span className="legal-badge">🔒 confidential</span>
-        </div>
 
         <div className="legal-content report-content">
           <div className="legal-section">

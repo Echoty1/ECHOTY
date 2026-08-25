@@ -5,10 +5,11 @@ import DeleteConfirmationModal from './DeleteConfirmationModal';
 const MessageMenu = ({
   children,
   isOwn,
-  canDelete = false, // new prop: controls delete button visibility
+  canDelete = false,
   onDelete,
   onReply,
   onEdit,
+  onReact,
   copyText,
 }) => {
   const [showActions, setShowActions] = useState(false);
@@ -18,7 +19,6 @@ const MessageMenu = ({
   const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   const copyTimeout = useRef(null);
 
-  // ─── Copy handler ──────────────────────────────────────────────
   const handleCopy = (e) => {
     e.stopPropagation();
     if (!copyText) return;
@@ -32,7 +32,6 @@ const MessageMenu = ({
         }, 1000);
       })
       .catch(() => {
-        // Fallback
         const textarea = document.createElement('textarea');
         textarea.value = copyText;
         document.body.appendChild(textarea);
@@ -45,7 +44,6 @@ const MessageMenu = ({
     setShowActions(false);
   };
 
-  // ─── Close actions on outside tap ─────────────────────────────
   useEffect(() => {
     const handleClickOutside = (e) => {
       if (containerRef.current && !containerRef.current.contains(e.target)) {
@@ -63,13 +61,13 @@ const MessageMenu = ({
     };
   }, [isTouchDevice]);
 
-  // ─── Determine which buttons to show ──────────────────────────
+  const showReply = typeof onReply === 'function';
   const showCopy = !!copyText && typeof copyText === 'string' && copyText.trim().length > 0;
-  const showReply = !isOwn && typeof onReply === 'function';
   const showEdit = isOwn && typeof onEdit === 'function';
   const showDelete = canDelete && typeof onDelete === 'function';
+  const showReact = typeof onReact === 'function';
 
-  const hasActions = showDelete || showEdit || showReply || showCopy;
+  const hasActions = showDelete || showEdit || showReply || showCopy || showReact;
 
   if (!hasActions) {
     return <>{children}</>;
@@ -123,6 +121,14 @@ const MessageMenu = ({
     setShowConfirm(true);
   };
 
+  const handleReactClick = (e) => {
+    e.stopPropagation();
+    setShowActions(false);
+    if (typeof onReact === 'function') {
+      onReact();
+    }
+  };
+
   const handleConfirmDelete = () => {
     setShowConfirm(false);
     if (typeof onDelete === 'function') {
@@ -132,7 +138,7 @@ const MessageMenu = ({
 
   return (
     <div
-      className="message-wrapper"
+      className={`message-wrapper ${isOwn ? 'own' : 'partner'}`}
       ref={containerRef}
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
@@ -158,6 +164,11 @@ const MessageMenu = ({
         {showDelete && (
           <button className="message-action-btn delete" onClick={handleDeleteClick}>
             <i className="fas fa-trash-alt" />
+          </button>
+        )}
+        {showReact && (
+          <button className="message-action-btn react" onClick={handleReactClick} title="React">
+            <i className="fas fa-smile" />
           </button>
         )}
       </div>

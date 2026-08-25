@@ -778,3 +778,79 @@
   backdrop-filter: blur(8px);
   margin-bottom: 8px;
 }
+
+/* src/components/pages/Shop/Shop.css */
+
+/* ─── Skeleton Loader ────────────────────────────────────────── */
+@keyframes shimmer {
+  0% { background-position: -200px 0; }
+  100% { background-position: 200px 0; }
+}
+
+.shop-item.skeleton .skeleton-image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 12px;
+  background: var(--bg-input);
+  background-image: linear-gradient(90deg, var(--bg-input) 0px, var(--border-color) 40px, var(--bg-input) 80px);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite linear;
+  margin-bottom: 8px;
+}
+
+.shop-item.skeleton .skeleton-title {
+  height: 16px;
+  width: 60%;
+  margin: 4px auto;
+  border-radius: 4px;
+  background: var(--bg-input);
+  background-image: linear-gradient(90deg, var(--bg-input) 0px, var(--border-color) 40px, var(--bg-input) 80px);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+.shop-item.skeleton .skeleton-price {
+  height: 14px;
+  width: 40%;
+  margin: 4px auto;
+  border-radius: 4px;
+  background: var(--bg-input);
+  background-image: linear-gradient(90deg, var(--bg-input) 0px, var(--border-color) 40px, var(--bg-input) 80px);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+.shop-item.skeleton .skeleton-btn {
+  height: 32px;
+  width: 70%;
+  margin: 8px auto 0;
+  border-radius: 20px;
+  background: var(--bg-input);
+  background-image: linear-gradient(90deg, var(--bg-input) 0px, var(--border-color) 40px, var(--bg-input) 80px);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+/* ─── Header skeleton ────────────────────────────────────────── */
+.shop-header .shop-coins-skeleton .skeleton-line {
+  width: 80px;
+  height: 24px;
+  border-radius: 12px;
+  background: var(--bg-input);
+  background-image: linear-gradient(90deg, var(--bg-input) 0px, var(--border-color) 40px, var(--bg-input) 80px);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite linear;
+}
+
+.shop-header .shop-get-more.skeleton-btn {
+  width: 80px;
+  height: 32px;
+  border-radius: 20px;
+  border: none;
+  background: var(--bg-input);
+  background-image: linear-gradient(90deg, var(--bg-input) 0px, var(--border-color) 40px, var(--bg-input) 80px);
+  background-size: 200px 100%;
+  animation: shimmer 1.5s infinite linear;
+  color: transparent;
+  cursor: default;
+}

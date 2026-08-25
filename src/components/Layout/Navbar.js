@@ -1,9 +1,9 @@
-// src/components/Layout/Navbar.js (theme‑aware)
+// src/components/Layout/Navbar.js
 import React, { useEffect, memo, useState, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useProfile } from '../../contexts/ProfileContext';
-import { useCall } from '../../contexts/CallContext'; // ✅ Import for video calls
+import { useCall } from '../../contexts/CallContext';
 import { db } from '../../services/firebase';
 import { ref, onValue, update, remove } from 'firebase/database';
 import ECHOMOJI from '../UI/ECHOMOJI';
@@ -32,7 +32,7 @@ const Navbar = memo(() => {
   const location = useLocation();
   const navigate = useNavigate();
   const { fetchProfile, getProfile, isOnline } = useProfile();
-  const { startVideoCall } = useCall(); // ✅ Use call context
+  const { startVideoCall } = useCall();
 
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
@@ -68,6 +68,54 @@ const Navbar = memo(() => {
   const targetUserId = pathParts[1] === 'chat' ? pathParts[2] : undefined;
   const isChatRoute = location.pathname.startsWith('/chat/');
   const isEchoAiRoute = targetUserId === 'echo_ai_assistant';
+  const isCommunityRoute = location.pathname.startsWith('/community/');
+  const communityId = isCommunityRoute ? pathParts[2] : null;
+  const [communityInfo, setCommunityInfo] = useState(null);
+
+  // ─── Pages that need a back button ──────────────────────────
+  const isProfileRoute = location.pathname === '/profile';
+  const isSettingsRoute = location.pathname === '/settings';
+  const isAboutRoute = location.pathname === '/about';
+  const isTermsRoute = location.pathname === '/terms';
+  const isPrivacyRoute = location.pathname === '/privacy';
+  const isReportRoute = location.pathname === '/report';
+  const isCoinsRoute = location.pathname === '/coins';
+
+  const showBackButton =
+    isChatRoute ||
+    isCommunityRoute ||
+    isProfileRoute ||
+    isSettingsRoute ||
+    isAboutRoute ||
+    isTermsRoute ||
+    isPrivacyRoute ||
+    isReportRoute ||
+    isCoinsRoute;
+
+  // ─── Back destination ───────────────────────────────────────
+  const getBackDestination = () => {
+    if (isCommunityRoute) return '/communities';
+    if (isChatRoute) {
+      const fromCommunity = location.state?.fromCommunity;
+      if (fromCommunity) return `/community/${fromCommunity}`;
+      return '/chats';
+    }
+    if (isProfileRoute || isSettingsRoute) return '/other';
+    if (isAboutRoute || isTermsRoute || isPrivacyRoute || isReportRoute) return '/other';
+    if (isCoinsRoute) return '/shop';
+    return '/';
+  };
+
+  // ─── Handle back: preserve scroll position ──────────────────
+  const handleBack = () => {
+    // If there's a history entry, go back naturally (preserves scroll)
+    if (window.history.length > 1) {
+      navigate(-1);
+    } else {
+      // Fallback if no history (e.g., direct URL)
+      navigate(getBackDestination());
+    }
+  };
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -165,6 +213,28 @@ const Navbar = memo(() => {
   }, [user?.uid, fetchProfile]);
 
   useEffect(() => {
+    if (!communityId) {
+      setCommunityInfo(null);
+      return;
+    }
+    const cRef = ref(db, `communities/${communityId}`);
+    const unsub = onValue(cRef, (snap) => {
+      if (!snap.exists()) {
+        setCommunityInfo(null);
+        return;
+      }
+      const d = snap.val() || {};
+      setCommunityInfo({
+        id: communityId,
+        name: d.name || 'Community',
+        image: d.image || '/images/communities/default.png',
+        memberCount: Number(d.memberCount || 0),
+      });
+    });
+    return () => unsub();
+  }, [communityId]);
+
+  useEffect(() => {
     if (isChatRoute && targetUserId && !isEchoAiRoute) {
       const cleanup = fetchProfile(targetUserId);
       return () => {
@@ -235,18 +305,28 @@ const Navbar = memo(() => {
     >
       {/* LEFT SECTION */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-        {isChatRoute ? (
+        {showBackButton ? (
           <button
-            onClick={() => navigate('/chats')}
+            onClick={handleBack}
             style={{
               background: 'none',
-              border: 'none',
+              border: '1px solid transparent',
               color: 'var(--text-primary)',
               fontSize: '18px',
               cursor: 'pointer',
-              padding: '4px',
+              padding: '6px 10px',
+              borderRadius: '8px',
+              transition: 'background 0.2s, border-color 0.2s',
               display: 'flex',
               alignItems: 'center',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'none';
+              e.currentTarget.style.borderColor = 'transparent';
             }}
           >
             <i className="fas fa-arrow-left" />
@@ -264,12 +344,52 @@ const Navbar = memo(() => {
           </span>
         )}
 
+        {isCommunityRoute && communityInfo && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
+            <img
+              src={communityInfo.image}
+              alt=""
+              style={{
+                width: 36,
+                height: 36,
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: '1px solid var(--border-color)',
+                flexShrink: 0,
+              }}
+              onError={(e) => {
+                e.currentTarget.src = '/images/communities/default.png';
+              }}
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <span
+                style={{
+                  color: 'var(--text-primary)',
+                  fontWeight: 700,
+                  fontSize: 14,
+                  lineHeight: 1.2,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '42vw',
+                }}
+              >
+                {communityInfo.name}
+              </span>
+              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                {communityInfo.memberCount.toLocaleString()} members
+              </span>
+            </div>
+          </div>
+        )}
+
         {isChatRoute && (
           <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
             <div
+              className="nav-chat-avatar"
               style={{
-                width: '38px',
-                height: '38px',
+                width: '36px',
+                height: '36px',
                 borderRadius: '50%',
                 overflow: 'hidden',
                 display: 'flex',
@@ -280,7 +400,7 @@ const Navbar = memo(() => {
                 position: 'relative',
               }}
             >
-              <Avatar src={chatAvatar} name={chatName} size={38} />
+              <Avatar src={chatAvatar} name={chatName} size={36} />
               {partnerSkin && (
                 <div
                   style={{
@@ -310,16 +430,30 @@ const Navbar = memo(() => {
 
             <div style={{ display: 'flex', flexDirection: 'column' }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span style={{ color: 'var(--text-primary)', fontWeight: 700, fontSize: '14px', lineHeight: '1.2' }}>
+                <span
+                  className="nav-chat-name"
+                  style={{
+                    color: 'var(--text-primary)',
+                    fontWeight: 700,
+                    fontSize: '14px',
+                    lineHeight: '1.2',
+                    maxWidth: '42vw',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
                   {chatName}
                 </span>
-                <ECHOMOJI
-                  mood={partnerMood}
-                  skin={partnerSkin}
-                  size={20}
-                  interactive={false}
-                  animated={false}
-                />
+                <span className="nav-chat-echomoji">
+                  <ECHOMOJI
+                    mood={partnerMood}
+                    skin={partnerSkin}
+                    size={18}
+                    interactive={false}
+                    animated={false}
+                  />
+                </span>
               </div>
               <span style={{ color: statusColor, fontSize: '11px', marginTop: '1px' }}>
                 {statusText}
@@ -327,11 +461,30 @@ const Navbar = memo(() => {
             </div>
           </div>
         )}
+
+        {/* ─── For profile/legal pages, show page title ──────── */}
+        {!isChatRoute && !isCommunityRoute && showBackButton && (
+          <span
+            style={{
+              fontSize: '16px',
+              fontWeight: 700,
+              color: 'var(--text-primary)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {isProfileRoute && 'Profile'}
+            {isSettingsRoute && 'Settings'}
+            {isAboutRoute && 'About Us'}
+            {isTermsRoute && 'Terms of Service'}
+            {isPrivacyRoute && 'Privacy Policy'}
+            {isReportRoute && 'Report'}
+            {isCoinsRoute && 'Get Coins'}
+          </span>
+        )}
       </div>
 
       {/* RIGHT SECTION */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-        {/* ✅ Video Call Button – only if in chat with an online user */}
+      <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
         {isChatRoute && targetUserId && !isEchoAiRoute && isTargetOnline && (
           <button
             onClick={() => startVideoCall(targetUserId, chatName, chatAvatar)}
@@ -515,6 +668,7 @@ const Navbar = memo(() => {
           />
         )}
         <span
+          className="nav-own-name"
           style={{
             fontSize: '14px',
             color: 'var(--text-secondary)',
@@ -553,6 +707,17 @@ const Navbar = memo(() => {
         timestamp={selectedNotification?.timestamp}
       />
 
+      <style>{`
+        @media (max-width: 480px) {
+          .nav-own-name { display: none !important; }
+          .nav-chat-name { max-width: 28vw !important; font-size: 13px !important; }
+          .nav-chat-echomoji { display: none !important; }
+          .notification-bell-wrapper button { font-size: 18px !important; }
+        }
+        @media (max-width: 360px) {
+          .nav-chat-name { max-width: 22vw !important; }
+        }
+      `}</style>
       <ConfirmModal
         isOpen={confirmModal.isOpen}
         onClose={closeConfirmModal}

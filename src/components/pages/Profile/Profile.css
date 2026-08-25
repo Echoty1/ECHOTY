@@ -101,6 +101,8 @@
   }
 }
 
+/* ─── Removed .page-back-header ─────────────────────────────── */
+
 .profile-card {
   background: var(--bg-card);
   backdrop-filter: blur(12px);
@@ -599,42 +601,31 @@
   background: #7C4CE1;
 }
 
-/* ─── Sticky Back Header (corrected class name) ────────────── */
-.page-back-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--bg-primary);
-  padding: 8px 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  border-bottom: 1px solid var(--border-color);
-  margin-bottom: 12px;
+/* ─── Removed .page-back-header ─────────────────────────────── */
+
+/* src/components/pages/Profile/Profile.css */
+
+/* ─── Ensure inputs use theme variables ────────────────────── */
+.profile-name-input,
+.profile-bio-textarea {
+  color: var(--text-primary) !important;
+  background: var(--bg-input) !important;
+  border: 1px solid var(--border-color) !important;
+}
+
+.profile-name-input:focus,
+.profile-bio-textarea:focus {
+  border-color: #6C3CE1 !important;
+  outline: none;
+}
+
+.profile-bio-textarea {
   width: 100%;
+  padding: 10px 60px 10px 40px;
+  border-radius: 12px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 14px;
+  min-height: 60px;
   box-sizing: border-box;
-  backdrop-filter: blur(8px);
-}
-.page-back-btn {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 16px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: background 0.2s, color 0.2s;
-}
-.page-back-btn:hover {
-  background: var(--bg-input);
-  color: var(--text-primary);
-}
-.page-back-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-  flex: 1;
 }

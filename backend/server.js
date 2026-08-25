@@ -9,6 +9,10 @@ import Groq from 'groq-sdk';
 import fetch from 'node-fetch';
 import 'dotenv/config';
 
+// ─── IMAP poller imports ────────────────────────────────────────
+import { ImapFlow } from 'imapflow';
+import { simpleParser } from 'mailparser';
+
 // ─── Constants ──────────────────────────────────────────────────
 const ECHO_AI_AVATAR = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
 const ECHO_AI_ID = 'echo_ai_assistant';
@@ -345,7 +349,6 @@ app.post('/api/chat', async (req, res) => {
     }
 
     const rawReply = result.response.choices[0]?.message?.content || 'I could not generate a reply.';
-    // ─── Strip <think> tags ─────────────────────────────────────
     let cleanReply = stripThinkTags(rawReply);
 
     // Process memory & search tokens
@@ -427,7 +430,417 @@ app.post('/api/admin/delete-user', async (req, res) => {
   }
 });
 
-// ─── Start server ──────────────────────────────────────────────
+// ==========================================================================
+//  💰 SELAR PAYMENTS (pending orders + webhook + IMAP email poller)
+// ==========================================================================
+
+const PRODUCT_COINS = {
+//  '014871867i': 10,
+  '105w82207h': 500,
+  '72a169f519': 1000,
+  '1xc588p2uc': 1500,
+  'b5377r174h': 2000,
+  'n4s9l3yy02': 2500,
+  '3x61201c46': 3000,
+  '2g079jdyyd': 4000,
+  '3363k13i67': 5000,
+};
+
+/** Create pending payment when user clicks a package */
+app.post('/api/create-pending-payment', async (req, res) => {
+  try {
+    const { reference, uid, productId, coins, price } = req.body || {};
+    if (!reference || !uid || !productId) {
+      return res.status(400).json({ success: false, message: 'Missing fields' });
+    }
+    const coinAmount = Number(coins) || PRODUCT_COINS[productId];
+    if (!coinAmount) {
+      return res.status(400).json({ success: false, message: 'Unknown product' });
+    }
+
+    const existing = await db.ref(`pendingPayments/${reference}`).once('value');
+    if (existing.exists() && existing.val().status === 'completed') {
+      return res.json({ success: true, message: 'Already completed' });
+    }
+
+    await db.ref(`pendingPayments/${reference}`).set({
+      uid,
+      productId,
+      coins: coinAmount,
+      price: Number(price) || 0,
+      status: 'pending',
+      createdAt: Date.now(),
+    });
+
+    console.log(`🧾 Pending payment created: ${reference} → ${uid} (+${coinAmount})`);
+    res.json({ success: true, reference });
+  } catch (err) {
+    console.error('create-pending-payment', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/** Client polls this — NOT Selar */
+app.get('/api/payment-status', async (req, res) => {
+  try {
+    const reference = req.query.reference;
+    if (!reference) return res.status(400).json({ status: 'error', message: 'Missing reference' });
+
+    const snap = await db.ref(`pendingPayments/${reference}`).once('value');
+    if (!snap.exists()) return res.json({ status: 'unknown' });
+
+    const data = snap.val();
+    res.json({
+      status: data.status || 'pending',
+      coinsAdded: data.coinsAdded || null,
+      message: data.message || null,
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
+/**
+ * Credit coins once. Idempotent on reference.
+ */
+async function fulfillPayment(reference, source = 'webhook') {
+  if (!reference || typeof reference !== 'string') {
+    return { ok: false, message: 'Invalid reference' };
+  }
+  reference = reference.trim();
+
+  const pendingRef = db.ref(`pendingPayments/${reference}`);
+  const snap = await pendingRef.once('value');
+  if (!snap.exists()) {
+    return { ok: false, message: 'Unknown reference' };
+  }
+  const pending = snap.val();
+  if (pending.status === 'completed') {
+    return { ok: true, already: true, coins: pending.coinsAdded || pending.coins };
+  }
+
+  const uid = pending.uid;
+  const coins = Number(pending.coins) || PRODUCT_COINS[pending.productId];
+  if (!uid || !coins) return { ok: false, message: 'Invalid pending data' };
+
+  const coinsRef = db.ref(`userSkins/${uid}/coins`);
+  const curSnap = await coinsRef.once('value');
+  const current = Number(curSnap.val()) || 0;
+  const newCoins = current + coins;
+  await coinsRef.set(newCoins);
+
+  await pendingRef.update({
+    status: 'completed',
+    coinsAdded: coins,
+    newBalance: newCoins,
+    completedAt: Date.now(),
+    source,
+  });
+
+  await db.ref(`transactions/${uid}/${reference}`).set({
+    amount: coins,
+    productId: pending.productId || null,
+    timestamp: Date.now(),
+    status: 'completed',
+    source,
+  });
+
+  console.log(`✅ [${source}] +${coins} coins → ${uid} (ref ${reference})`);
+  return { ok: true, coins, newCoins };
+}
+
+/** Optional webhook (kept; not required if you only use IMAP) */
+app.post('/api/selar-webhook', async (req, res) => {
+  try {
+    const secret = process.env.SELAR_WEBHOOK_SECRET;
+    if (secret) {
+      const got = req.headers['x-echo-secret'] || req.query.secret;
+      if (got !== secret) {
+        return res.status(401).json({ success: false, message: 'Unauthorized' });
+      }
+    }
+
+    console.log('📩 Selar webhook body:', JSON.stringify(req.body));
+    const body = req.body || {};
+    let reference =
+      body.reference ||
+      body.echo_ref ||
+      body.ref ||
+      body.custom_fields?.ref ||
+      body.custom_fields?.echo_ref ||
+      body.meta?.reference;
+
+    if (!reference && typeof body.notes === 'string') {
+      const m = body.notes.match(/echo_[A-Za-z0-9]+_[A-Za-z0-9]+_[A-Za-z0-9]+/);
+      if (m) reference = m[0];
+    }
+    if (!reference && typeof body === 'object') {
+      const blob = JSON.stringify(body);
+      const m = blob.match(/echo_[A-Za-z0-9_-]+_[A-Za-z0-9_-]+_[A-Za-z0-9_-]+/);
+      if (m) reference = m[0];
+    }
+
+    if (!reference) {
+      return res.status(400).json({ success: false, message: 'No reference in payload' });
+    }
+
+    const result = await fulfillPayment(reference, 'selar-webhook');
+    if (!result.ok) {
+      return res.status(400).json({ success: false, message: result.message });
+    }
+    res.json({ success: true, coins: result.coins, already: !!result.already });
+  } catch (err) {
+    console.error('selar-webhook error', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/** Admin / support manual complete */
+app.post('/api/admin/complete-payment', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split('Bearer ')[1];
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+    const decoded = await admin.auth().verifyIdToken(token);
+    if (decoded.uid !== 'hD7tJzPVI1VSorhok8GToBC6VDy1') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    const { reference } = req.body || {};
+    if (!reference) return res.status(400).json({ error: 'Missing reference' });
+    const result = await fulfillPayment(reference, 'admin');
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================================================
+//  📬 IMAP EMAIL POLLER – auto-credit from Selar sale emails
+// ==========================================================================
+
+/** Extract product ID and buyer email from Selar receipt email */
+function extractSaleDetails(text) {
+  if (!text || typeof text !== 'string') return null;
+
+  // 1. Find product ID from receipt URL: "?products=014871867i"
+  const productMatch = text.match(/[?&]products=([A-Za-z0-9]+)/);
+  const productId = productMatch ? productMatch[1] : null;
+
+  // 2. Find buyer email (look for any email address in the text)
+  const emailMatch = text.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
+  const buyerEmail = emailMatch ? emailMatch[0] : null;
+
+  if (productId && buyerEmail) {
+    return { productId, buyerEmail };
+  }
+  return null;
+}
+
+/** Strip HTML to plain text */
+function htmlToText(html) {
+  if (!html) return '';
+  return String(html)
+    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
+    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\s+/g, ' ');
+}
+
+let imapBusy = false;
+
+async function pollSelarEmails() {
+  if (imapBusy) {
+    console.log('📬 IMAP poll already running — skip');
+    return;
+  }
+
+  const user = process.env.SELAR_EMAIL;
+  const pass = process.env.SELAR_EMAIL_PASS;
+  if (!user || !pass) {
+    console.warn('⚠️ SELAR_EMAIL or SELAR_EMAIL_PASS not set. Email poller disabled.');
+    return;
+  }
+
+  imapBusy = true;
+  console.log('📬 Checking Selar payment emails...');
+
+  const client = new ImapFlow({
+    host: process.env.SELAR_IMAP_HOST || 'imap.gmail.com',
+    port: Number(process.env.SELAR_IMAP_PORT || 993),
+    secure: true,
+    auth: { user, pass },
+    logger: false,
+    socketTimeout: 60000,
+  });
+
+  try {
+    await client.connect();
+    console.log('✅ IMAP connected');
+
+    await client.mailboxOpen('INBOX');
+
+    // ─── Search for "New Sale:" emails – include both seen and unseen ───
+    let uids = await client.search({
+      subject: 'New Sale:',
+    });
+
+    // If many, limit to recent 50 to avoid processing too many old ones
+    if (uids && uids.length > 50) {
+      uids = uids.slice(-50);
+    }
+
+    if (!uids || uids.length === 0) {
+      console.log('📨 No new sale emails found');
+      await client.logout();
+      return;
+    }
+
+    console.log(`📨 Found ${uids.length} sale email(s)`);
+
+    for (const uid of uids) {
+      try {
+        const msg = await client.fetchOne(uid, {
+          source: true,
+          envelope: true,
+          uid: true,
+        });
+        if (!msg || !msg.source) continue;
+
+        const parsed = await simpleParser(msg.source);
+        const subject = parsed.subject || msg.envelope?.subject || '';
+        const textBody = parsed.text || '';
+        const htmlBody = htmlToText(parsed.html || '');
+        const fullText = `${subject}\n${textBody}\n${htmlBody}`;
+
+        const details = extractSaleDetails(fullText);
+        if (!details) {
+          console.warn(`⚠️ Could not extract productId/email from sale email (uid=${uid})`);
+          try { await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true }); } catch (_) {}
+          continue;
+        }
+
+        const { productId, buyerEmail } = details;
+        console.log(`🔍 Sale: product=${productId}, email=${buyerEmail}`);
+
+        // Find pending orders with this productId and status 'pending'
+        const pendingSnap = await db.ref('pendingPayments')
+          .orderByChild('productId')
+          .equalTo(productId)
+          .once('value');
+
+        if (!pendingSnap.exists()) {
+          console.warn(`⚠️ No pending orders found for productId ${productId}`);
+          try { await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true }); } catch (_) {}
+          continue;
+        }
+
+        const pendingData = pendingSnap.val();
+        let matched = false;
+
+        for (const [refKey, order] of Object.entries(pendingData)) {
+          if (order.status !== 'pending') continue;
+
+          // ─── Get user email from profile OR accounts ──────────────
+          let userEmail = null;
+
+          // Try profile first
+          const profileSnap = await db.ref(`profiles/${order.uid}/email`).once('value');
+          if (profileSnap.exists()) {
+            userEmail = profileSnap.val();
+          }
+
+          // If not in profile, try accounts
+          if (!userEmail) {
+            const accountSnap = await db.ref(`accounts/${order.uid}/email`).once('value');
+            if (accountSnap.exists()) {
+              userEmail = accountSnap.val();
+            }
+          }
+
+          // If still no email, try Firebase Auth (requires admin SDK)
+          if (!userEmail) {
+            try {
+              const userRecord = await admin.auth().getUser(order.uid);
+              if (userRecord.email) {
+                userEmail = userRecord.email;
+                // Save it to profile for future
+                await db.ref(`profiles/${order.uid}/email`).set(userEmail);
+              }
+            } catch (_) {}
+          }
+
+          if (!userEmail) {
+            console.warn(`⚠️ No email found for ${order.uid}`);
+            continue;
+          }
+
+          // Compare emails (case-insensitive)
+          if (userEmail.toLowerCase() === buyerEmail.toLowerCase()) {
+            console.log(`✅ Found matching pending order: ${refKey} for ${order.uid}`);
+            const result = await fulfillPayment(refKey, 'email-poller');
+            if (result.ok) {
+              console.log(`✅ Credited ${result.coins} coins to ${order.uid}`);
+              matched = true;
+            } else {
+              console.warn(`⚠️ Fulfillment failed: ${result.message}`);
+            }
+            break; // Only one order per sale
+          }
+        }
+
+        if (!matched) {
+          console.warn(`⚠️ No matching pending order for product ${productId} and email ${buyerEmail}`);
+        }
+
+        // Mark as seen
+        try {
+          await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
+        } catch (flagErr) {
+          console.warn('Could not mark seen:', flagErr.message);
+        }
+      } catch (err) {
+        console.warn(`❌ Error processing sale email uid=${uid}:`, err.message);
+      }
+    }
+
+    await client.logout();
+    console.log('📬 Email poll complete');
+  } catch (err) {
+    console.error('❌ IMAP poller error:', err.message);
+    try {
+      await client.logout();
+    } catch (_) {}
+  } finally {
+    imapBusy = false;
+  }
+}
+
+// Run every 2 minutes
+const IMAP_POLL_MS = Number(process.env.SELAR_IMAP_POLL_MS || 2 * 60 * 1000);
+setInterval(pollSelarEmails, IMAP_POLL_MS);
+// Startup
+setTimeout(pollSelarEmails, 8000);
+
+// Manual trigger for support/debug
+app.post('/api/admin/poll-selar-emails', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split('Bearer ')[1];
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+    const decoded = await admin.auth().verifyIdToken(token);
+    if (decoded.uid !== 'hD7tJzPVI1VSorhok8GToBC6VDy1') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+    pollSelarEmails().catch((e) => console.error(e));
+    res.json({ success: true, message: 'Poll started' });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================================================
+//  🚀 START SERVER
+// ==========================================================================
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 ECHO backend running on port ${PORT}`);

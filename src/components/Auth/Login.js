@@ -1,31 +1,79 @@
 // src/components/Auth/Login.js
-import React, { useState } from 'react';
-import { signInWithPopup, GoogleAuthProvider, signInWithEmailAndPassword, createUserWithEmailAndPassword } from 'firebase/auth';
+import React, { useState, useEffect } from 'react';
+import {
+  signInWithRedirect,
+  signInWithPopup,
+  getRedirectResult,
+  GoogleAuthProvider,
+  signInWithEmailAndPassword,
+  createUserWithEmailAndPassword,
+} from 'firebase/auth';
 import { auth, db } from '../../services/firebase';
 import { ref, set, get, push, serverTimestamp } from 'firebase/database';
 
-// ─── Demo constants ────────────────────────────────────────────
 const DEMO_EMAIL = 'demo@echoty.xyz';
 const DEMO_PASSWORD = 'demodemo';
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 const DEMO_AVATAR = 'https://echoty.xyz/videos/library/Animation Smile GIF.gif';
 
+const isLocalhost =
+  typeof window !== 'undefined' &&
+  (window.location.hostname === 'localhost' ||
+    window.location.hostname === '127.0.0.1');
+
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [isSignup, setIsSignup] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    setBusy(true);
+    getRedirectResult(auth)
+      .then((result) => {
+        if (cancelled) return;
+        if (result?.user) {
+          console.log('Google redirect sign-in OK', result.user.uid);
+        }
+      })
+      .catch((err) => {
+        console.error('Redirect sign-in error:', err);
+        if (!cancelled) setError(err.message || 'Google sign-in failed');
+      })
+      .finally(() => {
+        if (!cancelled) setBusy(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleGoogle = async () => {
+    setError('');
+    setBusy(true);
+    const provider = new GoogleAuthProvider();
+    provider.setCustomParameters({ prompt: 'select_account' });
     try {
-      await signInWithPopup(auth, new GoogleAuthProvider());
+      if (isLocalhost) {
+        // Popup works on localhost; redirect does not (init.json 404)
+        await signInWithPopup(auth, provider);
+      } else {
+        await signInWithRedirect(auth, provider);
+      }
     } catch (err) {
-      alert(err.message);
+      console.error(err);
+      setError(err.message || 'Google sign-in failed');
+      setBusy(false);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setBusy(true);
     try {
       if (isSignup) {
         await createUserWithEmailAndPassword(auth, email, password);
@@ -33,16 +81,18 @@ const Login = () => {
         await signInWithEmailAndPassword(auth, email, password);
       }
     } catch (err) {
-      alert(err.message);
+      setError(err.message);
+      setBusy(false);
     }
   };
 
   const handleDemoLogin = async () => {
+    setError('');
+    setBusy(true);
     try {
       await signInWithEmailAndPassword(auth, DEMO_EMAIL, DEMO_PASSWORD);
 
-      const profileRef = ref(db, `profiles/${DEMO_UID}`);
-      await set(profileRef, {
+      await set(ref(db, `profiles/${DEMO_UID}`), {
         name: 'Demo User',
         avatar: DEMO_AVATAR,
         videoUrl: DEMO_AVATAR,
@@ -68,8 +118,7 @@ const Login = () => {
         });
       }
 
-      const supportChatRef = ref(db, `userChats/${DEMO_UID}/${SUPPORT_UID}`);
-      await set(supportChatRef, {
+      await set(ref(db, `userChats/${DEMO_UID}/${SUPPORT_UID}`), {
         id: SUPPORT_UID,
         partnerName: 'ECHO Support',
         partnerAvatar: '',
@@ -79,46 +128,70 @@ const Login = () => {
         unreadCount: 0,
       });
     } catch (err) {
-      alert('Demo login failed: ' + err.message);
+      setError('Demo login failed: ' + err.message);
+      setBusy(false);
     }
   };
 
   return (
-    <div style={{
-      minHeight: '100vh',
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      background: 'var(--bg-primary)',
-      padding: '20px',
-      transition: 'background 0.3s ease',
-    }}>
-      <div style={{
-        background: 'var(--bg-secondary)',
-        borderRadius: '24px',
-        padding: '40px 32px',
-        maxWidth: '400px',
-        width: '100%',
-        border: '1px solid var(--border-color)',
-        boxShadow: '0 24px 80px var(--shadow-color)',
-        textAlign: 'center',
-        transition: 'background 0.3s ease, border-color 0.3s ease',
-      }}>
+    <div
+      style={{
+        minHeight: '100vh',
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        background: 'var(--bg-primary)',
+        padding: '20px',
+      }}
+    >
+      <div
+        style={{
+          background: 'var(--bg-secondary)',
+          borderRadius: '24px',
+          padding: '40px 32px',
+          maxWidth: '400px',
+          width: '100%',
+          border: '1px solid var(--border-color)',
+          boxShadow: '0 24px 80px var(--shadow-color)',
+          textAlign: 'center',
+        }}
+      >
         <div style={{ marginBottom: '32px' }}>
-          <div style={{
-            fontSize: '32px',
-            fontWeight: 900,
-            background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
-            WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent',
-          }}>ECHO</div>
+          <div
+            style={{
+              fontSize: '32px',
+              fontWeight: 900,
+              background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            ECHO
+          </div>
           <p style={{ color: 'var(--text-secondary)', fontSize: '14px', marginTop: '4px' }}>
             The future of conversations
           </p>
         </div>
 
+        {error && (
+          <div
+            style={{
+              background: 'rgba(239,68,68,0.12)',
+              color: '#f87171',
+              borderRadius: 12,
+              padding: '10px 12px',
+              marginBottom: 16,
+              fontSize: 13,
+              textAlign: 'left',
+            }}
+          >
+            {error}
+          </div>
+        )}
+
         <button
           onClick={handleDemoLogin}
+          disabled={busy}
           style={{
             width: '100%',
             padding: '12px',
@@ -128,14 +201,12 @@ const Login = () => {
             color: '#fff',
             fontSize: '16px',
             fontWeight: 600,
-            cursor: 'pointer',
+            cursor: busy ? 'not-allowed' : 'pointer',
             marginBottom: '16px',
-            transition: 'transform 0.2s ease',
+            opacity: busy ? 0.7 : 1,
           }}
-          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
         >
-          🚀 Try Demo
+          {busy ? 'Please wait…' : '🚀 Try Demo'}
         </button>
 
         <div style={{ display: 'flex', alignItems: 'center', marginBottom: '16px' }}>
@@ -146,6 +217,7 @@ const Login = () => {
 
         <button
           onClick={handleGoogle}
+          disabled={busy}
           style={{
             width: '100%',
             padding: '12px',
@@ -159,17 +231,15 @@ const Login = () => {
             alignItems: 'center',
             justifyContent: 'center',
             gap: '12px',
-            cursor: 'pointer',
-            transition: 'transform 0.2s ease',
+            cursor: busy ? 'not-allowed' : 'pointer',
+            opacity: busy ? 0.7 : 1,
           }}
-          onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-          onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
         >
           <svg viewBox="0 0 48 48" width="20" height="20">
-            <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z"/>
-            <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z"/>
-            <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z"/>
-            <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z"/>
+            <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
+            <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
+            <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
+            <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
           </svg>
           Continue with Google
         </button>
@@ -186,6 +256,7 @@ const Login = () => {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
+            disabled={busy}
             style={{
               width: '100%',
               padding: '12px 16px',
@@ -197,7 +268,7 @@ const Login = () => {
               outline: 'none',
               marginBottom: '12px',
               fontFamily: 'inherit',
-              transition: 'border-color 0.2s, background 0.2s, color 0.2s',
+              boxSizing: 'border-box',
             }}
             required
           />
@@ -206,6 +277,7 @@ const Login = () => {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            disabled={busy}
             style={{
               width: '100%',
               padding: '12px 16px',
@@ -217,12 +289,13 @@ const Login = () => {
               outline: 'none',
               marginBottom: '16px',
               fontFamily: 'inherit',
-              transition: 'border-color 0.2s, background 0.2s, color 0.2s',
+              boxSizing: 'border-box',
             }}
             required
           />
           <button
             type="submit"
+            disabled={busy}
             style={{
               width: '100%',
               padding: '12px',
@@ -232,27 +305,17 @@ const Login = () => {
               color: 'white',
               fontSize: '16px',
               fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'transform 0.2s ease',
+              cursor: busy ? 'not-allowed' : 'pointer',
+              opacity: busy ? 0.7 : 1,
             }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'scale(1)'}
           >
-            {isSignup ? 'Sign Up' : 'Login'}
+            {busy ? 'Please wait…' : isSignup ? 'Sign Up' : 'Login'}
           </button>
         </form>
 
-        <p style={{
-          textAlign: 'center',
-          marginTop: '16px',
-          color: 'var(--text-secondary)',
-          fontSize: '14px',
-        }}>
-          {isSignup ? 'Already have an account? ' : "No account? "}
-          <span
-            style={{ color: '#8B5CF6', cursor: 'pointer' }}
-            onClick={() => setIsSignup(!isSignup)}
-          >
+        <p style={{ textAlign: 'center', marginTop: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>
+          {isSignup ? 'Already have an account? ' : 'No account? '}
+          <span style={{ color: '#8B5CF6', cursor: 'pointer' }} onClick={() => !busy && setIsSignup(!isSignup)}>
             {isSignup ? 'Login' : 'Sign up'}
           </span>
         </p>

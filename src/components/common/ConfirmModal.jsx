@@ -16,11 +16,17 @@ const ConfirmModal = ({
   onInputChange = () => {},
   inputType = 'text',
   loading = false,
+  verificationText = '', // the exact text required to enable the button
 }) => {
   if (!isOpen) return null;
 
+  // ─── Determine if confirm button should be disabled ──────────
+  const isConfirmDisabled =
+    loading ||
+    (showInput && verificationText && inputValue.trim() !== verificationText);
+
   const handleConfirm = () => {
-    if (!loading) {
+    if (!isConfirmDisabled) {
       onConfirm(showInput ? inputValue : undefined);
     }
   };
@@ -54,7 +60,7 @@ const ConfirmModal = ({
           <button
             className={`confirm-modal-btn confirm ${loading ? 'loading' : ''}`}
             onClick={handleConfirm}
-            disabled={loading}
+            disabled={isConfirmDisabled}
           >
             {loading ? (
               <span className="confirm-modal-spinner" />
@@ -174,6 +180,8 @@ const ConfirmModal = ({
         .confirm-modal-btn:disabled {
           opacity: 0.5;
           cursor: not-allowed;
+          transform: none !important;
+          box-shadow: none !important;
         }
         .confirm-modal-btn.confirm.loading {
           background: var(--text-muted);

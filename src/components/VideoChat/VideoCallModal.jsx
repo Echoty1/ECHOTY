@@ -336,7 +336,15 @@ const VideoCallModal = ({
     });
 
     peer.on('error', (err) => {
-      console.error('[Call] Peer error:', err?.type || err);
+      const friendly = (() => {
+          const t = String(err?.type || err?.message || '');
+          if (/peer-unavailable/i.test(t)) return 'This person is unavailable. Try again.';
+          if (/network|fetch|server-error|socket/i.test(t)) return 'Network issue. Check your connection and try again.';
+          if (/Could not get an ID|Failed to fetch/i.test(t)) return 'Could not connect to the call server. Try again.';
+          return 'Call connection failed. Please try again.';
+        })();
+        if (isMounted.current) setCallStatus(friendly);
+        console.error('[Call] Peer error:', err?.type || err);
       if (err?.type === 'peer-unavailable' && isMounted.current) {
         setCallStatus('Could not reach the other person. Try again.');
       }

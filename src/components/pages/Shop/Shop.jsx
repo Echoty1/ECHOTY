@@ -17,6 +17,22 @@ const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
 
+// ─── Shop Skeleton ──────────────────────────────────────────────
+const ShopSkeleton = () => {
+  return (
+    <div className="shop-grid">
+      {Array.from({ length: 6 }).map((_, index) => (
+        <div key={index} className="shop-item skeleton">
+          <div className="skeleton-image" />
+          <div className="skeleton-title" />
+          <div className="skeleton-price" />
+          <div className="skeleton-btn" />
+        </div>
+      ))}
+    </div>
+  );
+};
+
 // ─── Skin item ────────────────────────────────────────────────────
 const SkinItem = React.memo(({ skin, isOwned, isActive, purchase, onApply, onPurchase }) => {
   const skinObj = useMemo(
@@ -677,15 +693,39 @@ const Shop = () => {
     [user, coins, ownedGifs, gifLibrary]
   );
 
+  // ─── Loading state with skeletons ──────────────────────────────
   if (loading) {
     return (
-      <div className="shop-loading">
-        <div className="shop-loading-spinner" />
-        <p>Loading shop...</p>
+      <div className="shop-page">
+        <div className="shop-header">
+          <div className="shop-header-left">
+            <div className="shop-coins-skeleton"><div className="skeleton-line" /></div>
+          </div>
+          <div className="shop-header-center">
+            <h1>🛍️ Shop</h1>
+          </div>
+          <div className="shop-header-right">
+            <button className="shop-get-more skeleton-btn">Get More</button>
+          </div>
+        </div>
+
+        <div className="shop-section skins-section">
+          <h2>Skins</h2>
+          <ShopSkeleton />
+        </div>
+
+        <div className="shop-section gifs-section">
+          <h2>Premium GIFs</h2>
+          <ShopSkeleton />
+        </div>
+
+        <Modal isOpen={modal.isOpen} onClose={closeModal} title={modal.title} message={modal.message} type={modal.type} />
+        {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
       </div>
     );
   }
 
+  // ─── Main render ──────────────────────────────────────────────
   const availableGifs = gifLibrary.filter(gif => !ownedGifs.includes(gif.id));
 
   const renderShopContent = () => (
@@ -757,7 +797,6 @@ const Shop = () => {
       />
       <StructuredData />
       <div className="shop-page">
-        {/* ─── Sticky Back Header (only for admin) ─────────────── */}
         {isAdmin && (
           <div className="page-back-header">
             <button className="page-back-btn" onClick={() => navigate('/other')}>

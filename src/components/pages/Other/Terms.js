@@ -13,13 +13,6 @@ const Terms = () => {
       <SEO title="Terms of Service" description="Read ECHO's terms of service." />
       <StructuredData />
       <div className="legal-page">
-        <div className="legal-header">
-          <button className="legal-back" onClick={() => navigate('/other')}>
-            ← Back
-          </button>
-          <h1>Terms of Service</h1>
-          <span className="legal-badge">v2.0</span>
-        </div>
 
         <div className="legal-content">
           <div className="legal-section">

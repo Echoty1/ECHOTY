@@ -1,16 +1,17 @@
 // src/components/Layout/BottomNav.js
 import React, { useState, useRef, useEffect } from 'react';
-import { NavLink, useLocation } from 'react-router-dom'; // ✅ useLocation added
+import { NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { db } from '../../services/firebase';
 import { ref, onValue } from 'firebase/database';
+import { setFaviconBadge } from '../../utils/faviconBadge';
 
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 const AD_ZONE_ID = '12035158';
 
 const BottomNav = () => {
   const { user } = useAuth();
-  const location = useLocation(); // ✅ get current route
+  const location = useLocation();
   const [position, setPosition] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const startPos = useRef({ x: 0, y: 0 });
@@ -34,16 +35,27 @@ const BottomNav = () => {
   const isSupport = user?.uid === SUPPORT_UID;
 
   const getTabs = () => {
+    // Common tabs (always present)
     const commonTabs = [
       { to: '/chats', label: 'Chats', icon: 'fa-comment-dots' },
       { to: '/communities', label: 'Communities', icon: 'fa-users' },
       { to: '/shop', label: 'Shop', icon: 'fa-store' },
       { to: '/other', label: 'Other', icon: 'fa-ellipsis-h' },
     ];
+
+    // Everyone gets Home first
+    const baseTabs = [{ to: '/', label: 'Home', icon: 'fa-house' }];
+
     if (isSupport) {
-      return [{ to: '/control', label: 'Control', icon: 'fa-sliders-h' }, ...commonTabs];
+      // Admin: Home, Control, Chats, Communities, Shop, Other
+      return [
+        ...baseTabs,
+        { to: '/control', label: 'Control', icon: 'fa-sliders-h' },
+        ...commonTabs,
+      ];
     } else {
-      return [{ to: '/', label: 'Home', icon: 'fa-house' }, ...commonTabs];
+      // Normal user: Home, Chats, Communities, Shop, Other
+      return [...baseTabs, ...commonTabs];
     }
   };
 
@@ -74,6 +86,13 @@ const BottomNav = () => {
 
     return () => unsubscribe();
   }, [user?.uid]);
+
+  useEffect(() => {
+    setFaviconBadge(unreadChatsCount).catch(() => {});
+    // optional: also show count in the tab title
+    const base = 'ECHO';
+    document.title = unreadChatsCount > 0 ? `(${unreadChatsCount}) ${base}` : base;
+  }, [unreadChatsCount]);
 
   // ─── Drag handlers ──────────────────────────────────────────
   const handleStart = (e) => {
@@ -201,7 +220,7 @@ const BottomNav = () => {
       runAd();
     }, 300);
     return () => clearTimeout(timer);
-  }, [location.pathname]); // ✅ reload when URL changes
+  }, [location.pathname]);
 
   const navHeight = isMinimized ? '32px' : '72px';
   const tabOpacity = isMinimized ? 0 : 1;

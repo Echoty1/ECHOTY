@@ -1,4 +1,5 @@
 /* src/components/pages/Other/LegalPages.css */
+
 .legal-page {
   max-width: 720px;
   margin: 0 auto;
@@ -8,14 +9,9 @@
   color: var(--text-primary);
 }
 
-/* ─── Desktop: stretch full width ───────────────────────────── */
 @media (min-width: 1024px) {
   .legal-page {
-    max-width: 100%;
     padding: 32px 40px 80px;
-  }
-  .legal-page .legal-header h1 {
-    font-size: 32px;
   }
   .legal-page .legal-section {
     padding: 28px 32px;
@@ -49,48 +45,20 @@
 }
 
 .legal-header {
-  position: sticky;
-  top: 0px;          /* ✅ below the navbar */
-  z-index: 10;
-  background: var(--bg-primary);
-  padding: 6px 12px;
   display: flex;
   align-items: center;
   gap: 12px;
+  padding: 6px 0 12px;
   border-bottom: 1px solid var(--border-color);
-  backdrop-filter: blur(8px);
-  margin-bottom: 8px;
-  flex-wrap: nowrap;
-}
-
-.legal-back {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 15px;              /* ✅ slightly smaller */
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 6px;
-  border-radius: 6px;
-  transition: background 0.2s, color 0.2s;
-  white-space: nowrap;
-}
-.legal-back:hover {
-  background: var(--bg-input);
-  color: var(--text-primary);
+  margin-bottom: 20px;
 }
 
 .legal-header h1 {
-  font-size: 16px;              /* ✅ smaller to match compact header */
+  font-size: 24px;
   font-weight: 700;
   color: var(--text-primary);
   margin: 0;
   flex: 1;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .legal-badge {
@@ -104,7 +72,7 @@
   white-space: nowrap;
 }
 
-/* ─── rest of file unchanged ─────────────────────────────────── */
+/* rest of file unchanged */
 .legal-content {
   display: flex;
   flex-direction: column;

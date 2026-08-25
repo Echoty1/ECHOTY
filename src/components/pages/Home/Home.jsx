@@ -62,6 +62,7 @@ const Home = () => {
   const { profiles, fetchProfile } = useProfile();
   const { startVideoCall, activeVideoCall } = useCall();
   const [onlineUids, setOnlineUids] = useState([]);
+  const [bannedUids, setBannedUids] = useState(new Set());
   const [liveUids, setLiveUids] = useState([]);
   const [liveMeta, setLiveMeta] = useState({}); // uid -> {name, avatar}
   const [loading, setLoading] = useState(true);
@@ -70,6 +71,7 @@ const Home = () => {
 
   const [isLive, setIsLive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
+  const [peerError, setPeerError] = useState(null);
   const videoRef = useRef(null);
   const streamRef = useRef(null);
   const peerRef = useRef(null);
@@ -115,6 +117,7 @@ const Home = () => {
           update(ref(db, 'live/' + user.uid), { peerId: id }).catch(() => {});
         }
         console.log('✅ PeerJS connected with ID:', id);
+        setPeerError(null);
       });
 
       // Multi-viewer live: answer each viewer with our camera stream
@@ -129,13 +132,23 @@ const Home = () => {
 
       peer.on('error', (err) => {
         console.error('PeerJS error:', err);
+        const code = err?.type || err?.message || '';
         if (attempt < maxAttempts && peerInstance) {
           attempt++;
           console.log(`🔄 Retrying PeerJS connection (attempt ${attempt})...`);
-          peerInstance.destroy();
+          try { peerInstance.destroy(); } catch (_) {}
           timeoutId = setTimeout(createPeer, 2000);
         } else {
           console.warn('⚠️ PeerJS connection failed after retries.');
+          let msg = 'Connection problem. Please try again.';
+          if (/network|fetch|server-error|socket-error|unavailable/i.test(String(code))) {
+            msg = 'Network issue reaching the call server. Check your connection and try again.';
+          } else if (/peer-unavailable/i.test(String(code))) {
+            msg = 'The other person is unavailable. Try again in a moment.';
+          } else if (/Could not get an ID|Failed to fetch|Aborting/i.test(String(err?.message || code))) {
+            msg = 'Could not connect to the call server. Please try again.';
+          }
+          setPeerError(msg);
         }
       });
     };
@@ -279,8 +292,20 @@ const Home = () => {
       setLoading(false);
     }, 5000);
 
+    // Track banned UIDs so they never appear online on Home
+    const accountsRef = ref(db, 'accounts');
+    const unsubAccounts = onValue(accountsRef, (snap) => {
+      const data = snap.val() || {};
+      const banned = new Set();
+      Object.keys(data).forEach((id) => {
+        if (data[id] && data[id].banned === true) banned.add(id);
+      });
+      setBannedUids(banned);
+    });
+
     return () => {
       unsubscribePresence();
+      unsubAccounts();
       clearTimeout(timeout);
     };
   }, [user, isDemoUser, isSupportUser, profiles, fetchProfile]);
@@ -351,7 +376,7 @@ const Home = () => {
 
   // ─── 7. Build Online + Live Users List ───────────────────────
   // Only show accounts with a real profile name (hide wiped / "User" ghosts)
-  const combinedUids = Array.from(new Set([...onlineUids, ...liveUids]));
+  const combinedUids = Array.from(new Set([...onlineUids, ...liveUids])).filter((id) => !bannedUids.has(id));
   const onlineUsers = filterVisibleUsers(
     combinedUids
       .map((uid) => {
@@ -982,6 +1007,66 @@ const Home = () => {
           box-shadow: 0 8px 30px rgba(74, 222, 128, 0.5) !important;
         }
       `}</style>
+      {peerError && (
+        <div
+          role="alert"
+          style={{
+            position: 'fixed',
+            bottom: '100px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 9999,
+            maxWidth: 'min(420px, calc(100vw - 32px))',
+            padding: '12px 16px',
+            borderRadius: '14px',
+            background: 'rgba(239, 68, 68, 0.95)',
+            color: '#fff',
+            fontSize: '14px',
+            fontWeight: 600,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.35)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px',
+          }}
+        >
+          <span style={{ flex: 1 }}>{peerError}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setPeerError(null);
+              window.location.reload();
+            }}
+            style={{
+              background: '#fff',
+              color: '#EF4444',
+              border: 'none',
+              borderRadius: '20px',
+              padding: '6px 12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              fontSize: '13px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Try again
+          </button>
+          <button
+            type="button"
+            onClick={() => setPeerError(null)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#fff',
+              fontSize: '18px',
+              cursor: 'pointer',
+              lineHeight: 1,
+            }}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
     </>
   );
 };

@@ -20,14 +20,6 @@ const About = () => {
       />
       <StructuredData />
       <div className="legal-page">
-        {/* ─── Compact Sticky Header ───────────────────────────── */}
-        <div className="legal-header">
-          <button className="legal-back" onClick={() => navigate('/other')}>
-            ← Back
-          </button>
-          <h1>About ECHO</h1>
-          <span className="legal-badge">v2.0</span>
-        </div>
 
         <div className="legal-content">
           {/* ... rest of the content (unchanged) ... */}

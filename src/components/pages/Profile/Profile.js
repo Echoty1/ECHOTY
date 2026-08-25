@@ -125,15 +125,12 @@ const Profile = () => {
   const [nameAvailable, setNameAvailable] = useState(true);
   const [nameCheckLoading, setNameCheckLoading] = useState(false);
 
-  // ─── Check if the typed name is already taken (case‑insensitive) ──
   const checkNameAvailability = useCallback(async (newName) => {
     const trimmed = newName.trim();
     if (!trimmed) {
       setNameAvailable(true);
       return;
     }
-
-    // If the name is the same as the current profile name, it's available (it's yours)
     if (profile?.name && trimmed.toLowerCase() === profile.name.toLowerCase()) {
       setNameAvailable(true);
       return;
@@ -149,23 +146,20 @@ const Profile = () => {
       setNameAvailable(!exists);
     } catch (err) {
       console.warn('Name check failed:', err);
-      setNameAvailable(true); // Assume available on error
+      setNameAvailable(true);
     } finally {
       setNameCheckLoading(false);
     }
   }, [profile]);
 
-  // ─── Debounce name check ──────────────────────────────────────
   const debounceTimer = useRef(null);
 
   useEffect(() => {
     if (!editing) return;
     const newName = editData.name || '';
-    // Clear previous timer
     if (debounceTimer.current) {
       clearTimeout(debounceTimer.current);
     }
-    // Debounce 400ms
     debounceTimer.current = setTimeout(() => {
       checkNameAvailability(newName);
     }, 400);
@@ -258,17 +252,14 @@ const Profile = () => {
       return;
     }
 
-    // Check name availability again before saving (in case the user typed quickly)
     const trimmedName = name.trim();
     const searchTerm = trimmedName.toLowerCase();
-    // If the name is unchanged and it's the user's own name, skip check
     if (profile?.name && trimmedName.toLowerCase() !== profile.name.toLowerCase()) {
       try {
         const profilesRef = ref(db, 'profiles');
         const q = query(profilesRef, orderByChild('searchName'), equalTo(searchTerm), limitToFirst(1));
         const snapshot = await get(q);
         if (snapshot.exists()) {
-          // Check if the found profile is the user themselves (shouldn't happen but just in case)
           const foundUid = Object.keys(snapshot.val())[0];
           if (foundUid !== user.uid) {
             setToast({ message: 'Name already taken. Please choose another.', type: 'error' });
@@ -277,7 +268,6 @@ const Profile = () => {
         }
       } catch (err) {
         console.warn('Final name check failed:', err);
-        // Proceed anyway (network error)
       }
     }
 
@@ -552,7 +542,7 @@ const Profile = () => {
                     transform: 'translateY(-50%)',
                     background: 'none',
                     border: 'none',
-                    color: '#888',
+                    color: 'var(--text-muted)',
                     fontSize: '18px',
                     cursor: 'pointer',
                     padding: '4px',
@@ -567,7 +557,7 @@ const Profile = () => {
                   right: '12px',
                   bottom: '6px',
                   fontSize: '11px',
-                  color: (editData.name?.length || 0) >= NAME_MAX_LENGTH ? '#EF4444' : '#666',
+                  color: (editData.name?.length || 0) >= NAME_MAX_LENGTH ? '#EF4444' : 'var(--text-muted)',
                   pointerEvents: 'none',
                 }}>
                   {editData.name?.length || 0}/{NAME_MAX_LENGTH}
@@ -605,7 +595,7 @@ const Profile = () => {
                     top: '50%',
                     transform: 'translateY(-50%)',
                     fontSize: '12px',
-                    color: '#888',
+                    color: 'var(--text-muted)',
                   }}>
                     checking...
                   </span>
@@ -621,7 +611,7 @@ const Profile = () => {
           )}
 
           {isDemoUser ? (
-            <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>
+            <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: 'var(--text-secondary)' }}>
               {profile?.bio || 'No bio yet.'}
             </p>
           ) : editing ? (
@@ -629,7 +619,7 @@ const Profile = () => {
               <div style={{ position: 'relative' }}>
                 <textarea
                   ref={bioInputRef}
-                  className="profile-bio-input"
+                  className="profile-bio-textarea"
                   value={editData.bio || ''}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -640,18 +630,6 @@ const Profile = () => {
                   placeholder="Write a short bio..."
                   rows={3}
                   maxLength={BIO_MAX_LENGTH}
-                  style={{
-                    width: '100%',
-                    background: 'rgba(255,255,255,0.05)',
-                    color: '#fff',
-                    border: '1px solid rgba(255,255,255,0.1)',
-                    borderRadius: '8px',
-                    padding: '8px 60px 8px 40px',
-                    resize: 'vertical',
-                  }}
-                  onFocus={() => handleInputFocus('bio')}
-                  onMouseDown={handleInputMouseDown}
-                  onTouchStart={handleInputMouseDown}
                 />
                 <button
                   type="button"
@@ -662,7 +640,7 @@ const Profile = () => {
                     top: '8px',
                     background: 'none',
                     border: 'none',
-                    color: '#888',
+                    color: 'var(--text-muted)',
                     fontSize: '18px',
                     cursor: 'pointer',
                     padding: '4px',
@@ -677,7 +655,7 @@ const Profile = () => {
                   right: '12px',
                   bottom: '6px',
                   fontSize: '11px',
-                  color: (editData.bio?.length || 0) >= BIO_MAX_LENGTH ? '#EF4444' : '#666',
+                  color: (editData.bio?.length || 0) >= BIO_MAX_LENGTH ? '#EF4444' : 'var(--text-muted)',
                   pointerEvents: 'none',
                 }}>
                   {editData.bio?.length || 0}/{BIO_MAX_LENGTH}
@@ -685,14 +663,14 @@ const Profile = () => {
               </div>
             </div>
           ) : (
-            profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: '#ccc' }}>{profile.bio}</p>
+            profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: 'var(--text-secondary)' }}>{profile.bio}</p>
           )}
 
           {!loading && (
-            <div style={{ marginTop: '16px', padding: '12px', background: 'rgba(255,255,255,0.03)', borderRadius: '12px' }}>
+            <div style={{ marginTop: '16px', padding: '12px', background: 'var(--bg-input)', borderRadius: '12px' }}>
               {editing ? (
                 <>
-                  <div style={{ fontSize: '14px', color: '#888', marginBottom: '8px', fontWeight: 500 }}>Choose your mood</div>
+                  <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 500 }}>Choose your mood</div>
                   <MoodPicker currentMood={editData.mood || 'neutral'} onSelect={handleMoodChange} />
                 </>
               ) : (
@@ -726,9 +704,9 @@ const Profile = () => {
                 <span
                   key={idx}
                   style={{
-                    background: 'rgba(255, 255, 255, 0.08)',
-                    color: '#AAA',
-                    border: '1px solid rgba(255, 255, 255, 0.12)',
+                    background: 'rgba(255,255,255,0.08)',
+                    color: 'var(--text-secondary)',
+                    border: '1px solid var(--border-color)',
                     padding: '4px 12px',
                     borderRadius: '12px',
                     fontSize: '12px',
@@ -749,7 +727,7 @@ const Profile = () => {
                     className="save-btn"
                     onClick={handleSave}
                     style={{
-                      background: '#6C3CE1',
+                      background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
                       color: '#fff',
                       border: 'none',
                       padding: '10px 24px',
@@ -766,7 +744,14 @@ const Profile = () => {
                   <button
                     className="cancel-btn"
                     onClick={() => { setEditing(false); setEditData(profile); }}
-                    style={{ background: '#333', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer' }}
+                    style={{
+                      background: 'var(--bg-input)',
+                      color: 'var(--text-secondary)',
+                      border: '1px solid var(--border-color)',
+                      padding: '10px 24px',
+                      borderRadius: '20px',
+                      cursor: 'pointer',
+                    }}
                   >
                     Cancel
                   </button>
@@ -782,7 +767,15 @@ const Profile = () => {
                     setEditing(true);
                   }
                 }}
-                style={{ background: '#6C3CE1', color: '#fff', border: 'none', padding: '10px 24px', borderRadius: '20px', cursor: 'pointer', fontWeight: 600 }}
+                style={{
+                  background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '10px 24px',
+                  borderRadius: '20px',
+                  cursor: 'pointer',
+                  fontWeight: 600,
+                }}
               >
                 {isDemoUser ? 'Change Avatar' : 'Edit Profile'}
               </button>

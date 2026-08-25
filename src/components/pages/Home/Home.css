@@ -64,28 +64,35 @@
   font-style: italic;
 }
 
+/* ─── Horizontal scroll container ────────────────────────────── */
 .live-users-scroll {
   display: flex;
   gap: 20px;
   overflow-x: auto;
   padding: 6px 0 12px;
+  /* ✅ Show a thin scrollbar */
   scrollbar-width: thin;
+  scrollbar-color: var(--scrollbar-thumb, #6C3CE1) transparent;
 }
 
 .live-users-scroll::-webkit-scrollbar {
   height: 4px;
-  display: none;
-}
-
-.live-users-scroll::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 4px;
 }
 
 .live-users-scroll::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
+  background: transparent;
 }
 
+.live-users-scroll::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb, #6C3CE1);
+  border-radius: 4px;
+}
+
+.live-users-scroll::-webkit-scrollbar-thumb:hover {
+  background: var(--scrollbar-thumb-hover, #8B5CF6);
+}
+
+/* ─── Keep existing styles ───────────────────────────────────── */
 .live-user-card {
   display: flex;
   flex-direction: column;

@@ -2,8 +2,8 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
-import { db, auth } from '../../../services/firebase';
-import { ref, remove } from 'firebase/database';
+import { db } from '../../../services/firebase';
+import { ref, onValue, remove, update, get, set } from 'firebase/database';
 import {
   deleteUser,
   reauthenticateWithPopup,
@@ -15,6 +15,12 @@ import { removeAllReferencesToUser } from '../../../services/accountCleanup';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import { useTheme } from '../../../contexts/ThemeContext';
+import ConfirmModal from '../../common/ConfirmModal';
+import Toast from '../../Toast/Toast';
+import Avatar from '../../common/Avatar';
+import { clearChatList } from '../../../services/indexedDBService';
+import { clearMessagesCache } from '../../../services/messageStorage';
+import { clearMessageCache } from '../../../services/messageCache';
 import './Settings.css';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
@@ -24,25 +30,352 @@ const Settings = () => {
   const navigate = useNavigate();
   const { themePreference, setTheme } = useTheme();
 
+  // ─── Account deletion states ──────────────────────────────────
   const [step, setStep] = useState('idle');
   const [typedName, setTypedName] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isReauthing, setIsReauthing] = useState(false);
 
+  // ─── Chat management states ──────────────────────────────────
+  const [chats, setChats] = useState([]);
+  const [selectedChats, setSelectedChats] = useState(new Set());
+  const [loadingChats, setLoadingChats] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [confirmModal, setConfirmModal] = useState({
+    isOpen: false,
+    title: '',
+    message: '',
+    confirmText: '',
+    onConfirm: null,
+    showCancel: true,
+    showInput: false,
+    inputPlaceholder: '',
+    inputValue: '',
+    onInputChange: null,
+    verificationText: '',
+  });
+  const [toast, setToast] = useState(null);
+  const [chatBgEnabled, setChatBgEnabled] = useState(() => {
+    try {
+      const v = localStorage.getItem('echo_chat_bg');
+      return v === null ? true : v === '1';
+    } catch {
+      return true;
+    }
+  });
+
+  const toggleChatBg = () => {
+    setChatBgEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('echo_chat_bg', next ? '1' : '0');
+      } catch (_) {}
+      window.dispatchEvent(
+        new CustomEvent('echo-chat-bg-changed', { detail: { enabled: next } })
+      );
+      return next;
+    });
+  };
+
   const userName = user?.name || user?.displayName || user?.email?.split('@')[0] || '';
   const isGoogleUser = user?.providerData?.some(p => p.providerId === 'google.com');
   const isDemoUser = user?.uid === DEMO_UID;
 
+  // ─── Load user's chats ────────────────────────────────────────
   useEffect(() => {
-    if (step === 'done') {
-      const timer = setTimeout(() => {
-        navigate('/');
-      }, 2000);
-      return () => clearTimeout(timer);
-    }
-  }, [step, navigate]);
+    if (!user?.uid) return;
 
+    const userChatsRef = ref(db, `userChats/${user.uid}`);
+    const unsubscribe = onValue(userChatsRef, (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
+        setChats([]);
+        setLoadingChats(false);
+        return;
+      }
+      const chatList = Object.entries(data)
+        .map(([partnerId, chat]) => ({
+          id: partnerId,
+          ...chat,
+          partnerName: chat.partnerName || chat.name || 'User',
+          partnerAvatar: chat.partnerAvatar || '',
+          lastMessage: chat.lastMessage || 'Start chatting...',
+          timestamp: chat.lastUpdated || Date.now(),
+          clearedAt: chat.clearedAt || null,
+        }))
+        .sort((a, b) => b.timestamp - a.timestamp);
+      setChats(chatList);
+      setLoadingChats(false);
+    });
+
+    return () => unsubscribe();
+  }, [user]);
+
+  // ─── Helper: compute composite chat ID ──────────────────────
+  const getChatId = (partnerId) => {
+    return [user?.uid, partnerId].sort().join('_');
+  };
+
+  // ─── Local‑only wipe for this user's device ──────────────────
+  const wipeLocalChatData = async (partnerId) => {
+    if (!user?.uid || !partnerId) return;
+    const cId = getChatId(partnerId);
+    try {
+      await clearMessagesCache(cId);
+    } catch (_) {}
+    try {
+      clearMessageCache(cId);
+    } catch (_) {}
+    await clearChatList(user.uid).catch(() => {});
+    window.dispatchEvent(
+      new CustomEvent('chat-history-cleared', {
+        detail: { partnerId, chatId: cId },
+      })
+    );
+  };
+
+  // ─── Helper: show toast ──────────────────────────────────────
+  const showToast = (message, type = 'success') => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
+
+  // ─── Close confirm modal ─────────────────────────────────────
+  const closeConfirmModal = () => {
+    setConfirmModal(prev => ({ ...prev, isOpen: false }));
+  };
+
+  // ─── Open confirm modal with verification ────────────────────
+  const openConfirmModal = (config) => {
+    setConfirmModal({
+      isOpen: true,
+      showCancel: true,
+      showInput: false,
+      inputPlaceholder: '',
+      inputValue: '',
+      onInputChange: null,
+      verificationText: '',
+      ...config,
+    });
+  };
+
+  // ─── 1. Clear History (selected chats) – permanently deletes messages ──
+  const handleClearSelectedHistory = () => {
+    if (selectedChats.size === 0) {
+      showToast('No chats selected.', 'error');
+      return;
+    }
+    const count = selectedChats.size;
+    openConfirmModal({
+      title: `Clear History for ${count} Chat${count > 1 ? 's' : ''}`,
+      message: `⚠️ This will permanently delete ALL messages for both you and the other person. The chat will remain in your Recent list but with no messages. This action is irreversible and cannot be undone.`,
+      confirmText: 'Clear History',
+      showInput: true,
+      inputPlaceholder: 'Type CLEAR to confirm',
+      verificationText: 'CLEAR',
+      onConfirm: async () => {
+        try {
+          const updates = {};
+          const now = Date.now();
+          for (const partnerId of selectedChats) {
+            const chatId = getChatId(partnerId);
+            // Delete the shared messages node
+            updates[`chats/${chatId}`] = null;
+            // Set clearedAt for both users (optional, but we also set lastMessage to 'Start chatting...')
+            updates[`userChats/${user.uid}/${partnerId}/clearedAt`] = now;
+            updates[`userChats/${partnerId}/${user.uid}/clearedAt`] = now;
+            // Reset lastMessage for both
+            updates[`userChats/${user.uid}/${partnerId}/lastMessage`] = 'Start chatting...';
+            updates[`userChats/${partnerId}/${user.uid}/lastMessage`] = 'Start chatting...';
+            // Wipe local cache for current user
+            await wipeLocalChatData(partnerId);
+          }
+          await update(ref(db), updates);
+          await clearChatList(user.uid).catch(() => {});
+          setSelectedChats(new Set());
+          showToast(`Cleared history for ${count} chat${count > 1 ? 's' : ''} (messages permanently deleted).`);
+          window.dispatchEvent(new CustomEvent('chats-refresh'));
+        } catch (err) {
+          console.error('Clear history error:', err);
+          showToast('Failed to clear history.', 'error');
+        }
+      },
+    });
+  };
+
+  // ─── 1.1 Clear History (single chat) ──────────────────────────
+  const handleClearSingleHistory = (chatId, partnerName) => {
+    openConfirmModal({
+      title: 'Clear History',
+      message: `⚠️ Permanently delete ALL messages with ${partnerName} for both you and them? The chat will remain in your Recent list but with no messages. This action is irreversible.`,
+      confirmText: 'Clear History',
+      showInput: true,
+      inputPlaceholder: 'Type CLEAR to confirm',
+      verificationText: 'CLEAR',
+      onConfirm: async () => {
+        try {
+          const cId = getChatId(chatId);
+          const updates = {};
+          const now = Date.now();
+          updates[`chats/${cId}`] = null;
+          updates[`userChats/${user.uid}/${chatId}/clearedAt`] = now;
+          updates[`userChats/${chatId}/${user.uid}/clearedAt`] = now;
+          updates[`userChats/${user.uid}/${chatId}/lastMessage`] = 'Start chatting...';
+          updates[`userChats/${chatId}/${user.uid}/lastMessage`] = 'Start chatting...';
+          await update(ref(db), updates);
+          await wipeLocalChatData(chatId);
+          await clearChatList(user.uid).catch(() => {});
+          showToast(`History cleared with ${partnerName} (messages permanently deleted).`);
+          window.dispatchEvent(new CustomEvent('chats-refresh'));
+        } catch (err) {
+          console.error('Clear history error:', err);
+          showToast('Failed to clear history.', 'error');
+        }
+      },
+    });
+  };
+
+  // ─── 2. Delete Chat (selected chats) – permanently deletes messages & removes chat ──
+  const handleDeleteSelectedChats = () => {
+    if (selectedChats.size === 0) {
+      showToast('No chats selected.', 'error');
+      return;
+    }
+    const count = selectedChats.size;
+    openConfirmModal({
+      title: `Delete ${count} Chat${count > 1 ? 's' : ''}`,
+      message: `⚠️ This will permanently delete ALL messages and remove the conversation for both you and the other user${count > 1 ? 's' : ''}. The chat will disappear from Recent lists. This action is irreversible.`,
+      confirmText: 'Delete',
+      showInput: true,
+      inputPlaceholder: 'Type DELETE to confirm',
+      verificationText: 'DELETE',
+      onConfirm: async () => {
+        try {
+          const updates = {};
+          for (const partnerId of selectedChats) {
+            const chatId = getChatId(partnerId);
+            updates[`userChats/${user.uid}/${partnerId}`] = null;
+            updates[`userChats/${partnerId}/${user.uid}`] = null;
+            updates[`chats/${chatId}`] = null;
+            await wipeLocalChatData(partnerId);
+          }
+          await update(ref(db), updates);
+          await clearChatList(user.uid).catch(() => {});
+          setSelectedChats(new Set());
+          showToast(`Deleted ${count} chat${count > 1 ? 's' : ''} permanently.`);
+          window.dispatchEvent(new CustomEvent('chats-refresh'));
+        } catch (err) {
+          console.error('Delete chats error:', err);
+          showToast('Failed to delete chats.', 'error');
+        }
+      },
+    });
+  };
+
+  // ─── 2.1 Delete Chat (single) ──────────────────────────────────
+  const handleDeleteSingleChat = (chatId, partnerName) => {
+    openConfirmModal({
+      title: 'Delete Chat',
+      message: `⚠️ Permanently delete the entire conversation with ${partnerName} for both you and them? All messages will be removed and the chat will disappear from Recent lists. This action is irreversible.`,
+      confirmText: 'Delete',
+      showInput: true,
+      inputPlaceholder: 'Type DELETE to confirm',
+      verificationText: 'DELETE',
+      onConfirm: async () => {
+        try {
+          const cId = getChatId(chatId);
+          const updates = {};
+          updates[`userChats/${user.uid}/${chatId}`] = null;
+          updates[`userChats/${chatId}/${user.uid}`] = null;
+          updates[`chats/${cId}`] = null;
+          await update(ref(db), updates);
+          await wipeLocalChatData(chatId);
+          await clearChatList(user.uid).catch(() => {});
+          setSelectedChats(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(chatId);
+            return newSet;
+          });
+          showToast(`Chat with ${partnerName} deleted permanently.`);
+          window.dispatchEvent(new CustomEvent('chats-refresh'));
+        } catch (err) {
+          console.error('Delete chat error:', err);
+          showToast('Failed to delete chat.', 'error');
+        }
+      },
+    });
+  };
+
+  // ─── 3. Delete All Chats – permanently deletes all ─────────────
+  const handleDeleteAllChats = () => {
+    if (chats.length === 0) {
+      showToast('No chats to delete.', 'error');
+      return;
+    }
+    openConfirmModal({
+      title: 'Delete All Chats',
+      message: `⚠️ This will permanently delete ALL conversations for both you and every other user you've chatted with. All messages will be removed and all chats will disappear from Recent lists. This action is irreversible.`,
+      confirmText: 'Delete All',
+      showInput: true,
+      inputPlaceholder: 'Type DELETE ALL to confirm',
+      verificationText: 'DELETE ALL',
+      onConfirm: async () => {
+        try {
+          const updates = {};
+          updates[`userChats/${user.uid}`] = null;
+          for (const chat of chats) {
+            const partnerId = chat.id;
+            const chatId = getChatId(partnerId);
+            updates[`userChats/${partnerId}/${user.uid}`] = null;
+            updates[`chats/${chatId}`] = null;
+            await wipeLocalChatData(partnerId);
+          }
+          await update(ref(db), updates);
+          await clearChatList(user.uid).catch(() => {});
+          setSelectedChats(new Set());
+          showToast('All chats deleted permanently.');
+          window.dispatchEvent(new CustomEvent('chats-refresh'));
+        } catch (err) {
+          console.error('Delete all chats error:', err);
+          showToast('Failed to delete all chats.', 'error');
+        }
+      },
+    });
+  };
+
+  // ─── Toggle chat selection ────────────────────────────────────
+  const toggleSelectChat = (chatId) => {
+    setSelectedChats(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(chatId)) {
+        newSet.delete(chatId);
+      } else {
+        newSet.add(chatId);
+      }
+      return newSet;
+    });
+  };
+
+  // ─── Select / Deselect all ────────────────────────────────────
+  const toggleSelectAll = () => {
+    const filtered = getFilteredChats();
+    if (selectedChats.size === filtered.length) {
+      setSelectedChats(new Set());
+    } else {
+      setSelectedChats(new Set(filtered.map(c => c.id)));
+    }
+  };
+
+  // ─── Get filtered chats based on search term ─────────────────
+  const getFilteredChats = () => {
+    if (!searchTerm.trim()) return chats;
+    return chats.filter(chat =>
+      chat.partnerName.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  };
+
+  // ─── Account deletion handlers ────────────────────────────────
   const handleDeleteRequest = () => {
     if (isDemoUser) {
       setError('Demo accounts cannot be deleted.');
@@ -62,7 +395,7 @@ const Settings = () => {
   };
 
   const handleReauth = async () => {
-    const currentUser = auth.currentUser;
+    const currentUser = user;
     if (!currentUser || !currentUser.email) {
       setError('No user found. Please sign in again.');
       return;
@@ -100,7 +433,7 @@ const Settings = () => {
   };
 
   const handleConfirmDelete = async () => {
-    const currentUser = auth.currentUser;
+    const currentUser = user;
     if (!currentUser) {
       setError('No user found. Please sign in again.');
       return;
@@ -140,17 +473,14 @@ const Settings = () => {
     setError('');
   };
 
+  // ─── Render ────────────────────────────────────────────────────
+  const filteredChats = getFilteredChats();
+
   return (
     <>
       <SEO title="Settings" description="Manage your ECHO account settings." />
       <StructuredData />
       <div className="settings-page">
-        <div className="settings-header">
-          <button className="settings-back" onClick={() => navigate('/other')}>
-            ← Back
-          </button>
-          <h1>Settings</h1>
-        </div>
 
         <div className="settings-content">
           {/* ─── THEME CARD ─────────────────────────────────────── */}
@@ -198,6 +528,133 @@ const Settings = () => {
                 ? 'Auto-detects from your device settings.'
                 : `Currently using ${themePreference} mode.`}
             </p>
+          </div>
+
+          {/* ─── CHAT BACKGROUND TOGGLE ─────────────────────────── */}
+          <div className="settings-card">
+            <h2><i className="fas fa-circle-notch" style={{ color: '#a78bfa' }} /> Chat background</h2>
+            <p>
+              Show the animated ECHO rings behind your conversations.
+              Preference is saved on this device only.
+            </p>
+            <button
+              type="button"
+              className={`echo-toggle-btn ${chatBgEnabled ? 'on' : 'off'}`}
+              onClick={toggleChatBg}
+              aria-pressed={chatBgEnabled}
+            >
+              <span className="echo-toggle-track">
+                <span className="echo-toggle-thumb" />
+              </span>
+              <span className="echo-toggle-label">
+                {chatBgEnabled ? 'Background on' : 'Background off'}
+              </span>
+            </button>
+          </div>
+
+          {/* ─── CHAT MANAGEMENT CARD ───────────────────────────── */}
+          <div className="settings-card chat-management">
+            <h2><i className="fas fa-comment-slash" /> Chat Management</h2>
+            <p>Manage your conversations. Actions affect both you and the other person.</p>
+
+            {loadingChats ? (
+              <div className="chat-loading">Loading your chats...</div>
+            ) : chats.length === 0 ? (
+              <div className="no-chats-message">No chats found.</div>
+            ) : (
+              <>
+                {/* ─── Search bar ─────────────────────────────────── */}
+                <div className="chat-search-wrapper">
+                  <i className="fas fa-search search-icon" />
+                  <input
+                    type="text"
+                    placeholder="Search your chats..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="chat-search-input"
+                  />
+                  {searchTerm && (
+                    <button className="search-clear" onClick={() => setSearchTerm('')}>✕</button>
+                  )}
+                </div>
+
+                <div className="chat-list-header">
+                  <div className="chat-select-all">
+                    <input
+                      type="checkbox"
+                      checked={selectedChats.size === filteredChats.length && filteredChats.length > 0}
+                      onChange={toggleSelectAll}
+                    />
+                    <span>Select All</span>
+                  </div>
+                  <div className="chat-actions">
+                    <button
+                      className="btn-clear-history"
+                      onClick={handleClearSelectedHistory}
+                      disabled={selectedChats.size === 0}
+                    >
+                      <i className="fas fa-eraser" /> Clear History
+                    </button>
+                    <button
+                      className="btn-delete-chat"
+                      onClick={handleDeleteSelectedChats}
+                      disabled={selectedChats.size === 0}
+                    >
+                      <i className="fas fa-trash-alt" /> Delete Chat
+                    </button>
+                    <button
+                      className="btn-delete-all"
+                      onClick={handleDeleteAllChats}
+                    >
+                      <i className="fas fa-trash-alt" /> Delete All
+                    </button>
+                  </div>
+                </div>
+
+                <div className="chat-list">
+                  {filteredChats.length === 0 ? (
+                    <div className="no-chats-message">No chats match your search.</div>
+                  ) : (
+                    filteredChats.map((chat) => (
+                      <div key={chat.id} className={`chat-list-item ${chat.clearedAt ? 'is-cleared' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={selectedChats.has(chat.id)}
+                          onChange={() => toggleSelectChat(chat.id)}
+                          className="chat-checkbox"
+                        />
+                        <div className="chat-avatar">
+                          <Avatar src={chat.partnerAvatar} name={chat.partnerName} size={40} />
+                        </div>
+                        <div className="chat-info">
+                          <div className="chat-name">
+                            {chat.partnerName}
+                            {chat.clearedAt && <span className="cleared-badge"> (cleared)</span>}
+                          </div>
+                          <div className="chat-last-message">{chat.lastMessage}</div>
+                        </div>
+                        <div className="chat-actions-single">
+                          <button
+                            className="btn-clear-single"
+                            onClick={() => handleClearSingleHistory(chat.id, chat.partnerName)}
+                            title="Clear History (permanently delete messages)"
+                          >
+                            <i className="fas fa-eraser" />
+                          </button>
+                          <button
+                            className="btn-delete-single"
+                            onClick={() => handleDeleteSingleChat(chat.id, chat.partnerName)}
+                            title="Delete Chat (permanently remove conversation)"
+                          >
+                            <i className="fas fa-trash-alt" />
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            )}
           </div>
 
           {/* ─── DANGER ZONE CARD ────────────────────────────────── */}
@@ -302,6 +759,41 @@ const Settings = () => {
           </div>
         </div>
       </div>
+
+      {/* ─── Confirm Modal ───────────────────────────────────────── */}
+      <ConfirmModal
+        isOpen={confirmModal.isOpen}
+        onClose={closeConfirmModal}
+        onConfirm={() => {
+          // Check verification if needed (fallback)
+          if (confirmModal.showInput && confirmModal.verificationText) {
+            if (confirmModal.inputValue !== confirmModal.verificationText) {
+              showToast(`Please type "${confirmModal.verificationText}" to confirm.`, 'error');
+              return;
+            }
+          }
+          if (confirmModal.onConfirm) {
+            confirmModal.onConfirm();
+          }
+          closeConfirmModal();
+        }}
+        title={confirmModal.title}
+        message={confirmModal.message}
+        confirmText={confirmModal.confirmText}
+        cancelText="Cancel"
+        showCancel={confirmModal.showCancel !== false}
+        showInput={confirmModal.showInput}
+        inputPlaceholder={confirmModal.inputPlaceholder}
+        inputValue={confirmModal.inputValue}
+        onInputChange={(value) => {
+          setConfirmModal(prev => ({ ...prev, inputValue: value }));
+        }}
+        verificationText={confirmModal.verificationText}
+        loading={false}
+      />
+
+      {/* ─── Toast ───────────────────────────────────────────────── */}
+      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
     </>
   );
 };

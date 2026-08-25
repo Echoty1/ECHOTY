@@ -37,6 +37,10 @@ const AdminPanel = () => {
   const [banReason, setBanReason] = useState('');
   const [uidNotFound, setUidNotFound] = useState(false);
 
+  // ─── Transactions state ──────────────────────────────────────
+  const [transactions, setTransactions] = useState([]);
+  const [transactionsLoading, setTransactionsLoading] = useState(true);
+
   // ─── Bulk selection ──────────────────────────────────────────
   const [selectedUsers, setSelectedUsers] = useState(new Set());
   const [selectAll, setSelectAll] = useState(false);
@@ -113,7 +117,6 @@ const AdminPanel = () => {
         avatar: profile.avatar || '',
         mood: profile.mood || 'neutral',
         isBanned,
-        // Online only if presence true and NOT banned
         isOnline: rawOnline && !isBanned,
       });
     }
@@ -124,7 +127,6 @@ const AdminPanel = () => {
   const loadUsers = async (forceRefresh = false) => {
     console.log('🔄 [loadUsers] Loading users, forceRefresh:', forceRefresh);
     setUsersLoading(true);
-    // Cache is only used as a quick shell; always refresh ban + presence below
     if (!forceRefresh) {
       try {
         const cached = await getAdminUserList();
@@ -141,7 +143,6 @@ const AdminPanel = () => {
         const data = profilesSnap.val();
         const usersList = [];
         for (const [uid, profile] of Object.entries(data)) {
-          // ✅ Fetch ban status directly from accounts node
           const banStatus = await getUserBanStatus(uid);
           let isOnline = false;
           try {
@@ -149,7 +150,6 @@ const AdminPanel = () => {
             isOnline = presenceSnap.val() === true;
           } catch (_) {}
           const banned = banStatus.isBanned === true;
-          // Never show Online when banned
           const online = !banned && isOnline;
           usersList.push({
             uid,
@@ -161,7 +161,7 @@ const AdminPanel = () => {
             isOnline: online,
           });
           banStatusCache.current[uid] = banned;
-          presenceCache.current[uid] = isOnline; // raw presence, buildUserList applies ban
+          presenceCache.current[uid] = isOnline;
         }
         const sorted = sortUsers(usersList);
         setUsers(sorted);
@@ -181,28 +181,58 @@ const AdminPanel = () => {
     }
   };
 
-  // ─── Real‑time listeners ──────────────────────────────────────
+  // ─── Load transactions ────────────────────────────────────────
+  const loadTransactions = async () => {
+    setTransactionsLoading(true);
+    try {
+      const snap = await get(ref(db, 'transactions'));
+      if (!snap.exists()) {
+        setTransactions([]);
+        setTransactionsLoading(false);
+        return;
+      }
+      const all = snap.val();
+      const list = [];
+      for (const [uid, transRefs] of Object.entries(all)) {
+        const profileSnap = await get(ref(db, `profiles/${uid}/name`));
+        const name = profileSnap.val() || 'Unknown';
+        for (const [refKey, data] of Object.entries(transRefs)) {
+          list.push({
+            uid,
+            name,
+            ref: refKey,
+            ...data,
+          });
+        }
+      }
+      list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+      setTransactions(list);
+    } catch (err) {
+      console.error('Failed to load transactions:', err);
+      showToast('Failed to load transactions', 'error');
+    } finally {
+      setTransactionsLoading(false);
+    }
+  };
+
+  // ─── Listeners ────────────────────────────────────────────────
   useEffect(() => {
     loadUsers();
+    loadTransactions();
 
     const profilesRef = ref(db, 'profiles');
     const unsubProfiles = onValue(profilesRef, (snapshot) => {
       const data = snapshot.val() || {};
       const newUsers = buildUserList(data);
       setUsers(newUsers);
-      setFilteredUsers((prev) => {
-        // keep search filter if any
-        return newUsers; // filter effect will re-run from users
-      });
+      setFilteredUsers(newUsers);
       setUsersLoading(false);
       setAdminUserList(newUsers).catch(() => {});
-      console.log('📡 [profiles] Listener updated');
     });
 
     const presenceRef = ref(db, 'presence/online');
     const unsubPresence = onValue(presenceRef, (snapshot) => {
       const data = snapshot.val() || {};
-      // Normalize: only strict true counts as online
       const normalized = {};
       Object.keys(data).forEach((id) => {
         normalized[id] = data[id] === true;
@@ -220,7 +250,6 @@ const AdminPanel = () => {
           })
         )
       );
-      console.log('📡 [presence] Listener updated');
     });
 
     const accountsRef = ref(db, 'accounts');
@@ -243,7 +272,6 @@ const AdminPanel = () => {
           })
         )
       );
-      console.log('📡 [accounts] Listener updated, banned users:', Object.keys(newBanStatus));
     });
 
     return () => {
@@ -356,7 +384,7 @@ const AdminPanel = () => {
     return users.filter(u => targets.includes(u.uid));
   };
 
-  // ─── Bulk Ban / Unban (INSTANT UI + DEBUG) ────────────────────
+  // ─── Bulk Ban / Unban ────────────────────────────────────────
   const handleBulkToggleBan = () => {
     const uids = getActiveTargetUids();
     if (uids.length === 0) {
@@ -387,7 +415,6 @@ const AdminPanel = () => {
         setConfirmModal(prev => ({ ...prev, loading: true }));
         console.log(`🔨 [handleBulkToggleBan] ${action}ning users:`, uids);
 
-        // ✅ Optimistic UI update – toggle local state immediately
         setUsers(prevUsers => {
           const updated = sortUsers(
             prevUsers.map((row) => {
@@ -395,7 +422,7 @@ const AdminPanel = () => {
                 return {
                   ...row,
                   isBanned: !allBanned,
-                  isOnline: allBanned ? false : false, // after ban always offline until they login again
+                  isOnline: allBanned ? false : false,
                 };
               }
               return row;
@@ -416,7 +443,6 @@ const AdminPanel = () => {
               } else {
                 await banUser(userUid, reason.trim());
                 console.log(`✅ [handleBulkToggleBan] Banned ${userUid}`);
-                // Also force logout
                 await forceLogoutUser(userUid);
                 console.log(`✅ [handleBulkToggleBan] Force logout ${userUid}`);
               }
@@ -433,7 +459,6 @@ const AdminPanel = () => {
           closeConfirmModal();
           setSelectedUsers(new Set());
           setSelectAll(false);
-          // ✅ Refresh from server to confirm
           await loadUsers(true);
         } catch (err) {
           console.error('❌ [handleBulkToggleBan] Unexpected error:', err);
@@ -800,6 +825,39 @@ const AdminPanel = () => {
                   {activeCount > 0 && getSelectedUsersList().every(u => u.isBanned) ? 'Unban' : 'Ban'}{activeCount > 1 ? ' All' : ''}
                 </button>
               </div>
+            </div>
+
+            {/* ─── Coin Purchases Card ─────────────────────────────── */}
+            <div className="admin-card">
+              <h2><i className="fas fa-receipt" /> Coin Purchases</h2>
+              {transactionsLoading ? (
+                <div className="loading-placeholder">Loading transactions...</div>
+              ) : transactions.length === 0 ? (
+                <div className="empty-placeholder">No completed purchases yet.</div>
+              ) : (
+                <div className="table-wrapper">
+                  <table className="user-table">
+                    <thead>
+                      <tr>
+                        <th>Name</th>
+                        <th>UID</th>
+                        <th>Coins</th>
+                        <th>Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {transactions.slice(0, 20).map((t, i) => (
+                        <tr key={i}>
+                          <td>{t.name}</td>
+                          <td className="uid-cell"><code>{t.uid}</code></td>
+                          <td>🪙 {t.amount}</td>
+                          <td>{new Date(t.timestamp).toLocaleString()}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
 
             <div className="admin-card admin-message-card">

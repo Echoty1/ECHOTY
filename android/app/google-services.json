@@ -1,0 +1,40 @@
+{
+  "project_info": {
+    "project_number": "506340369217",
+    "firebase_url": "https://echoty-fa3ca-default-rtdb.firebaseio.com",
+    "project_id": "echoty-fa3ca",
+    "storage_bucket": "echoty-fa3ca.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:506340369217:android:4f41079ebe3928daaab7c0",
+        "android_client_info": {
+          "package_name": "com.echoty.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "506340369217-pqibe643qj110b2irc6m7vfp5fmt16he.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMLsv58es_SWlvvm9Ky-cRHJXHTgNNKbc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "506340369217-pqibe643qj110b2irc6m7vfp5fmt16he.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

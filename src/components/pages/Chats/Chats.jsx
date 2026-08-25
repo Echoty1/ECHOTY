@@ -119,27 +119,26 @@ const processChatItem = async (chat, user, onlineUsers) => {
     const rawAvatar = profile?.avatar || chat.partnerAvatar || '';
     if (rawAvatar) preloadMedia(rawAvatar);
 
-    const compositeChatId = [user.uid, chat.id].sort().join('_');
-    const latest = await fetchLatestMessage(compositeChatId);
-    let rawLastMessage = latest.text;
-    let lastSenderId = latest.senderId;
+    // Prefer userChats payload (realtime) – avoid extra DB round-trips
+    let lastSenderId = chat.lastSenderId || '';
     const isSender = lastSenderId === user.uid;
-
+    let rawLastMessage = chat.lastMessage || 'Start chatting...';
     let displayMessage = rawLastMessage;
-    if (latest.type === 'echomoji') {
-      const moodLabel = latest.mood || 'neutral';
-      displayMessage = `😊 ECHOMOJI (${moodLabel})`;
-    } else if (latest.type === 'media') {
-      let mediaLabel = '📷 Image';
-      if (latest.mediaType === 'video') mediaLabel = '🎬 Video';
-      else if (latest.mediaType === 'audio') mediaLabel = '🎤 Voice note';
-      displayMessage = isSender ? `You: ${mediaLabel}` : `${partnerName}: ${mediaLabel}`;
-    } else {
-      if (displayMessage !== 'Start chatting...') {
-        displayMessage = isSender ? `You: ${displayMessage}` : `${partnerName}: ${displayMessage}`;
-        if (displayMessage.length > 30) {
-          displayMessage = displayMessage.substring(0, 30) + '...';
-        }
+
+    if (displayMessage && displayMessage !== 'Start chatting...') {
+      const alreadyPrefixed =
+        displayMessage.startsWith('You:') ||
+        displayMessage.startsWith('😊') ||
+        displayMessage.startsWith('📷') ||
+        displayMessage.startsWith('🎬') ||
+        displayMessage.startsWith('🎤');
+      if (!alreadyPrefixed) {
+        displayMessage = isSender
+          ? `You: ${displayMessage}`
+          : `${partnerName}: ${displayMessage}`;
+      }
+      if (displayMessage.length > 36) {
+        displayMessage = displayMessage.substring(0, 36) + '...';
       }
     }
 
@@ -334,6 +333,26 @@ const Chats = () => {
     return () => window.removeEventListener('chat-unread-cleared', handleUnreadCleared);
   }, []);
 
+  // Instant list patches from ChatView (send / read) without waiting for full reload
+  useEffect(() => {
+    const handleListUpdate = (event) => {
+      const { partnerId, patch } = event.detail || {};
+      if (!partnerId || !patch) return;
+      setRecentChats((prev) => {
+        const idx = prev.findIndex((c) => c.id === partnerId);
+        if (idx === -1) return prev;
+        const next = [...prev];
+        next[idx] = { ...next[idx], ...patch };
+        // Move updated chat to top
+        const [item] = next.splice(idx, 1);
+        next.unshift(item);
+        return next;
+      });
+    };
+    window.addEventListener('chat-list-update', handleListUpdate);
+    return () => window.removeEventListener('chat-list-update', handleListUpdate);
+  }, []);
+
   // ─── Presence listener ──────────────────────────────────────
   useEffect(() => {
     if (!user) return;
@@ -490,7 +509,7 @@ const Chats = () => {
     loadingChats,
   ]);
 
-  // ─── Search ──────────────────────────────────────────────────
+  // ─── Search (local-first, then network – no per-user fetches) ──
   const performSearch = async (queryText) => {
     const trimmed = queryText.trim().toLowerCase();
     if (trimmed.length < 1) {
@@ -499,6 +518,30 @@ const Chats = () => {
       return;
     }
     setIsSearching(true);
+
+    // 1) Instant: filter conversations already on this device
+    const localHits = (recentChats || [])
+      .filter((c) => {
+        const n = (c.name || '').toLowerCase();
+        const m = (c.lastMessage || '').toLowerCase();
+        return n.includes(trimmed) || m.includes(trimmed);
+      })
+      .map((c) => ({
+        id: c.id,
+        name: c.name,
+        avatar: c.avatar,
+        mood: c.mood || 'happy',
+        activeSkin: c.activeSkin || 'default',
+        location: c.location || '',
+        isOnline: !!onlineUsers[c.id],
+        fromLocal: true,
+      }));
+    if (localHits.length) {
+      setResults(localHits);
+      setIsSearching(false); // show local immediately
+    }
+
+    // 2) Network search – use cached searchProfiles payload as-is (no extra gets)
     try {
       const searchRes = await searchProfiles(trimmed, user.uid, 50);
       const rawResults = Array.isArray(searchRes)
@@ -506,52 +549,35 @@ const Chats = () => {
         : Array.isArray(searchRes?.results)
         ? searchRes.results
         : [];
-      const livePromises = rawResults.map(async (u) => {
-        if (!u || typeof u !== 'object') return null;
-        try {
-          const [profileSnap, skinSnap] = await Promise.all([
-            get(ref(db, `profiles/${u.id}`)),
-            get(ref(db, `userSkins/${u.id}/activeSkin`))
-          ]);
-          const freshData = profileSnap.exists() ? profileSnap.val() : {};
-          const activeSkin = skinSnap.exists() ? skinSnap.val() : null;
-          const safeDisplayName = sanitizeName(
-            freshData.name || freshData.displayName || freshData.username || u.name || u.displayName,
-            u.id
-          );
-          const userLoc =
-            freshData.location ||
-            [freshData.city, freshData.country].filter(Boolean).join(', ') ||
+      const remote = rawResults
+        .filter((u) => u && typeof u === 'object' && u.id)
+        .filter((u) => !(u.id === DEMO_UID && !isSupportUser))
+        .map((u) => ({
+          ...u,
+          id: u.id,
+          name: sanitizeName(u.name || u.displayName || u.username, u.id),
+          mood: u.mood || 'happy',
+          activeSkin: u.activeSkin || 'default',
+          location:
             u.location ||
-            '';
-          return {
-            ...u,
-            ...freshData,
-            id: u.id,
-            name: safeDisplayName,
-            mood: freshData.mood || u.mood || 'happy',
-            activeSkin: activeSkin || freshData.activeSkin || u.activeSkin || 'default',
-            location: userLoc,
-            isOnline: !!onlineUsers[u.id],
-          };
-        } catch (err) {
-          return {
-            ...u,
-            name: sanitizeName(u.name || u.displayName, u.id),
-            isOnline: !!onlineUsers[u.id],
-          };
+            [u.city, u.country].filter(Boolean).join(', ') ||
+            '',
+          isOnline: !!onlineUsers[u.id],
+        }));
+
+      // Merge: local first, then remote without duplicates
+      const seen = new Set(localHits.map((x) => x.id));
+      const merged = [...localHits];
+      for (const r of remote) {
+        if (!seen.has(r.id)) {
+          seen.add(r.id);
+          merged.push(r);
         }
-      });
-      const resolved = await Promise.all(livePromises);
-      const updatedResults = resolved.filter(Boolean);
-      const finalResults = updatedResults.filter(u => {
-        if (u.id === DEMO_UID && !isSupportUser) return false;
-        return true;
-      });
-      setResults(finalResults);
+      }
+      setResults(merged);
     } catch (err) {
       console.error('❌ [Search] Search failed:', err);
-      setResults([]);
+      if (!localHits.length) setResults([]);
     } finally {
       setIsSearching(false);
     }
@@ -569,11 +595,11 @@ const Chats = () => {
     sessionStorage.setItem('chats_search_query', queryStr);
     searchTimeout.current = setTimeout(() => {
       performSearch(queryStr);
-    }, 150);
+    }, 120);
     return () => {
       if (searchTimeout.current) clearTimeout(searchTimeout.current);
     };
-  }, [searchQuery, onlineUsers, isSupportUser]);
+  }, [searchQuery, onlineUsers, isSupportUser, recentChats]);
 
   const startChat = (selectedUser) => {
     if (!selectedUser) return;
