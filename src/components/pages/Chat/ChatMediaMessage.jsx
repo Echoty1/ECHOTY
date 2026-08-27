@@ -30,7 +30,7 @@ const InvalidMediaPlaceholder = () => (
   </div>
 );
 
-// ─── Fullscreen Video Player ─────────────────────────────────────
+// ─── Fullscreen Video Player (internal – only used if disablePreview is false) ──
 const FullscreenVideoPlayer = ({ src, onClose }) => {
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -112,9 +112,8 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
   );
 };
 
-// ─── Inline Video Player (with caching) ──────────────────────────
-const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
-  // ─── Use cached blob URL ──────────────────────────────────────
+// ─── Inline Video Player ──────────────────────────────────────────
+const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading, disablePreview }) => {
   const { blobUrl, isLoading: cacheLoading, error: cacheError } = useCachedBlobUrl(src);
 
   // ─── If uploading, show upload overlay ──────────────────────
@@ -199,6 +198,7 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
   };
 
   const openFullscreen = () => {
+    if (disablePreview) return; // 🚫 block internal fullscreen
     muteAll();
     setShowFullscreen(true);
   };
@@ -240,16 +240,15 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading }) => {
         </div>
       </div>
       {caption && <div className="chat-media-caption">{caption}</div>}
-      {showFullscreen && (
+      {showFullscreen && !disablePreview && (
         <FullscreenVideoPlayer src={displaySrc} onClose={() => setShowFullscreen(false)} />
       )}
     </>
   );
 };
 
-// ─── Image with Lightbox (uses cached image) ──────────────────────
-const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
-  // ─── Use cached image (returns Base64 or original URL) ────
+// ─── Image with Lightbox ──────────────────────────────────────────
+const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading, disablePreview }) => {
   const cachedImage = useCachedImage(src, null);
   const imageSrc = cachedImage || src;
 
@@ -295,7 +294,11 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
     };
   }, [src, isBlob, cachedImage]);
 
-  const openLightbox = () => setLightboxOpen(true);
+  const openLightbox = () => {
+    if (disablePreview) return; // 🚫 block internal lightbox
+    setLightboxOpen(true);
+  };
+
   const closeLightbox = () => setLightboxOpen(false);
 
   const handleRetry = (e) => {
@@ -323,7 +326,7 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
           <img src={imageSrc} alt={caption || 'Image'} className="chat-media-image" loading="lazy" />
         </div>
         {caption && <div className="chat-media-caption">{caption}</div>}
-        {lightboxOpen && (
+        {lightboxOpen && !disablePreview && (
           <div className="media-lightbox-overlay" onClick={closeLightbox}>
             <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()}>
               <img src={imageSrc} alt={caption || 'Image'} className="media-lightbox-image" />
@@ -362,7 +365,7 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
         )}
       </div>
       {caption && <div className="chat-media-caption">{caption}</div>}
-      {lightboxOpen && !loadError && (
+      {lightboxOpen && !loadError && !disablePreview && (
         <div className="media-lightbox-overlay" onClick={closeLightbox}>
           <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()}>
             <img src={imageSrc} alt={caption || 'Image'} className="media-lightbox-image" />
@@ -378,14 +381,31 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading }) => {
 };
 
 // ─── Main Media Message ──────────────────────────────────────────
-const ChatMediaMessage = ({ message, isUploading = false, uploadProgress }) => {
+const ChatMediaMessage = ({ message, isUploading = false, uploadProgress, disablePreview = false }) => {
   const { mediaType, mediaUrl, caption, id, isMediaReady } = message;
 
   if (mediaType === 'video') {
-    return <VideoPlayer videoId={id} src={mediaUrl} caption={caption} isMediaReady={isMediaReady} isUploading={isUploading} />;
+    return (
+      <VideoPlayer
+        videoId={id}
+        src={mediaUrl}
+        caption={caption}
+        isMediaReady={isMediaReady}
+        isUploading={isUploading}
+        disablePreview={disablePreview}
+      />
+    );
   }
 
-  return <ImageWithLightbox src={mediaUrl} caption={caption} isMediaReady={isMediaReady} isUploading={isUploading} />;
+  return (
+    <ImageWithLightbox
+      src={mediaUrl}
+      caption={caption}
+      isMediaReady={isMediaReady}
+      isUploading={isUploading}
+      disablePreview={disablePreview}
+    />
+  );
 };
 
 export default ChatMediaMessage;

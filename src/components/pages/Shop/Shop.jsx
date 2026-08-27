@@ -797,14 +797,6 @@ const Shop = () => {
       />
       <StructuredData />
       <div className="shop-page">
-        {isAdmin && (
-          <div className="page-back-header">
-            <button className="page-back-btn" onClick={() => navigate('/other')}>
-              <i className="fas fa-arrow-left" /> Back
-            </button>
-            <span className="page-back-title">Shop</span>
-          </div>
-        )}
 
         {isAdmin ? (
           <div className="shop-admin-layout">

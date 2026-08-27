@@ -11,10 +11,9 @@ const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 const Other = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const isSupport = user?.uid === SUPPORT_UID;
 
-  // Base menu for everyone
-  const baseMenu = [
+  // Base menu for everyone – Shop is already in bottom nav, so it's not here
+  const menuItems = [
     {
       id: 'profile',
       label: 'Profile',
@@ -59,21 +58,6 @@ const Other = () => {
     },
   ];
 
-  // Admin: add Shop to the top (after Profile)
-  const menuItems = isSupport
-    ? [
-        baseMenu[0], // Profile
-        {
-          id: 'shop',
-          label: 'Shop',
-          icon: 'fa-store',
-          path: '/shop',
-          description: 'Buy skins and premium GIFs',
-        },
-        ...baseMenu.slice(1), // rest
-      ]
-    : baseMenu; // non-admin: no Shop here
-
   return (
     <>
       <SEO
@@ -83,7 +67,7 @@ const Other = () => {
       <StructuredData />
       <div className="other-page">
         <div className="other-header">
-          <h2 className="other-title">⚙️ More</h2>
+          <h2 className="other-title">⚙️ Other</h2>
           <p className="other-subtitle">Explore additional features and policies</p>
         </div>
         <div className="other-menu">

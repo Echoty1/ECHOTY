@@ -16,12 +16,14 @@ import RepliedMessage from '../Chat/RepliedMessage';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import ReactDOM from 'react-dom';
+import CommunityWall from './CommunityWall';
 import {
   loadMessagesFromCache,
   saveMessagesToCache,
 } from '../../../services/messageStorage';
 import { getCache, setCache } from '../../../services/cacheService';
 import './CommunityChat.css';
+import CommunityMembers from './CommunityMembers';
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
@@ -59,7 +61,7 @@ const sortMessages = (list) =>
     });
 
 const CommunityChat = () => {
-  const { communityId } = useParams();
+  const { communityId, tab } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
   const { currentCommunity, setCurrentCommunity } = useCommunity();
@@ -89,6 +91,9 @@ const CommunityChat = () => {
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [reactionViewer, setReactionViewer] = useState(null);
 
+  // ─── Active tab from URL ────────────────────────────────────────
+  const activeTab = tab || 'wall';
+
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -105,6 +110,7 @@ const CommunityChat = () => {
   const lastPushedCommunityId = useRef(null);
   const lastPushedCount = useRef(null);
 
+  // Auto-resize textarea
   useEffect(() => {
     const textarea = inputRef.current;
     if (textarea) {
@@ -113,6 +119,7 @@ const CommunityChat = () => {
     }
   }, [newMessage]);
 
+  // Load from cache
   useEffect(() => {
     if (!communityId) return;
     const loadCached = async () => {
@@ -132,6 +139,7 @@ const CommunityChat = () => {
     loadCached();
   }, [communityId, user?.uid]);
 
+  // Community meta realtime
   useEffect(() => {
     if (!communityId) return;
     if (currentCommunity?.id === communityId) {
@@ -169,6 +177,7 @@ const CommunityChat = () => {
     return () => unsub();
   }, [communityId, currentCommunity, setCurrentCommunity, isMember]);
 
+  // Membership realtime
   useEffect(() => {
     if (!user?.uid || !communityId) {
       setIsMember(false);
@@ -196,6 +205,7 @@ const CommunityChat = () => {
     return () => unsub();
   }, [user?.uid, communityId, membershipCacheKey, community, setCurrentCommunity, communityId]);
 
+  // User name
   useEffect(() => {
     if (!user?.uid) return;
     (async () => {
@@ -209,8 +219,12 @@ const CommunityChat = () => {
     })();
   }, [user]);
 
+  // Messages listener (only for chat tab)
   useEffect(() => {
-    if (!communityId || !cacheKey) return;
+    if (!communityId || !cacheKey || activeTab !== 'chat') {
+      if (activeTab !== 'chat') setMessages([]);
+      return;
+    }
     initialScrollRef.current = false;
     isNearBottomRef.current = true;
 
@@ -260,7 +274,7 @@ const CommunityChat = () => {
       () => setLoading(false)
     );
     return () => unsub();
-  }, [communityId, cacheKey, fetchProfile]);
+  }, [communityId, cacheKey, fetchProfile, activeTab]);
 
   const handleScroll = useCallback(() => {
     const el = messagesContainerRef.current;
@@ -269,7 +283,7 @@ const CommunityChat = () => {
   }, []);
 
   useEffect(() => {
-    if (!messagesEndRef.current) return;
+    if (!messagesEndRef.current || activeTab !== 'chat') return;
     if (!initialScrollRef.current) {
       initialScrollRef.current = true;
       messagesEndRef.current.scrollIntoView({ behavior: 'auto' });
@@ -278,10 +292,11 @@ const CommunityChat = () => {
     if (isNearBottomRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
-  }, [messages]);
+  }, [messages, activeTab]);
 
   const focusInput = () => setTimeout(() => inputRef.current?.focus(), 0);
 
+  // Cloudinary upload
   const uploadToCloudinary = (file, onProgress) => {
     return new Promise((resolve, reject) => {
       const formData = new FormData();
@@ -311,10 +326,11 @@ const CommunityChat = () => {
     });
   };
 
+  // Send text message
   const handleSend = async (e) => {
     e?.preventDefault?.();
     const text = newMessage.trim();
-    if (!text || !user?.uid || !communityId || sending || !isMember) return;
+    if (!text || !user?.uid || !communityId || sending || !isMember || activeTab !== 'chat') return;
 
     setSending(true);
     const sentAt = Date.now();
@@ -352,6 +368,7 @@ const CommunityChat = () => {
     }
   };
 
+  // Media preview
   const openMediaPreview = (file) => {
     if (!file || !isMember) return;
     if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) return;
@@ -392,7 +409,7 @@ const CommunityChat = () => {
   };
 
   const sendMediaMessage = async () => {
-    if (!selectedFile || !user?.uid || !communityId || sending) return;
+    if (!selectedFile || !user?.uid || !communityId || sending || activeTab !== 'chat') return;
     const file = selectedFile;
     const localPreview = previewUrl;
     const caption = captionText.trim();
@@ -458,6 +475,7 @@ const CommunityChat = () => {
     }
   };
 
+  // Emoji picker
   const handleEmojiSelect = (emoji) => {
     const input = inputRef.current;
     if (input) {
@@ -474,7 +492,9 @@ const CommunityChat = () => {
     } else setNewMessage((p) => p + emoji);
   };
 
+  // Reply
   const handleReply = (msg) => {
+    if (activeTab !== 'chat') return;
     setReplyTo({
       messageId: msg.id,
       senderName:
@@ -490,6 +510,7 @@ const CommunityChat = () => {
     focusInput();
   };
 
+  // Copy
   const handleCopy = async (msg) => {
     const text =
       msg.type === 'media' ? msg.mediaUrl || msg.caption || '' : msg.text || '';
@@ -507,6 +528,7 @@ const CommunityChat = () => {
     setTimeout(() => setCopiedId(null), 1500);
   };
 
+  // Delete
   const handleDelete = async (msg) => {
     if (!msg?.id || msg.senderId !== user?.uid || String(msg.id).startsWith('temp_')) return;
     setDeletingMessageId(msg.id);
@@ -524,8 +546,9 @@ const CommunityChat = () => {
     }
   };
 
+  // Jump to replied message
   const jumpToMessage = (messageId) => {
-    if (!messageId) return;
+    if (!messageId || activeTab !== 'chat') return;
     const el = msgRefs.current[messageId];
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -534,6 +557,7 @@ const CommunityChat = () => {
     }
   };
 
+  // Open private chat from sender
   const openUserChat = (senderId) => {
     if (!senderId || senderId === user?.uid || senderId === 'system') return;
     const profile = getProfile?.(senderId);
@@ -546,6 +570,7 @@ const CommunityChat = () => {
     });
   };
 
+  // Keydown
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -553,6 +578,7 @@ const CommunityChat = () => {
     }
   };
 
+  // Format timestamp
   const formatTime = (timestamp) => {
     if (!timestamp) return '';
     const date = new Date(timestamp);
@@ -565,14 +591,16 @@ const CommunityChat = () => {
     return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
   };
 
+  // Reactions
   const handleReact = (msg) => {
+    if (activeTab !== 'chat') return;
     setReactingMessageId(msg.id);
     setShowReactionPicker(true);
   };
 
   const handleReactionSelect = async (emoji) => {
     setShowReactionPicker(false);
-    if (!reactingMessageId || !user?.uid || !communityId) return;
+    if (!reactingMessageId || !user?.uid || !communityId || activeTab !== 'chat') return;
     const reactionRef = ref(db, `communityChats/${communityId}/messages/${reactingMessageId}/reactions/${user.uid}`);
     try {
       const currentMsg = messages.find(m => m.id === reactingMessageId);
@@ -585,7 +613,6 @@ const CommunityChat = () => {
       setReactingMessageId(null);
     } catch (err) {
       console.warn('Reaction error:', err);
-      // Only show alert for non‑permission errors
       if (!err.message.includes('PERMISSION_DENIED')) {
         alert('Failed to react. Please try again.');
       }
@@ -598,7 +625,7 @@ const CommunityChat = () => {
   };
 
   const handleRemoveReaction = async (messageId, emoji) => {
-    if (!user?.uid || !communityId) return;
+    if (!user?.uid || !communityId || activeTab !== 'chat') return;
     const reactionRef = ref(db, `communityChats/${communityId}/messages/${messageId}/reactions/${user.uid}`);
     try {
       await remove(reactionRef);
@@ -614,7 +641,7 @@ const CommunityChat = () => {
   };
 
   const openReactionViewer = (emoji, reactions, messageId) => {
-    if (!reactions || typeof reactions !== 'object') return;
+    if (!reactions || typeof reactions !== 'object' || activeTab !== 'chat') return;
     const userIds = Object.keys(reactions).filter(uid => reactions[uid] === emoji);
     if (userIds.length === 0) return;
     setReactionViewer({ emoji, userIds, messageId });
@@ -671,7 +698,7 @@ const CommunityChat = () => {
   };
 
   const renderReactions = (reactions, messageId) => {
-    if (!reactions || typeof reactions !== 'object') return null;
+    if (!reactions || typeof reactions !== 'object' || activeTab !== 'chat') return null;
     const entries = Object.entries(reactions);
     if (entries.length === 0) return null;
 
@@ -700,6 +727,7 @@ const CommunityChat = () => {
     );
   };
 
+  // Render individual message
   const renderMessage = (msg) => {
     const isOwn = msg.senderId === user?.uid;
     const isSystem = msg.type === 'system' || msg.system === true;
@@ -787,6 +815,104 @@ const CommunityChat = () => {
     );
   };
 
+  // ─── Chat render function ──────────────────────────────────────
+  const renderChat = () => (
+    <div className="community-chat-panel">
+      <div
+        className="messages-container"
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+      >
+        {loading && messages.length === 0 ? (
+          <div className="empty-chat-state">
+            <div className="loading-spinner" />
+            <p>Loading messages…</p>
+          </div>
+        ) : messages.length === 0 ? (
+          <div className="empty-chat-state">
+            <i className="fas fa-comments empty-icon" />
+            <p>Be the first to chat in this community!</p>
+            <span className="empty-sub">Say hello and start the conversation 👋</span>
+          </div>
+        ) : (
+          <>
+            {messages.map((msg) => renderMessage(msg))}
+            <div ref={messagesEndRef} />
+          </>
+        )}
+      </div>
+
+      <form className="chat-input-container" onSubmit={handleSend} ref={inputContainerRef}>
+        {membershipLoading ? (
+          <div className="chat-input" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
+            Checking membership…
+          </div>
+        ) : !isMember ? (
+          <button
+            type="button"
+            className="chat-send-btn wide"
+            onClick={() => navigate('/communities')}
+          >
+            Join to chat
+          </button>
+        ) : (
+          <>
+            {replyTo && (
+              <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />
+            )}
+            <div className="chat-input-row">
+              <button
+                type="button"
+                className="chat-emoji-btn"
+                onClick={() => setShowEmojiPicker((v) => !v)}
+                title="Emoji"
+              >
+                <i className="fas fa-smile" />
+              </button>
+              <button
+                type="button"
+                className="chat-attach-btn"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={sending}
+                title="Photo or video"
+              >
+                <i className="fas fa-paperclip" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*"
+                style={{ display: 'none' }}
+                onChange={handleFileSelect}
+              />
+              <textarea
+                ref={inputRef}
+                className="chat-input"
+                placeholder={`Message #${titleName}...`}
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                disabled={sending}
+                maxLength={1000}
+                rows={1}
+              />
+              <button
+                type="submit"
+                className="chat-send-btn"
+                disabled={!newMessage.trim() || sending}
+                aria-label="Send"
+              >
+                {sending ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-paper-plane" />}
+              </button>
+            </div>
+          </>
+        )}
+      </form>
+    </div>
+  );
+
+  // ─── Preview overlay for media ──────────────────────────────────
   const renderPreviewOverlay = () => {
     if (!previewUrl) return null;
     return ReactDOM.createPortal(
@@ -846,10 +972,6 @@ const CommunityChat = () => {
     );
   };
 
-  const effectiveMemberCount = isMember
-    ? (community?.memberCount || 0) + 1
-    : (community?.memberCount || 0) || 1;
-
   const titleName = community?.name || 'Community';
 
   if (!loading && !community) {
@@ -875,28 +997,15 @@ const CommunityChat = () => {
           <span className="echo-bg-ring r3" />
         </div>
 
-        <div
-          className="messages-container"
-          ref={messagesContainerRef}
-          onScroll={handleScroll}
-        >
-          {loading && messages.length === 0 ? (
-            <div className="empty-chat-state">
-              <div className="loading-spinner" />
-              <p>Loading messages…</p>
-            </div>
-          ) : messages.length === 0 ? (
-            <div className="empty-chat-state">
-              <i className="fas fa-comments empty-icon" />
-              <p>Be the first to chat in this community!</p>
-              <span className="empty-sub">Say hello and start the conversation 👋</span>
-            </div>
-          ) : (
-            <>
-              {messages.map((msg) => renderMessage(msg))}
-              <div ref={messagesEndRef} />
-            </>
+        {/* ─── Content Area ────────────────────────────────────────── */}
+        <div className="community-content">
+          {activeTab === 'wall' && (
+            <CommunityWall communityId={communityId} isMember={isMember} />
           )}
+          {activeTab === 'chat' && renderChat()}
+          {activeTab === 'members' && (
+          <CommunityMembers communityId={communityId} />
+        )}
         </div>
 
         {showEmojiPicker && (
@@ -910,74 +1019,6 @@ const CommunityChat = () => {
         )}
 
         {renderPreviewOverlay()}
-
-        <form className="chat-input-container" onSubmit={handleSend} ref={inputContainerRef}>
-          {membershipLoading ? (
-            <div className="chat-input" style={{ textAlign: 'center', color: 'var(--text-muted)' }}>
-              Checking membership…
-            </div>
-          ) : !isMember ? (
-            <button
-              type="button"
-              className="chat-send-btn wide"
-              onClick={() => navigate('/communities')}
-            >
-              Join to chat
-            </button>
-          ) : (
-            <>
-              {replyTo && (
-                <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />
-              )}
-              <div className="chat-input-row">
-                <button
-                  type="button"
-                  className="chat-emoji-btn"
-                  onClick={() => setShowEmojiPicker((v) => !v)}
-                  title="Emoji"
-                >
-                  <i className="fas fa-smile" />
-                </button>
-                <button
-                  type="button"
-                  className="chat-attach-btn"
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={sending}
-                  title="Photo or video"
-                >
-                  <i className="fas fa-paperclip" />
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*,video/*"
-                  style={{ display: 'none' }}
-                  onChange={handleFileSelect}
-                />
-                <textarea
-                  ref={inputRef}
-                  className="chat-input"
-                  placeholder={`Message #${titleName}...`}
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  onKeyDown={handleKeyDown}
-                  onPaste={handlePaste}
-                  disabled={sending}
-                  maxLength={1000}
-                  rows={1}
-                />
-                <button
-                  type="submit"
-                  className="chat-send-btn"
-                  disabled={!newMessage.trim() || sending}
-                  aria-label="Send"
-                >
-                  {sending ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-paper-plane" />}
-                </button>
-              </div>
-            </>
-          )}
-        </form>
       </div>
 
       {showReactionPicker && (

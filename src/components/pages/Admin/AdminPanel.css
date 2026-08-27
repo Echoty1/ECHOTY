@@ -317,8 +317,9 @@
   background: var(--bg-input);
 }
 
+/* ─── FIXED: Action Buttons ────────────────────────────────── */
 .action-btn {
-  background: rgba(108, 60, 225, 0.12);
+  background: rgba(108, 60, 225, 0.15);
   border: none;
   color: #a78bfa;
   padding: 4px 10px;
@@ -331,8 +332,9 @@
   gap: 4px;
 }
 .action-btn:hover {
-  background: rgba(108, 60, 225, 0.2);
+  background: rgba(108, 60, 225, 0.3);
 }
+
 .table-footer {
   font-size: 12px;
   color: var(--text-muted);
@@ -399,6 +401,7 @@
   cursor: not-allowed;
 }
 
+/* ─── FIXED: Admin Actions Grid ────────────────────────────── */
 .admin-actions-grid {
   display: grid;
   grid-template-columns: 1fr;
@@ -424,6 +427,7 @@
   gap: 8px;
   font-size: 14px;
   width: 100%;
+  border: 1px solid transparent;
 }
 .admin-actions-grid button:hover:not(:disabled) {
   background: rgba(108, 60, 225, 0.25);
@@ -432,19 +436,27 @@
 .admin-actions-grid button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+  transform: none !important;
 }
 .admin-actions-grid .admin-danger {
   background: rgba(239, 68, 68, 0.15);
+  color: #EF4444;
+  border-color: rgba(239, 68, 68, 0.2);
 }
 .admin-actions-grid .admin-danger:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.4);
 }
 .admin-actions-grid .admin-success {
   background: rgba(16, 185, 129, 0.15);
+  color: #10B981;
+  border-color: rgba(16, 185, 129, 0.2);
 }
 .admin-actions-grid .admin-success:hover:not(:disabled) {
   background: rgba(16, 185, 129, 0.25);
+  border-color: rgba(16, 185, 129, 0.4);
 }
+
 .add-coins-wrapper {
   display: flex;
   gap: 8px;
@@ -470,7 +482,7 @@
   min-width: 80px;
   padding: 10px 12px;
   border-radius: 10px;
-  border: none;
+  border: 1px solid transparent;
   font-weight: 600;
   font-size: 14px;
   cursor: pointer;
@@ -483,20 +495,25 @@
 .add-coins-wrapper button:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+  transform: none !important;
 }
 .add-coins-wrapper button:first-of-type {
-  background: rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.15);
   color: #10B981;
+  border-color: rgba(16, 185, 129, 0.2);
 }
 .add-coins-wrapper button:first-of-type:hover:not(:disabled) {
-  background: rgba(16, 185, 129, 0.3);
+  background: rgba(16, 185, 129, 0.25);
+  border-color: rgba(16, 185, 129, 0.4);
 }
 .add-coins-wrapper button:last-of-type {
-  background: rgba(239, 68, 68, 0.2);
+  background: rgba(239, 68, 68, 0.15);
   color: #EF4444;
+  border-color: rgba(239, 68, 68, 0.2);
 }
 .add-coins-wrapper button:last-of-type:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.3);
+  background: rgba(239, 68, 68, 0.25);
+  border-color: rgba(239, 68, 68, 0.4);
 }
 
 .status-badge {
@@ -583,7 +600,7 @@
   border-radius: 10px;
   border: 1px solid var(--border-color);
   background: var(--bg-input);
-  color: var(--text-primary);  /* ✅ this ensures dark text in light theme */
+  color: var(--text-primary);
   font-size: 14px;
   outline: none;
   transition: border-color 0.2s, background 0.2s;

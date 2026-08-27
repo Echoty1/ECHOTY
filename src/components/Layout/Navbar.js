@@ -4,8 +4,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useProfile } from '../../contexts/ProfileContext';
 import { useCall } from '../../contexts/CallContext';
-import { db } from '../../services/firebase';
 import { ref, onValue, update, remove } from 'firebase/database';
+import { db } from '../../services/firebase';
 import ECHOMOJI from '../UI/ECHOMOJI';
 import { getSkinById } from '../../constants/echomoji';
 import Avatar from '../common/Avatar';
@@ -70,7 +70,6 @@ const Navbar = memo(() => {
   const isEchoAiRoute = targetUserId === 'echo_ai_assistant';
   const isCommunityRoute = location.pathname.startsWith('/community/');
   const communityId = isCommunityRoute ? pathParts[2] : null;
-  const [communityInfo, setCommunityInfo] = useState(null);
 
   // ─── Pages that need a back button ──────────────────────────
   const isProfileRoute = location.pathname === '/profile';
@@ -80,6 +79,7 @@ const Navbar = memo(() => {
   const isPrivacyRoute = location.pathname === '/privacy';
   const isReportRoute = location.pathname === '/report';
   const isCoinsRoute = location.pathname === '/coins';
+  const isOtherRoute = location.pathname === '/other';
 
   const showBackButton =
     isChatRoute ||
@@ -90,7 +90,8 @@ const Navbar = memo(() => {
     isTermsRoute ||
     isPrivacyRoute ||
     isReportRoute ||
-    isCoinsRoute;
+    isCoinsRoute ||
+    isOtherRoute;
 
   // ─── Back destination ───────────────────────────────────────
   const getBackDestination = () => {
@@ -100,7 +101,7 @@ const Navbar = memo(() => {
       if (fromCommunity) return `/community/${fromCommunity}`;
       return '/chats';
     }
-    if (isProfileRoute || isSettingsRoute) return '/other';
+    if (isProfileRoute || isSettingsRoute || isOtherRoute) return '/other';
     if (isAboutRoute || isTermsRoute || isPrivacyRoute || isReportRoute) return '/other';
     if (isCoinsRoute) return '/shop';
     return '/';
@@ -108,15 +109,48 @@ const Navbar = memo(() => {
 
   // ─── Handle back: preserve scroll position ──────────────────
   const handleBack = () => {
-    // If there's a history entry, go back naturally (preserves scroll)
     if (window.history.length > 1) {
       navigate(-1);
     } else {
-      // Fallback if no history (e.g., direct URL)
       navigate(getBackDestination());
     }
   };
 
+  const [navCommunity, setNavCommunity] = useState(null);
+  const [activeCommunityTab, setActiveCommunityTab] = useState('wall');
+
+  // ─── Load community data ────────────────────────────────────────
+  useEffect(() => {
+    if (isCommunityRoute && communityId) {
+      const communityRef = ref(db, `communities/${communityId}`);
+      const unsub = onValue(communityRef, (snap) => {
+        if (snap.exists()) {
+          const data = snap.val();
+          setNavCommunity({
+            id: communityId,
+            name: data.name || 'Community',
+            image: data.image || '/images/communities/default.png',
+            memberCount: Number(data.memberCount || 0),
+          });
+        } else {
+          setNavCommunity(null);
+        }
+      });
+      return () => unsub();
+    } else {
+      setNavCommunity(null);
+    }
+  }, [isCommunityRoute, communityId]);
+
+  // ─── Determine active tab from URL ─────────────────────────────
+  useEffect(() => {
+    if (isCommunityRoute) {
+      const tab = pathParts[3] || 'wall';
+      setActiveCommunityTab(tab);
+    }
+  }, [isCommunityRoute, pathParts]);
+
+  // ─── Notifications ─────────────────────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
     const notifRef = ref(db, `adminNotifications/${user.uid}/messages`);
@@ -203,6 +237,7 @@ const Navbar = memo(() => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
+  // ─── Profile loading ─────────────────────────────────────────────
   useEffect(() => {
     if (user?.uid) {
       const cleanup = fetchProfile(user.uid);
@@ -211,28 +246,6 @@ const Navbar = memo(() => {
       };
     }
   }, [user?.uid, fetchProfile]);
-
-  useEffect(() => {
-    if (!communityId) {
-      setCommunityInfo(null);
-      return;
-    }
-    const cRef = ref(db, `communities/${communityId}`);
-    const unsub = onValue(cRef, (snap) => {
-      if (!snap.exists()) {
-        setCommunityInfo(null);
-        return;
-      }
-      const d = snap.val() || {};
-      setCommunityInfo({
-        id: communityId,
-        name: d.name || 'Community',
-        image: d.image || '/images/communities/default.png',
-        memberCount: Number(d.memberCount || 0),
-      });
-    });
-    return () => unsub();
-  }, [communityId]);
 
   useEffect(() => {
     if (isChatRoute && targetUserId && !isEchoAiRoute) {
@@ -284,6 +297,16 @@ const Navbar = memo(() => {
   const ownSkin = ownProfile?.activeSkin ? getSkinById(ownProfile.activeSkin) : null;
   const ownName = sanitizeName(ownProfile?.name || ownProfile?.displayName || 'User', user?.uid);
 
+  const handleTabClick = (tab) => {
+    if (isCommunityRoute && communityId) {
+      navigate(`/community/${communityId}/${tab}`);
+    }
+  };
+
+  // ─── Determine if we need mobile community layout ─────────────
+  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 480;
+  const isMobileCommunity = isMobile && isCommunityRoute && navCommunity;
+
   return (
     <nav
       style={{
@@ -291,20 +314,30 @@ const Navbar = memo(() => {
         top: 0,
         left: 0,
         right: 0,
-        height: '60px',
+        minHeight: isMobileCommunity ? '80px' : '56px',
         backgroundColor: 'var(--bg-primary)',
         borderBottom: '1px solid var(--border-color)',
         display: 'flex',
+        flexWrap: isMobileCommunity ? 'wrap' : 'nowrap',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 16px',
+        padding: isMobileCommunity ? '6px 12px 10px' : '0 12px',
         zIndex: 1000,
         boxSizing: 'border-box',
         color: 'var(--text-primary)',
+        fontFamily: 'Inter, sans-serif',
       }}
     >
-      {/* LEFT SECTION */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+      {/* ─── LEFT SECTION ────────────────────────────────────────── */}
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '10px', 
+        minWidth: 0,
+        flex: isMobileCommunity ? '1 1 100%' : '0 1 auto',
+        order: isMobileCommunity ? 1 : 0,
+        marginBottom: isMobileCommunity ? '6px' : 0,
+      }}>
         {showBackButton ? (
           <button
             onClick={handleBack}
@@ -332,137 +365,12 @@ const Navbar = memo(() => {
             <i className="fas fa-arrow-left" />
           </button>
         ) : (
-          <span
-            style={{
-              fontSize: '20px',
-              fontWeight: 800,
-              letterSpacing: '1px',
-              color: 'var(--text-primary)',
-            }}
-          >
+          <span style={{ fontSize: '18px', fontWeight: 800, letterSpacing: '1px', color: 'var(--text-primary)' }}>
             ECHO
           </span>
         )}
 
-        {isCommunityRoute && communityInfo && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
-            <img
-              src={communityInfo.image}
-              alt=""
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: '50%',
-                objectFit: 'cover',
-                border: '1px solid var(--border-color)',
-                flexShrink: 0,
-              }}
-              onError={(e) => {
-                e.currentTarget.src = '/images/communities/default.png';
-              }}
-            />
-            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-              <span
-                style={{
-                  color: 'var(--text-primary)',
-                  fontWeight: 700,
-                  fontSize: 14,
-                  lineHeight: 1.2,
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: '42vw',
-                }}
-              >
-                {communityInfo.name}
-              </span>
-              <span style={{ color: 'var(--text-muted)', fontSize: 11 }}>
-                {communityInfo.memberCount.toLocaleString()} members
-              </span>
-            </div>
-          </div>
-        )}
-
-        {isChatRoute && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-            <div
-              className="nav-chat-avatar"
-              style={{
-                width: '36px',
-                height: '36px',
-                borderRadius: '50%',
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                border: '1px solid var(--border-color)',
-                flexShrink: 0,
-                position: 'relative',
-              }}
-            >
-              <Avatar src={chatAvatar} name={chatName} size={36} />
-              {partnerSkin && (
-                <div
-                  style={{
-                    position: 'absolute',
-                    bottom: -6,
-                    right: -6,
-                    width: 22,
-                    height: 22,
-                    borderRadius: '50%',
-                    background: 'var(--bg-primary)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    border: '2px solid var(--bg-primary)',
-                  }}
-                >
-                  <ECHOMOJI
-                    mood={partnerMood}
-                    skin={partnerSkin}
-                    size={18}
-                    interactive={false}
-                    animated={false}
-                  />
-                </div>
-              )}
-            </div>
-
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                <span
-                  className="nav-chat-name"
-                  style={{
-                    color: 'var(--text-primary)',
-                    fontWeight: 700,
-                    fontSize: '14px',
-                    lineHeight: '1.2',
-                    maxWidth: '42vw',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {chatName}
-                </span>
-                <span className="nav-chat-echomoji">
-                  <ECHOMOJI
-                    mood={partnerMood}
-                    skin={partnerSkin}
-                    size={18}
-                    interactive={false}
-                    animated={false}
-                  />
-                </span>
-              </div>
-              <span style={{ color: statusColor, fontSize: '11px', marginTop: '1px' }}>
-                {statusText}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {/* ─── For profile/legal pages, show page title ──────── */}
+        {/* ─── Page Title for sub‑pages ─────────────────────────── */}
         {!isChatRoute && !isCommunityRoute && showBackButton && (
           <span
             style={{
@@ -479,12 +387,224 @@ const Navbar = memo(() => {
             {isPrivacyRoute && 'Privacy Policy'}
             {isReportRoute && 'Report'}
             {isCoinsRoute && 'Get Coins'}
+            {isOtherRoute && 'Other'}
           </span>
+        )}
+
+        {/* ─── Community Info ────────────────────────────────────── */}
+        {isCommunityRoute && navCommunity && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0 }}>
+            <img
+              src={navCommunity.image}
+              alt=""
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: '50%',
+                objectFit: 'cover',
+                border: '1px solid var(--border-color)',
+                flexShrink: 0,
+              }}
+              onError={(e) => { e.currentTarget.src = '/images/communities/default.png'; }}
+            />
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <span
+                style={{
+                  color: 'var(--text-primary)',
+                  fontWeight: 700,
+                  fontSize: isMobileCommunity ? '16px' : '13px',
+                  lineHeight: 1.2,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: isMobileCommunity ? '70vw' : '30vw',
+                }}
+              >
+                {navCommunity.name}
+              </span>
+              <span style={{ color: 'var(--text-muted)', fontSize: isMobileCommunity ? '12px' : '10px' }}>
+                {navCommunity.memberCount.toLocaleString()} members
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* ─── Chat Info ────────────────────────────────────────── */}
+        {isChatRoute && !isCommunityRoute && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <div
+              style={{
+                width: '32px',
+                height: '32px',
+                borderRadius: '50%',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '1px solid var(--border-color)',
+                flexShrink: 0,
+                position: 'relative',
+              }}
+            >
+              <Avatar src={chatAvatar} name={chatName} size={32} />
+              {partnerSkin && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: -4,
+                    right: -4,
+                    width: 18,
+                    height: 18,
+                    borderRadius: '50%',
+                    background: 'var(--bg-primary)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    border: '2px solid var(--bg-primary)',
+                  }}
+                >
+                  <ECHOMOJI
+                    mood={partnerMood}
+                    skin={partnerSkin}
+                    size={14}
+                    interactive={false}
+                    animated={false}
+                  />
+                </div>
+              )}
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                <span
+                  style={{
+                    color: 'var(--text-primary)',
+                    fontWeight: 700,
+                    fontSize: '13px',
+                    lineHeight: '1.2',
+                    maxWidth: '30vw',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {chatName}
+                </span>
+                <ECHOMOJI
+                  mood={partnerMood}
+                  skin={partnerSkin}
+                  size={16}
+                  interactive={false}
+                  animated={false}
+                />
+              </div>
+              <span style={{ color: statusColor, fontSize: '10px', marginTop: '1px' }}>
+                {statusText}
+              </span>
+            </div>
+          </div>
         )}
       </div>
 
-      {/* RIGHT SECTION */}
-      <div className="nav-right" style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+      {/* ─── CENTER – Community Tabs ─────────────────────────────── */}
+      <div 
+        style={{ 
+          flex: isMobileCommunity ? '1 1 100%' : '1',
+          display: 'flex', 
+          justifyContent: 'center', 
+          alignItems: 'center', 
+          gap: '6px', 
+          margin: isMobileCommunity ? '0' : '0 4px',
+          minWidth: 0,
+          overflow: 'hidden',
+          order: isMobileCommunity ? 2 : 0,
+          padding: isMobileCommunity ? '4px 0 0' : 0,
+        }}
+      >
+        {isCommunityRoute && navCommunity && (
+          <>
+            <button
+              className="nav-tab"
+              onClick={() => handleTabClick('wall')}
+              style={{
+                background: activeCommunityTab === 'wall' ? 'rgba(108,60,225,0.2)' : 'transparent',
+                border: 'none',
+                color: activeCommunityTab === 'wall' ? '#fff' : 'var(--text-muted)',
+                padding: isMobileCommunity ? '8px 14px' : '6px 12px',
+                borderRadius: '8px',
+                fontSize: isMobileCommunity ? '15px' : '14px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                transition: 'all 0.2s ease',
+                borderBottom: activeCommunityTab === 'wall' ? '3px solid #6C3CE1' : '3px solid transparent',
+                letterSpacing: '0.3px',
+                whiteSpace: 'nowrap',
+                flexShrink: 1,
+                minWidth: 0,
+              }}
+            >
+              <i className="fas fa-newspaper" style={{ fontSize: isMobileCommunity ? '14px' : '12px', marginRight: '4px' }} /> Wall
+            </button>
+            <button
+              className="nav-tab"
+              onClick={() => handleTabClick('chat')}
+              style={{
+                background: activeCommunityTab === 'chat' ? 'rgba(108,60,225,0.2)' : 'transparent',
+                border: 'none',
+                color: activeCommunityTab === 'chat' ? '#fff' : 'var(--text-muted)',
+                padding: isMobileCommunity ? '8px 14px' : '6px 12px',
+                borderRadius: '8px',
+                fontSize: isMobileCommunity ? '15px' : '14px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                transition: 'all 0.2s ease',
+                borderBottom: activeCommunityTab === 'chat' ? '3px solid #6C3CE1' : '3px solid transparent',
+                letterSpacing: '0.3px',
+                whiteSpace: 'nowrap',
+                flexShrink: 1,
+                minWidth: 0,
+              }}
+            >
+              <i className="fas fa-comment-dots" style={{ fontSize: isMobileCommunity ? '14px' : '12px', marginRight: '4px' }} /> Chat
+            </button>
+            <button
+              className="nav-tab"
+              onClick={() => handleTabClick('members')}
+              style={{
+                background: activeCommunityTab === 'members' ? 'rgba(108,60,225,0.2)' : 'transparent',
+                border: 'none',
+                color: activeCommunityTab === 'members' ? '#fff' : 'var(--text-muted)',
+                padding: isMobileCommunity ? '8px 14px' : '6px 12px',
+                borderRadius: '8px',
+                fontSize: isMobileCommunity ? '15px' : '14px',
+                fontWeight: 700,
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                transition: 'all 0.2s ease',
+                borderBottom: activeCommunityTab === 'members' ? '3px solid #6C3CE1' : '3px solid transparent',
+                letterSpacing: '0.3px',
+                whiteSpace: 'nowrap',
+                flexShrink: 1,
+                minWidth: 0,
+              }}
+            >
+              <i className="fas fa-users" style={{ fontSize: isMobileCommunity ? '14px' : '12px', marginRight: '4px' }} /> Members
+            </button>
+          </>
+        )}
+      </div>
+
+      {/* ─── RIGHT SECTION ───────────────────────────────────────── */}
+      <div style={{ 
+        display: 'flex', 
+        alignItems: 'center', 
+        gap: '4px', 
+        flexShrink: 0,
+        order: isMobileCommunity ? 3 : 0,
+        marginLeft: isMobileCommunity ? 'auto' : 0,
+        marginTop: isMobileCommunity ? '4px' : 0,
+      }}>
         {isChatRoute && targetUserId && !isEchoAiRoute && isTargetOnline && (
           <button
             onClick={() => startVideoCall(targetUserId, chatName, chatAvatar)}
@@ -492,38 +612,47 @@ const Navbar = memo(() => {
               background: 'none',
               border: 'none',
               color: 'var(--text-secondary)',
-              fontSize: '20px',
+              fontSize: '18px',
               cursor: 'pointer',
               padding: '4px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              transition: 'color 0.2s',
+              borderRadius: '6px',
+              transition: 'background 0.2s',
             }}
-            onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--text-primary)')}
-            onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-secondary)')}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
             title="Start video call"
           >
             <i className="fas fa-video" />
           </button>
         )}
 
-        {/* Notification Bell */}
-        <div ref={bellRef} className="notification-bell-wrapper" style={{ position: 'relative' }}>
+        {/* Notification Bell - hidden on mobile */}
+        <div 
+          ref={bellRef} 
+          className="notification-bell-wrapper desktop-only"
+          style={{ position: 'relative' }}
+        >
           <button
             onClick={toggleDropdown}
             style={{
               background: 'none',
               border: 'none',
               color: 'var(--text-secondary)',
-              fontSize: '20px',
+              fontSize: '18px',
               cursor: 'pointer',
               padding: '4px',
               position: 'relative',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
+              borderRadius: '6px',
+              transition: 'background 0.2s',
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
           >
             <i className="fas fa-bell" />
             {unreadCount > 0 && (
@@ -532,12 +661,12 @@ const Navbar = memo(() => {
                   position: 'absolute',
                   top: '-4px',
                   right: '-4px',
-                  minWidth: '18px',
-                  height: '18px',
+                  minWidth: '16px',
+                  height: '16px',
                   borderRadius: '50%',
                   backgroundColor: '#EF4444',
                   color: '#fff',
-                  fontSize: '10px',
+                  fontSize: '9px',
                   fontWeight: 700,
                   display: 'flex',
                   alignItems: 'center',
@@ -658,29 +787,45 @@ const Navbar = memo(() => {
         </div>
 
         {/* User Info */}
-        {ownSkin && (
-          <ECHOMOJI
-            mood={ownProfile?.mood || 'happy'}
-            skin={ownSkin}
-            size={30}
-            interactive={false}
-            animated={false}
-          />
-        )}
-        <span
-          className="nav-own-name"
+        <div
           style={{
-            fontSize: '14px',
-            color: 'var(--text-secondary)',
-            fontWeight: 600,
-            whiteSpace: 'nowrap',
-            maxWidth: '80px',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '4px 6px',
+            borderRadius: '6px',
+            transition: 'background 0.2s',
+            cursor: 'default',
           }}
+          onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}
+          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
         >
-          {ownName}
-        </span>
+          {ownSkin && (
+            <ECHOMOJI
+              mood={ownProfile?.mood || 'happy'}
+              skin={ownSkin}
+              size={28}
+              interactive={false}
+              animated={false}
+            />
+          )}
+          <span
+            className="nav-own-name"
+            style={{
+              fontSize: '13px',
+              color: 'var(--text-secondary)',
+              fontWeight: 600,
+              whiteSpace: 'nowrap',
+              maxWidth: '70px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {ownName}
+          </span>
+        </div>
+
+        {/* Logout Button */}
         <button
           onClick={logout}
           title="Log Out"
@@ -691,8 +836,17 @@ const Navbar = memo(() => {
             color: '#EF4444',
             fontSize: '14px',
             cursor: 'pointer',
-            padding: '6px 10px',
-            borderRadius: '10px',
+            padding: '6px 8px',
+            borderRadius: '8px',
+            transition: 'background 0.2s, border-color 0.2s',
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)';
+            e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.4)';
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+            e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.2)';
           }}
         >
           <i className="fas fa-sign-out-alt" />
@@ -707,17 +861,6 @@ const Navbar = memo(() => {
         timestamp={selectedNotification?.timestamp}
       />
 
-      <style>{`
-        @media (max-width: 480px) {
-          .nav-own-name { display: none !important; }
-          .nav-chat-name { max-width: 28vw !important; font-size: 13px !important; }
-          .nav-chat-echomoji { display: none !important; }
-          .notification-bell-wrapper button { font-size: 18px !important; }
-        }
-        @media (max-width: 360px) {
-          .nav-chat-name { max-width: 22vw !important; }
-        }
-      `}</style>
       <ConfirmModal
         isOpen={confirmModal.isOpen}
         onClose={closeConfirmModal}
@@ -728,6 +871,58 @@ const Navbar = memo(() => {
         cancelText={confirmModal.cancelText}
         loading={confirmModal.loading}
       />
+
+      <style>{`
+        /* ─── Community Tabs ────────────────────────────────────── */
+        .nav-tab {
+          font-size: 14px !important;
+          font-weight: 700 !important;
+          padding: 6px 12px !important;
+          letter-spacing: 0.3px !important;
+        }
+        .nav-tab i {
+          font-size: 12px !important;
+          margin-right: 4px !important;
+        }
+
+        /* ─── Hide bell on mobile ───────────────────────────────── */
+        @media (max-width: 480px) {
+          .desktop-only {
+            display: none !important;
+          }
+          
+          .nav-tab {
+            font-size: 12px !important;
+            padding: 4px 8px !important;
+          }
+          .nav-tab i {
+            font-size: 10px !important;
+            margin-right: 3px !important;
+          }
+          
+          .nav-own-name {
+            display: none !important;
+          }
+          
+          .nav-chat-name {
+            max-width: 20vw !important;
+            font-size: 12px !important;
+          }
+        }
+
+        @media (max-width: 380px) {
+          .nav-tab {
+            font-size: 10px !important;
+            padding: 3px 6px !important;
+          }
+          .nav-tab i {
+            display: none !important;
+          }
+          .nav-chat-name {
+            max-width: 16vw !important;
+          }
+        }
+      `}</style>
     </nav>
   );
 });

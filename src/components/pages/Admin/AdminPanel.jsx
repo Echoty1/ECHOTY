@@ -14,7 +14,7 @@ import {
   checkIsSupport,
 } from '../../../services/adminService';
 import { db } from '../../../services/firebase';
-import { ref, onValue, get, push, set } from 'firebase/database';
+import { ref, onValue, get, push, set, remove, update, runTransaction } from 'firebase/database';
 import { getAdminUserList, setAdminUserList } from '../../../services/indexedDBService';
 import Toast from '../../Toast/Toast';
 import LoginAnalyticsChart from './LoginAnalyticsChart';
@@ -104,11 +104,12 @@ const AdminPanel = () => {
       return (a.name || '').localeCompare(b.name || '');
     });
 
-  // ─── Build user list ──────────────────────────────────────────
-  const buildUserList = (profilesData) => {
+  // ─── Build user list from profiles and accounts ──────────────
+  const buildUserList = (profilesData, accountsData) => {
     const list = [];
     for (const [uid, profile] of Object.entries(profilesData || {})) {
-      const isBanned = banStatusCache.current[uid] === true;
+      const account = accountsData?.[uid] || {};
+      const isBanned = account.banned === true;
       const rawOnline = presenceCache.current[uid] === true;
       list.push({
         uid,
@@ -123,56 +124,58 @@ const AdminPanel = () => {
     return sortUsers(list);
   };
 
-  // ─── Load users ──────────────────────────────────────────────
+  // ─── Load users efficiently ──────────────────────────────────
   const loadUsers = async (forceRefresh = false) => {
     console.log('🔄 [loadUsers] Loading users, forceRefresh:', forceRefresh);
     setUsersLoading(true);
+
     if (!forceRefresh) {
       try {
         const cached = await getAdminUserList();
         if (cached && cached.length > 0) {
           setUsers(sortUsers(cached));
           setFilteredUsers(sortUsers(cached));
-          console.log('✅ [loadUsers] Shell from cache, refreshing status…');
+          console.log('✅ [loadUsers] Shell from cache, refreshing ban status…');
         }
       } catch (_) {}
     }
+
     try {
-      const profilesSnap = await get(ref(db, 'profiles'));
-      if (profilesSnap.exists()) {
-        const data = profilesSnap.val();
-        const usersList = [];
-        for (const [uid, profile] of Object.entries(data)) {
-          const banStatus = await getUserBanStatus(uid);
-          let isOnline = false;
-          try {
-            const presenceSnap = await get(ref(db, `presence/online/${uid}`));
-            isOnline = presenceSnap.val() === true;
-          } catch (_) {}
-          const banned = banStatus.isBanned === true;
-          const online = !banned && isOnline;
-          usersList.push({
-            uid,
-            name: profile.name || 'Unknown',
-            email: profile.email || '',
-            avatar: profile.avatar || '',
-            mood: profile.mood || 'neutral',
-            isBanned: banned,
-            isOnline: online,
-          });
-          banStatusCache.current[uid] = banned;
-          presenceCache.current[uid] = isOnline;
-        }
-        const sorted = sortUsers(usersList);
-        setUsers(sorted);
-        setFilteredUsers(sorted);
-        await setAdminUserList(sortUsers(usersList));
-        console.log('✅ [loadUsers] Loaded from Firebase with ban status', usersList.map(u => ({ name: u.name, banned: u.isBanned })));
-      } else {
-        setUsers([]);
-        setFilteredUsers([]);
-        await setAdminUserList([]);
+      const [profilesSnap, accountsSnap] = await Promise.all([
+        get(ref(db, 'profiles')),
+        get(ref(db, 'accounts')),
+      ]);
+
+      const profilesData = profilesSnap.exists() ? profilesSnap.val() : {};
+      const accountsData = accountsSnap.exists() ? accountsSnap.val() : {};
+
+      const usersList = [];
+      for (const [uid, profile] of Object.entries(profilesData)) {
+        const account = accountsData[uid] || {};
+        const isBanned = account.banned === true;
+        let isOnline = false;
+        try {
+          const presenceSnap = await get(ref(db, `presence/online/${uid}`));
+          isOnline = presenceSnap.val() === true;
+        } catch (_) {}
+        usersList.push({
+          uid,
+          name: profile.name || 'Unknown',
+          email: profile.email || '',
+          avatar: profile.avatar || '',
+          mood: profile.mood || 'neutral',
+          isBanned,
+          isOnline: isOnline && !isBanned,
+        });
+        banStatusCache.current[uid] = isBanned;
+        presenceCache.current[uid] = isOnline;
       }
+
+      const sorted = sortUsers(usersList);
+      setUsers(sorted);
+      setFilteredUsers(sorted);
+      await setAdminUserList(sortUsers(usersList));
+      console.log('✅ [loadUsers] Loaded from Firebase with ban status');
     } catch (err) {
       console.error('❌ [loadUsers] Error:', err);
       showToast('Failed to load user list', 'error');
@@ -222,12 +225,26 @@ const AdminPanel = () => {
 
     const profilesRef = ref(db, 'profiles');
     const unsubProfiles = onValue(profilesRef, (snapshot) => {
-      const data = snapshot.val() || {};
-      const newUsers = buildUserList(data);
-      setUsers(newUsers);
-      setFilteredUsers(newUsers);
+      const profilesData = snapshot.val() || {};
+      const newUsers = [];
+      for (const [uid, profile] of Object.entries(profilesData)) {
+        const isBanned = banStatusCache.current[uid] === true;
+        const isOnline = presenceCache.current[uid] === true && !isBanned;
+        newUsers.push({
+          uid,
+          name: (profile.name && String(profile.name).trim()) || 'User',
+          email: profile.email || '',
+          avatar: profile.avatar || '',
+          mood: profile.mood || 'neutral',
+          isBanned,
+          isOnline,
+        });
+      }
+      const sorted = sortUsers(newUsers);
+      setUsers(sorted);
+      setFilteredUsers(sorted);
+      setAdminUserList(sorted).catch(() => {});
       setUsersLoading(false);
-      setAdminUserList(newUsers).catch(() => {});
     });
 
     const presenceRef = ref(db, 'presence/online');
@@ -472,7 +489,7 @@ const AdminPanel = () => {
     });
   };
 
-  // ─── Other bulk actions ──────────────────────────────────────
+  // ─── Bulk Force Logout ────────────────────────────────────────
   const handleBulkForceLogout = () => {
     const uids = getActiveTargetUids();
     if (uids.length === 0) return showToast('Select at least one user or enter a valid UID.', 'error');
@@ -503,65 +520,170 @@ const AdminPanel = () => {
     });
   };
 
+  // ─── Wipe Data ──────────────────────────────────────────────────
   const handleBulkWipeData = () => {
     const uids = getActiveTargetUids();
     if (uids.length === 0) return showToast('Select at least one user or enter a valid UID.', 'error');
     const names = getSelectedUserNames();
     const count = uids.length;
-    openConfirmModal({
-      title: `Wipe Data for ${count} User${count > 1 ? 's' : ''}`,
-      message: `Are you sure you want to permanently wipe ALL data for ${count} user${count > 1 ? 's' : ''}? This cannot be undone.\n\n${names}`,
-      confirmText: 'Wipe Data',
-      cancelText: 'Cancel',
-      showInput: false,
-      onConfirm: async () => {
-        setConfirmModal(prev => ({ ...prev, loading: true }));
-        try {
-          let success = 0, failed = 0;
-          for (const userUid of uids) {
-            try { await wipeUserData(userUid); success++; } catch (err) { failed++; }
-          }
-          showToast(`Wiped data for ${success} user${success > 1 ? 's' : ''}${failed > 0 ? `, ${failed} failed` : ''}`, 'success');
-          closeConfirmModal();
-          setSelectedUsers(new Set());
-          setSelectAll(false);
-          await loadUsers(true);
-        } catch (err) {
-          showToast(err.message, 'error');
-          setConfirmModal(prev => ({ ...prev, loading: false }));
-        }
-      },
-    });
-  };
 
-  const handleBulkDeleteAccounts = () => {
-    const uids = getActiveTargetUids();
-    if (uids.length === 0) return showToast('Select at least one user or enter a valid UID.', 'error');
-    const names = getSelectedUserNames();
-    const count = uids.length;
     openConfirmModal({
-      title: `Delete ${count} Account${count > 1 ? 's' : ''}`,
-      message: `Are you sure you want to permanently DELETE ${count} account${count > 1 ? 's' : ''}? This will delete all data and authentication accounts. This cannot be undone.\n\n${names}`,
-      confirmText: 'Delete Accounts',
+      title: `⚠️ Wipe ALL Data for ${count} User${count > 1 ? 's' : ''}`,
+      message: `
+  This will PERMANENTLY delete EVERYTHING for ${count} user${count > 1 ? 's' : ''}:
+
+  🔴 DELETE from Firebase Authentication (cannot be undone)
+  📁 DELETE all profile data (name, avatar, bio, mood, etc.)
+  💬 DELETE all chat messages (both sides)
+  👥 DELETE all chat history from other users' lists
+  🪙 DELETE all coins, skins, and purchases
+  📊 DELETE all login history and activity logs
+  📨 DELETE all admin notifications
+  🔊 DELETE all call history and live streams
+
+  ⚠️ This action is IRREVERSIBLE and CANNOT BE UNDONE!
+
+  Affected users:
+  ${names}
+
+  Type "WIPE ALL" to confirm.`,
+      confirmText: '🗑️ Wipe All Data',
       cancelText: 'Cancel',
-      showInput: false,
-      onConfirm: async () => {
+      showInput: true,
+      inputPlaceholder: 'Type "WIPE ALL" to confirm',
+      verificationText: 'WIPE ALL',
+      onConfirm: async (inputValue) => {
+        if (inputValue !== 'WIPE ALL') {
+          showToast('Please type "WIPE ALL" to confirm.', 'error');
+          return;
+        }
         setConfirmModal(prev => ({ ...prev, loading: true }));
+        let failedNodes = [];
         try {
           let success = 0, failed = 0;
-          for (const userUid of uids) {
-            try { await deleteUserAccount(userUid); success++; } catch (err) { failed++; }
+          for (const targetUid of uids) {
+            try {
+              // ─── 1. Delete from Firebase Authentication ────────
+              try {
+                const idToken = await user.getIdToken();
+                const response = await fetch('/api/admin/delete-user', {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${idToken}`,
+                  },
+                  body: JSON.stringify({ targetUid }),
+                });
+                if (!response.ok) {
+                  const errData = await response.json().catch(() => ({}));
+                  throw new Error(errData.error || `HTTP ${response.status}`);
+                }
+                console.log(`✅ [Wipe] Deleted auth account: ${targetUid}`);
+              } catch (authErr) {
+                console.warn(`⚠️ [Wipe] Auth deletion failed for ${targetUid}:`, authErr.message);
+                failedNodes.push(`Auth: ${authErr.message}`);
+              }
+
+              // ─── 2. Remove all database references ──────────────
+              const nodesToDelete = [
+                `profiles/${targetUid}`,
+                `userSkins/${targetUid}`,
+                `userChats/${targetUid}`,
+                `userDailyLogins/${targetUid}`,
+                `adminNotifications/${targetUid}`,
+                `calls/${targetUid}`,
+                `live/${targetUid}`,
+                `busy/${targetUid}`,
+                `peerIds/${targetUid}`,
+                `presence/online/${targetUid}`,
+                `userMemories/${targetUid}`,
+                `aiConversations/${targetUid}`,
+                `accounts/${targetUid}`,
+              ];
+
+              for (const path of nodesToDelete) {
+                try {
+                  await remove(ref(db, path));
+                  console.log(`✅ [Wipe] Deleted ${path}`);
+                } catch (err) {
+                  console.warn(`⚠️ [Wipe] Failed to delete ${path}:`, err.message);
+                  failedNodes.push(`${path}: ${err.message}`);
+                }
+              }
+
+              // ─── 3. Remove this user from ALL other users' chat lists ──
+              try {
+                const profilesSnap = await get(ref(db, 'profiles'));
+                const allUids = profilesSnap.exists() ? Object.keys(profilesSnap.val()) : [];
+                const updates = {};
+                for (const uid of allUids) {
+                  if (uid !== targetUid) {
+                    updates[`userChats/${uid}/${targetUid}`] = null;
+                    const chatId = [uid, targetUid].sort().join('_');
+                    updates[`chats/${chatId}`] = null;
+                  }
+                }
+                if (Object.keys(updates).length > 0) {
+                  await update(ref(db), updates);
+                  console.log(`✅ [Wipe] Removed user from other users' chat lists`);
+                }
+              } catch (err) {
+                console.warn('⚠️ [Wipe] Failed to remove from other users\' chats:', err.message);
+                failedNodes.push(`other chats: ${err.message}`);
+              }
+
+              // ─── 4. Remove from communities ──────────────────────
+              try {
+                const userCommunitiesRef = ref(db, `userCommunities/${targetUid}`);
+                const commSnap = await get(userCommunitiesRef);
+                if (commSnap.exists()) {
+                  const communities = commSnap.val();
+                  for (const [communityId] of Object.entries(communities)) {
+                    await remove(ref(db, `userCommunities/${targetUid}/${communityId}`));
+                    const countRef = ref(db, `communities/${communityId}/memberCount`);
+                    await runTransaction(countRef, (current) => {
+                      return Math.max(0, (current || 0) - 1);
+                    });
+                  }
+                  console.log(`✅ [Wipe] Removed user from communities`);
+                }
+              } catch (err) {
+                console.warn('⚠️ [Wipe] Failed to remove from communities:', err.message);
+                failedNodes.push(`communities: ${err.message}`);
+              }
+
+              success++;
+              console.log(`✅ [Wipe] Successfully wiped user: ${targetUid}`);
+            } catch (err) {
+              failed++;
+              console.error(`❌ [Wipe] Failed for ${targetUid}:`, err);
+            }
           }
-          showToast(`Deleted ${success} account${success > 1 ? 's' : ''}${failed > 0 ? `, ${failed} failed` : ''}`, 'success');
+
+          // Show summary including failed nodes (if any)
+          let summary = `Wiped ${success} user${success > 1 ? 's' : ''} completely`;
+          if (failed > 0) summary += `, ${failed} user${failed > 1 ? 's' : ''} failed`;
+          if (failedNodes.length > 0) {
+            summary += `\n\nSome nodes could not be deleted due to permission errors:\n${failedNodes.slice(0, 5).join('\n')}`;
+            if (failedNodes.length > 5) summary += `\nand ${failedNodes.length - 5} more.`;
+            summary += '\n\nThese are usually non-critical data (presence, memories, etc.).';
+          }
+          showToast(summary, success > 0 ? 'success' : 'error');
           closeConfirmModal();
           setSelectedUsers(new Set());
           setSelectAll(false);
           setUid('');
           await loadUsers(true);
         } catch (err) {
+          console.error('❌ [Wipe] Unexpected error:', err);
           showToast(err.message, 'error');
           setConfirmModal(prev => ({ ...prev, loading: false }));
+        } finally {
+          setConfirmModal(prev => ({ ...prev, loading: false }));
         }
+      },
+      onInputChange: (value) => {
+        setConfirmModal(prev => ({ ...prev, inputValue: value }));
       },
     });
   };
@@ -813,9 +935,6 @@ const AdminPanel = () => {
                 <button className="admin-danger" onClick={handleBulkWipeData} disabled={loading || activeCount === 0}>
                   <i className="fas fa-trash-alt" /> Wipe Data{activeCount > 1 ? ' All' : ''}
                 </button>
-                <button className="admin-danger" onClick={handleBulkDeleteAccounts} disabled={loading || activeCount === 0}>
-                  <i className="fas fa-user-minus" /> Delete{activeCount > 1 ? ' All' : ''}
-                </button>
                 <button
                   className={activeCount > 0 && getSelectedUsersList().every(u => u.isBanned) ? 'admin-success' : 'admin-danger'}
                   onClick={handleBulkToggleBan}
@@ -913,6 +1032,7 @@ const AdminPanel = () => {
           inputValue={confirmModal.inputValue}
           onInputChange={confirmModal.onInputChange}
           loading={confirmModal.loading}
+          verificationText={confirmModal.verificationText}
         />
       </div>
     </>

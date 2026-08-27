@@ -476,14 +476,6 @@ const Profile = () => {
       <div className="profile-page">
         <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleImageFile} />
 
-        {/* ─── Sticky Back Header ─────────────────────────────── */}
-        <div className="page-back-header">
-          <button className="page-back-btn" onClick={() => navigate('/other')}>
-            <i className="fas fa-arrow-left" /> Back
-          </button>
-          <span className="page-back-title">Profile</span>
-        </div>
-
         <div className="profile-card">
           <div
             className="profile-avatar"

@@ -1,70 +1,205 @@
-import React, { useEffect, useState } from 'react';
+// src/components/pages/Communities/Communities.jsx
+import React, { useEffect, useState, useMemo, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ref, onValue, get, set, push, runTransaction } from 'firebase/database';
+import { motion } from 'framer-motion';
+import { ref, onValue, set, runTransaction, push, get } from 'firebase/database';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import { db } from '../../../services/firebase';
 import { useAuth } from '../../../hooks/useAuth';
 import { useCommunity } from '../../../contexts/CommunityContext';
 import { getCommunityRules, RULES_PENALTY } from '../../../constants/communityRules';
+import { getCache, setCache } from '../../../services/cacheService';
 import './Communities.css';
 
-const CACHE_KEY = 'echo_communities_v1';
-const MEMBER_CACHE_KEY = 'echo_user_communities_v1';
+const FALLBACK_IMAGE = '/images/communities/default.png';
+const COMMUNITIES_CACHE_KEY = 'communities_list';
+const MEMBERSHIP_CACHE_KEY = 'user_memberships';
+const CACHE_TTL = 60; // 1 minute
 
-const getCommunityImage = (name) => {
-  const imageMap = {
-    General: '/images/communities/default.png',
-    Gaming: '/images/communities/gaming.png',
-    Movies: '/images/communities/movies.png',
-    Music: '/images/communities/music.png',
-    Technology: '/images/communities/tech.png',
-    Tech: '/images/communities/tech.png',
-    Art: '/images/communities/art.png',
-    'Book Club': '/images/communities/book.png',
-    Fitness: '/images/communities/fitness.png',
+const guessCategory = (name = '') => {
+  const n = name.toLowerCase();
+  if (n.includes('game')) return 'gaming';
+  if (n.includes('music')) return 'music';
+  if (n.includes('tech')) return 'tech';
+  if (n.includes('movie') || n.includes('film')) return 'movies';
+  if (n.includes('art')) return 'art';
+  if (n.includes('fit')) return 'fitness';
+  if (n.includes('book') || n.includes('read')) return 'books';
+  return 'general';
+};
+
+const guessIcon = (category) => {
+  const map = {
+    gaming: '🎮', music: '🎵', tech: '💻', movies: '🎬',
+    art: '🎨', fitness: '💪', books: '📚', general: '🌐'
   };
-  if (!name) return '/images/communities/default.png';
-  if (imageMap[name]) return imageMap[name];
-  const lower = String(name).toLowerCase();
-  for (const [key, value] of Object.entries(imageMap)) {
-    if (key.toLowerCase() === lower) return value;
-  }
-  if (lower.includes('tech')) return '/images/communities/tech.png';
-  if (lower.includes('game')) return '/images/communities/gaming.png';
-  if (lower.includes('music')) return '/images/communities/music.png';
-  if (lower.includes('movie') || lower.includes('film')) return '/images/communities/movies.png';
-  if (lower.includes('fit')) return '/images/communities/fitness.png';
-  if (lower.includes('art')) return '/images/communities/art.png';
-  if (lower.includes('book') || lower.includes('read')) return '/images/communities/book.png';
-  return '/images/communities/default.png';
+  return map[category] || '🌐';
 };
 
-const readCache = (key, fallback) => {
-  try {
-    const raw = localStorage.getItem(key);
-    return raw ? JSON.parse(raw) : fallback;
-  } catch {
-    return fallback;
-  }
-};
+// ─── Memoized Skeleton Card ────────────────────────────────────
+const SkeletonCard = memo(() => (
+  <div className="community-card skeleton">
+    <div className="skeleton-image" />
+    <div className="skeleton-body">
+      <div className="skeleton-line" style={{ width: '70%' }} />
+      <div className="skeleton-line" style={{ width: '90%' }} />
+      <div className="skeleton-line" style={{ width: '50%' }} />
+    </div>
+  </div>
+));
 
-const writeCache = (key, value) => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (_) {}
-};
+// ─── Memoized Community Card ────────────────────────────────────
+const CommunityCard = memo(({ community, isMember, isJoining, isLeaving, onJoin, onLeave, onOpen }) => {
+  const busy = isJoining || isLeaving;
 
+  return (
+    <motion.div
+      className="community-card"
+      whileHover="hover"
+      style={{
+        '--card-bg': community.bgColor || '#12121a',
+      }}
+    >
+      <div className="community-card-image">
+        <img
+          src={community.image}
+          alt={community.name}
+          loading="lazy"
+          onError={(e) => {
+            e.currentTarget.src = FALLBACK_IMAGE;
+          }}
+        />
+        <div className="community-card-overlay" />
+        {isMember && (
+          <span className="community-card-member">Member</span>
+        )}
+      </div>
+
+      <div className="community-card-body">
+        <h3>{community.name}</h3>
+        <p className="community-description">{community.description}</p>
+        <div className="community-card-meta">
+          <span className="community-member-count">
+            <i className="fas fa-users" />
+            {community.memberCount.toLocaleString()}
+          </span>
+        </div>
+
+        <div className="community-card-actions">
+          {isMember ? (
+            <>
+              <button
+                className="community-join-btn joined"
+                onClick={() => onOpen(community)}
+              >
+                <i className="fas fa-comment" /> Open
+              </button>
+              <button
+                className="community-leave-btn"
+                onClick={() => onLeave(community)}
+                disabled={busy}
+              >
+                {isLeaving ? (
+                  <i className="fas fa-spinner fa-spin" />
+                ) : (
+                  <i className="fas fa-sign-out-alt" />
+                )}
+                <span>Leave</span>
+              </button>
+            </>
+          ) : (
+            <button
+              className="community-join-btn"
+              onClick={() => onJoin(community)}
+              disabled={busy}
+            >
+              {isJoining ? (
+                <>
+                  <i className="fas fa-spinner fa-spin" /> Joining…
+                </>
+              ) : (
+                <>
+                  <i className="fas fa-plus" /> Join
+                </>
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    </motion.div>
+  );
+});
+
+// ─── Rules Modal ────────────────────────────────────────────────
+const RulesModal = memo(({ community, onAccept, onCancel, accepting }) => (
+  <div className="community-rules-overlay" role="dialog" aria-modal="true">
+    <div className="community-rules-modal">
+      <h2>Rules · {community.name}</h2>
+      <p className="community-rules-intro">Please read and accept these rules before joining.</p>
+      <ul className="community-rules-list">
+        {getCommunityRules(community.name).map((rule, i) => (
+          <li key={i}>{rule}</li>
+        ))}
+      </ul>
+      <p className="community-rules-penalty">{RULES_PENALTY}</p>
+      <div className="community-rules-actions">
+        <button
+          className="community-rules-cancel"
+          disabled={accepting}
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+        <button
+          className="community-rules-accept"
+          disabled={accepting}
+          onClick={onAccept}
+        >
+          {accepting ? 'Joining…' : 'I agree · Join'}
+        </button>
+      </div>
+    </div>
+  </div>
+));
+
+// ─── Leave Modal ────────────────────────────────────────────────
+const LeaveModal = memo(({ community, onLeave, onCancel, leaving }) => (
+  <div className="community-rules-overlay" role="dialog" aria-modal="true">
+    <div className="community-rules-modal">
+      <h2>Leave {community.name}?</h2>
+      <p className="community-rules-intro">
+        You can rejoin anytime. Your past messages will stay in the community.
+      </p>
+      <div className="community-rules-actions">
+        <button
+          className="community-rules-cancel"
+          disabled={leaving}
+          onClick={onCancel}
+        >
+          Cancel
+        </button>
+        <button
+          className="community-leave-confirm"
+          disabled={leaving}
+          onClick={onLeave}
+        >
+          {leaving ? 'Leaving…' : 'Leave community'}
+        </button>
+      </div>
+    </div>
+  </div>
+));
+
+// ─── Main Communities Component ────────────────────────────────
 const Communities = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { setCurrentCommunity } = useCommunity();
 
-  const [communities, setCommunities] = useState(() => readCache(CACHE_KEY, []));
-  const [userCommunities, setUserCommunities] = useState(() =>
-    user?.uid ? readCache(`${MEMBER_CACHE_KEY}_${user.uid}`, {}) : {}
-  );
-  const [loading, setLoading] = useState(() => !(readCache(CACHE_KEY, []).length));
+  const [communities, setCommunities] = useState([]);
+  const [userCommunities, setUserCommunities] = useState({});
+  const [loading, setLoading] = useState(true);
   const [joiningId, setJoiningId] = useState(null);
   const [leavingId, setLeavingId] = useState(null);
   const [error, setError] = useState('');
@@ -73,9 +208,10 @@ const Communities = () => {
   const [leaveModal, setLeaveModal] = useState(null);
   const [acceptingRules, setAcceptingRules] = useState(false);
 
+  // ─── Load user name ────────────────────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
-    (async () => {
+    const loadName = async () => {
       try {
         const snapshot = await get(ref(db, `profiles/${user.uid}`));
         const data = snapshot.exists() ? snapshot.val() : {};
@@ -83,70 +219,114 @@ const Communities = () => {
       } catch {
         setUserName(user.displayName || user.email?.split('@')[0] || 'User');
       }
-    })();
+    };
+    loadName();
   }, [user]);
 
+  // ─── Load communities with caching ────────────────────────────
   useEffect(() => {
-    const unsub = onValue(
-      ref(db, 'communities'),
-      (snapshot) => {
-        const data = snapshot.val() || {};
-        const list = Object.entries(data).map(([id, c]) => {
-          const mapped = getCommunityImage(c.name);
-          const raw = c.image || '';
-          const image =
-            !raw || String(raw).includes('default.png')
-              ? mapped
-              : raw.startsWith('http') || raw.startsWith('/')
-              ? raw
-              : mapped;
-          return {
-            id,
-            name: c.name || 'Unnamed Community',
-            description: c.description || '',
-            image: image || mapped,
-            tags: Array.isArray(c.tags) ? c.tags : Object.values(c.tags || {}),
-            memberCount: Number(c.memberCount || 0),
-            createdBy: c.createdBy || '',
-          };
-        });
-        list.sort((a, b) => a.name.localeCompare(b.name));
-        setCommunities(list);
-        writeCache(CACHE_KEY, list);
-        setLoading(false);
-      },
-      () => {
-        setError('Could not load communities.');
-        setLoading(false);
-      }
-    );
-    return () => unsub();
-  }, []);
+    let isMounted = true;
+    let communitiesUnsub = null;
+    let membershipUnsub = null;
 
-  useEffect(() => {
-    if (!user?.uid) {
-      setUserCommunities({});
-      return;
+    const loadData = async () => {
+      try {
+        // ─── Try cache first ──────────────────────────────────────
+        const cachedCommunities = await getCache(COMMUNITIES_CACHE_KEY);
+        if (cachedCommunities && cachedCommunities.length > 0) {
+          if (isMounted) {
+            setCommunities(cachedCommunities);
+            setLoading(false);
+          }
+        }
+
+        // ─── Listen to communities ────────────────────────────────
+        const communitiesRef = ref(db, 'communities');
+        communitiesUnsub = onValue(
+          communitiesRef,
+          (snapshot) => {
+            if (!isMounted) return;
+            const data = snapshot.val() || {};
+            const list = Object.entries(data).map(([id, c]) => {
+              const category = c.category || guessCategory(c.name);
+              return {
+                id,
+                name: c.name || 'Unnamed Community',
+                description: c.description || '',
+                image: c.image || FALLBACK_IMAGE,
+                memberCount: Number(c.memberCount || 0),
+                category,
+                icon: c.icon || guessIcon(category),
+                bgColor: c.bgColor || '#12121a',
+              };
+            });
+            list.sort((a, b) => a.name.localeCompare(b.name));
+            setCommunities(list);
+            setLoading(false);
+            // Cache the list
+            setCache(COMMUNITIES_CACHE_KEY, list, CACHE_TTL).catch(() => {});
+          },
+          () => {
+            if (isMounted) {
+              setError('Could not load communities.');
+              setLoading(false);
+            }
+          }
+        );
+
+        // ─── Listen to user memberships ────────────────────────────
+        if (user?.uid) {
+          const membershipRef = ref(db, `userCommunities/${user.uid}`);
+          membershipUnsub = onValue(membershipRef, (snap) => {
+            if (isMounted) {
+              const data = snap.val() || {};
+              setUserCommunities(data);
+              // Cache memberships
+              setCache(`${MEMBERSHIP_CACHE_KEY}_${user.uid}`, data, CACHE_TTL).catch(() => {});
+            }
+          });
+        } else {
+          setUserCommunities({});
+        }
+      } catch (err) {
+        console.warn('Communities load error:', err);
+        if (isMounted) {
+          setError('Failed to load communities.');
+          setLoading(false);
+        }
+      }
+    };
+
+    // ─── Try cached memberships ──────────────────────────────────
+    if (user?.uid) {
+      getCache(`${MEMBERSHIP_CACHE_KEY}_${user.uid}`).then((cached) => {
+        if (cached && isMounted) {
+          setUserCommunities(cached);
+        }
+      });
     }
-    const unsub = onValue(ref(db, `userCommunities/${user.uid}`), (snap) => {
-      const val = snap.val() || {};
-      setUserCommunities(val);
-      writeCache(`${MEMBER_CACHE_KEY}_${user.uid}`, val);
-    });
-    return () => unsub();
+
+    loadData();
+
+    return () => {
+      isMounted = false;
+      if (communitiesUnsub) communitiesUnsub();
+      if (membershipUnsub) membershipUnsub();
+    };
   }, [user?.uid]);
 
-  const openCommunity = (community) => {
+  // ─── Handlers ──────────────────────────────────────────────────
+  const openCommunity = useCallback((community) => {
     setCurrentCommunity({
       id: community.id,
       name: community.name,
       memberCount: community.memberCount,
       image: community.image,
     });
-    navigate(`/community/${community.id}`);
-  };
+    navigate(`/community/${community.id}/wall`);
+  }, [navigate, setCurrentCommunity]);
 
-  const handleJoin = async (community) => {
+  const handleJoin = useCallback(async (community) => {
     if (!user?.uid) {
       setError('Please sign in to join communities.');
       return;
@@ -158,6 +338,7 @@ const Communities = () => {
     }
     setJoiningId(community.id);
     setError('');
+
     try {
       await set(ref(db, `userCommunities/${user.uid}/${community.id}`), true);
       await runTransaction(ref(db, `communities/${community.id}/memberCount`), (n) =>
@@ -172,7 +353,7 @@ const Communities = () => {
       });
       setUserCommunities((p) => ({ ...p, [community.id]: true }));
       setCurrentCommunity({ ...community, memberCount: community.memberCount + 1 });
-      navigate(`/community/${community.id}`);
+      navigate(`/community/${community.id}/wall`);
     } catch (err) {
       try {
         await set(ref(db, `userCommunities/${user.uid}/${community.id}`), null);
@@ -181,14 +362,14 @@ const Communities = () => {
     } finally {
       setJoiningId(null);
     }
-  };
+  }, [user, joiningId, leavingId, userCommunities, userName, navigate, setCurrentCommunity, openCommunity]);
 
-  const handleLeave = async (community) => {
+  const handleLeave = useCallback(async (community) => {
     if (!user?.uid || !userCommunities[community.id]) return;
     setLeavingId(community.id);
     setError('');
+
     try {
-      // 1️⃣ Write system message FIRST (while still a member)
       await push(ref(db, `communityChats/${community.id}/messages`), {
         senderId: 'system',
         type: 'system',
@@ -196,16 +377,11 @@ const Communities = () => {
         timestamp: Date.now(),
         system: true,
       });
-
-      // 2️⃣ Remove membership
       await set(ref(db, `userCommunities/${user.uid}/${community.id}`), null);
-
-      // 3️⃣ Decrement memberCount
       await runTransaction(ref(db, `communities/${community.id}/memberCount`), (n) =>
         Math.max(0, (Number(n) || 0) - 1)
       );
-
-      setUserCommunities((p) => {c
+      setUserCommunities((p) => {
         const next = { ...p };
         delete next[community.id];
         return next;
@@ -216,42 +392,47 @@ const Communities = () => {
       setLeavingId(null);
       setLeaveModal(null);
     }
-  };
+  }, [user, userCommunities, userName]);
+
+  // ─── Render ────────────────────────────────────────────────────
+  if (loading && communities.length === 0) {
+    return (
+      <div className="communities-page">
+        <div className="communities-header">
+          <h1>🌍 Communities</h1>
+          <p>Loading realms…</p>
+        </div>
+        <div className="communities-grid skeleton-grid">
+          {[1, 2, 3, 4, 5, 6].map((i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <>
-      <SEO title="Communities" description="Join communities on ECHO." />
+      <SEO title="ECHO – Communities" description="Explore communities on ECHO." />
       <StructuredData />
+
       <div className="communities-page">
         <div className="communities-header">
-          <h1>🌟 Communities</h1>
-          <p>Find your people and connect over what you love.</p>
+          <h1>🌍 Communities</h1>
+          <p>Find your people. Explore realms.</p>
         </div>
 
         {error && (
           <div className="communities-error">
             <i className="fas fa-exclamation-circle" />
             <span>{error}</span>
-            <button type="button" className="communities-error-dismiss" onClick={() => setError('')}>
+            <button className="communities-error-dismiss" onClick={() => setError('')}>
               ✕
             </button>
           </div>
         )}
 
-        {loading && communities.length === 0 ? (
-          <div className="communities-grid communities-skeleton">
-            {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
-              <div className="community-card skeleton" key={i}>
-                <div className="community-card-image skeleton-image" />
-                <div className="community-card-body">
-                  <div className="skeleton-title" />
-                  <div className="skeleton-text" />
-                  <div className="skeleton-meta" />
-                </div>
-              </div>
-            ))}
-          </div>
-        ) : communities.length === 0 ? (
+        {communities.length === 0 ? (
           <div className="communities-empty">
             <i className="fas fa-users" />
             <h2>No communities yet</h2>
@@ -259,161 +440,51 @@ const Communities = () => {
           </div>
         ) : (
           <div className="communities-grid">
-            {communities.map((community, index) => {
+            {communities.map((community) => {
               const isMember = userCommunities[community.id] === true;
               const isJoining = joiningId === community.id;
               const isLeaving = leavingId === community.id;
-              const busy = isJoining || isLeaving;
 
               return (
-                <div
-                  className="community-card"
+                <CommunityCard
                   key={community.id}
-                  style={{ animationDelay: `${index * 60}ms` }}
-                >
-                  <div className="community-card-image">
-                    <img
-                      src={community.image}
-                      alt={community.name}
-                      onError={(e) => {
-                        e.currentTarget.src = getCommunityImage(community.name);
-                      }}
-                    />
-                    {isMember && (
-                      <div className="community-member-badge">
-                        <i className="fas fa-check" /> Member
-                      </div>
-                    )}
-                  </div>
-                  <div className="community-card-body">
-                    <h3>{community.name}</h3>
-                    <p className="community-description">{community.description}</p>
-                    <div className="community-meta">
-                      <span className="community-member-count">
-                        <i className="fas fa-users" />
-                        {community.memberCount.toLocaleString()} member
-                        {community.memberCount === 1 ? '' : 's'}
-                      </span>
-                    </div>
-                    <div className="community-btn-row">
-                      <button
-                        type="button"
-                        className={`community-join-btn ${isMember ? 'joined' : ''}`}
-                        disabled={busy}
-                        onClick={() => {
-                          if (isMember) openCommunity(community);
-                          else setRulesModal({ community });
-                        }}
-                      >
-                        {isJoining ? (
-                          <>
-                            <i className="fas fa-spinner fa-spin" /> Joining…
-                          </>
-                        ) : isMember ? (
-                          <>
-                            <i className="fas fa-comment" /> Open Chat
-                          </>
-                        ) : (
-                          <>
-                            <i className="fas fa-plus" /> Join Community
-                          </>
-                        )}
-                      </button>
-                      {isMember && (
-                        <button
-                          type="button"
-                          className="community-leave-btn"
-                          disabled={busy}
-                          onClick={() => setLeaveModal({ community })}
-                        >
-                          {isLeaving ? (
-                            <>
-                              <i className="fas fa-spinner fa-spin" /> Leaving…
-                            </>
-                          ) : (
-                            <>
-                              <i className="fas fa-sign-out-alt" />
-                              <span className="leave-text">Leave</span>
-                            </>
-                          )}
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                </div>
+                  community={community}
+                  isMember={isMember}
+                  isJoining={isJoining}
+                  isLeaving={isLeaving}
+                  onJoin={() => setRulesModal({ community })}
+                  onLeave={() => setLeaveModal({ community })}
+                  onOpen={openCommunity}
+                />
               );
             })}
           </div>
         )}
 
         {rulesModal && (
-          <div className="community-rules-overlay" role="dialog" aria-modal="true">
-            <div className="community-rules-modal">
-              <h2>Rules · {rulesModal.community.name}</h2>
-              <p className="community-rules-intro">Please read and accept these rules before joining.</p>
-              <ul className="community-rules-list">
-                {getCommunityRules(rulesModal.community.name).map((rule, i) => (
-                  <li key={i}>{rule}</li>
-                ))}
-              </ul>
-              <p className="community-rules-penalty">{RULES_PENALTY}</p>
-              <div className="community-rules-actions">
-                <button
-                  type="button"
-                  className="community-rules-cancel"
-                  disabled={acceptingRules}
-                  onClick={() => setRulesModal(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="community-rules-accept"
-                  disabled={acceptingRules}
-                  onClick={async () => {
-                    setAcceptingRules(true);
-                    try {
-                      await handleJoin(rulesModal.community);
-                      setRulesModal(null);
-                    } finally {
-                      setAcceptingRules(false);
-                    }
-                  }}
-                >
-                  {acceptingRules ? 'Joining…' : 'I agree · Join'}
-                </button>
-              </div>
-            </div>
-          </div>
+          <RulesModal
+            community={rulesModal.community}
+            accepting={acceptingRules}
+            onAccept={async () => {
+              setAcceptingRules(true);
+              try {
+                await handleJoin(rulesModal.community);
+                setRulesModal(null);
+              } finally {
+                setAcceptingRules(false);
+              }
+            }}
+            onCancel={() => setRulesModal(null)}
+          />
         )}
 
         {leaveModal && (
-          <div className="community-rules-overlay" role="dialog" aria-modal="true">
-            <div className="community-rules-modal">
-              <h2>Leave {leaveModal.community.name}?</h2>
-              <p className="community-rules-intro">
-                You can rejoin anytime. Your past messages will stay in the community.
-              </p>
-              <div className="community-rules-actions">
-                <button
-                  type="button"
-                  className="community-rules-cancel"
-                  disabled={!!leavingId}
-                  onClick={() => setLeaveModal(null)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="community-leave-confirm"
-                  disabled={!!leavingId}
-                  onClick={() => handleLeave(leaveModal.community)}
-                >
-                  {leavingId ? 'Leaving…' : 'Leave community'}
-                </button>
-              </div>
-            </div>
-          </div>
+          <LeaveModal
+            community={leaveModal.community}
+            leaving={!!leavingId}
+            onLeave={() => handleLeave(leaveModal.community)}
+            onCancel={() => setLeaveModal(null)}
+          />
         )}
       </div>
     </>

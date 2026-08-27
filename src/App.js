@@ -432,6 +432,8 @@ function AppContent() {
           <Route path="/community/:communityId" element={<CommunityChat />} />
           <Route path="/shop" element={<Shop />} />
           <Route path="*" element={<Navigate to="/" />} />
+          <Route path="/community/:communityId" element={<CommunityChat />} />
+          <Route path="/community/:communityId/:tab" element={<CommunityChat />} />
         </Routes>
       </div>
       <BottomNav />

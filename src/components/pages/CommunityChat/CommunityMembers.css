@@ -1,0 +1,134 @@
+/* src/components/pages/CommunityChat/CommunityMembers.css */
+.community-members-container {
+  padding: 16px 16px 100px; /* added bottom padding to clear bottom nav */
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.members-header {
+  margin-bottom: 8px;
+}
+.members-title {
+  font-weight: 700;
+  font-size: 18px;
+}
+
+.members-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex: 1;
+}
+
+.members-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  transition: background 0.15s;
+}
+.members-item:hover {
+  background: var(--bg-input);
+}
+
+.members-info {
+  flex: 1;
+  min-width: 0;
+}
+.members-name-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.members-name {
+  font-weight: 700;
+  font-size: 18px;
+  color: var(--text-primary);
+}
+.members-you {
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+.members-status {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.members-status.online {
+  color: #4ade80;
+}
+.members-status.offline {
+  color: #6B7280;
+}
+.members-bio {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.members-chat-btn {
+  flex-shrink: 0;
+  border: none;
+  border-radius: 30px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: transform 0.15s;
+}
+.members-chat-btn:hover {
+  transform: scale(1.04);
+}
+
+.members-empty {
+  text-align: center;
+  color: var(--text-muted);
+  padding: 40px 0;
+}
+.members-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  color: var(--text-muted);
+}
+
+@media (max-width: 480px) {
+  .members-item {
+    padding: 12px;
+    gap: 12px;
+  }
+  .members-name {
+    font-size: 16px;
+  }
+  .members-status {
+    font-size: 12px;
+  }
+  .members-bio {
+    font-size: 13px;
+  }
+  .members-chat-btn {
+    font-size: 12px;
+    padding: 6px 12px;
+  }
+  .members-chat-btn i {
+    display: none;
+  }
+}

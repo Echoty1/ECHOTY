@@ -17,10 +17,10 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 const DEMO_AVATAR = 'https://echoty.xyz/videos/library/Animation Smile GIF.gif';
 
-const isLocalhost =
-  typeof window !== 'undefined' &&
-  (window.location.hostname === 'localhost' ||
-    window.location.hostname === '127.0.0.1');
+// ─── Native app detection (Capacitor) ────────────────────────────
+const isNativeApp = () => {
+  return typeof window !== 'undefined' && window.hasOwnProperty('Capacitor') && window.Capacitor.isNative;
+};
 
 const Login = () => {
   const [email, setEmail] = useState('');
@@ -28,7 +28,9 @@ const Login = () => {
   const [isSignup, setIsSignup] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [isRedirecting, setIsRedirecting] = useState(false);
 
+  // ─── Handle redirect result on every mount ──────────────────
   useEffect(() => {
     let cancelled = false;
     setBusy(true);
@@ -36,40 +38,64 @@ const Login = () => {
       .then((result) => {
         if (cancelled) return;
         if (result?.user) {
-          console.log('Google redirect sign-in OK', result.user.uid);
+          console.log('✅ Google redirect sign-in OK', result.user.uid);
+          // User is signed in; the app will navigate to Home via AuthContext.
+        } else {
+          // No redirect result – user is not signed in yet.
         }
       })
       .catch((err) => {
-        console.error('Redirect sign-in error:', err);
-        if (!cancelled) setError(err.message || 'Google sign-in failed');
+        console.error('❌ Redirect sign-in error:', err);
+        if (!cancelled) {
+          // If the error is because there's no redirect result, ignore it.
+          // But if it's a real error (like missing state), show it.
+          if (err.code !== 'auth/no-redirect-result') {
+            setError(err.message || 'Google sign-in failed');
+          }
+        }
       })
       .finally(() => {
-        if (!cancelled) setBusy(false);
+        if (!cancelled) {
+          setBusy(false);
+          setIsRedirecting(false);
+        }
       });
+
     return () => {
       cancelled = true;
     };
   }, []);
 
+  // ─── Google sign-in ─────────────────────────────────────────────
   const handleGoogle = async () => {
     setError('');
     setBusy(true);
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
+
     try {
-      if (isLocalhost) {
-        // Popup works on localhost; redirect does not (init.json 404)
-        await signInWithPopup(auth, provider);
-      } else {
+      if (isNativeApp()) {
+        // On native (Android), use redirect.
+        setIsRedirecting(true);
         await signInWithRedirect(auth, provider);
+        // The page will redirect; no need to setBusy(false) here.
+        // The `getRedirectResult` will handle the return.
+        return;
+      } else {
+        // Web: use popup (works on localhost and production).
+        await signInWithPopup(auth, provider);
+        // After popup, user is signed in.
+        setBusy(false);
       }
     } catch (err) {
       console.error(err);
       setError(err.message || 'Google sign-in failed');
       setBusy(false);
+      setIsRedirecting(false);
     }
   };
 
+  // ─── Email/password sign-up/login ──────────────────────────────
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -86,6 +112,7 @@ const Login = () => {
     }
   };
 
+  // ─── Demo login ──────────────────────────────────────────────────
   const handleDemoLogin = async () => {
     setError('');
     setBusy(true);
@@ -133,6 +160,7 @@ const Login = () => {
     }
   };
 
+  // ─── Render ──────────────────────────────────────────────────────
   return (
     <div
       style={{
@@ -189,9 +217,40 @@ const Login = () => {
           </div>
         )}
 
+        {/* ─── Loading overlay during redirect ───────────────────── */}
+        {isRedirecting && (
+          <div
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.7)',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+            }}
+          >
+            <div
+              style={{
+                width: 40,
+                height: 40,
+                border: '3px solid rgba(255,255,255,0.2)',
+                borderTopColor: '#6C3CE1',
+                borderRadius: '50%',
+                animation: 'spin 0.8s linear infinite',
+              }}
+            />
+            <p style={{ color: '#fff', marginTop: 16 }}>Signing in…</p>
+          </div>
+        )}
+
         <button
           onClick={handleDemoLogin}
-          disabled={busy}
+          disabled={busy || isRedirecting}
           style={{
             width: '100%',
             padding: '12px',
@@ -201,9 +260,9 @@ const Login = () => {
             color: '#fff',
             fontSize: '16px',
             fontWeight: 600,
-            cursor: busy ? 'not-allowed' : 'pointer',
+            cursor: busy || isRedirecting ? 'not-allowed' : 'pointer',
             marginBottom: '16px',
-            opacity: busy ? 0.7 : 1,
+            opacity: busy || isRedirecting ? 0.7 : 1,
           }}
         >
           {busy ? 'Please wait…' : '🚀 Try Demo'}
@@ -217,7 +276,7 @@ const Login = () => {
 
         <button
           onClick={handleGoogle}
-          disabled={busy}
+          disabled={busy || isRedirecting}
           style={{
             width: '100%',
             padding: '12px',
@@ -231,8 +290,8 @@ const Login = () => {
             alignItems: 'center',
             justifyContent: 'center',
             gap: '12px',
-            cursor: busy ? 'not-allowed' : 'pointer',
-            opacity: busy ? 0.7 : 1,
+            cursor: busy || isRedirecting ? 'not-allowed' : 'pointer',
+            opacity: busy || isRedirecting ? 0.7 : 1,
           }}
         >
           <svg viewBox="0 0 48 48" width="20" height="20">
@@ -256,7 +315,7 @@ const Login = () => {
             placeholder="Email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            disabled={busy}
+            disabled={busy || isRedirecting}
             style={{
               width: '100%',
               padding: '12px 16px',
@@ -277,7 +336,7 @@ const Login = () => {
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            disabled={busy}
+            disabled={busy || isRedirecting}
             style={{
               width: '100%',
               padding: '12px 16px',
@@ -295,7 +354,7 @@ const Login = () => {
           />
           <button
             type="submit"
-            disabled={busy}
+            disabled={busy || isRedirecting}
             style={{
               width: '100%',
               padding: '12px',
@@ -305,8 +364,8 @@ const Login = () => {
               color: 'white',
               fontSize: '16px',
               fontWeight: 600,
-              cursor: busy ? 'not-allowed' : 'pointer',
-              opacity: busy ? 0.7 : 1,
+              cursor: busy || isRedirecting ? 'not-allowed' : 'pointer',
+              opacity: busy || isRedirecting ? 0.7 : 1,
             }}
           >
             {busy ? 'Please wait…' : isSignup ? 'Sign Up' : 'Login'}
@@ -315,11 +374,20 @@ const Login = () => {
 
         <p style={{ textAlign: 'center', marginTop: '16px', color: 'var(--text-secondary)', fontSize: '14px' }}>
           {isSignup ? 'Already have an account? ' : 'No account? '}
-          <span style={{ color: '#8B5CF6', cursor: 'pointer' }} onClick={() => !busy && setIsSignup(!isSignup)}>
+          <span
+            style={{ color: '#8B5CF6', cursor: 'pointer' }}
+            onClick={() => !busy && !isRedirecting && setIsSignup(!isSignup)}
+          >
             {isSignup ? 'Login' : 'Sign up'}
           </span>
         </p>
       </div>
+
+      <style>{`
+        @keyframes spin {
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };

@@ -22,7 +22,16 @@ const NotificationModal = ({ isOpen, onClose, title, body, timestamp }) => {
           <i className="fas fa-times" />
         </button>
         <div className="notif-modal-title">{title}</div>
-        <div className="notif-modal-body">{body}</div>
+        <div 
+          className="notif-modal-body" 
+          style={{ 
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
+            lineHeight: '1.6',
+          }}
+        >
+          {body}
+        </div>
         {timestamp && (
           <div className="notif-modal-time">
             <i className="far fa-clock" /> {formattedDate}
@@ -84,6 +93,7 @@ const NotificationModal = ({ isOpen, onClose, title, body, timestamp }) => {
           line-height: 1.6;
           margin-bottom: 16px;
           word-break: break-word;
+          white-space: pre-wrap;
         }
         .notif-modal-time {
           font-size: 12px;

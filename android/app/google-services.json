@@ -15,6 +15,22 @@
       },
       "oauth_client": [
         {
+          "client_id": "506340369217-c0hjjolqe1o0aloqs1p3h9up19j57ff5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.echoty.app",
+            "certificate_hash": "ac047e74e8a3e37ead893c9ee2716ed375c3e8ac"
+          }
+        },
+        {
+          "client_id": "506340369217-e97t4cusf1bp8qtuqji90hj9u1fs6sg2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.echoty.app",
+            "certificate_hash": "384a86a73f6e28775922239e97639fe81ae2bf7c"
+          }
+        },
+        {
           "client_id": "506340369217-pqibe643qj110b2irc6m7vfp5fmt16he.apps.googleusercontent.com",
           "client_type": 3
         }

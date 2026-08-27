@@ -5,9 +5,10 @@ import { getCache, setCache, getProfile as getCachedProfile } from './cacheServi
 import { getKeys, removeItem } from './storageService';
 
 const SEARCH_TIMEOUT = 3000;
-const SEARCH_CACHE_TTL = 5 * 60; // 5 minutes
+const SEARCH_CACHE_TTL = 60; // 1 minute (was 5 minutes)
 
 let fullIndexCache = null;
+let fullIndexCacheTimestamp = 0;
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
@@ -19,9 +20,15 @@ export const prefetchProfilesIndex = async (currentUserId) => {
   }
 
   try {
+    // Check if we have a fresh enough cache (less than 60 seconds old)
+    if (fullIndexCache && Date.now() - fullIndexCacheTimestamp < SEARCH_CACHE_TTL * 1000) {
+      return;
+    }
+
     const cached = await getCache('search_full_index');
-    if (cached) {
-      fullIndexCache = cached;
+    if (cached && Date.now() - cached.timestamp < SEARCH_CACHE_TTL * 1000) {
+      fullIndexCache = cached.data;
+      fullIndexCacheTimestamp = cached.timestamp;
       return;
     }
 
@@ -51,7 +58,8 @@ export const prefetchProfilesIndex = async (currentUserId) => {
         .filter((p) => p.id !== currentUserId);
 
       fullIndexCache = parsed;
-      await setCache('search_full_index', parsed, SEARCH_CACHE_TTL);
+      fullIndexCacheTimestamp = Date.now();
+      await setCache('search_full_index', { data: parsed, timestamp: Date.now() }, SEARCH_CACHE_TTL);
     }
   } catch (err) {
     console.warn('⚡ Fast prefetch skipped or offline:', err.message);
@@ -85,7 +93,6 @@ export const searchProfiles = async (
       const supportName = (supportProfile.name || '').toLowerCase();
       const supportUsername = (supportProfile.username || '').toLowerCase();
       const supportSearchName = (supportProfile.searchName || '').toLowerCase();
-      // Check if query matches support's name or username
       if (supportName.includes(trimmed) || supportUsername.includes(trimmed) || supportSearchName.includes(trimmed)) {
         return {
           results: [{ id: SUPPORT_UID, ...supportProfile, name: supportProfile.name || 'ECHO Support' }],
@@ -93,7 +100,6 @@ export const searchProfiles = async (
           hasMore: false,
         };
       } else {
-        // No match: return empty (UI will show custom message)
         return { results: [], total: 0, hasMore: false };
       }
     }
@@ -210,6 +216,8 @@ export const clearSearchCache = async () => {
         await removeItem(key);
       }
     }
+    fullIndexCache = null;
+    fullIndexCacheTimestamp = 0;
   } catch (error) {
     console.error('Clear search cache error:', error);
   }
