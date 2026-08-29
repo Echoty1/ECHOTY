@@ -27,7 +27,6 @@ export const AuthProvider = ({ children }) => {
         return;
       }
       await set(userLoginRef, true);
-      // Also update the profile's lastLoginDate for consistency
       await update(ref(db, `profiles/${uid}`), { lastLoginDate: today });
       console.log(`✅ Daily login marked for ${uid} (${today})`);
     } catch (err) {
@@ -60,7 +59,6 @@ export const AuthProvider = ({ children }) => {
           const uid = firebaseUser.uid;
           console.log('👤 User authenticated:', uid);
 
-          setLoading(false);
           presenceCleanupRef.current = initPresence(uid);
 
           const baseUser = {
@@ -131,8 +129,8 @@ export const AuthProvider = ({ children }) => {
                   photoURL: firebaseUser.photoURL || profileData.avatar || '',
                 }));
 
-                // ✅ Count this login if not already counted today
                 await updateDailyLogin(uid);
+                setLoading(false);
 
               } else {
                 // Profile does not exist – create one
@@ -178,11 +176,14 @@ export const AuthProvider = ({ children }) => {
                   console.log('✅ New profile created and daily login counted for:', uid);
                 } catch (err) {
                   console.warn('Error creating profile or auxiliary nodes:', err);
+                } finally {
+                  setLoading(false);
                 }
               }
             },
             (error) => {
               console.error('❌ Profile listener error for', uid, error);
+              setLoading(false);
             }
           );
           profileUnsubRef.current = unsubscribeProfile;

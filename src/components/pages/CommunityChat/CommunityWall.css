@@ -544,3 +544,22 @@
     gap: 4px;
   }
 }
+
+@media (min-width: 900px) {
+  .community-wall-container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 20px 16px 32px;
+    width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .community-wall-container {
+    padding: 10px 10px 24px;
+    gap: 12px;
+  }
+  .wall-feed-title {
+    font-size: 16px;
+  }
+}

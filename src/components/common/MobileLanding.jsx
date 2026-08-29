@@ -8,7 +8,7 @@ const MobileLanding = ({ onContinueToWeb }) => {
   const handleDownload = () => {
     if (isAndroid) {
       // Replace with your actual Play Store link or APK URL
-      window.open('https://play.google.com/store/apps/details?id=com.yourcompany.echo', '_blank');
+      window.open('https://play.google.com/store/apps/details?id=com.echoty.app', '_blank', 'noopener,noreferrer');
     } else if (isIOS) {
       // For iOS, you might link to App Store or show instructions
       alert('📱 Add ECHO to your Home Screen:\n\nTap the Share button and select "Add to Home Screen".');

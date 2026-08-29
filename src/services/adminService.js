@@ -1,6 +1,6 @@
 // src/services/adminService.js
 import { db } from './firebase';
-import { ref, get, set, remove } from 'firebase/database';
+import { ref, get, set, remove, update } from 'firebase/database';
 
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 
@@ -54,26 +54,7 @@ const clearPresence = async (uid) => {
 };
 
 export const wipeUserData = async (uid) => {
-  if (!uid) throw new Error('UID is required');
-
-  // Force logout first
-  await set(ref(db, `accounts/${uid}/forceLogout`), true).catch(() => {});
-  await clearPresence(uid);
-
-  const paths = [
-    `profiles/${uid}`,
-    `userSkins/${uid}`,
-    `userChats/${uid}`,
-    `userDailyLogins/${uid}`,
-    `adminNotifications/${uid}`,
-    `calls/${uid}`,
-  ];
-  const results = await Promise.allSettled(paths.map((p) => remove(ref(db, p))));
-  const failed = results.filter((r) => r.status === 'rejected');
-  if (failed.length) {
-    console.warn('[wipeUserData] some paths failed (check Firebase rules):', failed);
-  }
-  return true;
+  return purgeUserCompletely(uid);
 };
 
 export const forceLogoutUser = async (uid) => {
@@ -161,4 +142,70 @@ export const cleanPresenceGhosts = async () => {
     }
   }
   return removed;
+};
+
+export const purgeUserCompletely = async (uid) => {
+  if (!uid) throw new Error('UID is required');
+
+  await set(ref(db, `accounts/${uid}/forceLogout`), true).catch(() => {});
+  await clearPresence(uid).catch(() => {});
+
+  const directPaths = [
+    `profiles/${uid}`,
+    `userSkins/${uid}`,
+    `userChats/${uid}`,
+    `userDailyLogins/${uid}`,
+    `adminNotifications/${uid}`,
+    `notifications/${uid}`,
+    `calls/${uid}`,
+    `live/${uid}`,
+    `liveChat/${uid}`,
+    `busy/${uid}`,
+    `peerIds/${uid}`,
+    `presence/online/${uid}`,
+    `userMemories/${uid}`,
+    `aiConversations/${uid}`,
+    `channelMemberships/${uid}`,
+    `userCommunities/${uid}`,
+    `accounts/${uid}`,
+  ];
+  for (const path of directPaths) {
+    await remove(ref(db, path)).catch(() => {});
+  }
+
+  const updates = {};
+
+  const profilesSnap = await get(ref(db, 'profiles')).catch(() => null);
+  const allUids = profilesSnap?.exists() ? Object.keys(profilesSnap.val()) : [];
+  for (const other of allUids) {
+    if (other === uid) continue;
+    updates[`userChats/${other}/${uid}`] = null;
+    updates[`chats/${[other, uid].sort().join('_')}`] = null;
+  }
+
+  const communitiesSnap = await get(ref(db, 'communities')).catch(() => null);
+  if (communitiesSnap?.exists()) {
+    const communities = communitiesSnap.val() || {};
+    for (const [cid, community] of Object.entries(communities)) {
+      if (community?.members && community.members[uid]) {
+        updates[`communities/${cid}/members/${uid}`] = null;
+        const count = Number(community.memberCount || 0);
+        updates[`communities/${cid}/memberCount`] = Math.max(0, count - 1);
+      }
+      if (community?.createdBy === uid) {
+        updates[`communities/${cid}/createdBy`] = 'removed';
+      }
+    }
+  }
+
+  const userComms = await get(ref(db, `userCommunities/${uid}`)).catch(() => null);
+  // already removed node, but other indexes
+  const memberships = await get(ref(db, 'userCommunities')).catch(() => null);
+  // skip
+
+  if (Object.keys(updates).length) {
+    await update(ref(db), updates);
+  }
+
+  return true;
 };

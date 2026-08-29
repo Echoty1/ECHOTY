@@ -116,6 +116,10 @@ const ChatView = () => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loadingMessages, setLoadingMessages] = useState(true);
+  useEffect(() => {
+    const t = setTimeout(() => setLoadingMessages(false), 1200);
+    return () => clearTimeout(t);
+  }, []);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isAILoading, setIsAILoading] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
@@ -175,6 +179,7 @@ const ChatView = () => {
   const focusedField = useRef('main');
   const moreOptionsRef = useRef(null);
   const messageRefs = useRef({});
+  const clearedAtRef = useRef(0);
 
   const closeConfirmModal = () => setConfirmModal((prev) => ({ ...prev, isOpen: false }));
   const openConfirmModal = (config) => setConfirmModal({ isOpen: true, ...config });
@@ -1368,6 +1373,22 @@ const ChatView = () => {
     );
   };
 
+  useEffect(() => {
+    clearedAtRef.current = clearedAt || 0;
+  }, [clearedAt]);
+
+  useEffect(() => {
+    return () => {
+      (messages || []).forEach((m) => {
+        if (typeof m?.mediaUrl === 'string' && m.mediaUrl.startsWith('blob:')) {
+          try { URL.revokeObjectURL(m.mediaUrl); } catch (_) {}
+        }
+      });
+    };
+    // Only revoke when leaving this conversation
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
+
   // ─── UseEffect: clear unread ──────────────────────────────────
   useEffect(() => {
     if (!user?.uid || !userId) return;
@@ -1394,7 +1415,7 @@ const ChatView = () => {
 
     loadMessagesFromCache(cId).then((cachedMessages) => {
       if (isMounted.current && cachedMessages.length > 0) {
-        const cut = clearedAt || 0;
+        const cut = clearedAtRef.current || 0;
         const visible = cut
           ? cachedMessages.filter((m) => {
               const ts = typeof m.timestamp === 'number' ? m.timestamp : 0;
@@ -1423,7 +1444,7 @@ const ChatView = () => {
             Object.entries(data).map(([id, val]) => ({ id, ...val }))
           );
         }
-        const cut = clearedAt || 0;
+        const cut = clearedAtRef.current || 0;
         let visible = cut
           ? newMessages.filter((m) => {
               if (m.pending) return true;
@@ -1647,12 +1668,24 @@ const ChatView = () => {
     }
     const clearedRef = ref(db, `userChats/${user.uid}/${userId}/clearedAt`);
     const unsub = onValue(clearedRef, (snap) => {
-      const val = snap.val();
-      setClearedAt(typeof val === 'number' ? val : 0);
+      const val = typeof snap.val() === 'number' ? snap.val() : 0;
+      clearedAtRef.current = val;
+      setClearedAt(val);
+      if (val) {
+        setMessages((prev) =>
+          prev.filter((m) => {
+            if (m.pending) return true;
+            const ts = typeof m.timestamp === 'number' ? m.timestamp : 0;
+            return !ts || ts >= val;
+          })
+        );
+      }
     });
     const onLocalClear = (e) => {
       if (e.detail?.partnerId === userId) {
-        setClearedAt(Date.now());
+        const now = Date.now();
+        clearedAtRef.current = now;
+        setClearedAt(now);
         setMessages([]);
       }
     };
@@ -1680,7 +1713,7 @@ const ChatView = () => {
           )}
 
           <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll}>
-            {(loadingMessages || !initialScrollRef.current) && messages.length === 0 ? (
+            {loadingMessages && messages.length === 0 ? (
               <div className="chat-skeleton-list">
                 <SkeletonMessage />
                 <SkeletonMessage />

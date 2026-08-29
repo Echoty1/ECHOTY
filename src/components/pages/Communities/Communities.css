@@ -438,3 +438,143 @@
     padding: 6px 8px;
   }
 }
+
+@media (min-width: 900px) {
+  .communities-page {
+    padding: 28px 24px 40px;
+  }
+  .communities-grid {
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 28px;
+  }
+  .community-card-image {
+    height: 160px;
+  }
+}
+
+@media (hover: none) {
+  .community-card:hover {
+    transform: none;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15);
+  }
+}
+
+@media (max-width: 480px) {
+  .communities-page {
+    padding: 12px 12px 108px;
+  }
+  .community-card-actions {
+    flex-wrap: wrap;
+  }
+  .community-join-btn,
+  .community-leave-btn {
+    min-height: 36px;
+  }
+}
+
+
+.echo-brand-banner {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 920px;
+  margin: 8px auto 24px;
+  aspect-ratio: 16 / 9;
+  border-radius: 20px;
+  overflow: hidden;
+  text-decoration: none;
+  background: linear-gradient(135deg, #1b1038 0%, #6C3CE1 48%, #EC4899 100%);
+  box-shadow: 0 16px 40px rgba(108, 60, 225, 0.28);
+  isolation: isolate;
+}
+.echo-brand-orb {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+.echo-brand-orb.o1 {
+  width: 46%;
+  height: 82%;
+  left: -8%;
+  top: -20%;
+  background: rgba(255,255,255,0.16);
+  animation: echoBrandFloat 8s ease-in-out infinite;
+}
+.echo-brand-orb.o2 {
+  width: 34%;
+  height: 60%;
+  right: -6%;
+  bottom: -18%;
+  background: rgba(236, 72, 153, 0.45);
+  animation: echoBrandFloat 10s ease-in-out infinite reverse;
+}
+.echo-brand-orb.o3 {
+  width: 18%;
+  height: 32%;
+  right: 22%;
+  top: 12%;
+  background: rgba(255,255,255,0.22);
+  animation: echoBrandPulse 3.4s ease-in-out infinite;
+}
+.echo-brand-inner {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: clamp(16px, 4vw, 36px);
+  color: #fff;
+}
+.echo-brand-kicker {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  opacity: 0.86;
+  animation: echoBrandIn 0.7s ease both;
+}
+.echo-brand-title {
+  margin: 0;
+  font-size: clamp(22px, 4vw, 36px);
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  animation: echoBrandIn 0.8s ease 0.08s both;
+}
+.echo-brand-sub {
+  margin: 8px 0 18px;
+  font-size: clamp(14px, 2.2vw, 18px);
+  opacity: 0.92;
+  animation: echoBrandIn 0.8s ease 0.16s both;
+}
+.echo-brand-cta {
+  align-self: flex-start;
+  background: #fff;
+  color: #4c1d95;
+  font-weight: 700;
+  font-size: 13px;
+  border-radius: 999px;
+  padding: 10px 16px;
+  animation: echoBrandIn 0.8s ease 0.24s both, echoBrandCta 2.8s ease-in-out 1s infinite;
+}
+.echo-brand-banner:hover {
+  transform: translateY(-2px);
+  transition: transform 0.25s ease;
+}
+@keyframes echoBrandFloat {
+  0%, 100% { transform: translate3d(0,0,0) scale(1); }
+  50% { transform: translate3d(12px, -10px, 0) scale(1.06); }
+}
+@keyframes echoBrandPulse {
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.12); }
+}
+@keyframes echoBrandIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes echoBrandCta {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}

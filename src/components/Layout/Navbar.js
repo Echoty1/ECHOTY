@@ -12,6 +12,7 @@ import Avatar from '../common/Avatar';
 import { preloadMedia } from '../../utils/mediaCache';
 import NotificationModal from '../common/NotificationModal';
 import ConfirmModal from '../common/ConfirmModal';
+import './NavbarCommunity.css';
 
 const ECHO_AI_GIF = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
 
@@ -109,6 +110,10 @@ const Navbar = memo(() => {
 
   // ─── Handle back: preserve scroll position ──────────────────
   const handleBack = () => {
+    if (isCommunityRoute) {
+      navigate('/communities');
+      return;
+    }
     if (window.history.length > 1) {
       navigate(-1);
     } else {
@@ -314,14 +319,14 @@ const Navbar = memo(() => {
         top: 0,
         left: 0,
         right: 0,
-        minHeight: isMobileCommunity ? '80px' : '56px',
+        minHeight: '56px',
         backgroundColor: 'var(--bg-primary)',
         borderBottom: '1px solid var(--border-color)',
         display: 'flex',
-        flexWrap: isMobileCommunity ? 'wrap' : 'nowrap',
+        flexWrap: 'nowrap',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: isMobileCommunity ? '6px 12px 10px' : '0 12px',
+        padding: '0 10px',
         zIndex: 1000,
         boxSizing: 'border-box',
         color: 'var(--text-primary)',
@@ -334,9 +339,10 @@ const Navbar = memo(() => {
         alignItems: 'center', 
         gap: '10px', 
         minWidth: 0,
-        flex: isMobileCommunity ? '1 1 100%' : '0 1 auto',
-        order: isMobileCommunity ? 1 : 0,
-        marginBottom: isMobileCommunity ? '6px' : 0,
+        flex: '1 1 auto',
+        order: 0,
+        marginBottom: 0,
+        overflow: 'hidden',
       }}>
         {showBackButton ? (
           <button
@@ -412,12 +418,12 @@ const Navbar = memo(() => {
                 style={{
                   color: 'var(--text-primary)',
                   fontWeight: 700,
-                  fontSize: isMobileCommunity ? '16px' : '13px',
+                  fontSize: '14px',
                   lineHeight: 1.2,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
-                  maxWidth: isMobileCommunity ? '70vw' : '30vw',
+                  maxWidth: '36vw',
                 }}
               >
                 {navCommunity.name}
@@ -507,17 +513,18 @@ const Navbar = memo(() => {
 
       {/* ─── CENTER – Community Tabs ─────────────────────────────── */}
       <div 
+        className="echo-comm-tabs"
         style={{ 
-          flex: isMobileCommunity ? '1 1 100%' : '1',
+          flex: '0 0 auto',
           display: 'flex', 
-          justifyContent: 'center', 
+          justifyContent: 'flex-end', 
           alignItems: 'center', 
-          gap: '6px', 
-          margin: isMobileCommunity ? '0' : '0 4px',
+          gap: '4px', 
+          margin: '0 6px',
           minWidth: 0,
-          overflow: 'hidden',
-          order: isMobileCommunity ? 2 : 0,
-          padding: isMobileCommunity ? '4px 0 0' : 0,
+          overflow: 'visible',
+          order: 0,
+          padding: 0,
         }}
       >
         {isCommunityRoute && navCommunity && (
@@ -529,9 +536,9 @@ const Navbar = memo(() => {
                 background: activeCommunityTab === 'wall' ? 'rgba(108,60,225,0.2)' : 'transparent',
                 border: 'none',
                 color: activeCommunityTab === 'wall' ? '#fff' : 'var(--text-muted)',
-                padding: isMobileCommunity ? '8px 14px' : '6px 12px',
+                padding: '6px 10px',
                 borderRadius: '8px',
-                fontSize: isMobileCommunity ? '15px' : '14px',
+                fontSize: '13px',
                 fontWeight: 700,
                 cursor: 'pointer',
                 fontFamily: 'inherit',
@@ -543,7 +550,7 @@ const Navbar = memo(() => {
                 minWidth: 0,
               }}
             >
-              <i className="fas fa-newspaper" style={{ fontSize: isMobileCommunity ? '14px' : '12px', marginRight: '4px' }} /> Wall
+              <i className="fas fa-newspaper" style={{ fontSize: '12px', marginRight: '4px' }} /> Wall
             </button>
             <button
               className="nav-tab"
@@ -552,9 +559,9 @@ const Navbar = memo(() => {
                 background: activeCommunityTab === 'chat' ? 'rgba(108,60,225,0.2)' : 'transparent',
                 border: 'none',
                 color: activeCommunityTab === 'chat' ? '#fff' : 'var(--text-muted)',
-                padding: isMobileCommunity ? '8px 14px' : '6px 12px',
+                padding: '6px 10px',
                 borderRadius: '8px',
-                fontSize: isMobileCommunity ? '15px' : '14px',
+                fontSize: '13px',
                 fontWeight: 700,
                 cursor: 'pointer',
                 fontFamily: 'inherit',
@@ -566,30 +573,7 @@ const Navbar = memo(() => {
                 minWidth: 0,
               }}
             >
-              <i className="fas fa-comment-dots" style={{ fontSize: isMobileCommunity ? '14px' : '12px', marginRight: '4px' }} /> Chat
-            </button>
-            <button
-              className="nav-tab"
-              onClick={() => handleTabClick('members')}
-              style={{
-                background: activeCommunityTab === 'members' ? 'rgba(108,60,225,0.2)' : 'transparent',
-                border: 'none',
-                color: activeCommunityTab === 'members' ? '#fff' : 'var(--text-muted)',
-                padding: isMobileCommunity ? '8px 14px' : '6px 12px',
-                borderRadius: '8px',
-                fontSize: isMobileCommunity ? '15px' : '14px',
-                fontWeight: 700,
-                cursor: 'pointer',
-                fontFamily: 'inherit',
-                transition: 'all 0.2s ease',
-                borderBottom: activeCommunityTab === 'members' ? '3px solid #6C3CE1' : '3px solid transparent',
-                letterSpacing: '0.3px',
-                whiteSpace: 'nowrap',
-                flexShrink: 1,
-                minWidth: 0,
-              }}
-            >
-              <i className="fas fa-users" style={{ fontSize: isMobileCommunity ? '14px' : '12px', marginRight: '4px' }} /> Members
+              <i className="fas fa-comment-dots" style={{ fontSize: '12px', marginRight: '4px' }} /> Chat
             </button>
           </>
         )}
@@ -601,9 +585,9 @@ const Navbar = memo(() => {
         alignItems: 'center', 
         gap: '4px', 
         flexShrink: 0,
-        order: isMobileCommunity ? 3 : 0,
-        marginLeft: isMobileCommunity ? 'auto' : 0,
-        marginTop: isMobileCommunity ? '4px' : 0,
+        order: 0,
+        marginLeft: 0,
+        marginTop: 0,
       }}>
         {isChatRoute && targetUserId && !isEchoAiRoute && isTargetOnline && (
           <button

@@ -4,6 +4,8 @@
   margin: 0 auto;
   padding: 20px 16px 80px;
   color: var(--text-primary);
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .admin-stats-row {
@@ -179,6 +181,7 @@
   padding: 20px 24px;
   margin-bottom: 20px;
   transition: border-color 0.2s;
+  overflow: hidden;
 }
 .admin-card:hover {
   border-color: rgba(108, 60, 225, 0.2);
@@ -233,6 +236,7 @@
   padding: 8px 0;
   font-size: 14px;
   outline: none;
+  min-width: 0;
 }
 .search-wrapper input::placeholder {
   color: var(--text-muted);
@@ -258,11 +262,13 @@
 .table-wrapper {
   overflow-x: auto;
   margin-bottom: 8px;
+  -webkit-overflow-scrolling: touch;
 }
 .user-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  min-width: 500px;
 }
 .user-table th {
   text-align: left;
@@ -292,6 +298,7 @@
   font-family: monospace;
   font-size: 12px;
   color: var(--text-secondary);
+  flex-wrap: wrap;
 }
 .uid-cell code {
   background: var(--bg-input);
@@ -379,6 +386,7 @@
   font-size: 14px;
   outline: none;
   font-family: monospace;
+  min-width: 0;
 }
 .uid-input-wrapper input::placeholder {
   color: var(--text-muted);
@@ -428,6 +436,7 @@
   font-size: 14px;
   width: 100%;
   border: 1px solid transparent;
+  box-sizing: border-box;
 }
 .admin-actions-grid button:hover:not(:disabled) {
   background: rgba(108, 60, 225, 0.25);
@@ -462,6 +471,7 @@
   gap: 8px;
   width: 100%;
   grid-column: 1 / -1;
+  flex-wrap: wrap;
 }
 .add-coins-wrapper input {
   flex: 1;
@@ -473,6 +483,7 @@
   color: var(--text-primary);
   font-size: 14px;
   outline: none;
+  box-sizing: border-box;
 }
 .add-coins-wrapper input:focus {
   border-color: #6C3CE1;
@@ -491,6 +502,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
+  box-sizing: border-box;
 }
 .add-coins-wrapper button:disabled {
   opacity: 0.4;
@@ -615,4 +627,136 @@
 .admin-message-card .admin-message-input::placeholder,
 .admin-message-card .admin-message-textarea::placeholder {
   color: var(--text-muted);
+}
+
+/* ─── Mobile Fixes ────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .admin-panel {
+    padding: 16px 12px 100px;
+  }
+
+  .admin-card {
+    padding: 16px 14px;
+  }
+
+  .admin-card h2 {
+    font-size: 16px;
+    margin-bottom: 12px;
+  }
+
+  .search-wrapper {
+    max-width: 100%;
+    width: 100%;
+  }
+
+  .user-table {
+    font-size: 12px;
+    min-width: 400px;
+  }
+  .user-table th,
+  .user-table td {
+    padding: 6px 4px;
+  }
+  .uid-cell code {
+    max-width: 120px;
+    font-size: 10px;
+  }
+
+  .admin-actions-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .add-coins-wrapper {
+    flex-direction: column;
+  }
+  .add-coins-wrapper input,
+  .add-coins-wrapper button {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .admin-stats-row {
+    flex-direction: column;
+  }
+  .stat-card {
+    min-width: 0;
+  }
+
+  .admin-col-right {
+    min-width: 0;
+  }
+
+  .admin-two-col {
+    gap: 16px;
+  }
+
+  .admin-chart-container {
+    padding: 16px;
+  }
+  .admin-chart {
+    height: 100px;
+  }
+  .chart-bar-track {
+    min-height: 60px;
+  }
+
+  .admin-message-card .admin-message-textarea {
+    min-height: 60px;
+  }
+}
+
+@media (max-width: 480px) {
+  .admin-panel {
+    padding: 12px 8px 90px;
+  }
+
+  .admin-card {
+    padding: 14px 10px;
+    border-radius: 12px;
+  }
+
+  .user-table {
+    font-size: 11px;
+    min-width: 300px;
+  }
+  .user-table th,
+  .user-table td {
+    padding: 4px 2px;
+  }
+  .uid-cell code {
+    max-width: 80px;
+    font-size: 9px;
+  }
+
+  .search-wrapper input {
+    font-size: 13px;
+    padding: 6px 0;
+  }
+
+  .admin-actions-grid button {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+
+  .add-coins-wrapper input {
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+  .add-coins-wrapper button {
+    font-size: 13px;
+    padding: 8px 10px;
+  }
+
+  .admin-chart-container {
+    padding: 12px;
+  }
+  .admin-chart {
+    height: 80px;
+  }
+  .chart-bar-track {
+    min-height: 40px;
+  }
+  .chart-bar-label {
+    font-size: 9px;
+  }
 }

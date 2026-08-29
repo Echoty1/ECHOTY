@@ -1,13 +1,14 @@
 // src/services/storageService.js
 import { Preferences } from '@capacitor/preferences';
+import { Capacitor } from '@capacitor/core';
 
 // Detect if running in a native app (Capacitor) or web browser
 export const isNativeApp = () => {
-  return (
-    typeof window !== 'undefined' &&
-    window.hasOwnProperty('Capacitor') &&
-    window.Capacitor.isNative
-  );
+  try {
+    return typeof window !== 'undefined' && Capacitor.isNativePlatform();
+  } catch {
+    return false;
+  }
 };
 
 // ─── Get an item ──────────────────────────────────────────────
@@ -16,9 +17,8 @@ export const getItem = async (key) => {
     if (isNativeApp()) {
       const { value } = await Preferences.get({ key });
       return value;
-    } else {
-      return localStorage.getItem(key);
     }
+    return localStorage.getItem(key);
   } catch (error) {
     console.error(`Error getting ${key}:`, error);
     return null;
@@ -29,7 +29,6 @@ export const getItem = async (key) => {
 export const setItem = async (key, value) => {
   const stringVal = String(value);
 
-  // 1. Native Mobile App (Capacitor Preferences)
   if (isNativeApp()) {
     try {
       await Preferences.set({ key, value: stringVal });
@@ -40,12 +39,10 @@ export const setItem = async (key, value) => {
     }
   }
 
-  // 2. Web Browser (localStorage)
   try {
     localStorage.setItem(key, stringVal);
     return true;
   } catch (error) {
-    // Detect LocalStorage Quota Exceeded
     if (
       error.name === 'QuotaExceededError' ||
       error.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
@@ -53,20 +50,13 @@ export const setItem = async (key, value) => {
       error.code === 1014
     ) {
       console.warn('⚠️ LocalStorage quota exceeded. Evicting old echo cache entries...');
-
       try {
-        // Collect and remove all echo_cache keys to free space
         const keysToRemove = [];
         for (let i = 0; i < localStorage.length; i++) {
           const k = localStorage.key(i);
-          if (k && k.startsWith('echo_cache_')) {
-            keysToRemove.push(k);
-          }
+          if (k && k.startsWith('echo_cache_')) keysToRemove.push(k);
         }
-
         keysToRemove.forEach((k) => localStorage.removeItem(k));
-
-        // Retry saving after cleanup
         localStorage.setItem(key, stringVal);
         console.log(`✅ Successfully saved ${key} after clearing cache.`);
         return true;
@@ -116,9 +106,8 @@ export const getKeys = async () => {
     if (isNativeApp()) {
       const { keys } = await Preferences.keys();
       return keys;
-    } else {
-      return Object.keys(localStorage);
     }
+    return Object.keys(localStorage);
   } catch (error) {
     console.error('Error getting keys:', error);
     return [];

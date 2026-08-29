@@ -13,6 +13,9 @@
         <item name="windowActionBar">false</item>
         <item name="windowNoTitle">true</item>
         <item name="android:background">@null</item>
+        <!-- Remove WebView touch feedback -->
+        <item name="android:colorControlHighlight">@android:color/transparent</item>
+        <item name="android:selectableItemBackground">@android:color/transparent</item>
     </style>
 
 

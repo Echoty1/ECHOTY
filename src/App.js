@@ -222,7 +222,7 @@ function AppContent() {
 
     if (saved && saved !== current) {
       localStorage.setItem(key, current);
-      window.location.reload(true);
+      window.location.reload();
     } else if (!saved) {
       localStorage.setItem(key, current);
     }
@@ -429,11 +429,11 @@ function AppContent() {
           <Route path="/about" element={<About />} />
           <Route path="/control" element={<AdminPanel />} />
           <Route path="/communities" element={<Communities />} />
+          <Route path="/community/:communityId/:tab" element={<CommunityChat />} />
           <Route path="/community/:communityId" element={<CommunityChat />} />
           <Route path="/shop" element={<Shop />} />
-          <Route path="*" element={<Navigate to="/" />} />
-          <Route path="/community/:communityId" element={<CommunityChat />} />
-          <Route path="/community/:communityId/:tab" element={<CommunityChat />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="/login" element={<Login />} />
         </Routes>
       </div>
       <BottomNav />

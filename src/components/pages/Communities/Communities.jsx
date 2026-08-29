@@ -422,6 +422,23 @@ const Communities = () => {
           <p>Find your people. Explore realms.</p>
         </div>
 
+        <a
+          className="echo-brand-banner"
+          href="https://brand.echoty.xyz"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <span className="echo-brand-orb o1" aria-hidden="true" />
+          <span className="echo-brand-orb o2" aria-hidden="true" />
+          <span className="echo-brand-orb o3" aria-hidden="true" />
+          <div className="echo-brand-inner">
+            <p className="echo-brand-kicker">ECHO Brand</p>
+            <h3 className="echo-brand-title">Want your own community?</h3>
+            <p className="echo-brand-sub">Create it on brand.echoty.xyz</p>
+            <span className="echo-brand-cta">Visit brand.echoty.xyz</span>
+          </div>
+        </a>
+
         {error && (
           <div className="communities-error">
             <i className="fas fa-exclamation-circle" />
@@ -460,6 +477,7 @@ const Communities = () => {
             })}
           </div>
         )}
+
 
         {rulesModal && (
           <RulesModal

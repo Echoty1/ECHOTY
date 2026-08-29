@@ -121,18 +121,38 @@ const Settings = () => {
   const wipeLocalChatData = async (partnerId) => {
     if (!user?.uid || !partnerId) return;
     const cId = getChatId(partnerId);
-    try {
-      await clearMessagesCache(cId);
-    } catch (_) {}
-    try {
-      clearMessageCache(cId);
-    } catch (_) {}
+    try { await clearMessagesCache(cId); } catch (_) {}
+    try { await clearMessageCache(cId); } catch (_) {}
     await clearChatList(user.uid).catch(() => {});
-    window.dispatchEvent(
-      new CustomEvent('chat-history-cleared', {
-        detail: { partnerId, chatId: cId },
-      })
-    );
+    window.dispatchEvent(new CustomEvent('chat-history-cleared', { detail: { partnerId, chatId: cId } }));
+    window.dispatchEvent(new CustomEvent('chats-refresh'));
+  };
+
+  const clearConversationForBoth = async (partnerId) => {
+    const chatId = getChatId(partnerId);
+    const now = Date.now();
+    const updates = {
+      [`chats/${chatId}`]: null,
+      [`userChats/${user.uid}/${partnerId}/clearedAt`]: now,
+      [`userChats/${partnerId}/${user.uid}/clearedAt`]: now,
+      [`userChats/${user.uid}/${partnerId}/lastMessage`]: '',
+      [`userChats/${partnerId}/${user.uid}/lastMessage`]: '',
+      [`userChats/${user.uid}/${partnerId}/unreadCount`]: 0,
+      [`userChats/${partnerId}/${user.uid}/unreadCount`]: 0,
+    };
+    await update(ref(db), updates);
+    await wipeLocalChatData(partnerId);
+  };
+
+  const deleteConversationForBoth = async (partnerId) => {
+    const chatId = getChatId(partnerId);
+    const updates = {
+      [`chats/${chatId}`]: null,
+      [`userChats/${user.uid}/${partnerId}`]: null,
+      [`userChats/${partnerId}/${user.uid}`]: null,
+    };
+    await update(ref(db), updates);
+    await wipeLocalChatData(partnerId);
   };
 
   // ─── Helper: show toast ──────────────────────────────────────
@@ -168,8 +188,8 @@ const Settings = () => {
     }
     const count = selectedChats.size;
     openConfirmModal({
-      title: `Clear History for ${count} Chat${count > 1 ? 's' : ''}`,
-      message: `⚠️ This will permanently delete ALL messages for both you and the other person. The chat will remain in your Recent list but with no messages. This action is irreversible and cannot be undone.`,
+      title: `Clear conversation history`,
+      message: `Messages in the selected conversations will be removed for you and the other person. The chats will stay in Recent, with an empty history. This cannot be undone.`,
       confirmText: 'Clear History',
       showInput: true,
       inputPlaceholder: 'Type CLEAR to confirm',
@@ -208,7 +228,7 @@ const Settings = () => {
   const handleClearSingleHistory = (chatId, partnerName) => {
     openConfirmModal({
       title: 'Clear History',
-      message: `⚠️ Permanently delete ALL messages with ${partnerName} for both you and them? The chat will remain in your Recent list but with no messages. This action is irreversible.`,
+      message: `All messages with ${partnerName} will be removed for both of you. The conversation will stay in Recent, with an empty history. This cannot be undone.`,
       confirmText: 'Clear History',
       showInput: true,
       inputPlaceholder: 'Type CLEAR to confirm',
@@ -277,7 +297,7 @@ const Settings = () => {
   const handleDeleteSingleChat = (chatId, partnerName) => {
     openConfirmModal({
       title: 'Delete Chat',
-      message: `⚠️ Permanently delete the entire conversation with ${partnerName} for both you and them? All messages will be removed and the chat will disappear from Recent lists. This action is irreversible.`,
+      message: `The conversation with ${partnerName} will be removed for both of you, including messages and Recent list entries. This cannot be undone.`,
       confirmText: 'Delete',
       showInput: true,
       inputPlaceholder: 'Type DELETE to confirm',
@@ -315,7 +335,7 @@ const Settings = () => {
     }
     openConfirmModal({
       title: 'Delete All Chats',
-      message: `⚠️ This will permanently delete ALL conversations for both you and every other user you've chatted with. All messages will be removed and all chats will disappear from Recent lists. This action is irreversible.`,
+      message: `Every conversation will be removed for you and each person you have chatted with, including messages and Recent list entries. This cannot be undone.`,
       confirmText: 'Delete All',
       showInput: true,
       inputPlaceholder: 'Type DELETE ALL to confirm',

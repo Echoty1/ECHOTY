@@ -2,20 +2,10 @@
 import { ref, get } from 'firebase/database';
 import { db } from './firebase';
 import { getCache, setCache } from './cacheService';
+import { resolveAssetUrl } from '../utils/assetUrl';
 
 const CACHE_KEY = 'gif_library';
-const CACHE_TTL = 60 * 60; // 1 hour
-
-// src/services/gifLibraryService.js
-const resolveUrl = (url) => {
-  if (!url) return '';
-  if (url.startsWith('http://') || url.startsWith('https://')) {
-    return url;
-  }
-  // In development: http://localhost:3000/videos/library/...
-  // In production: https://your-app.com/videos/library/...
-  return window.location.origin + (url.startsWith('/') ? url : '/' + url);
-};
+const CACHE_TTL = 60 * 60;
 
 export const fetchGifLibrary = async (forceRefresh = false) => {
   if (!forceRefresh) {
@@ -30,14 +20,13 @@ export const fetchGifLibrary = async (forceRefresh = false) => {
       const library = Object.entries(data).map(([id, item]) => ({
         id,
         ...item,
-        url: resolveUrl(item.url), // ensure absolute URL
+        url: resolveAssetUrl(item.url),
       }));
       await setCache(CACHE_KEY, library, CACHE_TTL);
       return library;
     }
     return [];
-  } catch (err) {
-    console.error('Failed to fetch GIF library:', err);
+  } catch {
     const cached = await getCache(CACHE_KEY);
     return cached || [];
   }
@@ -45,5 +34,5 @@ export const fetchGifLibrary = async (forceRefresh = false) => {
 
 export const getGifById = async (id) => {
   const library = await fetchGifLibrary();
-  return library.find(item => item.id === id) || null;
+  return library.find((item) => item.id === id) || null;
 };

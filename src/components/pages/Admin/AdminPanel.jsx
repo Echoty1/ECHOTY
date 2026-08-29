@@ -8,12 +8,13 @@ import {
   wipeUserData,
   forceLogoutUser,
   deleteUserAccount,
+  purgeUserCompletely,
   banUser,
   unbanUser,
   getUserBanStatus,
   checkIsSupport,
 } from '../../../services/adminService';
-import { db } from '../../../services/firebase';
+import { auth, db } from '../../../services/firebase';
 import { ref, onValue, get, push, set, remove, update, runTransaction } from 'firebase/database';
 import { getAdminUserList, setAdminUserList } from '../../../services/indexedDBService';
 import Toast from '../../Toast/Toast';
@@ -21,6 +22,7 @@ import LoginAnalyticsChart from './LoginAnalyticsChart';
 import ConfirmModal from '../../common/ConfirmModal';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
+import { apiUrl } from '../../../utils/api';
 import './AdminPanel.css';
 
 const AdminPanel = () => {
@@ -520,7 +522,7 @@ const AdminPanel = () => {
     });
   };
 
-  // ─── Wipe Data ──────────────────────────────────────────────────
+  // ─── Wipe Data (Backend-driven) ──────────────────────────────
   const handleBulkWipeData = () => {
     const uids = getActiveTargetUids();
     if (uids.length === 0) return showToast('Select at least one user or enter a valid UID.', 'error');
@@ -540,6 +542,8 @@ const AdminPanel = () => {
   📊 DELETE all login history and activity logs
   📨 DELETE all admin notifications
   🔊 DELETE all call history and live streams
+  👥 DELETE from communities and decrement member counts
+  📝 DELETE all community posts by this user
 
   ⚠️ This action is IRREVERSIBLE and CANNOT BE UNDONE!
 
@@ -558,117 +562,49 @@ const AdminPanel = () => {
           return;
         }
         setConfirmModal(prev => ({ ...prev, loading: true }));
-        let failedNodes = [];
+
         try {
-          let success = 0, failed = 0;
+          // Get a fresh token from the Firebase Auth instance
+          const idToken = await auth.currentUser?.getIdToken();
+          if (!idToken) {
+            throw new Error('Not authenticated. Please sign in again.');
+          }
+
+          let successCount = 0;
+          let failCount = 0;
           for (const targetUid of uids) {
             try {
-              // ─── 1. Delete from Firebase Authentication ────────
-              try {
-                const idToken = await user.getIdToken();
-                const response = await fetch('/api/admin/delete-user', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${idToken}`,
-                  },
-                  body: JSON.stringify({ targetUid }),
-                });
-                if (!response.ok) {
-                  const errData = await response.json().catch(() => ({}));
-                  throw new Error(errData.error || `HTTP ${response.status}`);
-                }
-                console.log(`✅ [Wipe] Deleted auth account: ${targetUid}`);
-              } catch (authErr) {
-                console.warn(`⚠️ [Wipe] Auth deletion failed for ${targetUid}:`, authErr.message);
-                failedNodes.push(`Auth: ${authErr.message}`);
+              const response = await fetch(apiUrl('/api/admin/delete-user'), {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  'Authorization': `Bearer ${idToken}`,
+                },
+                body: JSON.stringify({ targetUid }),
+              });
+
+              // Read response body even on error for better diagnostics
+              const responseBody = await response.text();
+              let result;
+              try { result = JSON.parse(responseBody); } catch { result = { error: responseBody }; }
+
+              if (!response.ok) {
+                throw new Error(result.error || `HTTP ${response.status}: ${responseBody}`);
               }
 
-              // ─── 2. Remove all database references ──────────────
-              const nodesToDelete = [
-                `profiles/${targetUid}`,
-                `userSkins/${targetUid}`,
-                `userChats/${targetUid}`,
-                `userDailyLogins/${targetUid}`,
-                `adminNotifications/${targetUid}`,
-                `calls/${targetUid}`,
-                `live/${targetUid}`,
-                `busy/${targetUid}`,
-                `peerIds/${targetUid}`,
-                `presence/online/${targetUid}`,
-                `userMemories/${targetUid}`,
-                `aiConversations/${targetUid}`,
-                `accounts/${targetUid}`,
-              ];
-
-              for (const path of nodesToDelete) {
-                try {
-                  await remove(ref(db, path));
-                  console.log(`✅ [Wipe] Deleted ${path}`);
-                } catch (err) {
-                  console.warn(`⚠️ [Wipe] Failed to delete ${path}:`, err.message);
-                  failedNodes.push(`${path}: ${err.message}`);
-                }
-              }
-
-              // ─── 3. Remove this user from ALL other users' chat lists ──
-              try {
-                const profilesSnap = await get(ref(db, 'profiles'));
-                const allUids = profilesSnap.exists() ? Object.keys(profilesSnap.val()) : [];
-                const updates = {};
-                for (const uid of allUids) {
-                  if (uid !== targetUid) {
-                    updates[`userChats/${uid}/${targetUid}`] = null;
-                    const chatId = [uid, targetUid].sort().join('_');
-                    updates[`chats/${chatId}`] = null;
-                  }
-                }
-                if (Object.keys(updates).length > 0) {
-                  await update(ref(db), updates);
-                  console.log(`✅ [Wipe] Removed user from other users' chat lists`);
-                }
-              } catch (err) {
-                console.warn('⚠️ [Wipe] Failed to remove from other users\' chats:', err.message);
-                failedNodes.push(`other chats: ${err.message}`);
-              }
-
-              // ─── 4. Remove from communities ──────────────────────
-              try {
-                const userCommunitiesRef = ref(db, `userCommunities/${targetUid}`);
-                const commSnap = await get(userCommunitiesRef);
-                if (commSnap.exists()) {
-                  const communities = commSnap.val();
-                  for (const [communityId] of Object.entries(communities)) {
-                    await remove(ref(db, `userCommunities/${targetUid}/${communityId}`));
-                    const countRef = ref(db, `communities/${communityId}/memberCount`);
-                    await runTransaction(countRef, (current) => {
-                      return Math.max(0, (current || 0) - 1);
-                    });
-                  }
-                  console.log(`✅ [Wipe] Removed user from communities`);
-                }
-              } catch (err) {
-                console.warn('⚠️ [Wipe] Failed to remove from communities:', err.message);
-                failedNodes.push(`communities: ${err.message}`);
-              }
-
-              success++;
+              successCount++;
               console.log(`✅ [Wipe] Successfully wiped user: ${targetUid}`);
             } catch (err) {
-              failed++;
+              failCount++;
               console.error(`❌ [Wipe] Failed for ${targetUid}:`, err);
+              // Show a toast for each failure but continue with others
+              showToast(`Failed to wipe ${targetUid}: ${err.message}`, 'error');
             }
           }
 
-          // Show summary including failed nodes (if any)
-          let summary = `Wiped ${success} user${success > 1 ? 's' : ''} completely`;
-          if (failed > 0) summary += `, ${failed} user${failed > 1 ? 's' : ''} failed`;
-          if (failedNodes.length > 0) {
-            summary += `\n\nSome nodes could not be deleted due to permission errors:\n${failedNodes.slice(0, 5).join('\n')}`;
-            if (failedNodes.length > 5) summary += `\nand ${failedNodes.length - 5} more.`;
-            summary += '\n\nThese are usually non-critical data (presence, memories, etc.).';
-          }
-          showToast(summary, success > 0 ? 'success' : 'error');
+          let summary = `Wiped ${successCount} user${successCount > 1 ? 's' : ''} completely`;
+          if (failCount > 0) summary += `, ${failCount} user${failCount > 1 ? 's' : ''} failed.`;
+          showToast(summary, successCount > 0 ? 'success' : 'error');
           closeConfirmModal();
           setSelectedUsers(new Set());
           setSelectAll(false);
@@ -933,7 +869,7 @@ const AdminPanel = () => {
                   <i className="fas fa-sign-out-alt" /> Force Logout{activeCount > 1 ? ' All' : ''}
                 </button>
                 <button className="admin-danger" onClick={handleBulkWipeData} disabled={loading || activeCount === 0}>
-                  <i className="fas fa-trash-alt" /> Wipe Data{activeCount > 1 ? ' All' : ''}
+                  <i className="fas fa-trash-alt" /> Wipe Data (it won't work, because I am still working on it){activeCount > 1 ? ' All' : ''}
                 </button>
                 <button
                   className={activeCount > 0 && getSelectedUsersList().every(u => u.isBanned) ? 'admin-success' : 'admin-danger'}

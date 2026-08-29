@@ -10,6 +10,7 @@ import Peer from 'peerjs';
 import Avatar from '../../common/Avatar';
 import UserPreviewModal from '../../common/UserPreviewModal';
 import LiveViewModal from '../../VideoChat/LiveViewModal';
+import BroadcastView from '../../VideoChat/BroadcastView';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import './Home.css';
@@ -61,14 +62,16 @@ const Home = () => {
   const navigate = useNavigate();
   const { profiles, fetchProfile } = useProfile();
   const { startVideoCall, activeVideoCall } = useCall();
+
   const [onlineUids, setOnlineUids] = useState([]);
   const [bannedUids, setBannedUids] = useState(new Set());
   const [liveUids, setLiveUids] = useState([]);
-  const [liveMeta, setLiveMeta] = useState({}); // uid -> {name, avatar}
+  const [liveMeta, setLiveMeta] = useState({});
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState(null);
   const [viewingLive, setViewingLive] = useState(null);
 
+  // ─── Live broadcasting states ────────────────────────────────
   const [isLive, setIsLive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
   const [peerError, setPeerError] = useState(null);
@@ -76,6 +79,9 @@ const Home = () => {
   const streamRef = useRef(null);
   const peerRef = useRef(null);
   const peerIdSet = useRef(false);
+
+  // For the BroadcastView component
+  const [broadcastStream, setBroadcastStream] = useState(null);
 
   const isDemoUser = user?.uid === DEMO_UID;
   const isSupportUser = user?.uid === SUPPORT_UID;
@@ -102,10 +108,18 @@ const Home = () => {
         port: 443,
         path: '/',
         secure: true,
-        debug: 2,
+        debug: 1,
+        config: {
+          iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+          ],
+        },
       };
 
-      const peer = new Peer(null, config);
+      const peer = new Peer(undefined, config);
       peerInstance = peer;
       peerRef.current = peer;
 
@@ -116,30 +130,31 @@ const Home = () => {
         if (streamRef.current) {
           update(ref(db, 'live/' + user.uid), { peerId: id }).catch(() => {});
         }
-        console.log('✅ PeerJS connected with ID:', id);
         setPeerError(null);
       });
 
-      // Multi-viewer live: answer each viewer with our camera stream
       peer.on('call', (call) => {
         if (streamRef.current) {
-          console.log('[Live] Viewer joining');
           call.answer(streamRef.current);
         } else {
-          try { call.close(); } catch (_) {}
+          // Viewer connected before camera finished — answer as soon as we have a stream
+          const wait = setInterval(() => {
+            if (streamRef.current) {
+              clearInterval(wait);
+              try { call.answer(streamRef.current); } catch (_) {}
+            }
+          }, 250);
+          setTimeout(() => clearInterval(wait), 12000);
         }
       });
 
       peer.on('error', (err) => {
-        console.error('PeerJS error:', err);
         const code = err?.type || err?.message || '';
         if (attempt < maxAttempts && peerInstance) {
           attempt++;
-          console.log(`🔄 Retrying PeerJS connection (attempt ${attempt})...`);
           try { peerInstance.destroy(); } catch (_) {}
           timeoutId = setTimeout(createPeer, 2000);
         } else {
-          console.warn('⚠️ PeerJS connection failed after retries.');
           let msg = 'Connection problem. Please try again.';
           if (/network|fetch|server-error|socket-error|unavailable/i.test(String(code))) {
             msg = 'Network issue reaching the call server. Check your connection and try again.';
@@ -165,16 +180,25 @@ const Home = () => {
     };
   }, [user]);
 
-  // ─── 2. Camera Logic ──────────────────────────────────────────
+  // ─── 2. Camera Logic (for broadcasting) ──────────────────────
   const startCamera = async () => {
     try {
       const constraints = {
         video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' },
-        audio: false,
+        audio: true,
       };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      let stream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia(constraints);
+      } catch (audioErr) {
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: 'user' },
+          audio: false,
+        });
+      }
       streamRef.current = stream;
-      setIsLive(true); // mounts <video>, effect below attaches stream
+      setBroadcastStream(stream);
+      setIsLive(true);
       setCameraError(null);
 
       if (user) {
@@ -188,7 +212,11 @@ const Home = () => {
             if (p.avatar) avatar = p.avatar;
           }
         } catch (_) {}
-        const peerId = peerRef.current?.id || null;
+        let peerId = peerRef.current?.id || null;
+        for (let i = 0; i < 20 && !peerId; i += 1) {
+          await new Promise((r) => setTimeout(r, 250));
+          peerId = peerRef.current?.id || null;
+        }
         await set(ref(db, 'live/' + user.uid), {
           name,
           avatar,
@@ -199,7 +227,6 @@ const Home = () => {
         onDisconnect(ref(db, 'live/' + user.uid)).remove();
       }
     } catch (err) {
-      console.error('[Live] camera error', err);
       setCameraError('Allow camera access to go live.');
       setIsLive(false);
     }
@@ -209,11 +236,13 @@ const Home = () => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
       streamRef.current = null;
+      setBroadcastStream(null);
     }
     if (videoRef.current) videoRef.current.srcObject = null;
     setIsLive(false);
     if (user) {
-      remove(ref(db, 'live/' + user.uid));
+      remove(ref(db, 'live/' + user.uid)).catch(() => {});
+      remove(ref(db, 'liveChat/' + user.uid)).catch(() => {});
     }
   };
 
@@ -225,29 +254,7 @@ const Home = () => {
     }
   };
 
-  // Attach camera stream once the <video> is mounted (after isLive=true)
-  useEffect(() => {
-    if (!isLive || !streamRef.current) return;
-    const el = videoRef.current;
-    if (!el) return;
-    el.srcObject = streamRef.current;
-    el.play().catch(() => {});
-  }, [isLive]);
-
-  // Stop camera when component unmounts
-  useEffect(() => {
-    return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-        streamRef.current = null;
-      }
-      if (user) {
-        remove(ref(db, 'live/' + user.uid)).catch(() => {});
-      }
-    };
-  }, [user]);
-
-  // ─── 3. Firebase Presence Logic (FIXED) ──────────────────────
+  // ─── 3. Firebase Presence Logic ──────────────────────────────
   useEffect(() => {
     if (!user) return;
 
@@ -256,25 +263,19 @@ const Home = () => {
       presenceRef,
       (snapshot) => {
         const data = snapshot.val() || {};
-        console.log('🔴 Presence data:', data); // DEBUG
-
-        // true or any truthy value counts as online
         let online = Object.keys(data).filter(
           (uid) => uid !== user.uid && data[uid] !== false && data[uid] != null && data[uid] !== 0
         );
 
-        // Apply demo/support filters
         if (isDemoUser) {
           online = online.filter((uid) => uid === SUPPORT_UID);
         } else if (!isSupportUser) {
           online = online.filter((uid) => uid !== DEMO_UID);
         }
 
-        console.log('👥 Online UIDs:', online); // DEBUG
         setOnlineUids(online);
         setLoading(false);
 
-        // Fetch profiles for online users
         online.forEach((uid) => {
           if (!profiles[uid]) {
             fetchProfile(uid);
@@ -282,17 +283,14 @@ const Home = () => {
         });
       },
       (error) => {
-        console.error('❌ Presence listener error:', error);
         setLoading(false);
       }
     );
 
-    // Safety timeout: if no data after 5 seconds, stop loading
     const timeout = setTimeout(() => {
       setLoading(false);
     }, 5000);
 
-    // Track banned UIDs so they never appear online on Home
     const accountsRef = ref(db, 'accounts');
     const unsubAccounts = onValue(accountsRef, (snap) => {
       const data = snap.val() || {};
@@ -332,7 +330,7 @@ const Home = () => {
     return () => unsubLive();
   }, [user, fetchProfile]);
 
-  // ─── 6. Handlers ──────────────────────────────────────────────
+  // ─── 5. Handlers ──────────────────────────────────────────────
   const openUserPreview = (uid) => {
     const profile = profiles[uid];
     if (profile) {
@@ -346,13 +344,11 @@ const Home = () => {
 
   const closeUserPreview = () => setSelectedUser(null);
 
-  // When a video call is open (or just closed), never leave the user card on screen
   useEffect(() => {
     if (activeVideoCall) {
       setSelectedUser(null);
     }
   }, [activeVideoCall]);
-
 
   const startChat = (uid, name, avatar) => {
     closeUserPreview();
@@ -361,21 +357,16 @@ const Home = () => {
     });
   };
 
-
   const handleJoinLive = (uid, name) => {
     closeUserPreview();
     setViewingLive({ uid, name, avatar: profiles[uid]?.avatar || '' });
   };
 
-
-
-
   const closeLiveView = () => {
     setViewingLive(null);
   };
 
-  // ─── 7. Build Online + Live Users List ───────────────────────
-  // Only show accounts with a real profile name (hide wiped / "User" ghosts)
+  // ─── 6. Build Online + Live Users List ───────────────────────
   const combinedUids = Array.from(new Set([...onlineUids, ...liveUids])).filter((id) => !bannedUids.has(id));
   const onlineUsers = filterVisibleUsers(
     combinedUids
@@ -383,10 +374,7 @@ const Home = () => {
         const profile = profiles[uid];
         const isLiveUser = liveUids.includes(uid);
         const fromLive = liveMeta[uid] || {};
-        if (!profile) {
-          // Wait until profile loads – do not show UID fragments as "User"
-          return null;
-        }
+        if (!profile) return null;
         const name = (profile.name || fromLive.name || '').trim();
         if (!isRealDisplayName(name)) return null;
         return {
@@ -401,12 +389,18 @@ const Home = () => {
       .filter(Boolean)
   ).sort((a, b) => (b.isLive ? 1 : 0) - (a.isLive ? 1 : 0));
 
+  // ─── 7. Render ──────────────────────────────────────────────────
+
+  // If the user is broadcasting, show the full‑screen BroadcastView
+  if (isLive && broadcastStream) {
+    return <BroadcastView onEnd={stopCamera} stream={broadcastStream} />;
+  }
+
   // If still loading, show skeleton
   if (loading) {
     return <HomeSkeleton />;
   }
 
-  // ─── 8. Render ──────────────────────────────────────────────────
   return (
     <>
       <SEO
@@ -533,8 +527,6 @@ const Home = () => {
             overflowY: 'auto',
           }}
         >
-          {/* top brand header removed */}
-
           <div
             style={{
               width: '100%',
@@ -652,118 +644,9 @@ const Home = () => {
                 }}
               >
                 {liveUids.length > 0
-                  ? 'Tap a live user or press Join Live to watch'
+                  ? 'Tap a live user to view their stream'
                   : 'Tap any profile to view and chat instantly'}
               </p>
-
-              {/* Clear JOIN LIVE row – only when someone is broadcasting */}
-              {liveUids.length > 0 && (
-                <div
-                  style={{
-                    marginBottom: 16,
-                    padding: '12px',
-                    borderRadius: 16,
-                    background: 'rgba(239, 68, 68, 0.1)',
-                    border: '1px solid rgba(239, 68, 68, 0.3)',
-                  }}
-                >
-                  <div
-                    style={{
-                      fontSize: 12,
-                      fontWeight: 800,
-                      letterSpacing: '1px',
-                      color: '#ef4444',
-                      marginBottom: 10,
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 8,
-                        height: 8,
-                        borderRadius: '50%',
-                        background: '#ef4444',
-                        boxShadow: '0 0 10px #ef4444',
-                        animation: 'liveRingPulse 1.2s ease-in-out infinite',
-                      }}
-                    />
-                    WATCH LIVE NOW
-                  </div>
-                  <div
-                    style={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      gap: 10,
-                    }}
-                  >
-                    {onlineUsers
-                      .filter((p) => p.isLive)
-                      .map((p) => (
-                        <div
-                          key={`live-row-${p.uid}`}
-                          style={{
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: 12,
-                            padding: '10px 12px',
-                            borderRadius: 14,
-                            background: 'color-mix(in srgb, var(--bg-card) 80%, transparent)',
-                            border: '1px solid rgba(239, 68, 68, 0.25)',
-                          }}
-                        >
-                          <div
-                            style={{
-                              borderRadius: '50%',
-                              padding: 2,
-                              background: 'linear-gradient(135deg, #ef4444, #f97316)',
-                              lineHeight: 0,
-                              flexShrink: 0,
-                            }}
-                          >
-                            <Avatar src={p.avatar} name={p.name} size={44} />
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <div
-                              style={{
-                                fontWeight: 700,
-                                color: 'var(--text-primary)',
-                                fontSize: 15,
-                                whiteSpace: 'nowrap',
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                              }}
-                            >
-                              {p.name}
-                            </div>
-                            <div style={{ fontSize: 12, color: '#ef4444', fontWeight: 600 }}>
-                              ● Broadcasting now
-                            </div>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={() => handleJoinLive(p.uid, p.name)}
-                            style={{
-                              flexShrink: 0,
-                              padding: '10px 16px',
-                              border: 'none',
-                              borderRadius: 20,
-                              background: 'linear-gradient(135deg, #ef4444, #dc2626)',
-                              color: '#fff',
-                              fontWeight: 800,
-                              fontSize: 13,
-                              cursor: 'pointer',
-                              boxShadow: '0 4px 16px rgba(239, 68, 68, 0.35)',
-                            }}
-                          >
-                            Join Live
-                          </button>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
 
               <div
                 className="live-users-scroll"
@@ -771,9 +654,11 @@ const Home = () => {
                   display: 'flex',
                   gap: '20px',
                   overflowX: 'auto',
-                  paddingBottom: '8px',
+                  overflowY: 'hidden',
+                  paddingBottom: '14px',
                   width: '100%',
-                  scrollbarWidth: 'none',
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: '#6C3CE1 transparent',
                 }}
               >
                 {onlineUsers.length === 0 ? (
@@ -794,14 +679,7 @@ const Home = () => {
                   onlineUsers.map((profile) => (
                     <div
                       key={profile.uid}
-                      onClick={() => {
-                        if (profile.isLive) {
-                          // Tap live user → join stream directly
-                          handleJoinLive(profile.uid, profile.name);
-                        } else {
-                          openUserPreview(profile.uid);
-                        }
-                      }}
+                      onClick={() => openUserPreview(profile.uid)}
                       style={{
                         display: 'flex',
                         flexDirection: 'column',
@@ -827,12 +705,12 @@ const Home = () => {
                           position: 'relative',
                           transition: 'transform 0.2s',
                           borderRadius: '50%',
-                          padding: profile.isLive ? 3 : 0,
+                          padding: profile.isLive ? '4px !important' : '0',
                           background: profile.isLive
-                            ? 'linear-gradient(135deg, #ef4444, #f97316)'
+                            ? 'linear-gradient(135deg, #6C3CE1, #a78bfa) !important'
                             : 'transparent',
                           boxShadow: profile.isLive
-                            ? '0 0 18px rgba(239, 68, 68, 0.55)'
+                            ? '0 0 24px rgba(108,60,225,0.7), 0 0 48px rgba(108,60,225,0.3) !important'
                             : 'none',
                           animation: profile.isLive ? 'liveRingPulse 1.6s ease-in-out infinite' : 'none',
                         }}
@@ -940,6 +818,7 @@ const Home = () => {
           </div>
         </div>
 
+        {/* User Preview Modal */}
         {selectedUser && (
           <UserPreviewModal
             user={selectedUser}
@@ -959,6 +838,7 @@ const Home = () => {
           />
         )}
 
+        {/* Live Viewer Modal */}
         {viewingLive && (
           <LiveViewModal
             broadcasterId={viewingLive.uid}
@@ -974,6 +854,10 @@ const Home = () => {
           0%, 100% { opacity: 1; transform: scale(1); }
           50% { opacity: 0.6; transform: scale(1.3); }
         }
+        @keyframes liveRingPulse {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.7; transform: scale(1.05); }
+        }
         @keyframes fadeInDown {
           from { opacity: 0; transform: translateX(-50%) translateY(-30px); }
           to { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -983,7 +867,16 @@ const Home = () => {
           50% { opacity: 0.8; }
         }
         .live-users-scroll::-webkit-scrollbar {
-          display: none;
+          height: 8px;
+          display: block;
+        }
+        .live-users-scroll::-webkit-scrollbar-track {
+          background: rgba(108,60,225,0.08);
+          border-radius: 99px;
+        }
+        .live-users-scroll::-webkit-scrollbar-thumb {
+          background: #6C3CE1;
+          border-radius: 99px;
         }
         .live-user-card-hover:hover {
           transform: translateY(-4px) scale(1.02);
@@ -1007,6 +900,7 @@ const Home = () => {
           box-shadow: 0 8px 30px rgba(74, 222, 128, 0.5) !important;
         }
       `}</style>
+
       {peerError && (
         <div
           role="alert"

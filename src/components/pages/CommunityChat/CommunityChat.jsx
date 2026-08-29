@@ -23,7 +23,6 @@ import {
 } from '../../../services/messageStorage';
 import { getCache, setCache } from '../../../services/cacheService';
 import './CommunityChat.css';
-import CommunityMembers from './CommunityMembers';
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
@@ -92,7 +91,7 @@ const CommunityChat = () => {
   const [reactionViewer, setReactionViewer] = useState(null);
 
   // ─── Active tab from URL ────────────────────────────────────────
-  const activeTab = tab || 'wall';
+  const activeTab = tab === 'members' ? 'wall' : (tab || 'wall');
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -997,15 +996,11 @@ const CommunityChat = () => {
           <span className="echo-bg-ring r3" />
         </div>
 
-        {/* ─── Content Area ────────────────────────────────────────── */}
         <div className="community-content">
           {activeTab === 'wall' && (
             <CommunityWall communityId={communityId} isMember={isMember} />
           )}
           {activeTab === 'chat' && renderChat()}
-          {activeTab === 'members' && (
-          <CommunityMembers communityId={communityId} />
-        )}
         </div>
 
         {showEmojiPicker && (

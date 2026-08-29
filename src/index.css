@@ -3,6 +3,31 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent !important; /* Disable Android default touch feedback */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* ─── GPU‑accelerate animations ───────────────────────────────── */
+.echomoji, .animated-element {
+  will-change: transform, opacity;
+  transform: translateZ(0);
+  backface-visibility: hidden;
+}
+
+/* ─── Inputs: prevent zoom, improve tap size ─────────────────── */
+input, textarea, button {
+  font-size: 16px !important; /* Prevents iOS zoom on focus */
+  touch-action: manipulation;
+}
+
+button, .clickable {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 12px 16px;
 }
 
 /* ─── Theme Variables ─────────────────────────────────────────── */
@@ -54,6 +79,9 @@ body,
   height: 100%;
   width: 100%;
   overflow: hidden; /* no page scroll */
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0) !important;
+  touch-action: manipulation; /* Prevents zoom on double-tap */
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
@@ -63,11 +91,27 @@ body {
   transition: background 0.3s ease, color 0.3s ease;
 }
 
+/* Remove Android ripple/highlight on interactive elements */
+button,
+a,
+input,
+textarea,
+select,
+.clickable {
+  -webkit-tap-highlight-color: transparent !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+
 #root {
   overflow: hidden;
 }
 
 /* ─── Scrollbars ─────────────────────────────────────────────── */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
 ::-webkit-scrollbar {
   width: 4px;
 }

@@ -4,15 +4,8 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
+import { apiUrl } from '../../../utils/api';
 
-const getApiUrl = () => {
-  const base =
-    process.env.REACT_APP_API_URL ||
-    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-      ? 'http://localhost:3000'
-      : 'https://echoty-pdcy.onrender.com');
-  return base.replace(/\/+$/, '');
-};
 
 const packages = [
   { coins: 500, price: 1000, productId: '105w82207h' },
@@ -54,7 +47,7 @@ const CoinPurchase = () => {
       attempts += 1;
       try {
         const res = await fetch(
-          `${getApiUrl()}/api/payment-status?reference=${encodeURIComponent(pendingRef)}`
+          apiUrl(`/api/payment-status?reference=${encodeURIComponent(pendingRef)}`)
         );
         const data = await res.json();
         if (data.status === 'completed') {
@@ -107,7 +100,7 @@ const CoinPurchase = () => {
     sessionStorage.setItem('selar_payment_uid', user.uid);
 
     try {
-      await fetch(`${getApiUrl()}/api/create-pending-payment`, {
+      await fetch(apiUrl('/api/create-pending-payment'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

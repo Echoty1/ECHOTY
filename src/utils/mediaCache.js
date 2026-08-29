@@ -1,101 +1,103 @@
 // src/utils/mediaCache.js
 import { useState, useEffect } from 'react';
 import { getMedia, storeMedia } from '../services/indexedDBService';
+import { resolveAssetUrl, isCrossOriginAsset } from './assetUrl';
 
 const preloadedSet = new Set();
+const failedSet = new Set();
+const memoryUrls = new Map();
+const inflight = new Map();
+
+async function blobFromIdbOrNetwork(url) {
+  const resolved = resolveAssetUrl(url);
+  if (!resolved || resolved.startsWith('blob:') || resolved.startsWith('data:')) {
+    return { display: resolved, fromCache: true };
+  }
+  if (memoryUrls.has(resolved)) {
+    return { display: memoryUrls.get(resolved), fromCache: true };
+  }
+  if (failedSet.has(resolved)) {
+    return { display: resolved, fromCache: false };
+  }
+  if (inflight.has(resolved)) return inflight.get(resolved);
+
+  const job = (async () => {
+    try {
+      const cached = await getMedia(resolved);
+      if (cached) {
+        const obj = URL.createObjectURL(cached);
+        memoryUrls.set(resolved, obj);
+        return { display: obj, fromCache: true };
+      }
+    } catch (_) {}
+
+    try {
+      const response = await fetch(resolved, { mode: 'cors', credentials: 'omit' });
+      if (!response.ok) throw new Error('bad status');
+      const blob = await response.blob();
+      try { await storeMedia(resolved, blob); } catch (_) {}
+      const obj = URL.createObjectURL(blob);
+      memoryUrls.set(resolved, obj);
+      return { display: obj, fromCache: false };
+    } catch (_) {
+      failedSet.add(resolved);
+      return { display: resolved, fromCache: false };
+    }
+  })();
+
+  inflight.set(resolved, job);
+  try {
+    return await job;
+  } finally {
+    inflight.delete(resolved);
+  }
+}
 
 export const preloadMedia = (url) => {
-  if (!url || typeof url !== 'string' || preloadedSet.has(url)) return;
-  try {
-    const img = new Image();
-    img.src = url;
-    preloadedSet.add(url);
-  } catch (err) {
-    // quiet fallback
-  }
+  const resolved = resolveAssetUrl(url);
+  if (!resolved || preloadedSet.has(resolved)) return;
+  preloadedSet.add(resolved);
+  blobFromIdbOrNetwork(resolved).catch(() => {});
 };
 
 export const useCachedBlobUrl = (originalUrl) => {
-  const [blobUrl, setBlobUrl] = useState(originalUrl);
-  const [isLoading, setIsLoading] = useState(true);
+  const resolved = resolveAssetUrl(originalUrl);
+  const [blobUrl, setBlobUrl] = useState(memoryUrls.get(resolved) || resolved);
+  const [isLoading, setIsLoading] = useState(!!resolved);
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!originalUrl) {
+    if (!resolved) {
       setIsLoading(false);
-      return;
+      return undefined;
     }
-    if (originalUrl.startsWith('blob:')) {
-      setBlobUrl(originalUrl);
+    if (resolved.startsWith('blob:') || resolved.startsWith('data:')) {
+      setBlobUrl(resolved);
       setIsLoading(false);
-      return;
+      return undefined;
     }
-
-    let objectUrl = null;
-    let isMounted = true;
-
-    const load = async () => {
-      try {
-        const blob = await getMedia(originalUrl);
-        if (blob) {
-          objectUrl = URL.createObjectURL(blob);
-          if (isMounted) {
-            setBlobUrl(objectUrl);
-            setIsLoading(false);
-            return;
-          }
-        }
-
-        const response = await fetch(originalUrl);
-        if (!response.ok) throw new Error('Network response not ok');
-        const blobFromNetwork = await response.blob();
-        await storeMedia(originalUrl, blobFromNetwork);
-        objectUrl = URL.createObjectURL(blobFromNetwork);
-        if (isMounted) {
-          setBlobUrl(objectUrl);
-          setIsLoading(false);
-        }
-      } catch (err) {
-        console.warn('Media caching failed:', err);
-        setError(true);
-        setBlobUrl(originalUrl);
-        setIsLoading(false);
-      }
-    };
-    load();
-
-    return () => {
-      isMounted = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [originalUrl]);
+    let alive = true;
+    setIsLoading(true);
+    blobFromIdbOrNetwork(resolved).then((res) => {
+      if (!alive) return;
+      setBlobUrl(res.display || resolved);
+      setIsLoading(false);
+      setError(false);
+    });
+    return () => { alive = false; };
+  }, [resolved]);
 
   return { blobUrl, isLoading, error };
 };
 
 export const useCachedImage = (url, placeholder = null) => {
-  const { blobUrl, isLoading, error } = useCachedBlobUrl(url);
-  if (isLoading) return placeholder || url;
-  if (error) return url;
+  const { blobUrl, isLoading } = useCachedBlobUrl(url);
+  if (isLoading) return placeholder || resolveAssetUrl(url);
   return blobUrl;
 };
 
 export const cacheMedia = async (url) => {
-  if (!url || !url.startsWith('http')) {
-    console.debug('⏭️ Skipping cache for non-HTTP URL:', url);
-    return;
-  }
-
-  try {
-    const existing = await getMedia(url);
-    if (existing) return;
-
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Failed to fetch ${url}: ${response.status}`);
-    const blob = await response.blob();
-    await storeMedia(url, blob);
-    console.log(`✅ Cached media: ${url.substring(0, 60)}...`);
-  } catch (err) {
-    console.debug(`⚠️ Could not pre‑cache media: ${err.message}`);
-  }
+  const resolved = resolveAssetUrl(url);
+  if (!resolved || resolved.startsWith('blob:') || resolved.startsWith('data:')) return;
+  await blobFromIdbOrNetwork(resolved);
 };

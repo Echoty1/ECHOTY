@@ -1,7 +1,7 @@
 // src/components/pages/Chat/EchoAI.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { db } from '../../../services/firebase';
+import { auth, db } from '../../../services/firebase';
 import {
   ref,
   onValue,
@@ -39,21 +39,22 @@ import { cleanCachedMessagesForChat } from '../../../services/messageCleanup';
 import Markdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Toast from '../../Toast/Toast';
+import { apiUrl } from '../../../utils/api';
 import './ChatView.css';
+import './ChatThinking.css';
 
 const ECHO_AI_AVATAR = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
 const ECHO_AI_ID = 'echo_ai_assistant';
 
-const getBackendUrl = (path) => {
-  let base = process.env.REACT_APP_API_URL ||
-             (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-               ? 'http://localhost:3000'
-               : 'https://echoty-pdcy.onrender.com/');
-  // Remove trailing slash from base
-  base = base.replace(/\/+$/, '');
-  // Ensure path starts with a slash
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-  return `${base}${normalizedPath}`;
+const postChat = async (payload) => {
+  const token = await auth.currentUser?.getIdToken?.();
+  const headers = { 'Content-Type': 'application/json' };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return fetch(apiUrl('/api/chat'), {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(payload),
+  });
 };
 
 const EchoAI = () => {
@@ -248,16 +249,11 @@ const EchoAI = () => {
       const updatedMsg = { ...editingMessage, text: newText, isEdited: true };
       await upsertMessageInCache(cId, updatedMsg);
 
-      const response = await fetch(getBackendUrl('/api/chat'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.uid,
-          message: newText,
-          conversationId: currentConversationId,
-          isEdit: true,
-          editMessageId: messageId,
-        }),
+      const response = await postChat({
+        message: newText,
+        conversationId: currentConversationId,
+        isEdit: true,
+        editMessageId: messageId,
       });
 
       const result = await response.json();
@@ -608,14 +604,10 @@ const EchoAI = () => {
     }
 
     try {
-      const response = await fetch(getBackendUrl('/api/chat'), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          userId: user.uid,
-          message: userMessageText,
-          conversationId: currentConversationId,
-        }),
+      const response = await postChat({
+        message: userMessageText,
+        userId: user.uid,
+        conversationId: currentConversationId,
       });
 
       const contentType = response.headers.get('content-type');
@@ -868,11 +860,12 @@ const EchoAI = () => {
             messages.map((msg) => <React.Fragment key={msg.id}>{renderMessage(msg)}</React.Fragment>)
           )}
           {isAILoading && (
-            <div className="message-bubble partner">
-              <div className="typing-indicator">
-                <span></span>
-                <span></span>
-                <span></span>
+            <div className="message-row partner ai-thinking-row">
+              <div className="message-bubble partner ai-thinking">
+                <div className="typing-indicator" aria-hidden="true">
+                  <span></span><span></span><span></span>
+                </div>
+                <span className="ai-thinking-label">ECHO AI is thinking</span>
               </div>
             </div>
           )}

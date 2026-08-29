@@ -12,6 +12,13 @@ const config: CapacitorConfig = {
       skipNativeAuth: false,
       providers: ['google.com']
     }
+  },
+  android: {
+    allowMixedContent: true,
+    webContentsDebuggingEnabled: false,
+  },
+  ios: {
+    limitsNavigationsToAppBoundDomains: true,
   }
 };
 

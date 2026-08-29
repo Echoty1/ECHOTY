@@ -16,7 +16,6 @@ const UserPreviewModal = ({
 
   const skin = user.activeSkin ? getSkinById(user.activeSkin) : null;
   const isLive = user.isLive || false;
-  // Call disabled if THEY are live OR YOU are live
   const callDisabled = isLive || callerIsLive;
 
   return (
@@ -29,14 +28,17 @@ const UserPreviewModal = ({
         <div className="user-preview-avatar-wrapper">
           <div
             className="user-preview-avatar-ring"
-            style={
-              isLive
-                ? {
-                    background: 'linear-gradient(135deg, #ef4444, #f97316)',
-                    boxShadow: '0 0 24px rgba(239, 68, 68, 0.5)',
-                  }
-                : undefined
-            }
+            style={{
+              background: isLive
+                ? 'linear-gradient(135deg, #6C3CE1, #a78bfa)'
+                : 'transparent',
+              boxShadow: isLive
+                ? '0 0 24px rgba(108,60,225,0.6)'
+                : 'none',
+              padding: isLive ? 4 : 0,
+              borderRadius: '50%',
+              lineHeight: 0,
+            }}
           >
             <Avatar src={user.avatar} name={user.name} size={80} />
           </div>
@@ -133,7 +135,6 @@ const UserPreviewModal = ({
         }
         .user-preview-avatar-ring {
           border-radius: 50%;
-          padding: 3px;
           line-height: 0;
         }
         .user-preview-avatar-ring > * {
@@ -215,11 +216,6 @@ const UserPreviewModal = ({
           background: linear-gradient(135deg, #ef4444, #dc2626);
           color: #fff;
           box-shadow: 0 4px 20px rgba(239, 68, 68, 0.35);
-          width: 100%;
-          justify-content: center;
-          margin-top: 4px;
-          padding: 12px 20px;
-          font-size: 15px;
         }
         .user-preview-join-btn:hover {
           transform: scale(1.02);

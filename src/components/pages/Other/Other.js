@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
+// import TawkTo from '../../TawkTo/TawkTo'; // 👈 Remove if you already have it in App.js
 import './Other.css';
 
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
@@ -11,9 +12,9 @@ const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 const Other = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const isSupport = user?.uid === SUPPORT_UID;
 
-  // Base menu for everyone – Shop is already in bottom nav, so it's not here
-  const menuItems = [
+  const baseMenu = [
     {
       id: 'profile',
       label: 'Profile',
@@ -58,16 +59,30 @@ const Other = () => {
     },
   ];
 
+  // Admin gets Shop
+  const menuItems = isSupport
+    ? [
+        baseMenu[0],
+        {
+          id: 'shop',
+          label: 'Shop',
+          icon: 'fa-store',
+          path: '/shop',
+          description: 'Buy skins and premium GIFs',
+        },
+        ...baseMenu.slice(1),
+      ]
+    : baseMenu;
+
   return (
     <>
-      <SEO
-        title="Settings & Legal"
-        description="Manage your ECHO settings, read our terms of service, privacy policy, and learn more about us."
-      />
+      <SEO title="Settings & Legal" description="Manage your ECHO settings..." />
       <StructuredData />
+      {/* No TawkTo here – already in App.js */}
+
       <div className="other-page">
         <div className="other-header">
-          <h2 className="other-title">⚙️ Other</h2>
+          <h2 className="other-title">⚙️ More</h2>
           <p className="other-subtitle">Explore additional features and policies</p>
         </div>
         <div className="other-menu">

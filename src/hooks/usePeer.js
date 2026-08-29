@@ -7,15 +7,15 @@ export const usePeer = (userId) => {
   const peerInstance = useRef(null);
 
   useEffect(() => {
-    if (!userId || peerInstance.current) return;
+    if (!userId) return undefined;
 
-    // Create a single Peer instance attached to the user ID
-    const newPeer = new Peer(userId, {
+    // Let PeerJS assign the id. Reusing Firebase UID collides across tabs/devices.
+    const newPeer = new Peer(undefined, {
       host: '0.peerjs.com',
       port: 443,
       path: '/',
       secure: true,
-      debug: 1
+      debug: 1,
     });
 
     newPeer.on('open', (id) => {
@@ -24,23 +24,24 @@ export const usePeer = (userId) => {
     });
 
     newPeer.on('disconnected', () => {
-      // Reconnect existing peer instead of destroying/recreating
       if (!newPeer.destroyed) {
         newPeer.reconnect();
       }
     });
 
     newPeer.on('error', (err) => {
-      console.warn('PeerJS non-fatal error:', err.type);
+      console.warn('PeerJS non-fatal error:', err?.type || err);
     });
 
     peerInstance.current = newPeer;
 
     return () => {
-      if (peerInstance.current) {
-        peerInstance.current.destroy();
-        peerInstance.current = null;
-      }
+      try {
+        newPeer.destroy();
+      } catch (_) {}
+      peerInstance.current = null;
+      setPeer(null);
+      setPeerId(null);
     };
   }, [userId]);
 
