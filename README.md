@@ -292,4 +292,4 @@ Then follow step 5 above to generate the AAB.
 
 5. **Don't invent features:** If a feature isn't in the code yet, describe it as "planned", not "implemented".
 
-6. **Test both states:** Logged in, Logged out, Normal user, Admin user, and Mobile view (resize your browser).
+6. **Test both states:** Logged in, Logged out, Normal user, Admin user, and Mobile view (resize your browser). 
