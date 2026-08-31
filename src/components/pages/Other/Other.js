@@ -30,6 +30,13 @@ const Other = () => {
       description: 'Manage your account and preferences',
     },
     {
+      id: 'bookmarks',
+      label: 'Bookmarks',
+      icon: 'fa-bookmark',
+      path: '/bookmarks',
+      description: 'Saved messages that skip ECHO Tides',
+    },
+    {
       id: 'about',
       label: 'About Us',
       icon: 'fa-info-circle',

@@ -7,9 +7,6 @@
   background: var(--bg-primary);
   color: var(--text-primary);
 }
-
-/* ... rest of the file remains unchanged ... */
-
 /* ─── Desktop: stretch full width ───────────────────────────── */
 @media (min-width: 1024px) {
   .settings-page {
@@ -40,7 +37,6 @@
     padding: 12px 16px;
   }
 }
-
 .settings-header {
   position: sticky;
   top: 0px;
@@ -81,8 +77,6 @@
   margin: 0;
   flex: 1;
 }
-/* rest unchanged */
-
 .settings-header h1 {
   font-size: 24px;
   font-weight: 700;
@@ -91,7 +85,6 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
-
 .settings-content {
   display: flex;
   flex-direction: column;
@@ -124,7 +117,6 @@
   border-color: rgba(255, 80, 80, 0.2);
   background: rgba(255, 80, 80, 0.03);
 }
-
 .btn-danger {
   padding: 10px 24px;
   border-radius: 40px;
@@ -143,7 +135,6 @@
   transform: scale(1.02);
   box-shadow: 0 4px 20px rgba(239, 68, 68, 0.3);
 }
-
 .verify-section,
 .confirm-section {
   margin-top: 12px;
@@ -168,7 +159,6 @@
   font-size: 13px;
   margin-top: 4px;
 }
-
 .verify-actions,
 .confirm-actions {
   display: flex;
@@ -205,7 +195,6 @@
   background: var(--border-color);
   color: var(--text-primary);
 }
-
 .deleting-section {
   display: flex;
   flex-direction: column;
@@ -224,7 +213,6 @@
 @keyframes spin {
   to { transform: rotate(360deg); }
 }
-
 .done-section {
   display: flex;
   flex-direction: column;
@@ -262,21 +250,17 @@
   0% { transform: scale(0.5); opacity: 0.8; }
   100% { transform: scale(2); opacity: 0; }
 }
-
-
 /* ─── Chat Management ─────────────────────────────────────────── */
 .chat-management .chat-loading {
   color: var(--text-muted);
   text-align: center;
   padding: 20px 0;
 }
-
 .chat-management .no-chats-message {
   color: var(--text-muted);
   text-align: center;
   padding: 20px 0;
 }
-
 .chat-list-header {
   display: flex;
   justify-content: space-between;
@@ -285,7 +269,6 @@
   flex-wrap: wrap;
   gap: 8px;
 }
-
 .chat-select-all {
   display: flex;
   align-items: center;
@@ -299,7 +282,6 @@
   accent-color: #6C3CE1;
   cursor: pointer;
 }
-
 .chat-actions {
   display: flex;
   gap: 8px;
@@ -345,7 +327,6 @@
 .btn-delete-all:hover:not(:disabled) {
   background: rgba(239, 68, 68, 0.35);
 }
-
 .chat-list {
   max-height: 350px;
   overflow-y: auto;
@@ -361,7 +342,6 @@
   background: var(--scrollbar-thumb);
   border-radius: 4px;
 }
-
 .chat-list-item {
   display: flex;
   align-items: center;
@@ -379,7 +359,6 @@
 .chat-list-item.is-cleared {
   opacity: 0.6;
 }
-
 .chat-list-item .chat-checkbox {
   width: 18px;
   height: 18px;
@@ -387,11 +366,9 @@
   cursor: pointer;
   flex-shrink: 0;
 }
-
 .chat-list-item .chat-avatar {
   flex-shrink: 0;
 }
-
 .chat-list-item .chat-info {
   flex: 1;
   min-width: 0;
@@ -413,7 +390,6 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
-
 .chat-list-item .chat-actions-single {
   display: flex;
   gap: 4px;
@@ -437,37 +413,6 @@
   background: rgba(239, 68, 68, 0.1);
   color: #ef4444;
 }
-
-/* ─── Responsive tweaks ────────────────────────────────────── */
-@media (max-width: 600px) {
-  .chat-list-header {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-  }
-  .chat-actions {
-    justify-content: stretch;
-  }
-  .chat-actions button {
-    flex: 1;
-    justify-content: center;
-  }
-  .chat-list-item {
-    padding: 8px 10px;
-    gap: 8px;
-    flex-wrap: wrap;
-  }
-  .chat-list-item .chat-name {
-    font-size: 13px;
-  }
-  .chat-list-item .chat-last-message {
-    font-size: 12px;
-  }
-  .chat-list-item .chat-actions-single {
-    margin-left: auto;
-  }
-}
-
 /* ─── Chat search bar ─────────────────────────────────────────── */
 .chat-search-wrapper {
   display: flex;
@@ -510,163 +455,7 @@
 .chat-search-wrapper .search-clear:hover {
   color: var(--text-primary);
 }
-
-/* ─── Rest of chat management styles (if not already present) ─── */
-.chat-management .chat-loading {
-  color: var(--text-muted);
-  text-align: center;
-  padding: 20px 0;
-}
-.chat-management .no-chats-message {
-  color: var(--text-muted);
-  text-align: center;
-  padding: 20px 0;
-}
-.chat-list-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 12px;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-.chat-select-all {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-secondary);
-  font-size: 14px;
-}
-.chat-select-all input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  accent-color: #6C3CE1;
-  cursor: pointer;
-}
-.chat-actions {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-}
-.chat-actions button {
-  padding: 6px 14px;
-  border-radius: 20px;
-  border: none;
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-  transition: transform 0.15s, opacity 0.2s;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.chat-actions button:hover:not(:disabled) {
-  transform: scale(1.02);
-}
-.chat-actions button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-.btn-clear-history {
-  background: rgba(108, 60, 225, 0.15);
-  color: #8B5CF6;
-}
-.btn-clear-history:hover:not(:disabled) {
-  background: rgba(108, 60, 225, 0.25);
-}
-.btn-delete-chat {
-  background: rgba(239, 68, 68, 0.15);
-  color: #ef4444;
-}
-.btn-delete-chat:hover:not(:disabled) {
-  background: rgba(239, 68, 68, 0.25);
-}
-.chat-list {
-  max-height: 350px;
-  overflow-y: auto;
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  padding: 4px 0;
-  background: var(--bg-input);
-}
-.chat-list::-webkit-scrollbar {
-  width: 4px;
-}
-.chat-list::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 4px;
-}
-.chat-list-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px;
-  border-bottom: 1px solid var(--border-color);
-  transition: background 0.15s;
-}
-.chat-list-item:last-child {
-  border-bottom: none;
-}
-.chat-list-item:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-.chat-list-item.is-cleared {
-  opacity: 0.6;
-}
-.chat-list-item .chat-checkbox {
-  width: 18px;
-  height: 18px;
-  accent-color: #6C3CE1;
-  cursor: pointer;
-  flex-shrink: 0;
-}
-.chat-list-item .chat-avatar {
-  flex-shrink: 0;
-}
-.chat-list-item .chat-info {
-  flex: 1;
-  min-width: 0;
-}
-.chat-list-item .chat-name {
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 14px;
-}
-.chat-list-item .chat-name .cleared-badge {
-  font-weight: 400;
-  font-size: 12px;
-  color: var(--text-muted);
-}
-.chat-list-item .chat-last-message {
-  color: var(--text-muted);
-  font-size: 13px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.chat-list-item .chat-actions-single {
-  display: flex;
-  gap: 4px;
-  flex-shrink: 0;
-}
-.chat-list-item .chat-actions-single button {
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 4px 6px;
-  border-radius: 50%;
-  transition: background 0.2s, color 0.2s;
-  font-size: 14px;
-  color: var(--text-muted);
-}
-.chat-list-item .chat-actions-single .btn-clear-single:hover {
-  background: rgba(108, 60, 225, 0.1);
-  color: #8B5CF6;
-}
-.chat-list-item .chat-actions-single .btn-delete-single:hover {
-  background: rgba(239, 68, 68, 0.1);
-  color: #ef4444;
-}
+/* ─── Responsive tweaks ────────────────────────────────────── */
 @media (max-width: 600px) {
   .chat-list-header {
     flex-direction: column;
@@ -695,7 +484,6 @@
     margin-left: auto;
   }
 }
-
 /* ─── Chat background toggle ───────────────────────────────── */
 .echo-toggle-btn {
   display: inline-flex;
@@ -741,4 +529,43 @@
   color: var(--text-secondary);
 }
 
-
+/* ─── Bookmarks (Echo Archive) ──────────────────────────────── */
+.echo-bookmark-list {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.echo-bookmark-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+}
+.echo-bookmark-item p {
+  margin: 4px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+.echo-bookmark-item button {
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 4px 6px;
+}
+.echo-bookmark-item button:hover {
+  color: #ef4444;
+}
+.echo-bookmark-source {
+  color: var(--text-muted);
+  font-weight: 500;
+  font-size: 12px;
+}

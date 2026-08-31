@@ -1,7 +1,6 @@
 // src/components/pages/Communities/Communities.jsx
 import React, { useEffect, useState, useMemo, useCallback, memo } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
 import { ref, onValue, set, runTransaction, push, get } from 'firebase/database';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
@@ -54,9 +53,8 @@ const CommunityCard = memo(({ community, isMember, isJoining, isLeaving, onJoin,
   const busy = isJoining || isLeaving;
 
   return (
-    <motion.div
+    <div
       className="community-card"
-      whileHover="hover"
       style={{
         '--card-bg': community.bgColor || '#12121a',
       }}
@@ -127,7 +125,7 @@ const CommunityCard = memo(({ community, isMember, isJoining, isLeaving, onJoin,
           )}
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 });
 
@@ -432,9 +430,11 @@ const Communities = () => {
           <span className="echo-brand-orb o2" aria-hidden="true" />
           <span className="echo-brand-orb o3" aria-hidden="true" />
           <div className="echo-brand-inner">
-            <p className="echo-brand-kicker">ECHO Brand</p>
-            <h3 className="echo-brand-title">Want your own community?</h3>
-            <p className="echo-brand-sub">Create it on brand.echoty.xyz</p>
+            <div className="echo-brand-copy">
+              <p className="echo-brand-kicker">ECHO Brand</p>
+              <h3 className="echo-brand-title">Want your own community?</h3>
+              <p className="echo-brand-sub">Create it on brand.echoty.xyz</p>
+            </div>
             <span className="echo-brand-cta">Visit brand.echoty.xyz</span>
           </div>
         </a>

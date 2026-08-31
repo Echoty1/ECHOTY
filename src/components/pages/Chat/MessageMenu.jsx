@@ -10,6 +10,8 @@ const MessageMenu = ({
   onReply,
   onEdit,
   onReact,
+  onSave,
+  saved = false,
   copyText,
 }) => {
   const [showActions, setShowActions] = useState(false);
@@ -18,6 +20,7 @@ const MessageMenu = ({
   const containerRef = useRef(null);
   const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
   const copyTimeout = useRef(null);
+  const hideTimer = useRef(null);
 
   const handleCopy = (e) => {
     e.stopPropagation();
@@ -66,8 +69,9 @@ const MessageMenu = ({
   const showEdit = isOwn && typeof onEdit === 'function';
   const showDelete = canDelete && typeof onDelete === 'function';
   const showReact = typeof onReact === 'function';
+  const showSave = typeof onSave === 'function';
 
-  const hasActions = showDelete || showEdit || showReply || showCopy || showReact;
+  const hasActions = showDelete || showEdit || showReply || showCopy || showReact || showSave;
 
   if (!hasActions) {
     return <>{children}</>;
@@ -75,20 +79,14 @@ const MessageMenu = ({
 
   const handleMouseEnter = () => {
     if (!isTouchDevice) {
+      if (hideTimer.current) clearTimeout(hideTimer.current);
       setShowActions(true);
     }
   };
 
-  const handleMouseLeave = (e) => {
+  const handleMouseLeave = () => {
     if (!isTouchDevice) {
-      const related = e.relatedTarget;
-      if (related && related.nodeType === 1 && containerRef.current) {
-        if (!containerRef.current.contains(related)) {
-          setShowActions(false);
-        }
-      } else {
-        setShowActions(false);
-      }
+      hideTimer.current = setTimeout(() => setShowActions(false), 400);
     }
   };
 
@@ -164,6 +162,15 @@ const MessageMenu = ({
         {showDelete && (
           <button className="message-action-btn delete" onClick={handleDeleteClick}>
             <i className="fas fa-trash-alt" />
+          </button>
+        )}
+        {showSave && (
+          <button
+            className={`message-action-btn save ${saved ? 'saved' : ''}`}
+            onClick={(e) => { e.stopPropagation(); setShowActions(false); onSave(); }}
+            title={saved ? 'Remove bookmark' : 'Bookmark'}
+          >
+            <i className={`fas ${saved ? 'fa-bookmark' : 'fa-bookmark'}`} style={saved ? { color: '#f59e0b' } : undefined} />
           </button>
         )}
         {showReact && (

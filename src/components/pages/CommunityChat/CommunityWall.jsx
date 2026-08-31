@@ -94,9 +94,9 @@ const MediaItem = memo(({ mediaUrl, mediaType, caption, onClick }) => {
 });
 
 // ─── Memoized Post ─────────────────────────────────────────────
-const Post = memo(({ post, authorProfile, isOwn, onDelete, onMediaClick, onPostClick, isRead }) => {
-  const authorName = authorProfile?.name || 'User';
-  const authorAvatar = authorProfile?.avatar || '';
+const Post = memo(({ post, authorProfile, isOwn, onDelete, onMediaClick, onPostClick, isRead, views = 0 }) => {
+  const authorName = authorProfile?.name || post.authorName || 'User';
+  const authorAvatar = authorProfile?.avatar || post.authorAvatar || '';
 
   const handleClick = (e) => {
     if (e.target.closest('.wall-post-delete')) return;
@@ -126,6 +126,7 @@ const Post = memo(({ post, authorProfile, isOwn, onDelete, onMediaClick, onPostC
           </button>
         )}
         {!isRead && <span className="wall-post-unread-badge">New</span>}
+        <span className="wall-post-views">{Number(views || 0)} view{Number(views || 0) === 1 ? '' : 's'}</span>
       </div>
       {post.text && <div className="wall-post-text">{post.text}</div>}
       {post.mediaUrl && (
@@ -162,6 +163,7 @@ const CommunityWall = ({ communityId, isMember }) => {
   const [uploadErrorMessage, setUploadErrorMessage] = useState('');
   const [showReadPosts, setShowReadPosts] = useState(false);
   const [readPosts, setReadPosts] = useState({});
+  const [viewCounts, setViewCounts] = useState({});
 
   // ─── Load read status from Firebase + localStorage fallback ──
   useEffect(() => {
@@ -252,6 +254,10 @@ const CommunityWall = ({ communityId, isMember }) => {
         if (!showReadPosts) {
           filtered = filtered.filter(p => !readPosts[p.id]);
         }
+        postList.forEach((p) => {
+          const aid = p.uid || p.authorId || p.senderId;
+          if (aid) fetchProfile(aid);
+        });
         setFilteredPosts(filtered);
         setLoading(false);
 
@@ -281,7 +287,11 @@ const CommunityWall = ({ communityId, isMember }) => {
           if (!showReadPosts) {
             filtered = filtered.filter(p => !readPosts[p.id]);
           }
-          setFilteredPosts(filtered);
+          postList.forEach((p) => {
+          const aid = p.uid || p.authorId || p.senderId;
+          if (aid) fetchProfile(aid);
+        });
+        setFilteredPosts(filtered);
           setLoading(false);
           clearTimeout(timeoutId);
         }
@@ -297,8 +307,30 @@ const CommunityWall = ({ communityId, isMember }) => {
   }, [communityId, filterUid, showReadPosts, readPosts, loading]);
 
   // ─── Mark post as read (Firebase + localStorage fallback) ────
+  useEffect(() => {
+    if (!communityId) return undefined;
+    const viewsRef = ref(db, `communityPostViews/${communityId}`);
+    return onValue(viewsRef, (snap) => {
+      const data = snap.val() || {};
+      const next = {};
+      Object.entries(data).forEach(([pid, users]) => {
+        next[pid] = users ? Object.keys(users).length : 0;
+      });
+      setViewCounts(next);
+    });
+  }, [communityId]);
+
   const markPostAsRead = async (postId) => {
     if (!user?.uid || !communityId) return;
+    // Always count a unique view, even if this device already marked it read
+    try {
+      const viewedRef = ref(db, `communityPostViews/${communityId}/${postId}/${user.uid}`);
+      const already = await get(viewedRef);
+      if (!already.exists()) {
+        await set(viewedRef, Date.now());
+      }
+    } catch (_) {}
+
     if (readPosts[postId]) return;
 
     // Optimistically update UI immediately
@@ -315,6 +347,14 @@ const CommunityWall = ({ communityId, isMember }) => {
     try {
       const readRef = ref(db, `communityPostReads/${user.uid}/${communityId}/${postId}`);
       await set(readRef, true);
+      const viewedRef = ref(db, `communityPostViews/${communityId}/${postId}/${user.uid}`);
+      const already = await get(viewedRef);
+      if (!already.exists()) {
+        await set(viewedRef, Date.now());
+        const countRef = ref(db, `communityPosts/${communityId}/${postId}/viewCount`);
+        const snap = await get(countRef);
+        await set(countRef, Number(snap.val() || 0) + 1);
+      }
     } catch (err) {
       console.warn('Failed to mark post as read in Firebase (using localStorage fallback):', err.message);
       // Already stored in localStorage, so the UI will still hide the post.
@@ -374,6 +414,8 @@ const CommunityWall = ({ communityId, isMember }) => {
       const now = Date.now();
       await set(postRef, {
         uid: user.uid,
+        authorName: getProfile(user.uid)?.name || user.displayName || '',
+        authorAvatar: getProfile(user.uid)?.avatar || '',
         text: caption.trim() || '',
         mediaUrl: downloadURL,
         mediaType,
@@ -538,7 +580,7 @@ const CommunityWall = ({ communityId, isMember }) => {
               className={`wall-toggle-read ${showReadPosts ? 'active' : ''}`}
               onClick={toggleReadPosts}
             >
-              {showReadPosts ? 'Hide Read' : 'Show Read'}
+              {showReadPosts ? 'Showing all' : 'Unread only'}
             </button>
             {isMember && (
               <button
@@ -570,8 +612,9 @@ const CommunityWall = ({ communityId, isMember }) => {
           </div>
         ) : (
           displayPosts.map((post) => {
-            const authorProfile = getProfile(post.uid) || {};
-            const isOwn = post.uid === user?.uid;
+            const authorId = post.uid || post.authorId || post.senderId;
+            const authorProfile = getProfile(authorId) || {};
+            const isOwn = authorId === user?.uid;
             const isRead = !!readPosts[post.id];
 
             return (
@@ -581,6 +624,7 @@ const CommunityWall = ({ communityId, isMember }) => {
                 authorProfile={authorProfile}
                 isOwn={isOwn}
                 isRead={isRead}
+                views={viewCounts[post.id] || post.viewCount || 0}
                 onDelete={confirmDeletePost}
                 onPostClick={markPostAsRead}
                 onMediaClick={(p) => {
@@ -600,6 +644,7 @@ const CommunityWall = ({ communityId, isMember }) => {
           })
         )}
       </div>
+
 
       {renderAddPostModal()}
 

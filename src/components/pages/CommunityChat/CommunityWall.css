@@ -1,7 +1,7 @@
 /* src/components/pages/CommunityChat/CommunityWall.css */
 
 .community-wall-container {
-  padding: 16px 16px 100px; /* bottom padding for bottom nav */
+  padding: 16px 16px 132px; /* clear bottom nav */
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -429,7 +429,7 @@
 /* ─── Responsive ────────────────────────────────────────────────── */
 @media (max-width: 480px) {
   .community-wall-container {
-    padding: 12px 12px 100px;
+    padding: 12px 12px 132px;
   }
 
   .wall-add-post-modal {
@@ -549,17 +549,24 @@
   .community-wall-container {
     max-width: 720px;
     margin: 0 auto;
-    padding: 20px 16px 32px;
+    padding: 20px 16px 132px;
     width: 100%;
   }
 }
 
 @media (max-width: 480px) {
   .community-wall-container {
-    padding: 10px 10px 24px;
+    padding: 10px 10px 132px;
     gap: 12px;
   }
   .wall-feed-title {
     font-size: 16px;
   }
 }
+.wall-post-views {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+.wall-post-header { align-items: center; }

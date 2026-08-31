@@ -22,6 +22,7 @@ import { clearChatList } from '../../../services/indexedDBService';
 import { clearMessagesCache } from '../../../services/messageStorage';
 import { clearMessageCache } from '../../../services/messageCache';
 import './Settings.css';
+import { listEchoArchive, removeEchoArchive } from '../../../services/echoArchive';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
@@ -41,6 +42,7 @@ const Settings = () => {
   const [chats, setChats] = useState([]);
   const [selectedChats, setSelectedChats] = useState(new Set());
   const [loadingChats, setLoadingChats] = useState(true);
+  const [bookmarks, setBookmarks] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
@@ -85,6 +87,7 @@ const Settings = () => {
   // ─── Load user's chats ────────────────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
+    listEchoArchive(user.uid).then(setBookmarks).catch(() => {});
 
     const userChatsRef = ref(db, `userChats/${user.uid}`);
     const unsubscribe = onValue(userChatsRef, (snapshot) => {
@@ -573,6 +576,30 @@ const Settings = () => {
           </div>
 
           {/* ─── CHAT MANAGEMENT CARD ───────────────────────────── */}
+          <div className="settings-card">
+            <h2><i className="fas fa-bookmark" /> Bookmarks</h2>
+            <p>Messages you saved on this device. Maximum 10. They stay even after ECHO Tides removes the chat copy.</p>
+            {bookmarks.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)', marginTop: 8 }}>No bookmarks yet. Hover a message and tap the bookmark.</p>
+            ) : (
+              <ul className="echo-bookmark-list">
+                {bookmarks.map((row) => (
+                  <li key={row.archiveId} className="echo-bookmark-item">
+                    <div>
+                      <strong>{row.message?.senderId === user.uid ? 'You' : (row.message?.senderName || 'User')}</strong>
+                      <span className="echo-bookmark-source"> · {row.source === 'community' ? 'Community' : 'Chat'}</span>
+                      <p>{row.message?.text || (row.message?.mediaType ? 'Media' : 'Saved message')}</p>
+                    </div>
+                    <button type="button" onClick={async () => {
+                      await removeEchoArchive(row.archiveId);
+                      setBookmarks(await listEchoArchive(user.uid));
+                    }}>Remove</button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div className="settings-card chat-management">
             <h2><i className="fas fa-comment-slash" /> Chat Management</h2>
             <p>Manage your conversations. Actions affect both you and the other person.</p>

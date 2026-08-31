@@ -4,6 +4,7 @@ import { NavLink } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { db } from '../../services/firebase';
 import { ref, onValue } from 'firebase/database';
+import { setFaviconBadge } from '../../utils/faviconBadge';
 
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 
@@ -15,9 +16,7 @@ const BottomNav = () => {
   const startOffset = useRef({ x: 0, y: 0 });
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
 
-  const [isMinimized, setIsMinimized] = useState(() => {
-    return localStorage.getItem('bottomNavMinimized') === 'true';
-  });
+  const isMinimized = false;
 
   const toggleMinimize = () => {
     const newState = !isMinimized;
@@ -77,6 +76,7 @@ const BottomNav = () => {
         }
       });
       setUnreadChatsCount(count);
+        setFaviconBadge(count).catch(() => {});
     });
 
     return () => unsubscribe();
@@ -152,7 +152,7 @@ const BottomNav = () => {
         width: 'calc(100% - 16px)',
         maxWidth: '440px',
         boxShadow: '0 8px 40px var(--shadow-color)',
-        cursor: isDragging ? 'grabbing' : isMinimized ? 'default' : 'grab',
+        cursor: isDragging ? 'grabbing' : 'grab',
         touchAction: 'none',
         transition: 'height 0.3s cubic-bezier(0.22, 1, 0.36, 1), opacity 0.25s ease',
         userSelect: 'none',
@@ -164,7 +164,6 @@ const BottomNav = () => {
     >
       {/* ─── Toggle Button ────────────────────────────────────── */}
       <button
-        onClick={toggleMinimize}
         style={{
           position: 'absolute',
           top: '4px',
@@ -178,7 +177,7 @@ const BottomNav = () => {
           padding: '2px 8px',
           zIndex: 10,
         }}
-        aria-label={isMinimized ? 'Expand navigation' : 'Minimize navigation'}
+        aria-hidden="true" style={{ display: 'none' }}
       >
         <i className={`fas fa-chevron-${isMinimized ? 'up' : 'down'}`} />
       </button>

@@ -13,8 +13,10 @@ import {
   runTransaction,
 } from 'firebase/database';
 import { useAuth } from '../../../hooks/useAuth';
+import { sortMessages as sortMessagesByTime } from '../../../utils/sortMessages';
 import { useProfile } from '../../../contexts/ProfileContext';
-import { db } from '../../../services/firebase';
+import { auth, db } from '../../../services/firebase';
+import { apiUrl } from '../../../utils/api';
 import {
   loadMessagesFromCache,
   upsertMessageInCache,
@@ -31,6 +33,8 @@ import Avatar from '../../common/Avatar';
 import ChatMediaMessage from './ChatMediaMessage';
 import AudioPlayer from './AudioPlayer';
 import MessageMenu from './MessageMenu';
+import { saveToEchoArchive, listEchoArchive, removeEchoArchive } from '../../../services/echoArchive';
+import { privateExpiresAt, isTideExpired, tideProgress, formatTideLeft, PRIVATE_TTL_MS } from '../../../utils/echoTides';
 import ReplyPreview from './ReplyPreview';
 import RepliedMessage from './RepliedMessage';
 import EditMessageModal from './EditMessageModal';
@@ -40,7 +44,8 @@ import VoiceRecorder from './VoiceRecorder';
 import MediaPreview from '../../common/MediaPreview';
 import CustomVideoPlayer from '../../common/CustomVideoPlayer';
 import ConfirmModal from '../../common/ConfirmModal';
-import Modal from '../../common/Modal'; // <-- added for file-size warning
+import Modal from '../../common/Modal';
+import Toast from '../../Toast/Toast'; // <-- added for file-size warning
 import { SkeletonMessage } from '../../common/SkeletonLoader';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
@@ -74,17 +79,7 @@ const msgTime = (m) => {
   return 0;
 };
 
-const sortMessages = (list) =>
-  (list || []).slice().sort((a, b) => {
-    const ia = String(a.id || a.key || '');
-    const ib = String(b.id || b.key || '');
-    const aPush = ia.charAt(0) === '-';
-    const bPush = ib.charAt(0) === '-';
-    if (aPush && bPush && ia !== ib) return ia < ib ? -1 : 1;
-    const d = msgTime(a) - msgTime(b);
-    if (d !== 0) return d;
-    return ia.localeCompare(ib);
-  });
+const sortMessages = (list) => sortMessagesByTime(list);
 
 const formatMsgClock = (m) => {
   const ts = msgTime(m);
@@ -150,6 +145,9 @@ const ChatView = () => {
 
   // ─── File size warning modal ──────────────────────────────────
   const [fileSizeError, setFileSizeError] = useState(false);
+  const [toast, setToast] = useState(null);
+  const [bookmarkedIds, setBookmarkedIds] = useState({});
+  const stampedLegacyTides = useRef(false);
 
   // ─── Confirm Modal State ──────────────────────────────────────
   const [confirmModal, setConfirmModal] = useState({
@@ -246,6 +244,8 @@ const ChatView = () => {
       msgs.forEach((msg) => {
         if (msg.receiverId === user.uid && msg.isRead === false) {
           updates[`chats/${cId}/messages/${msg.key}/isRead`] = true;
+          updates[`chats/${cId}/messages/${msg.key}/readAt`] = Date.now();
+          updates[`chats/${cId}/messages/${msg.key}/expiresAt`] = privateExpiresAt();
           hasUnread = true;
         }
       });
@@ -340,6 +340,7 @@ const ChatView = () => {
       text: textToSend,
       timestamp: Date.now(),
       isRead: false,
+      expiresAt: privateExpiresAt(),
       pending: true,
     };
     if (replyToSave) {
@@ -367,6 +368,7 @@ const ChatView = () => {
       timestamp: Date.now(),
       clientTs: Date.now(),
       isRead: false,
+      expiresAt: privateExpiresAt(),
     };
     if (replyToSave) {
       msgData.replyTo = {
@@ -383,6 +385,34 @@ const ChatView = () => {
       console.error('Send failed:', err);
       setMessages((prev) => prev.filter((m) => m.id !== tempId));
       return;
+    }
+
+    if (userId === ECHO_AI_ID) {
+      setIsAILoading(true);
+      try {
+        const token = await auth.currentUser?.getIdToken?.();
+        const headers = { 'Content-Type': 'application/json' };
+        if (token) headers.Authorization = `Bearer ${token}`;
+        const response = await fetch(apiUrl('/api/chat'), {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ message: textToSend, userId: user.uid }),
+        });
+        if (!response.ok) {
+          const errBody = await response.json().catch(() => ({}));
+          throw new Error(errBody.error || 'AI request failed');
+        }
+      } catch (err) {
+        setMessages((prev) => prev.concat({
+          id: `ai_err_${Date.now()}`,
+          senderId: ECHO_AI_ID,
+          text: 'ECHO AI could not reply. Check that the backend is running.',
+          timestamp: Date.now(),
+          type: 'text',
+        }));
+      } finally {
+        setIsAILoading(false);
+      }
     }
 
     await patchMyUserChat(userId, {
@@ -484,6 +514,7 @@ const ChatView = () => {
       caption: caption,
       timestamp: Date.now(),
       isRead: false,
+      expiresAt: privateExpiresAt(),
       isUploading: true,
       uploadProgress: 0,
       isMediaReady: true,
@@ -526,6 +557,7 @@ const ChatView = () => {
         caption: caption,
         timestamp: Date.now(),
         isRead: false,
+      expiresAt: privateExpiresAt(),
       };
       if (currentReply) {
         realMsg.replyTo = {
@@ -616,6 +648,7 @@ const ChatView = () => {
       duration: duration,
       timestamp: Date.now(),
       isRead: false,
+      expiresAt: privateExpiresAt(),
       isUploading: true,
       uploadProgress: 0,
       isMediaReady: false,
@@ -676,6 +709,7 @@ const ChatView = () => {
         duration: duration,
         timestamp: Date.now(),
         isRead: false,
+      expiresAt: privateExpiresAt(),
       };
       if (currentReply) {
         realMsg.replyTo = {
@@ -1017,10 +1051,19 @@ const ChatView = () => {
     const el = messageRefs.current[messageId];
     if (el) {
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('highlight-flash');
+      setTimeout(() => el.classList.remove('highlight-flash'), 1600);
     } else {
       scrollToBottom(true);
     }
   };
+
+  useEffect(() => {
+    const focusId = new URLSearchParams(location.search || '').get('focus');
+    if (!focusId || !messages.length) return;
+    const t = setTimeout(() => jumpToMessage(focusId), 250);
+    return () => clearTimeout(t);
+  }, [location.search, messages.length]);
 
   const openUserChat = (senderId) => {
     if (!senderId || senderId === user?.uid || senderId === 'system') return;
@@ -1161,6 +1204,54 @@ const ChatView = () => {
   };
 
   // ─── Render message ────────────────────────────────────────────
+  useEffect(() => {
+    if (!user?.uid) return;
+    listEchoArchive(user.uid).then((rows) => {
+      const map = {};
+      rows.forEach((row) => { if (row.message?.id) map[row.message.id] = row.archiveId; });
+      setBookmarkedIds(map);
+    }).catch(() => {});
+  }, [user?.uid]);
+
+  const saveMessageToArchive = async (msg) => {
+    const cId = [user.uid, userId].sort().join('_');
+    try {
+      if (bookmarkedIds[msg.id]) {
+        await removeEchoArchive(bookmarkedIds[msg.id]);
+        await update(ref(db, `chats/${cId}/messages/${msg.id}`), { pinned: null }).catch(() => {});
+        setBookmarkedIds((prev) => { const n = { ...prev }; delete n[msg.id]; return n; });
+        return;
+      }
+      const senderName = msg.senderId === user.uid ? (currentUserProfile?.name || 'You') : (partnerProfile?.name || getProfile?.(msg.senderId)?.name || 'User');
+      const senderAvatar = msg.senderId === user.uid ? (currentUserProfile?.avatar || '') : (partnerProfile?.avatar || getProfile?.(msg.senderId)?.avatar || '');
+      const result = await saveToEchoArchive(user.uid, { ...msg, senderName, senderAvatar }, {
+        chatId: cId,
+        source: 'chat',
+        partnerId: userId,
+        senderName,
+        senderAvatar,
+      });
+      if (result?.ok) {
+        await update(ref(db, `chats/${cId}/messages/${msg.id}`), { pinned: true }).catch(() => {});
+        const rows = await listEchoArchive(user.uid);
+        const map = {};
+        rows.forEach((row) => { if (row.message?.id) map[row.message.id] = row.archiveId; });
+        setBookmarkedIds(map);
+      }
+    } catch (_) {}
+  };
+
+  const renderTide = (msg) => {
+    if (userId === ECHO_AI_ID || msg.pinned || bookmarkedIds[msg.id]) return null;
+    const fake = { ...msg, expiresAt: msg.expiresAt || (Number(msg.timestamp) || Date.now()) + PRIVATE_TTL_MS };
+    return (
+      <span className="echo-tide-chip" title="ECHO Tide">
+        <i className="fas fa-water" aria-hidden="true" />
+        {formatTideLeft(fake)}
+      </span>
+    );
+  };
+
   const renderMessage = (msg) => {
     if (msg.type === 'system' || msg.system) {
       return (
@@ -1180,7 +1271,7 @@ const ChatView = () => {
 
     const showReply = !isOwn && !isAi;
     let allowEdit = false;
-    if (isOwn) {
+    if (isOwn && userId !== ECHO_AI_ID) {
       if (msg.type === 'text') allowEdit = true;
       else if (msg.type === 'media' && msg.mediaType !== 'audio') allowEdit = true;
     }
@@ -1188,7 +1279,7 @@ const ChatView = () => {
     let copyText = null;
     if (msg.type === 'text' && msg.text) copyText = msg.text;
 
-    const allowDelete = isOwn;
+    const allowDelete = isOwn || (userId === ECHO_AI_ID && (isOwn || isAi));
 
     const handleMediaClick = () => {
       if (msg.type === 'media') {
@@ -1209,14 +1300,17 @@ const ChatView = () => {
     const shell = (inner) => (
       <div
         key={msg.id}
-        className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
+        className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${Date.now() - (msg.timestamp || 0) < 1600 ? (isOwn ? 'just-sent' : 'just-received') : ''} ${isTideExpired(msg) ? 'tide-leaving' : ''}`}
         ref={(el) => {
           if (el) messageRefs.current[msg.id] = el;
         }}
       >
-        <div className={`message-bubble ${isOwn ? 'own' : 'partner'}`}>
-          {inner}
-          {sentClock ? <div className="message-meta-time">{sentClock}</div> : null}
+        <div className={`message-stack ${isOwn ? 'own' : 'partner'}`}>
+          <div className={`message-bubble ${isOwn ? 'own' : 'partner'}`}>
+            {inner}
+            {sentClock ? <div className="message-meta-time">{sentClock}</div> : null}
+            {renderTide(msg)}
+          </div>
         </div>
         {renderReactions(msg.reactions, msg.id)}
       </div>
@@ -1232,6 +1326,8 @@ const ChatView = () => {
           onReply={showReply ? () => handleReply(msg) : null}
           onEdit={null}
           onReact={() => handleReact(msg)}
+          onSave={() => saveMessageToArchive(msg)}
+          saved={!!bookmarkedIds[msg.id]}
           copyText={null}
         >
           {replyToDisplay && (
@@ -1308,6 +1404,8 @@ const ChatView = () => {
           onReply={showReply ? () => handleReply(msg) : null}
           onEdit={allowEdit ? () => handleEditMessage(msg) : null}
           onReact={() => handleReact(msg)}
+          onSave={() => saveMessageToArchive(msg)}
+          saved={!!bookmarkedIds[msg.id]}
           copyText={null}
         >
           {replyToDisplay && (
@@ -1326,6 +1424,8 @@ const ChatView = () => {
         onReply={showReply ? () => handleReply(msg) : null}
         onEdit={allowEdit ? () => handleEditMessage(msg) : null}
         onReact={() => handleReact(msg)}
+        onSave={() => saveMessageToArchive(msg)}
+          saved={!!bookmarkedIds[msg.id]}
         copyText={copyText}
       >
         {replyToDisplay && (
@@ -1422,7 +1522,16 @@ const ChatView = () => {
               return !ts || ts >= cut;
             })
           : cachedMessages;
-        setMessages(sortMessages(visible));
+        setMessages(sortMessages(visible.filter((m) => userId === 'echo_ai_assistant' || !isTideExpired(m))));
+        if (userId !== ECHO_AI_ID && !stampedLegacyTides.current && visible.length) {
+          stampedLegacyTides.current = true;
+          const stamp = {};
+          const start = privateExpiresAt();
+          visible.forEach((m) => {
+            if (m.id && !m.expiresAt) stamp[`chats/${cId}/messages/${m.id}/expiresAt`] = start;
+          });
+          if (Object.keys(stamp).length) update(ref(db), stamp).catch(() => {});
+        }
         setLoadingMessages(false);
         prevMsgCountRef.current = visible.length;
         if (!initialScrollRef.current) {
@@ -1725,7 +1834,7 @@ const ChatView = () => {
                 <p>No messages yet. Say hello!</p>
               </div>
             ) : (
-              messages.map((msg) => renderMessage(msg))
+              sortMessages(messages).map((msg) => renderMessage(msg))
             )}
             {isAILoading && (
               <div className="message-bubble partner">
@@ -1920,6 +2029,7 @@ const ChatView = () => {
           message="The file you tried to upload exceeds the 20 MB limit. Please choose a smaller file."
           type="error"
         />
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </>
   );

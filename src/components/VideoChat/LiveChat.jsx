@@ -3,7 +3,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { db } from '../../services/firebase';
 import { ref, onValue, push, set, remove } from 'firebase/database';
 import { useAuth } from '../../hooks/useAuth';
+import { sortMessages } from '../../utils/sortMessages';
 import Avatar from '../common/Avatar';
+import MessageMenu from '../pages/Chat/MessageMenu';
 import './LiveChat.css';
 
 const REACTION_EMOJIS = ['❤️', '😂', '🔥', '😮', '👏', '👍', '👎'];
@@ -12,9 +14,9 @@ const LiveChat = ({ broadcasterId, isHost, compact = false, onPulse }) => {
   const { user } = useAuth();
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
-  const [showReactionPicker, setShowReactionPicker] = useState(null);
   const messagesEndRef = useRef(null);
   const seenPulseIds = useRef(new Set());
+  const [deletingMessageId, setDeletingMessageId] = useState(null);
 
   useEffect(() => {
     if (!broadcasterId) return undefined;
@@ -26,14 +28,14 @@ const LiveChat = ({ broadcasterId, isHost, compact = false, onPulse }) => {
         return;
       }
       const msgs = Object.entries(data).map(([id, msg]) => ({ id, ...msg }));
-      msgs.sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-      msgs.forEach((m) => {
+      const ordered = sortMessages(msgs);
+      ordered.forEach((m) => {
         if (m.type === 'reaction' && m.text && !seenPulseIds.current.has(m.id)) {
           seenPulseIds.current.add(m.id);
           if (Date.now() - (m.timestamp || 0) < 8000) onPulse?.(m.text);
         }
       });
-      setMessages(msgs.filter((m) => m.type !== 'reaction'));
+      setMessages(ordered.filter((m) => m.type !== 'reaction'));
     });
     return () => unsub();
   }, [broadcasterId, onPulse]);
@@ -55,7 +57,6 @@ const LiveChat = ({ broadcasterId, isHost, compact = false, onPulse }) => {
       text,
       type: 'text',
       timestamp: Date.now(),
-      reactions: {},
     });
   };
 
@@ -73,15 +74,12 @@ const LiveChat = ({ broadcasterId, isHost, compact = false, onPulse }) => {
     });
   };
 
-  const handleReact = async (messageId, emoji) => {
-    if (!user || !broadcasterId) return;
-    setShowReactionPicker(null);
-    await set(ref(db, `liveChat/${broadcasterId}/messages/${messageId}/reactions/${user.uid}`), emoji);
-  };
-
   const handleDelete = async (messageId) => {
     if (!broadcasterId || !messageId) return;
+    setDeletingMessageId(messageId);
+    await new Promise(resolve => setTimeout(resolve, 300));
     await remove(ref(db, `liveChat/${broadcasterId}/messages/${messageId}`));
+    setDeletingMessageId(null);
   };
 
   const formatTime = (ts) => {
@@ -89,59 +87,52 @@ const LiveChat = ({ broadcasterId, isHost, compact = false, onPulse }) => {
     return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   };
 
+  const renderMessage = (msg) => {
+    const isOwn = user?.uid && msg.senderId === user.uid;
+    // Host (broadcaster) can delete anyone's message, users can delete their own
+    const canDelete = Boolean(isHost || isOwn);
+
+    const senderName = msg.senderName || 'User';
+    const senderAvatar = msg.senderAvatar || '';
+
+    return (
+      <div key={msg.id} className={`message-row ${isOwn ? 'own' : 'partner'} ${Date.now() - (msg.timestamp || 0) < 1600 ? (isOwn ? 'just-sent' : 'just-received') : ''} ${deletingMessageId === msg.id ? 'deleting' : ''}`}>
+        {!isOwn && (
+          <div className="message-sender-info">
+            <Avatar src={senderAvatar} name={senderName} size={24} />
+            <span className="message-sender-name">{senderName}</span>
+            <span className="message-sender-time">{formatTime(msg.timestamp)}</span>
+          </div>
+        )}
+        <div className={`message-bubble ${isOwn ? 'own' : 'partner'}`}>
+          <MessageMenu
+            isOwn={isOwn}
+            canDelete={canDelete}
+            onDelete={() => handleDelete(msg.id)}
+            onReply={null}
+            onReact={null}
+            copyText={null}
+          >
+            <div className="live-message-content">
+              <div className="message-text">{msg.text}</div>
+            </div>
+          </MessageMenu>
+        </div>
+        {isOwn && (
+          <div className="message-meta-time own-time">{formatTime(msg.timestamp)}</div>
+        )}
+      </div>
+    );
+  };
+
   return (
     <div className={`live-chat ${compact ? 'is-compact' : ''}`}>
       <div className="live-chat-messages">
-        {messages.map((msg) => {
-          const isOwn = user?.uid && msg.senderId === user.uid;
-          const canDelete = Boolean(isHost || isOwn);
-          const reactionGroups = {};
-          Object.values(msg.reactions || {}).forEach((emoji) => {
-            reactionGroups[emoji] = (reactionGroups[emoji] || 0) + 1;
-          });
-          return (
-            <div key={msg.id} className={`live-chat-message ${isOwn ? 'is-own' : ''}`}>
-              <Avatar src={msg.senderAvatar} name={msg.senderName} size={28} />
-              <div className="live-chat-message-body">
-                <div className="live-chat-message-header">
-                  <span className="live-chat-message-name">{msg.senderName}</span>
-                  <span className="live-chat-message-time">{formatTime(msg.timestamp)}</span>
-                  {canDelete && (
-                    <button className="live-chat-delete-btn" onClick={() => handleDelete(msg.id)} type="button" aria-label="Delete">
-                      <i className="fas fa-trash-alt" />
-                    </button>
-                  )}
-                  <button
-                    className="live-chat-react-btn"
-                    type="button"
-                    onClick={() => setShowReactionPicker(showReactionPicker === msg.id ? null : msg.id)}
-                  >
-                    <i className="fas fa-smile" />
-                  </button>
-                </div>
-                <div className="live-chat-message-text">{msg.text}</div>
-                {Object.keys(reactionGroups).length > 0 && (
-                  <div className="live-chat-reactions">
-                    {Object.entries(reactionGroups).map(([emoji, count]) => (
-                      <span key={emoji} className="live-chat-reaction-badge">
-                        {emoji} {count > 1 && count}
-                      </span>
-                    ))}
-                  </div>
-                )}
-                {showReactionPicker === msg.id && (
-                  <div className="live-chat-reaction-picker">
-                    {REACTION_EMOJIS.map((emoji) => (
-                      <button key={emoji} type="button" onClick={() => handleReact(msg.id, emoji)}>
-                        {emoji}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
+        {messages.length === 0 ? (
+          <div className="live-chat-empty">No messages yet. Say hi!</div>
+        ) : (
+          sortMessages(messages).map((msg) => renderMessage(msg))
+        )}
         <div ref={messagesEndRef} />
       </div>
       <div className="live-chat-pulses">
@@ -152,8 +143,16 @@ const LiveChat = ({ broadcasterId, isHost, compact = false, onPulse }) => {
         ))}
       </div>
       <form className="live-chat-input" onSubmit={handleSend}>
-        <input type="text" placeholder="Send a message..." value={newMessage} maxLength={240} onChange={(e) => setNewMessage(e.target.value)} />
-        <button type="submit" disabled={!newMessage.trim()}><i className="fas fa-paper-plane" /></button>
+        <input
+          type="text"
+          placeholder="Send a message..."
+          value={newMessage}
+          maxLength={240}
+          onChange={(e) => setNewMessage(e.target.value)}
+        />
+        <button type="submit" disabled={!newMessage.trim()}>
+          <i className="fas fa-paper-plane" />
+        </button>
       </form>
     </div>
   );

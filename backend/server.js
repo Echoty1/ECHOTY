@@ -8,7 +8,6 @@ import webpush from 'web-push';
 import Groq from 'groq-sdk';
 import fetch from 'node-fetch';
 import 'dotenv/config';
-import { registerEchoAi } from './echoAi.js';
 
 // ─── IMAP poller imports ────────────────────────────────────────
 import { ImapFlow } from 'imapflow';
@@ -41,13 +40,12 @@ const db = admin.database();
 // ─── Express & Socket.io ──────────────────────────────────────
 const app = express();
 const CLIENT_ORIGIN = process.env.CLIENT_ORIGIN || 'https://echoty.xyz';
-app.use(cors({ origin: [CLIENT_ORIGIN, 'http://localhost:3000'], methods: ['GET', 'POST'] }));
+app.use(cors({ origin: [CLIENT_ORIGIN, 'http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001'], methods: ['GET', 'POST', 'OPTIONS'], credentials: true }));
 app.use(express.json());
-registerEchoAi(app, db);
 
 const server = http.createServer(app);
 const io = new Server(server, {
-  cors: { origin: [CLIENT_ORIGIN, 'http://localhost:3000'], methods: ['GET', 'POST'] },
+  cors: { origin: [CLIENT_ORIGIN, 'http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001'], methods: ['GET', 'POST'] },
   perMessageDeflate: true,
 });
 
@@ -420,101 +418,56 @@ app.post('/api/chat', requireUser, async (req, res) => {
   }
 });
 
-// ─── Enhanced Admin User Wipe Endpoint ─────────────────────────
+// ─── Admin user deletion ──────────────────────────────────────────
 app.post('/api/admin/delete-user', async (req, res) => {
   try {
     const { targetUid } = req.body;
     if (!targetUid) return res.status(400).json({ error: 'Missing targetUid' });
-
-    // Verify admin token (support user)
     const token = req.headers.authorization?.split('Bearer ')[1];
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
     const decoded = await admin.auth().verifyIdToken(token);
     if (decoded.uid !== 'hD7tJzPVI1VSorhok8GToBC6VDy1') {
       return res.status(403).json({ error: 'Forbidden' });
     }
-
-    // 1. Delete Firebase Auth user
-    await admin.auth().deleteUser(targetUid);
-
-    // 2. Delete all user-specific database nodes
-    const userNodes = [
+    try { await admin.auth().deleteUser(targetUid); } catch (e) {
+      if (e.code !== 'auth/user-not-found') throw e;
+    }
+    const nodesToDelete = [
       'profiles', 'userSkins', 'userChats', 'userMemories', 'aiConversations',
-      'accounts', 'live', 'peerIds', 'presence/online', 'userCommunities',
-      'liveChat', 'busy', 'notifications', 'channelMemberships', 'userDailyLogins',
-      'adminNotifications', 'calls'
+      'accounts', 'presence/online', 'userCommunities', 'channelMemberships',
+      'live', 'liveChat', 'notifications', 'adminNotifications', 'userDailyLogins',
+      'calls', 'busy', 'peerIds', 'communityPostReads'
     ];
-    await Promise.all(userNodes.map(node => db.ref(`${node}/${targetUid}`).remove().catch(() => {})));
-
-    // 3. Remove references to this user from other users' chat lists and delete chat nodes
+    await Promise.all(nodesToDelete.map((node) => db.ref(`${node}/${targetUid}`).remove().catch(() => {})));
+    const updates = {};
     const profilesSnap = await db.ref('profiles').once('value');
     const allUids = profilesSnap.val() ? Object.keys(profilesSnap.val()) : [];
-    const updates = {};
     for (const uid of allUids) {
-      if (uid !== targetUid) {
-        updates[`userChats/${uid}/${targetUid}`] = null;
-        const chatId = [uid, targetUid].sort().join('_');
-        updates[`chats/${chatId}`] = null;
+      if (uid === targetUid) continue;
+      updates[`userChats/${uid}/${targetUid}`] = null;
+      updates[`chats/${[uid, targetUid].sort().join('_')}`] = null;
+    }
+    const communitiesSnap = await db.ref('communities').once('value');
+    if (communitiesSnap.exists()) {
+      for (const [cid, community] of Object.entries(communitiesSnap.val() || {})) {
+        if (community?.members?.[targetUid]) {
+          updates[`communities/${cid}/members/${targetUid}`] = null;
+          updates[`communities/${cid}/memberCount`] = Math.max(0, Number(community.memberCount || 1) - 1);
+        }
+        if (community?.createdBy === targetUid) updates[`communities/${cid}/createdBy`] = 'removed';
       }
     }
-    if (Object.keys(updates).length > 0) {
-      await db.ref().update(updates);
-    }
-
-    // 4. Remove user from communities and decrement member counts
-    const userCommsSnap = await db.ref(`userCommunities/${targetUid}`).once('value');
-    if (userCommsSnap.exists()) {
-      const comms = userCommsSnap.val();
-      for (const commId of Object.keys(comms)) {
-        await db.ref(`communities/${commId}/memberCount`).transaction(current => Math.max(0, (current || 0) - 1));
-        await db.ref(`userCommunities/${targetUid}/${commId}`).remove();
-      }
-    }
-
-    // 5. Remove community posts by this user
-    const communityPostsSnap = await db.ref('communityPosts').once('value');
-    if (communityPostsSnap.exists()) {
-      const allPosts = communityPostsSnap.val();
-      for (const [commId, posts] of Object.entries(allPosts)) {
-        for (const [postId, post] of Object.entries(posts)) {
-          if (post.uid === targetUid) {
-            await db.ref(`communityPosts/${commId}/${postId}`).remove();
+    const postsSnap = await db.ref('communityPosts').once('value');
+    if (postsSnap.exists()) {
+      for (const [cid, posts] of Object.entries(postsSnap.val() || {})) {
+        for (const [pid, post] of Object.entries(posts || {})) {
+          if (post?.uid === targetUid || post?.authorId === targetUid) {
+            updates[`communityPosts/${cid}/${pid}`] = null;
           }
         }
       }
     }
-
-    res.json({ success: true, message: `User ${targetUid} fully wiped` });
-  } catch (err) {
-    console.error('Wipe user error:', err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ─── Admin user deletion (legacy, kept for compatibility) ──────
-app.post('/api/admin/delete-user-legacy', async (req, res) => {
-  try {
-    const { targetUid } = req.body;
-    if (!targetUid) return res.status(400).json({ error: 'Missing targetUid' });
-    const token = req.headers.authorization?.split('Bearer ')[1];
-    if (!token) return res.status(401).json({ error: 'Unauthorized' });
-    const decoded = await admin.auth().verifyIdToken(token);
-    if (decoded.uid !== 'hD7tJzPVI1VSorhok8GToBC6VDy1') {
-      return res.status(403).json({ error: 'Forbidden' });
-    }
-    await admin.auth().deleteUser(targetUid);
-    const nodesToDelete = ['profiles', 'userSkins', 'userChats', 'userMemories', 'aiConversations'];
-    await Promise.all(nodesToDelete.map((node) => db.ref(`${node}/${targetUid}`).remove()));
-    await db.ref(`accounts/${targetUid}`).remove();
-    const profilesSnap = await db.ref('profiles').once('value');
-    const allUids = profilesSnap.val() ? Object.keys(profilesSnap.val()) : [];
-    const updates = {};
-    for (const uid of allUids) {
-      if (uid !== targetUid) updates[`userChats/${uid}/${targetUid}`] = null;
-    }
-    if (Object.keys(updates).length > 0) {
-      await db.ref().update(updates);
-    }
+    if (Object.keys(updates).length) await db.ref().update(updates);
     res.json({ success: true, message: `User ${targetUid} deleted` });
   } catch (err) {
     console.error('Delete user error:', err);
@@ -933,7 +886,50 @@ app.post('/api/admin/poll-selar-emails', async (req, res) => {
 //  🚀 START SERVER
 // ==========================================================================
 
-const PORT = process.env.PORT || 4000;
+
+const TIDE_PRIVATE_MS = 24 * 60 * 60 * 1000;
+async function sweepExpiredEchoTides() {
+  try {
+    const now = Date.now();
+    const chatsSnap = await db.ref('chats').once('value');
+    const chatUpdates = {};
+    const chats = chatsSnap.val() || {};
+    for (const [chatId, chatData] of Object.entries(chats)) {
+      const messages = chatData?.messages || {};
+      for (const [msgId, msg] of Object.entries(messages)) {
+        if (msg?.pinned) continue;
+        const exp = Number(msg?.expiresAt || 0);
+        if (!exp) chatUpdates[`chats/${chatId}/messages/${msgId}/expiresAt`] = now + TIDE_PRIVATE_MS;
+        else if (exp < now) chatUpdates[`chats/${chatId}/messages/${msgId}`] = null;
+      }
+    }
+    const commSnap = await db.ref('communityChats').once('value');
+    const communities = commSnap.val() || {};
+    for (const [cid, node] of Object.entries(communities)) {
+      const messages = node?.messages || {};
+      for (const [msgId, msg] of Object.entries(messages)) {
+        if (msg?.pinned) continue;
+        const exp = Number(msg?.expiresAt || 0);
+        if (!exp) chatUpdates[`communityChats/${cid}/messages/${msgId}/expiresAt`] = now + (7 * TIDE_PRIVATE_MS);
+        else if (exp < now) chatUpdates[`communityChats/${cid}/messages/${msgId}`] = null;
+      }
+    }
+    const keys = Object.keys(chatUpdates);
+    for (let i = 0; i < keys.length; i += 400) {
+      const slice = keys.slice(i, i + 400);
+      const part = {};
+      slice.forEach((k) => { part[k] = null; });
+      await db.ref().update(part);
+    }
+    if (keys.length) console.log(`ECHO Tides swept ${keys.length} expired messages`);
+  } catch (err) {
+    console.warn('ECHO Tides sweep failed:', err.message);
+  }
+}
+setInterval(sweepExpiredEchoTides, 60 * 60 * 1000);
+setTimeout(sweepExpiredEchoTides, 20000);
+
+const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`🚀 ECHO backend running on port ${PORT}`);
 });

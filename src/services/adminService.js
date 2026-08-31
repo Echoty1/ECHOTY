@@ -203,6 +203,28 @@ export const purgeUserCompletely = async (uid) => {
   const memberships = await get(ref(db, 'userCommunities')).catch(() => null);
   // skip
 
+
+  // Wipe posts and leftover display names
+  const postsSnap = await get(ref(db, 'communityPosts')).catch(() => null);
+  if (postsSnap?.exists()) {
+    for (const [cid, posts] of Object.entries(postsSnap.val() || {})) {
+      for (const [pid, post] of Object.entries(posts || {})) {
+        if (post?.uid === uid || post?.authorId === uid) {
+          updates[`communityPosts/${cid}/${pid}`] = null;
+        }
+      }
+    }
+  }
+  const chatsSnap = await get(ref(db, 'communityChats')).catch(() => null);
+  if (chatsSnap?.exists()) {
+    for (const [cid, node] of Object.entries(chatsSnap.val() || {})) {
+      const messages = node?.messages || {};
+      for (const [mid, msg] of Object.entries(messages)) {
+        if (msg?.senderId === uid) updates[`communityChats/${cid}/messages/${mid}`] = null;
+      }
+    }
+  }
+
   if (Object.keys(updates).length) {
     await update(ref(db), updates);
   }

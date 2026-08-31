@@ -145,3 +145,72 @@ html.theme-dark .live-chat-message:not(.is-own) .live-chat-message-text {
   width: 42px;
   cursor: pointer;
 }
+
+.message-row.just-sent .message-bubble { animation: echoSentIn 0.38s ease; }
+.message-row.just-received .message-bubble { animation: echoReceivedIn 0.38s ease; }
+.message-row.deleting { animation: echoTideOut 0.45s ease forwards; }
+@keyframes echoSentIn {
+  from { opacity: 0; transform: translateX(12px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes echoReceivedIn {
+  from { opacity: 0; transform: translateX(-12px) scale(0.98); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes echoTideOut {
+  from { opacity: 1; }
+  to { opacity: 0; transform: translateY(-8px); }
+}
+
+.message-actions { display:flex; gap:6px; position:absolute; top:-34px; z-index:30; }
+.message-wrapper.own .message-actions { right:0; }
+.message-wrapper.partner .message-actions { left:0; }
+.message-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border-color);
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.message-meta-time, .message-sender-time, .own-time {
+  font-size: 10px;
+  margin-top: 4px;
+  opacity: 0.72;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.message-row.own .message-meta-time, .message-row.own .own-time { text-align: right; }
+.message-action-btn { width: 24px !important; height: 24px !important; font-size: 11px !important; }
+
+/* compact action icons */
+
+.message-actions {
+  display: flex !important;
+  gap: 6px !important;
+  position: absolute !important;
+  top: -30px !important;
+  z-index: 30 !important;
+}
+.message-action-btn {
+  width: 26px !important;
+  height: 26px !important;
+  min-width: 26px !important;
+  min-height: 26px !important;
+  padding: 0 !important;
+  border-radius: 50% !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 13px !important;
+  line-height: 1 !important;
+}
+.message-action-btn i {
+  font-size: 13px !important;
+  line-height: 1 !important;
+  width: auto !important;
+  height: auto !important;
+}

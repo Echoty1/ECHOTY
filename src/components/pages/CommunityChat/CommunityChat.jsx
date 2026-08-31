@@ -1,9 +1,10 @@
 // src/components/pages/CommunityChat/CommunityChat.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../../../services/firebase';
-import { ref, onValue, push, get, remove, set } from 'firebase/database';
+import {  ref, onValue, push, get, remove, set , update } from 'firebase/database';
 import { useAuth } from '../../../hooks/useAuth';
+import { sortMessages, msgTime } from '../../../utils/sortMessages';
 import { useCommunity } from '../../../contexts/CommunityContext';
 import { useProfile } from '../../../contexts/ProfileContext';
 import Avatar from '../../common/Avatar';
@@ -11,6 +12,8 @@ import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import ChatEmojiPicker from '../Chat/ChatEmojiPicker';
 import MessageMenu from '../Chat/MessageMenu';
+import { saveToEchoArchive, listEchoArchive, removeEchoArchive } from '../../../services/echoArchive';
+import { communityExpiresAt, isTideExpired, tideProgress, formatTideLeft, COMMUNITY_TTL_MS } from '../../../utils/echoTides';
 import ReplyPreview from '../Chat/ReplyPreview';
 import RepliedMessage from '../Chat/RepliedMessage';
 import SEO from '../../common/SEO';
@@ -39,34 +42,17 @@ const formatReactionCount = (count) => {
   return m >= 10 ? Math.round(m) + 'M' : m.toFixed(1) + 'M';
 };
 
-const msgTime = (m) => {
-  if (!m) return 0;
-  const t = m.timestamp;
-  if (typeof t === 'number' && !Number.isNaN(t)) return t;
-  if (t && typeof t === 'object') {
-    if (typeof t.toMillis === 'function') return t.toMillis();
-    if (typeof t.seconds === 'number') return t.seconds * 1000;
-  }
-  return 0;
-};
-
-const sortMessages = (list) =>
-  (list || [])
-    .slice()
-    .sort((a, b) => {
-      const d = msgTime(a) - msgTime(b);
-      if (d !== 0) return d;
-      return String(a.id || '').localeCompare(String(b.id || ''));
-    });
-
 const CommunityChat = () => {
   const { communityId, tab } = useParams();
   const { user } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const { currentCommunity, setCurrentCommunity } = useCommunity();
   const { getProfile, fetchProfile } = useProfile();
 
   const [messages, setMessages] = useState([]);
+  const [bookmarkedIds, setBookmarkedIds] = useState({});
+  const stampedLegacyTides = useRef(false);
   const [newMessage, setNewMessage] = useState('');
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
@@ -256,7 +242,17 @@ const CommunityChat = () => {
                   Math.abs(msgTime(v) - msgTime(m)) < 8000
               )
           );
-          return sortMessages([...list, ...pending]);
+          const next = sortMessages([...list, ...pending].filter((m) => !isTideExpired(m) || Date.now() - Number(m.expiresAt || 0) < 700));
+          if (!stampedLegacyTides.current && list.length) {
+            stampedLegacyTides.current = true;
+            const stamp = {};
+            const start = communityExpiresAt();
+            list.forEach((m) => {
+              if (m.id && !m.expiresAt) stamp[`communityChats/${communityId}/messages/${m.id}/expiresAt`] = start;
+            });
+            if (Object.keys(stamp).length) update(ref(db), stamp).catch(() => {});
+          }
+          return next;
         });
         setLoading(false);
         saveMessagesToCache(cacheKey, list).catch(() => {});
@@ -339,6 +335,7 @@ const CommunityChat = () => {
       text,
       timestamp: sentAt,
       type: 'text',
+      expiresAt: communityExpiresAt(sentAt),
     };
     if (replyTo) {
       payload.replyTo = {
@@ -429,6 +426,7 @@ const CommunityChat = () => {
       text: caption || (mediaType === 'video' ? 'Video' : 'Image'),
       caption,
       timestamp: sentAt,
+      expiresAt: communityExpiresAt(sentAt),
       pending: true,
       senderName: userName,
       isUploading: true,
@@ -727,7 +725,50 @@ const CommunityChat = () => {
   };
 
   // Render individual message
+  useEffect(() => {
+    if (!user?.uid) return;
+    listEchoArchive(user.uid).then((rows) => {
+      const map = {};
+      rows.forEach((row) => { if (row.message?.id) map[row.message.id] = row.archiveId; });
+      setBookmarkedIds(map);
+    }).catch(() => {});
+  }, [user?.uid]);
+
+  useEffect(() => {
+    const focusId = new URLSearchParams(location.search || '').get('focus');
+    if (!focusId || !messages.length) return;
+    const el = msgRefs.current[focusId];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }, [location.search, messages.length]);
+
+  const saveCommunityArchive = async (msg) => {
+    try {
+      if (bookmarkedIds[msg.id]) {
+        await removeEchoArchive(bookmarkedIds[msg.id]);
+        await update(ref(db, `communityChats/${communityId}/messages/${msg.id}`), { pinned: null }).catch(() => {});
+        setBookmarkedIds((prev) => { const n = { ...prev }; delete n[msg.id]; return n; });
+        return;
+      }
+      const senderProfile = getProfile?.(msg.senderId);
+      const result = await saveToEchoArchive(user.uid, {
+        ...msg,
+        senderName: senderProfile?.name || msg.senderName || 'User',
+        senderAvatar: senderProfile?.avatar || '',
+      }, { chatId: communityId, source: 'community', communityId, senderName: senderProfile?.name, senderAvatar: senderProfile?.avatar });
+      if (result?.ok !== false) {
+        await update(ref(db, `communityChats/${communityId}/messages/${msg.id}`), { pinned: true }).catch(() => {});
+        const rows = await listEchoArchive(user.uid);
+        const map = {};
+        rows.forEach((row) => { if (row.message?.id) map[row.message.id] = row.archiveId; });
+        setBookmarkedIds(map);
+      }
+    } catch (_) {}
+  };
+
   const renderMessage = (msg) => {
+    if (isTideExpired(msg) && !msg.pinned && !bookmarkedIds[msg.id]) return null;
     const isOwn = msg.senderId === user?.uid;
     const isSystem = msg.type === 'system' || msg.system === true;
     const isDeleting = msg.id === deletingMessageId;
@@ -759,7 +800,7 @@ const CommunityChat = () => {
     return (
       <div
         key={msg.id}
-        className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${
+        className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${Date.now() - (msg.timestamp || 0) < 1600 ? (isOwn ? 'just-sent' : 'just-received') : ''} ${isTideExpired(msg) ? 'tide-leaving' : ''} ${
           highlightId === msg.id ? 'highlight-flash' : ''
         }`}
         ref={(el) => {
@@ -789,6 +830,8 @@ const CommunityChat = () => {
             onReply={showReply ? () => handleReply(msg) : null}
             onEdit={null}
             onReact={() => handleReact(msg)}
+            onSave={() => saveCommunityArchive(msg)}
+            saved={!!bookmarkedIds[msg.id]}
             copyText={copyText}
           >
             {replyToDisplay && (
@@ -810,6 +853,12 @@ const CommunityChat = () => {
         </div>
         {renderReactions(reactions, msg.id)}
         <div className="message-time">{formatTime(msg.timestamp)}</div>
+        {!(msg.pinned || bookmarkedIds[msg.id]) && (
+        <span className="echo-tide-chip" title="ECHO Tide">
+          <i className="fas fa-water" aria-hidden="true" />
+          {formatTideLeft({ ...msg, expiresAt: msg.expiresAt || (Number(msg.timestamp) || Date.now()) + COMMUNITY_TTL_MS })}
+        </span>
+        )}
       </div>
     );
   };
@@ -835,7 +884,7 @@ const CommunityChat = () => {
           </div>
         ) : (
           <>
-            {messages.map((msg) => renderMessage(msg))}
+            {sortMessages(messages).map((msg) => renderMessage(msg))}
             <div ref={messagesEndRef} />
           </>
         )}

@@ -2,7 +2,7 @@
 import { openDB } from 'idb';
 
 const DB_NAME = 'echo-db';
-const DB_VERSION = 3; // Increment from 2 to add 'cacheStore'
+const DB_VERSION = 4; // Increment from 2 to add 'cacheStore'
 
 let dbPromise = null;
 
@@ -33,6 +33,9 @@ export const getDB = () => {
         // ─── New: Generic cache store for search, etc. ────────
         if (!db.objectStoreNames.contains('cacheStore')) {
           db.createObjectStore('cacheStore', { keyPath: 'key' });
+        }
+        if (!db.objectStoreNames.contains('echoArchive')) {
+          db.createObjectStore('echoArchive', { keyPath: 'archiveId' });
         }
       },
     });

@@ -14,6 +14,7 @@ import Chats from './components/pages/Chats/Chats';
 import ChatView from './components/pages/Chat/ChatView';
 import Profile from './components/pages/Profile/Profile';
 import Other from './components/pages/Other/Other';
+import Bookmarks from './components/pages/Other/Bookmarks';
 import Terms from './components/pages/Other/Terms';
 import DesktopInstallPrompt from './components/common/DesktopInstallPrompt';
 import Privacy from './components/pages/Other/Privacy';
@@ -425,6 +426,7 @@ function AppContent() {
           <Route path="/privacy" element={<Privacy />} />
           <Route path="/report" element={<Report />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/bookmarks" element={<Bookmarks />} />
           <Route path="/coins" element={<CoinPurchase />} />
           <Route path="/about" element={<About />} />
           <Route path="/control" element={<AdminPanel />} />
@@ -433,7 +435,6 @@ function AppContent() {
           <Route path="/community/:communityId" element={<CommunityChat />} />
           <Route path="/shop" element={<Shop />} />
           <Route path="*" element={<Navigate to="/" replace />} />
-          <Route path="/login" element={<Login />} />
         </Routes>
       </div>
       <BottomNav />

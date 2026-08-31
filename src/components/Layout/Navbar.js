@@ -81,6 +81,7 @@ const Navbar = memo(() => {
   const isReportRoute = location.pathname === '/report';
   const isCoinsRoute = location.pathname === '/coins';
   const isOtherRoute = location.pathname === '/other';
+  const isBookmarksRoute = location.pathname === '/bookmarks';
 
   const showBackButton =
     isChatRoute ||
@@ -92,7 +93,8 @@ const Navbar = memo(() => {
     isPrivacyRoute ||
     isReportRoute ||
     isCoinsRoute ||
-    isOtherRoute;
+    isOtherRoute ||
+    isBookmarksRoute;
 
   // ─── Back destination ───────────────────────────────────────
   const getBackDestination = () => {
@@ -102,7 +104,7 @@ const Navbar = memo(() => {
       if (fromCommunity) return `/community/${fromCommunity}`;
       return '/chats';
     }
-    if (isProfileRoute || isSettingsRoute || isOtherRoute) return '/other';
+    if (isProfileRoute || isSettingsRoute || isOtherRoute || isBookmarksRoute) return '/other';
     if (isAboutRoute || isTermsRoute || isPrivacyRoute || isReportRoute) return '/other';
     if (isCoinsRoute) return '/shop';
     return '/';
@@ -394,6 +396,7 @@ const Navbar = memo(() => {
             {isReportRoute && 'Report'}
             {isCoinsRoute && 'Get Coins'}
             {isOtherRoute && 'Other'}
+            {isBookmarksRoute && 'Bookmarks'}
           </span>
         )}
 
@@ -625,7 +628,7 @@ const Navbar = memo(() => {
               background: 'none',
               border: 'none',
               color: 'var(--text-secondary)',
-              fontSize: '18px',
+              fontSize: '22px',
               cursor: 'pointer',
               padding: '4px',
               position: 'relative',
@@ -638,19 +641,19 @@ const Navbar = memo(() => {
             onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.08)'; }}
             onMouseLeave={(e) => { e.currentTarget.style.background = 'none'; }}
           >
-            <i className="fas fa-bell" />
+            <i className="fas fa-bell" style={{ fontSize: '22px' }} />
             {unreadCount > 0 && (
               <span
                 style={{
                   position: 'absolute',
-                  top: '-4px',
-                  right: '-4px',
-                  minWidth: '16px',
-                  height: '16px',
+                  top: '-6px',
+                  right: '-8px',
+                  minWidth: '20px',
+                  height: '20px',
                   borderRadius: '50%',
                   backgroundColor: '#EF4444',
                   color: '#fff',
-                  fontSize: '9px',
+                  fontSize: '11px',
                   fontWeight: 700,
                   display: 'flex',
                   alignItems: 'center',

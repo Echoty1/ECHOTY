@@ -60,7 +60,7 @@ const SkinItem = React.memo(({ skin, isOwned, isActive, purchase, onApply, onPur
         boxShadow: isActive ? '0 0 20px rgba(236,72,153,0.2)' : 'none',
       }}
     >
-      <ECHOMOJI mood="neutral" skin={skinObj} size={48} interactive={false} animated={false} />
+      <ECHOMOJI mood="neutral" skin={skinObj} size={48} interactive={false} animated={true} />
       <div className="shop-item-name">{skin.name}</div>
       {skin.isLimited && <div className="shop-item-limited">🔥 Limited</div>}
       {isOwned && skin.isLimited && <CountdownBadge purchase={purchase} />}
