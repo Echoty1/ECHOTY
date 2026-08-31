@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">Echoty</string>
-    <string name="title_activity_main">Echoty</string>
-    <string name="package_name">com.echoty.app</string>
-    <string name="custom_url_scheme">com.echoty.app</string>
-</resources>

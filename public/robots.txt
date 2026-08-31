@@ -1,6 +1,0 @@
-User-agent: *
-Allow: /
-Sitemap: https://echoty.xyz/sitemap.xml
-Disallow: /control
-Disallow: /admin
-Disallow: /api
