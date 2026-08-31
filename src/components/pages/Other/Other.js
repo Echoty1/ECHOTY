@@ -35,15 +35,21 @@ const Other = () => {
     document.body.appendChild(script);
   }, []);
 
-  // ─── Quick action items ──────────────────────────────────────
-  const primaryActions = [
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
+  const MYHAPPR_URL = 'https://myhappr.co/@echoty';
+
+  // ─── Menu items – simplified list ─────────────────────────────
+  const menuItems = [
     {
       id: 'profile',
       label: 'Profile',
       icon: 'fa-user-circle',
       path: '/profile',
       description: 'Manage your identity',
-      color: '#6C3CE1',
     },
     {
       id: 'settings',
@@ -51,36 +57,14 @@ const Other = () => {
       icon: 'fa-sliders-h',
       path: '/settings',
       description: 'App & account preferences',
-      color: '#EC4899',
     },
-  ];
-
-  // ─── Secondary Actions – Shop only for admin ──────────────────
-  const secondaryActions = [
     {
       id: 'coins',
       label: 'Get Coins',
       icon: 'fa-coins',
       path: '/coins',
       description: 'Purchase virtual currency',
-      color: '#FBBF24',
     },
-  ];
-
-  // Admin gets Shop
-  if (isSupport) {
-    secondaryActions.unshift({
-      id: 'shop',
-      label: 'Shop',
-      icon: 'fa-store',
-      path: '/shop',
-      description: 'Manage skins & GIFs',
-      color: '#F59E0B',
-    });
-  }
-
-  // ─── Legal – consolidated into single page ────────────────────
-  const legalActions = [
     {
       id: 'legal',
       label: 'Legal & Policies',
@@ -90,12 +74,23 @@ const Other = () => {
     },
   ];
 
-  const handleLogout = async () => {
-    await logout();
-    navigate('/login');
-  };
-
-  const MYHAPPR_URL = 'https://myhappr.co/@echoty';
+  // ─── Theme toggle and logout buttons (quick settings) ─────────
+  const quickSettings = [
+    {
+      id: 'theme',
+      label: themePreference === 'dark' ? 'Light Mode' : 'Dark Mode',
+      icon: themePreference === 'dark' ? 'fa-sun' : 'fa-moon',
+      onClick: () => setTheme(themePreference === 'dark' ? 'light' : 'dark'),
+      color: '#FBBF24',
+    },
+    {
+      id: 'logout',
+      label: 'Logout',
+      icon: 'fa-sign-out-alt',
+      onClick: handleLogout,
+      color: '#EF4444',
+    },
+  ];
 
   return (
     <>
@@ -111,85 +106,39 @@ const Other = () => {
           <p>Explore everything ECHO has to offer</p>
         </div>
 
-        {/* ─── Quick Settings ────────────────────────────────────── */}
+        {/* ─── Quick Settings (Theme + Logout) ──────────────────── */}
         <div className="other-quick-settings">
-          <div
-            className="other-quick-card theme-toggle"
-            onClick={() => setTheme(themePreference === 'dark' ? 'light' : 'dark')}
-          >
-            <i className={`fas ${themePreference === 'dark' ? 'fa-sun' : 'fa-moon'}`} />
-            <span>{themePreference === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
-          </div>
-          <div className="other-quick-card logout" onClick={handleLogout}>
-            <i className="fas fa-sign-out-alt" />
-            <span>Logout</span>
-          </div>
+          {quickSettings.map((item) => (
+            <div
+              key={item.id}
+              className="other-quick-card"
+              onClick={item.onClick}
+              style={{ '--item-color': item.color }}
+            >
+              <i className={`fas ${item.icon}`} />
+              <span>{item.label}</span>
+            </div>
+          ))}
         </div>
 
-        {/* ─── Primary Actions ───────────────────────────────────── */}
-        <div className="other-section">
-          <div className="other-section-title">Account</div>
-          <div className="other-grid primary-grid">
-            {primaryActions.map((item) => (
-              <div
-                key={item.id}
-                className="other-grid-item primary"
-                style={{ '--item-color': item.color }}
-                onClick={() => navigate(item.path)}
-              >
-                <div className="other-grid-icon" style={{ background: `${item.color}20`, color: item.color }}>
-                  <i className={`fas ${item.icon}`} />
-                </div>
-                <div className="other-grid-content">
-                  <div className="other-grid-label">{item.label}</div>
-                  <div className="other-grid-desc">{item.description}</div>
-                </div>
-                <i className="fas fa-chevron-right other-grid-arrow" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ─── Secondary Actions ────────────────────────────────── */}
-        <div className="other-section">
-          <div className="other-section-title">Explore</div>
-          <div className="other-grid secondary-grid">
-            {secondaryActions.map((item) => (
-              <div
-                key={item.id}
-                className="other-grid-item secondary"
-                style={{ '--item-color': item.color }}
-                onClick={() => navigate(item.path)}
-              >
-                <div className="other-grid-icon" style={{ background: `${item.color}20`, color: item.color }}>
-                  <i className={`fas ${item.icon}`} />
-                </div>
-                <div className="other-grid-content">
-                  <div className="other-grid-label">{item.label}</div>
-                  <div className="other-grid-desc">{item.description}</div>
-                </div>
-                <i className="fas fa-chevron-right other-grid-arrow" />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ─── Legal Actions ────────────────────────────────────── */}
-        <div className="other-section">
-          <div className="other-section-title">Legal</div>
-          <div className="other-legal-grid">
-            {legalActions.map((item) => (
-              <div
-                key={item.id}
-                className="other-legal-item"
-                onClick={() => navigate(item.path)}
-              >
+        {/* ─── Menu List ─────────────────────────────────────────── */}
+        <div className="other-menu-list">
+          {menuItems.map((item) => (
+            <div
+              key={item.id}
+              className="other-menu-item"
+              onClick={() => navigate(item.path)}
+            >
+              <div className="other-menu-icon">
                 <i className={`fas ${item.icon}`} />
-                <span>{item.label}</span>
-                <i className="fas fa-chevron-right other-legal-arrow" />
               </div>
-            ))}
-          </div>
+              <div className="other-menu-content">
+                <div className="other-menu-label">{item.label}</div>
+                <div className="other-menu-desc">{item.description}</div>
+              </div>
+              <i className="fas fa-chevron-right other-menu-arrow" />
+            </div>
+          ))}
         </div>
 
         {/* ─── Footer ────────────────────────────────────────────── */}
