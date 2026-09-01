@@ -1,0 +1,70 @@
+
+.ai-rich { font-size: 14px; line-height: 1.55; word-break: break-word; }
+.ai-rich p { margin: 0 0 8px; }
+.ai-rich h1, .ai-rich h2, .ai-rich h3 { margin: 8px 0 6px; font-size: 16px; }
+.ai-rich ul, .ai-rich ol { margin: 0 0 8px 18px; padding: 0; }
+.ai-rich blockquote {
+  margin: 8px 0;
+  padding: 4px 10px;
+  border-left: 3px solid #6C3CE1;
+  opacity: 0.9;
+}
+.ai-inline-code, .ai-rich code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: rgba(108, 60, 225, 0.12);
+  padding: 1px 5px;
+  border-radius: 4px;
+}
+.ai-code-wrap { position: relative; margin: 8px 0; }
+.ai-copy {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.12);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+.ai-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: rgba(0,0,0,0.4);
+  color: inherit;
+  padding: 12px 40px 12px 12px;
+  border-radius: 10px;
+  overflow-x: auto;
+  margin: 0;
+  white-space: pre-wrap;
+}
+.ai-highlight, .ai-rich mark { background: rgba(251, 191, 36, 0.45); padding: 0 2px; border-radius: 3px; }
+.ai-rich sub { font-size: 0.75em; }
+.ai-rich sup { font-size: 0.75em; }
+.ai-chart { margin: 10px 0 12px; padding: 8px; border: 1px solid var(--border-color); border-radius: 12px; background: var(--bg-secondary); }
+.ai-chart-title { font-size: 12px; font-weight: 700; margin-bottom: 6px; }
+.ai-chart-body { width: 100%; min-width: 160px; }
+.ai-funnel { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 8px 0; }
+.ai-funnel-row { color: #fff; text-align: center; border-radius: 8px; padding: 6px 8px; font-size: 12px; }
+.ai-followups { display: flex; flex-direction: column; gap: 8px; margin-top: 12px; }
+.ai-followup {
+  text-align: left;
+  border: 1.5px solid #6C3CE1;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  border-radius: 14px;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.ai-followup:hover { background: rgba(108, 60, 225, 0.12); }
+.ai-spoiler-text {
+  background: var(--text-primary);
+  color: var(--text-primary);
+  border-radius: 4px;
+  padding: 0 4px;
+  cursor: pointer;
+}
+.ai-spoiler-text:hover, .ai-spoiler-text:focus { color: var(--bg-primary); }

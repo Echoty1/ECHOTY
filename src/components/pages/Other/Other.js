@@ -1,109 +1,151 @@
 // src/components/pages/Other/Other.js
-import React from 'react';
+import React, { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
+import { useTheme } from '../../../contexts/ThemeContext';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
-// import TawkTo from '../../TawkTo/TawkTo'; // 👈 Remove if you already have it in App.js
 import './Other.css';
 
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 
 const Other = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const { themePreference, setTheme } = useTheme();
   const isSupport = user?.uid === SUPPORT_UID;
 
-  const baseMenu = [
+  // ─── Load Myhappr widget script ──────────────────────────────
+  useEffect(() => {
+    if (document.querySelector('script[src="https://myhappr.com/widget.js"]')) return;
+
+    const script = document.createElement('script');
+    script.src = 'https://myhappr.com/widget.js';
+    script.async = true;
+    script.setAttribute('data-username', 'echoty');
+    script.setAttribute('data-color', '#9D5EFF');
+    script.setAttribute('data-button-color', '#9D5EFF');
+    script.setAttribute('data-text-color', '#FFFFFF');
+    script.setAttribute('data-radius', '8px');
+    script.setAttribute('data-text', 'Support ECHO ☕');
+    script.setAttribute('data-title', 'Keep the Echo Alive');
+    script.setAttribute('data-theme', 'light');
+    script.setAttribute('data-card-bg', '#FFFFFF');
+    script.setAttribute('data-card-text', '#09090b');
+    document.body.appendChild(script);
+  }, []);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
+
+  const MYHAPPR_URL = 'https://myhappr.co/@echoty';
+
+  // ─── Menu items – simplified list ─────────────────────────────
+  const menuItems = [
     {
       id: 'profile',
       label: 'Profile',
-      icon: 'fa-user',
+      icon: 'fa-user-circle',
       path: '/profile',
-      description: 'View and edit your profile',
+      description: 'Manage your identity',
     },
     {
       id: 'settings',
       label: 'Settings',
-      icon: 'fa-gear',
+      icon: 'fa-sliders-h',
       path: '/settings',
-      description: 'Manage your account and preferences',
+      description: 'App & account preferences',
     },
     {
-      id: 'about',
-      label: 'About Us',
-      icon: 'fa-info-circle',
-      path: '/about',
-      description: 'Learn more about ECHO and our mission',
+      id: 'coins',
+      label: 'Get Coins',
+      icon: 'fa-coins',
+      path: '/coins',
+      description: 'Purchase virtual currency',
     },
     {
-      id: 'terms',
-      label: 'Terms of Service',
-      icon: 'fa-file-contract',
-      path: '/terms',
-      description: 'Read our terms and conditions',
-    },
-    {
-      id: 'privacy',
-      label: 'Privacy Policy',
-      icon: 'fa-shield-alt',
-      path: '/privacy',
-      description: 'How we handle your data',
-    },
-    {
-      id: 'report',
-      label: 'Report a User',
-      icon: 'fa-flag',
-      path: '/report',
-      description: 'Report inappropriate behavior',
+      id: 'legal',
+      label: 'Legal & Policies',
+      icon: 'fa-gavel',
+      path: '/legal',
+      description: 'Terms, Privacy, and Report',
     },
   ];
 
-  // Admin gets Shop
-  const menuItems = isSupport
-    ? [
-        baseMenu[0],
-        {
-          id: 'shop',
-          label: 'Shop',
-          icon: 'fa-store',
-          path: '/shop',
-          description: 'Buy skins and premium GIFs',
-        },
-        ...baseMenu.slice(1),
-      ]
-    : baseMenu;
+  // ─── Theme toggle and logout buttons (quick settings) ─────────
+  const quickSettings = [
+    {
+      id: 'theme',
+      label: themePreference === 'dark' ? 'Light Mode' : 'Dark Mode',
+      icon: themePreference === 'dark' ? 'fa-sun' : 'fa-moon',
+      onClick: () => setTheme(themePreference === 'dark' ? 'light' : 'dark'),
+      color: '#FBBF24',
+    },
+    {
+      id: 'logout',
+      label: 'Logout',
+      icon: 'fa-sign-out-alt',
+      onClick: handleLogout,
+      color: '#EF4444',
+    },
+  ];
 
   return (
     <>
-      <SEO title="Settings & Legal" description="Manage your ECHO settings..." />
+      <SEO title="More" description="Explore additional features and policies on ECHO." />
       <StructuredData />
-      {/* No TawkTo here – already in App.js */}
-
       <div className="other-page">
+        {/* ─── Header ────────────────────────────────────────────── */}
         <div className="other-header">
-          <h2 className="other-title">⚙️ More</h2>
-          <p className="other-subtitle">Explore additional features and policies</p>
+          <div className="other-header-icon">
+            <i className="fas fa-ellipsis-h" />
+          </div>
+          <h1>More</h1>
+          <p>Explore everything ECHO has to offer</p>
         </div>
-        <div className="other-menu">
+
+        {/* ─── Quick Settings (Theme + Logout) ──────────────────── */}
+        <div className="other-quick-settings">
+          {quickSettings.map((item) => (
+            <div
+              key={item.id}
+              className="other-quick-card"
+              onClick={item.onClick}
+              style={{ '--item-color': item.color }}
+            >
+              <i className={`fas ${item.icon}`} />
+              <span>{item.label}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* ─── Menu List ─────────────────────────────────────────── */}
+        <div className="other-menu-list">
           {menuItems.map((item) => (
             <div
               key={item.id}
               className="other-menu-item"
               onClick={() => navigate(item.path)}
             >
-              <div className="other-icon-wrapper">
+              <div className="other-menu-icon">
                 <i className={`fas ${item.icon}`} />
               </div>
-              <div className="other-item-content">
-                <div className="other-item-label">{item.label}</div>
-                <div className="other-item-desc">{item.description}</div>
+              <div className="other-menu-content">
+                <div className="other-menu-label">{item.label}</div>
+                <div className="other-menu-desc">{item.description}</div>
               </div>
-              <div className="other-item-arrow">
-                <i className="fas fa-chevron-right" />
-              </div>
+              <i className="fas fa-chevron-right other-menu-arrow" />
             </div>
           ))}
+        </div>
+
+        {/* ─── Footer ────────────────────────────────────────────── */}
+        <div className="other-footer">
+          <span>ECHO v{process.env.REACT_APP_VERSION || '2.0'}</span>
+          <span>•</span>
+          <span>Made with ❤️</span>
         </div>
       </div>
     </>

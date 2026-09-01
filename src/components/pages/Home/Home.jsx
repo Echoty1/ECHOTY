@@ -217,6 +217,7 @@ const Home = () => {
           await new Promise((r) => setTimeout(r, 250));
           peerId = peerRef.current?.id || null;
         }
+        sessionStorage.setItem('echo_live_active', user.uid);
         await set(ref(db, 'live/' + user.uid), {
           name,
           avatar,
@@ -243,8 +244,45 @@ const Home = () => {
     if (user) {
       remove(ref(db, 'live/' + user.uid)).catch(() => {});
       remove(ref(db, 'liveChat/' + user.uid)).catch(() => {});
+      sessionStorage.removeItem('echo_live_active');
     }
   };
+
+
+  useEffect(() => {
+    if (!user?.uid) return;
+    if (sessionStorage.getItem('echo_live_active') !== user.uid) return;
+    const done = window.confirm('You refreshed while live. Are you done with this live stream?');
+    if (done) {
+      remove(ref(db, 'live/' + user.uid)).catch(() => {});
+      remove(ref(db, 'liveChat/' + user.uid)).catch(() => {});
+    }
+    sessionStorage.removeItem('echo_live_active');
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    const endLiveNow = () => {
+      if (sessionStorage.getItem('echo_live_active') !== user.uid) return;
+      remove(ref(db, 'live/' + user.uid)).catch(() => {});
+      remove(ref(db, 'liveChat/' + user.uid)).catch(() => {});
+      sessionStorage.removeItem('echo_live_active');
+    };
+    const onLeave = (e) => {
+      if (!isLive) return;
+      e.preventDefault();
+      e.returnValue = 'You are live. Leave this page to end the stream for viewers.';
+    };
+    const onHide = () => {
+      if (isLive) endLiveNow();
+    };
+    window.addEventListener('beforeunload', onLeave);
+    window.addEventListener('pagehide', onHide);
+    return () => {
+      window.removeEventListener('beforeunload', onLeave);
+      window.removeEventListener('pagehide', onHide);
+    };
+  }, [isLive, user?.uid]);
 
   const toggleLive = () => {
     if (isLive) {

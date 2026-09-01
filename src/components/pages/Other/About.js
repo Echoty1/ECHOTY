@@ -3,7 +3,6 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
-import './LegalPages.css';
 
 const BRAND_DESCRIPTION =
   'ECHO is a visual identity app where every user can express who they are and how they feel through animated avatars (ECHOMOJI), custom skins, real‑time presence, and communities. Discover, connect, and echo.';

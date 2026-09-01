@@ -14,10 +14,8 @@ import Chats from './components/pages/Chats/Chats';
 import ChatView from './components/pages/Chat/ChatView';
 import Profile from './components/pages/Profile/Profile';
 import Other from './components/pages/Other/Other';
-import Terms from './components/pages/Other/Terms';
+import Bookmarks from './components/pages/Other/Bookmarks';
 import DesktopInstallPrompt from './components/common/DesktopInstallPrompt';
-import Privacy from './components/pages/Other/Privacy';
-import Report from './components/pages/Other/Report';
 import Settings from './components/pages/Other/Settings';
 import About from './components/pages/Other/About';
 import CoinPurchase from './components/pages/CoinPurchase/CoinPurchase';
@@ -40,6 +38,9 @@ import Communities from './components/pages/Communities/Communities';
 import { CommunityProvider } from './contexts/CommunityContext';
 import CommunityChat from './components/pages/CommunityChat/CommunityChat';
 import { APP_VERSION } from './version';
+// src/App.js – add this route inside the Routes block
+import Legal from './components/pages/Other/Legal';
+
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
@@ -421,10 +422,8 @@ function AppContent() {
           <Route path="/chat/:userId" element={<ChatView />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/other" element={<Other />} />
-          <Route path="/terms" element={<Terms />} />
-          <Route path="/privacy" element={<Privacy />} />
-          <Route path="/report" element={<Report />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/bookmarks" element={<Bookmarks />} />
           <Route path="/coins" element={<CoinPurchase />} />
           <Route path="/about" element={<About />} />
           <Route path="/control" element={<AdminPanel />} />
@@ -432,8 +431,8 @@ function AppContent() {
           <Route path="/community/:communityId/:tab" element={<CommunityChat />} />
           <Route path="/community/:communityId" element={<CommunityChat />} />
           <Route path="/shop" element={<Shop />} />
+          <Route path="/legal" element={<Legal />} />
           <Route path="*" element={<Navigate to="/" replace />} />
-          <Route path="/login" element={<Login />} />
         </Routes>
       </div>
       <BottomNav />

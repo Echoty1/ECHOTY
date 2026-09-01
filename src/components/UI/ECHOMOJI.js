@@ -70,21 +70,23 @@ const ECHOMOJI = ({
     transition: 'transform 0.2s ease, box-shadow 0.2s ease',
     willChange: animated ? 'transform' : 'auto',
     transform: isPulsing ? 'scale(1.08)' : isHovered ? 'scale(1.05)' : 'scale(1)',
-    animation: animated ? 'echoFloat 3s ease-in-out infinite' : 'none',
+    animation: animated ? 'echoBounce 0.8s ease-in-out infinite' : 'none',
   };
 
-  // Ring styling helper
-  const ringStyle = (delay = 0, scale = 1.2) => ({
+  // Ring styling – now uses skin color, thicker borders, and glow
+  const ringStyle = (delay = 0, scale = 1.2, borderWidth = 3, opacity = 0.4) => ({
     position: 'absolute',
     borderRadius: '50%',
-    border: `2px solid ${theme.ledColor}`,
-    opacity: 0.3,
+    border: `${borderWidth}px solid ${theme.ledColor}`,
+    opacity: opacity,
     pointerEvents: 'none',
     width: size * scale,
     height: size * scale,
     top: (size * (1 - scale)) / 2,
     left: (size * (1 - scale)) / 2,
     animation: `echoRingPulse 3s ease-out infinite ${delay}s`,
+    boxShadow: `0 0 20px ${theme.glowColor}60`,
+    willChange: 'transform, opacity',
   });
 
   return (
@@ -96,12 +98,12 @@ const ECHOMOJI = ({
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
     >
-      {/* Echo Rings only rendered when animated flag is true */}
+      {/* Echo Rings – bolder and using skin colors */}
       {animated && (
         <>
-          <div style={ringStyle(0, 1.2)} />
-          <div style={ringStyle(0.5, 1.4)} />
-          <div style={ringStyle(1.0, 1.6)} />
+          <div style={ringStyle(0, 1.2, 4, 0.5)} />
+          <div style={ringStyle(0.5, 1.4, 3, 0.35)} />
+          <div style={ringStyle(1.0, 1.6, 2, 0.25)} />
         </>
       )}
 
@@ -137,8 +139,6 @@ const ECHOMOJI = ({
           fill="none"
         />
       </svg>
-
-      {/* ─── Removed accessory rendering ─────────────────────────── */}
 
       {/* Skin badge */}
       {skin && (

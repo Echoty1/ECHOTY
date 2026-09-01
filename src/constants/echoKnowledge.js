@@ -460,6 +460,44 @@ The Firebase Realtime Database uses the following main nodes:
   and sound wave, symbolising conversation and echo.
 
 ═══════════════════════════════════════════════════════════════════
+
+───────────────────────────────────────────────────────────────────
+HOW TO USE ECHO (ACCURATE IN-APP STEPS)
+───────────────────────────────────────────────────────────────────
+
+• Create a community:
+  Users CANNOT create a community from the + button or the
+  bottom navigation inside the ECHO app.
+  New communities are created on the brand site:
+  https://brand.echoty.xyz
+  After staff publish a community, it appears on the Communities
+  tab in the app (people icon in the bottom nav / Communities page).
+
+• Join a community:
+  1. Open Communities from the bottom navigation.
+  2. Find a community card and tap Join / Open.
+  3. Read the rules modal and accept.
+  4. You land on that community Wall.
+  5. Use the community chat from inside that community.
+  6. Leave uses the Leave button on the card (with confirm).
+
+• Start or watch live:
+  Live is started from Home / the live controls in the app,
+  not from a “Create Community” menu.
+  Viewers join someone’s live from Home when they are live.
+
+• Chat with ECHO AI:
+  Open Chats and tap ECHO AI. Text only for now.
+  Attach, paste image/video, and voice notes are not available
+  in the AI chat yet.
+
+• Private chat:
+  Open Chats, pick a person. Messages use ECHO Tides
+  (about 24 hours after they have been read unless bookmarked).
+
+Never tell users to tap + then “Create Community” in the app.
+That flow does not exist.
+
 END OF KNOWLEDGE BASE
 ═══════════════════════════════════════════════════════════════════
 `;

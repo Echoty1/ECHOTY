@@ -13,6 +13,7 @@ import {
   serverTimestamp,
 } from 'firebase/database';
 import { useAuth } from '../../../hooks/useAuth';
+import { sortMessages } from '../../../utils/sortMessages';
 import { SkeletonMessage } from '../../common/SkeletonLoader';
 import { getCache, setCache } from '../../../services/cacheService';
 import { clearMessageCache, storeMessageInCache } from '../../../services/messageCache';
@@ -251,6 +252,7 @@ const EchoAI = () => {
 
       const response = await postChat({
         message: newText,
+        userId: user.uid,
         conversationId: currentConversationId,
         isEdit: true,
         editMessageId: messageId,
@@ -857,7 +859,7 @@ const EchoAI = () => {
               <p>No messages yet. Say hello!</p>
             </div>
           ) : (
-            messages.map((msg) => <React.Fragment key={msg.id}>{renderMessage(msg)}</React.Fragment>)
+            sortMessages(messages).map((msg) => <React.Fragment key={msg.id}>{renderMessage(msg)}</React.Fragment>)
           )}
           {isAILoading && (
             <div className="message-row partner ai-thinking-row">
