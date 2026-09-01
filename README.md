@@ -64,21 +64,34 @@ You need **two** `.env` files. Ask a senior dev for the actual secret values (or
     # Server
     PORT=3000
 
-### Step 3: Run the Frontend
+### Step 3: Run the Backend (Optional)
 
-    npm start
+The backend handles AI chat, payments, and admin actions.  
+**You only need this if you're testing those features.**
 
-The app will open at `http://localhost:3000`.
+```bash
+cd backend
+npm install
+node server.js
+```
 
-### Step 4: Run the Backend (for AI / Payments)
+The backend runs on `http://localhost:3000`.
 
-Open a **new terminal**:
+---
 
-    cd backend
-    npm install
-    npm run dev
+### Step 4: Run the Frontend
 
-The backend runs on `http://localhost:3000` (matching the frontend's `REACT_APP_API_URL`).
+Open a **new terminal** and run:
+
+```bash
+npm start
+```
+
+The frontend runs on `http://localhost:3001`.
+
+---
+
+> **📌 Note:** You don't have to run the backend during frontend-only development. The app will load and work for UI changes, chat UI, etc. The frontend automatically detects the backend URL – it uses `http://localhost:3000` in development and your live backend URL in production. If you need to override it, set `REACT_APP_API_URL` in `.env`.
 
 ---
 
