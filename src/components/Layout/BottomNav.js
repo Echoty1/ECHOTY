@@ -9,6 +9,7 @@ import { ref, onValue, get } from 'firebase/database';
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 const DEFAULT_TAB_KEY = 'echo_default_tab';
 const TAB_ORDER_KEY = 'echo_tab_order';
+const WAVE_VIDEO = '/wave-bg.mp4';
 
 const haptic = (pattern = 12) => {
   try {
@@ -51,7 +52,6 @@ const BottomNav = () => {
   const [defaultToast, setDefaultToast] = useState(null);
   const [spinningId, setSpinningId] = useState(null);
   const [pulseFlash, setPulseFlash] = useState(false);
-
   const [onlineSheetOpen, setOnlineSheetOpen] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
   const [onlineLoading, setOnlineLoading] = useState(false);
@@ -70,6 +70,7 @@ const BottomNav = () => {
   const statusRef = useRef({});
   const presenceRef = useRef({});
   const contactIdsRef = useRef([]);
+  const videoRef = useRef(null);
 
   const isSupport = user?.uid === SUPPORT_UID;
 
@@ -119,6 +120,16 @@ const BottomNav = () => {
   const leftTabs = sideTabs.slice(0, Math.ceil(sideTabs.length / 2));
   const rightTabs = sideTabs.slice(Math.ceil(sideTabs.length / 2));
   const hasPulse = unreadChatsCount > 0 || onlineCount > 0;
+
+  // Keep the wave video playing
+  useEffect(() => {
+    const el = videoRef.current;
+    if (!el) return;
+    const play = () => el.play().catch(() => {});
+    play();
+    el.addEventListener('canplay', play);
+    return () => el.removeEventListener('canplay', play);
+  }, []);
 
   useEffect(() => setSwingKey((k) => k + 1), [activeIndex]);
 
@@ -219,7 +230,6 @@ const BottomNav = () => {
         }
       });
       contactIdsRef.current = [...new Set(ids)];
-
       let count = 0;
       let latest = null;
       Object.values(data).forEach((chat) => {
@@ -275,14 +285,12 @@ const BottomNav = () => {
     setOnlineLoading(true);
     setOnlineError('');
     haptic(14);
-
     try {
       const onlineSet = collectOnlineUids();
       const contacts = contactIdsRef.current || [];
       let uids = contacts.filter((id) => onlineSet.has(id));
       if (uids.length === 0) uids = [...onlineSet];
       uids = uids.slice(0, 50);
-
       const verified = [];
       for (const uid of uids) {
         let live = onlineSet.has(uid);
@@ -295,7 +303,6 @@ const BottomNav = () => {
         }
         if (live) verified.push(uid);
       }
-
       const profiles = await Promise.all(verified.map((uid) => fetchProfile(uid)));
       const contactSet = new Set(contacts);
       profiles.sort((a, b) => {
@@ -304,7 +311,6 @@ const BottomNav = () => {
         if (ac !== bc) return ac - bc;
         return String(a.name).localeCompare(String(b.name));
       });
-
       setOnlineUsers(profiles);
       setOnlineCount(profiles.length);
       if (profiles.length === 0) setOnlineError('No one is online on ECHO right now');
@@ -323,7 +329,6 @@ const BottomNav = () => {
       setOnlineError('Calling is not available right now');
       return;
     }
-
     let stillOnline = false;
     try {
       const s1 = await get(ref(db, `status/${person.uid}`));
@@ -332,14 +337,12 @@ const BottomNav = () => {
     } catch (_) {
       stillOnline = true;
     }
-
     if (!stillOnline) {
       setOnlineError(`${person.name} just went offline`);
       setOnlineUsers((prev) => prev.filter((p) => p.uid !== person.uid));
       haptic([20, 40]);
       return;
     }
-
     setCallingUid(person.uid);
     haptic([12, 24, 12]);
     try {
@@ -486,6 +489,7 @@ const BottomNav = () => {
     swipeStartY.current = t.clientY;
     swiping.current = false;
   };
+
   const onNavPointerMove = (e) => {
     if (swipeStartX.current == null) return;
     const t = e.touches ? e.touches[0] : e;
@@ -496,6 +500,7 @@ const BottomNav = () => {
       clearLongPress();
     }
   };
+
   const onNavPointerUp = (e) => {
     if (swipeStartX.current == null) return;
     const t = e.changedTouches ? e.changedTouches[0] : e;
@@ -521,6 +526,7 @@ const BottomNav = () => {
     centerTouchY.current = e.touches?.[0]?.clientY ?? null;
     startLongPress(activeTab, e);
   };
+
   const onCenterTouchEnd = (e) => {
     endPress();
     if (centerTouchY.current == null) return;
@@ -536,6 +542,7 @@ const BottomNav = () => {
   };
 
   const status = getStatus();
+
   const initials = (name) => {
     const p = String(name || 'U').trim().split(/\s+/);
     return ((p[0]?.[0] || 'U') + (p[1]?.[0] || '')).toUpperCase();
@@ -575,6 +582,19 @@ const BottomNav = () => {
       onMouseDown={onNavPointerDown}
       onMouseUp={onNavPointerUp}
     >
+      {/* Moving wave video background */}
+      <div className="echo-v-video" aria-hidden="true">
+        <video
+          ref={videoRef}
+          src={WAVE_VIDEO}
+          autoPlay
+          muted
+          loop
+          playsInline
+          preload="auto"
+        />
+      </div>
+
       {previewOpen && lastChatPreview && (
         <div className="echo-v-preview" onClick={() => setPreviewOpen(false)}>
           <span className="dot" />
@@ -590,7 +610,6 @@ const BottomNav = () => {
           <div className="echo-glass-panel">
             <div className="echo-glass-handle" />
             <p className="echo-glass-title">{contextMenu.tab.label}</p>
-
             <div className="echo-glass-grid">
               <button
                 type="button"
@@ -605,7 +624,6 @@ const BottomNav = () => {
                 </span>
                 <span className="echo-glass-label">Open</span>
               </button>
-
               <button
                 type="button"
                 className="echo-glass-tile echo-glass-tile-accent"
@@ -617,7 +635,6 @@ const BottomNav = () => {
                 <span className="echo-glass-label">Call online</span>
                 {onlineCount > 0 && <span className="echo-glass-chip">{onlineCount}</span>}
               </button>
-
               <button
                 type="button"
                 className="echo-glass-tile"
@@ -628,7 +645,6 @@ const BottomNav = () => {
                 </span>
                 <span className="echo-glass-label">Next visit</span>
               </button>
-
               <button
                 type="button"
                 className="echo-glass-tile"
@@ -643,7 +659,6 @@ const BottomNav = () => {
                 <span className="echo-glass-label">Top</span>
               </button>
             </div>
-
             <button type="button" className="echo-glass-cancel" onClick={() => setContextMenu(null)}>
               Cancel
             </button>
@@ -670,9 +685,7 @@ const BottomNav = () => {
                 <i className="fas fa-xmark" />
               </button>
             </div>
-
             {onlineError && <div className="online-error">{onlineError}</div>}
-
             <div className="online-list">
               {onlineLoading && <div className="online-empty">Finding people online…</div>}
               {!onlineLoading && onlineUsers.length === 0 && (
@@ -761,9 +774,9 @@ const BottomNav = () => {
       <svg className="echo-v-svg" viewBox="0 0 400 90" preserveAspectRatio="none" aria-hidden="true">
         <defs>
           <linearGradient id="vFill" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor="rgba(255,255,255,0.1)" />
-            <stop offset="50%" stopColor="rgba(167,139,250,0.1)" />
-            <stop offset="100%" stopColor="rgba(108,60,225,0.12)" />
+            <stop offset="0%" stopColor="rgba(255,255,255,0.04)" />
+            <stop offset="50%" stopColor="rgba(167,139,250,0.06)" />
+            <stop offset="100%" stopColor="rgba(108,60,225,0.08)" />
           </linearGradient>
           <linearGradient id="vLine" x1="0%" y1="0%" x2="100%" y2="0%">
             <stop offset="0%" stopColor="rgba(255,255,255,0.05)" />
@@ -843,30 +856,52 @@ const BottomNav = () => {
           pointer-events: none;
           transition: transform 0.3s cubic-bezier(0.22, 1, 0.36, 1);
           touch-action: pan-y;
+          overflow: hidden;
         }
         .echo-v-nav.is-hidden { transform: translateY(110%); }
 
+        /* Moving video background - fully visible */
+        .echo-v-video {
+          position: absolute;
+          inset: 0;
+          z-index: 0;
+          pointer-events: none;
+          overflow: hidden;
+        }
+        .echo-v-video video {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          opacity: 0.85;
+          filter: saturate(1.2) brightness(1);
+        }
+
+        /* Almost invisible underlay so the wave shows */
         .echo-v-underlay {
           position: absolute; left: 0; right: 0; bottom: 0; height: 58px;
-          background: linear-gradient(180deg, rgba(12,12,18,0.75), rgba(12,12,18,0.96));
-          backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-          border-top: 1px solid rgba(255,255,255,0.08); pointer-events: none;
+          background: linear-gradient(180deg, rgba(12,12,18,0.12), rgba(12,12,18,0.28));
+          backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+          border-top: 1px solid rgba(255,255,255,0.05);
+          pointer-events: none;
+          z-index: 1;
         }
+
         .echo-v-svg {
           position: absolute; inset: 0; width: 100%; height: 100%;
-          pointer-events: none; filter: drop-shadow(0 -8px 24px rgba(0,0,0,0.4));
+          pointer-events: none; filter: drop-shadow(0 -8px 24px rgba(0,0,0,0.22));
+          z-index: 2;
         }
         .echo-v-inner {
           position: relative; pointer-events: auto;
           display: flex; align-items: flex-end; justify-content: space-between;
           max-width: 560px; margin: 0 auto; height: 100%; padding: 0 6px 12px;
+          z-index: 3;
         }
         .echo-v-side {
           display: flex; flex: 1; justify-content: space-around;
           align-items: flex-end; height: 54px; min-width: 0;
         }
         .echo-v-center { flex: 0 0 auto; display: flex; align-items: flex-end; margin: 0 2px; }
-
         .echo-v-tab {
           display: flex; flex-direction: column; align-items: center; gap: 2px;
           background: none; border: none; color: rgba(255,255,255,0.5);
@@ -894,7 +929,6 @@ const BottomNav = () => {
           box-shadow: 0 6px 24px rgba(108,60,225,0.5), inset 0 1px 0 rgba(255,255,255,0.35);
         }
         .echo-v-icon.center-icon i { font-size: 22px; color: #fff; }
-
         .pulse-ring {
           position: absolute; left: 50%; top: 22px; width: 54px; height: 54px;
           margin-left: -27px; margin-top: -27px; border-radius: 50%;
@@ -924,7 +958,6 @@ const BottomNav = () => {
           display: flex; align-items: center; justify-content: center; padding: 0 4px;
           border: 2px solid #0c0c12;
         }
-
         .echo-v-preview, .echo-v-toast {
           position: absolute; left: 50%; transform: translateX(-50%); bottom: 100px; z-index: 60;
           border-radius: 12px; padding: 8px 14px; font-size: 12px; color: #fff; white-space: nowrap;
@@ -1020,7 +1053,6 @@ const BottomNav = () => {
         .echo-v-sheet-bg, .echo-online-bg {
           position: absolute; inset: 0; background: rgba(0,0,0,0.4);
         }
-
         .echo-online-sheet {
           position: absolute; left: 0; right: 0; bottom: 0;
           max-height: min(72vh, 520px);
@@ -1090,7 +1122,6 @@ const BottomNav = () => {
           background: rgba(108,60,225,0.25); color: #c4b5fd;
           display: flex; align-items: center; justify-content: center;
         }
-
         .echo-v-sheet {
           position: absolute; left: 0; right: 0; bottom: 0;
           background: rgba(16,14,24,0.97); border-radius: 18px 18px 0 0;
