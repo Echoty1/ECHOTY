@@ -16,6 +16,21 @@ const haptic = (pattern = 12) => {
   } catch (_) {}
 };
 
+const isOnlineValue = (val) => {
+  if (!val) return false;
+  if (val === 'online' || val === true) return true;
+  if (typeof val === 'string') return val.toLowerCase() === 'online';
+  if (typeof val === 'object') {
+    if (val.state === 'online' || val.status === 'online' || val.isOnline === true) return true;
+    if (val.lastChanged || val.last_seen || val.timestamp) {
+      const ts = Number(val.lastChanged || val.last_seen || val.timestamp);
+      if (ts > 1000000000000) return Date.now() - ts < 2 * 60 * 1000;
+      if (ts > 1000000000) return Date.now() - ts * 1000 < 2 * 60 * 1000;
+    }
+  }
+  return false;
+};
+
 const BottomNav = () => {
   const { user } = useAuth();
   const { startVideoCall } = useCall();
@@ -37,11 +52,11 @@ const BottomNav = () => {
   const [spinningId, setSpinningId] = useState(null);
   const [pulseFlash, setPulseFlash] = useState(false);
 
-  // Online call sheet
   const [onlineSheetOpen, setOnlineSheetOpen] = useState(false);
-  const [onlineUsers, setOnlineUsers] = useState([]); // { uid, name, avatar, status }
+  const [onlineUsers, setOnlineUsers] = useState([]);
   const [onlineLoading, setOnlineLoading] = useState(false);
   const [callingUid, setCallingUid] = useState(null);
+  const [onlineError, setOnlineError] = useState('');
 
   const longPressTimer = useRef(null);
   const longPressTriggered = useRef(false);
@@ -52,7 +67,9 @@ const BottomNav = () => {
   const lastTapRef = useRef(0);
   const lastScrollY = useRef(0);
   const prevUnread = useRef(0);
-  const statusMapRef = useRef({});
+  const statusRef = useRef({});
+  const presenceRef = useRef({});
+  const contactIdsRef = useRef([]);
 
   const isSupport = user?.uid === SUPPORT_UID;
 
@@ -101,7 +118,6 @@ const BottomNav = () => {
   const sideTabs = orderedTabs.filter((_, i) => i !== activeIndex);
   const leftTabs = sideTabs.slice(0, Math.ceil(sideTabs.length / 2));
   const rightTabs = sideTabs.slice(Math.ceil(sideTabs.length / 2));
-
   const hasPulse = unreadChatsCount > 0 || onlineCount > 0;
 
   useEffect(() => setSwingKey((k) => k + 1), [activeIndex]);
@@ -135,8 +151,8 @@ const BottomNav = () => {
   useEffect(() => {
     setContextMenu(null);
     setSheetOpen(false);
-    setSpinningId(null);
     setOnlineSheetOpen(false);
+    setSpinningId(null);
   }, [location.pathname]);
 
   const rememberOrder = useCallback(
@@ -151,92 +167,59 @@ const BottomNav = () => {
     [orderedTabs]
   );
 
-  const isUserOnline = (val) =>
-    val === 'online' ||
-    val === true ||
-    val?.state === 'online' ||
-    val?.isOnline === true ||
-    val?.status === 'online';
-
-  // Keep live status map + count
-  useEffect(() => {
-    return onValue(ref(db, 'status'), (snap) => {
-      const data = snap.val() || {};
-      statusMapRef.current = data;
-      const count = Object.entries(data).filter(
-        ([uid, s]) => uid !== user?.uid && isUserOnline(s)
-      ).length;
-      setOnlineCount(count);
+  const recountOnline = useCallback(() => {
+    const me = user?.uid;
+    const ids = new Set();
+    Object.entries(statusRef.current).forEach(([uid, val]) => {
+      if (uid !== me && isOnlineValue(val)) ids.add(uid);
     });
+    Object.entries(presenceRef.current).forEach(([uid, val]) => {
+      if (uid !== me && isOnlineValue(val)) ids.add(uid);
+    });
+    setOnlineCount(ids.size);
   }, [user?.uid]);
 
-  // Load online users with profiles for mini page
-  const openOnlineSheet = async () => {
-    setContextMenu(null);
-    setSheetOpen(false);
-    setOnlineSheetOpen(true);
-    setOnlineLoading(true);
-    haptic(14);
-
-    try {
-      const data = statusMapRef.current || {};
-      const uids = Object.entries(data)
-        .filter(([uid, s]) => uid !== user?.uid && isUserOnline(s))
-        .map(([uid]) => uid)
-        .slice(0, 40);
-
-      const profiles = await Promise.all(
-        uids.map(async (uid) => {
-          try {
-            const snap = await get(ref(db, `users/${uid}`));
-            const p = snap.exists() ? snap.val() : {};
-            return {
-              uid,
-              name: p.name || p.displayName || p.username || 'User',
-              avatar: p.avatar || p.photoURL || p.profileImage || '',
-            };
-          } catch (_) {
-            return { uid, name: 'User', avatar: '' };
-          }
-        })
-      );
-
-      setOnlineUsers(profiles);
-    } catch (err) {
-      console.error('Online list failed:', err);
-      setOnlineUsers([]);
-    } finally {
-      setOnlineLoading(false);
-    }
-  };
-
-  const callUser = (person) => {
-    if (!person?.uid || !startVideoCall) return;
-    setCallingUid(person.uid);
-    haptic([12, 24, 12]);
-    try {
-      startVideoCall(person.uid, person.name, person.avatar);
-      setOnlineSheetOpen(false);
-    } catch (err) {
-      console.error('Call failed:', err);
-    } finally {
-      setTimeout(() => setCallingUid(null), 800);
-    }
-  };
+  useEffect(() => {
+    const unsubs = [];
+    unsubs.push(
+      onValue(ref(db, 'status'), (snap) => {
+        statusRef.current = snap.val() || {};
+        recountOnline();
+      })
+    );
+    unsubs.push(
+      onValue(ref(db, 'presence'), (snap) => {
+        presenceRef.current = snap.val() || {};
+        recountOnline();
+      })
+    );
+    return () => unsubs.forEach((u) => typeof u === 'function' && u());
+  }, [recountOnline]);
 
   useEffect(() => {
     if (!user?.uid) {
+      contactIdsRef.current = [];
       setUnreadChatsCount(0);
       setLastChatPreview('');
       return;
     }
     return onValue(ref(db, `userChats/${user.uid}`), (snapshot) => {
-      const data = snapshot.val();
-      if (!data) {
-        setUnreadChatsCount(0);
-        setLastChatPreview('');
-        return;
-      }
+      const data = snapshot.val() || {};
+      const ids = [];
+      Object.entries(data).forEach(([key, chat]) => {
+        const other =
+          chat.userId ||
+          chat.uid ||
+          chat.partnerId ||
+          chat.receiverId ||
+          chat.senderId ||
+          (key !== user.uid ? key : null);
+        if (other && other !== user.uid && other !== 'echo_ai_assistant') {
+          ids.push(String(other));
+        }
+      });
+      contactIdsRef.current = [...new Set(ids)];
+
       let count = 0;
       let latest = null;
       Object.values(data).forEach((chat) => {
@@ -254,6 +237,121 @@ const BottomNav = () => {
       setLastChatPreview(latest?.text ? `${latest.name}: ${latest.text}` : '');
     });
   }, [user?.uid]);
+
+  const fetchProfile = async (uid) => {
+    const paths = [`users/${uid}`, `profiles/${uid}`, `userProfiles/${uid}`];
+    for (const p of paths) {
+      try {
+        const snap = await get(ref(db, p));
+        if (snap.exists()) {
+          const v = snap.val();
+          return {
+            uid,
+            name: v.name || v.displayName || v.username || v.userName || 'User',
+            avatar: v.avatar || v.photoURL || v.profileImage || v.image || '',
+          };
+        }
+      } catch (_) {}
+    }
+    return { uid, name: 'User', avatar: '' };
+  };
+
+  const collectOnlineUids = () => {
+    const me = user?.uid;
+    const online = new Set();
+    Object.entries(statusRef.current).forEach(([uid, val]) => {
+      if (uid !== me && isOnlineValue(val)) online.add(uid);
+    });
+    Object.entries(presenceRef.current).forEach(([uid, val]) => {
+      if (uid !== me && isOnlineValue(val)) online.add(uid);
+    });
+    return online;
+  };
+
+  const openOnlineSheet = async () => {
+    setContextMenu(null);
+    setSheetOpen(false);
+    setOnlineSheetOpen(true);
+    setOnlineLoading(true);
+    setOnlineError('');
+    haptic(14);
+
+    try {
+      const onlineSet = collectOnlineUids();
+      const contacts = contactIdsRef.current || [];
+      let uids = contacts.filter((id) => onlineSet.has(id));
+      if (uids.length === 0) uids = [...onlineSet];
+      uids = uids.slice(0, 50);
+
+      const verified = [];
+      for (const uid of uids) {
+        let live = onlineSet.has(uid);
+        if (!live) {
+          try {
+            const s1 = await get(ref(db, `status/${uid}`));
+            const s2 = await get(ref(db, `presence/${uid}`));
+            live = isOnlineValue(s1.val()) || isOnlineValue(s2.val());
+          } catch (_) {}
+        }
+        if (live) verified.push(uid);
+      }
+
+      const profiles = await Promise.all(verified.map((uid) => fetchProfile(uid)));
+      const contactSet = new Set(contacts);
+      profiles.sort((a, b) => {
+        const ac = contactSet.has(a.uid) ? 0 : 1;
+        const bc = contactSet.has(b.uid) ? 0 : 1;
+        if (ac !== bc) return ac - bc;
+        return String(a.name).localeCompare(String(b.name));
+      });
+
+      setOnlineUsers(profiles);
+      setOnlineCount(profiles.length);
+      if (profiles.length === 0) setOnlineError('No one is online on ECHO right now');
+    } catch (err) {
+      console.error('Online list failed:', err);
+      setOnlineUsers([]);
+      setOnlineError('Could not load online users');
+    } finally {
+      setOnlineLoading(false);
+    }
+  };
+
+  const callUser = async (person) => {
+    if (!person?.uid) return;
+    if (!startVideoCall) {
+      setOnlineError('Calling is not available right now');
+      return;
+    }
+
+    let stillOnline = false;
+    try {
+      const s1 = await get(ref(db, `status/${person.uid}`));
+      const s2 = await get(ref(db, `presence/${person.uid}`));
+      stillOnline = isOnlineValue(s1.val()) || isOnlineValue(s2.val());
+    } catch (_) {
+      stillOnline = true;
+    }
+
+    if (!stillOnline) {
+      setOnlineError(`${person.name} just went offline`);
+      setOnlineUsers((prev) => prev.filter((p) => p.uid !== person.uid));
+      haptic([20, 40]);
+      return;
+    }
+
+    setCallingUid(person.uid);
+    haptic([12, 24, 12]);
+    try {
+      await Promise.resolve(startVideoCall(person.uid, person.name, person.avatar || ''));
+      setOnlineSheetOpen(false);
+    } catch (err) {
+      console.error('Call failed:', err);
+      setOnlineError('Could not start the call');
+    } finally {
+      setTimeout(() => setCallingUid(null), 900);
+    }
+  };
 
   useEffect(() => {
     if (!user?.uid) return setCommunityUnread(0);
@@ -296,8 +394,6 @@ const BottomNav = () => {
     if (activeTab.id === 'home' && onlineCount > 0) return `${onlineCount} online`;
     if (activeTab.id === 'chats' && unreadChatsCount > 0) return `${unreadChatsCount} unread`;
     if (activeTab.id === 'shop' && coinBalance) return `${coinBalance} coins`;
-    if (activeTab.id === 'communities' && communityUnread > 0) return `${communityUnread} new`;
-    if (activeTab.id === 'control' && controlUnread > 0) return `${controlUnread} alerts`;
     return '';
   };
 
@@ -440,7 +536,6 @@ const BottomNav = () => {
   };
 
   const status = getStatus();
-
   const initials = (name) => {
     const p = String(name || 'U').trim().split(/\s+/);
     return ((p[0]?.[0] || 'U') + (p[1]?.[0] || '')).toUpperCase();
@@ -488,35 +583,75 @@ const BottomNav = () => {
       )}
       {defaultToast && <div className="echo-v-toast">{defaultToast}</div>}
 
-      {/* Long-press menu */}
+      {/* iPhone glassmorphism grid — long press */}
       {contextMenu && (
-        <div className="echo-v-ctx-wrap">
-          <div className="echo-v-ctx-bg" onClick={() => setContextMenu(null)} />
-          <div
-            className="echo-v-ctx"
-            style={{
-              left: Math.min(Math.max(16, contextMenu.x - 100), window.innerWidth - 220),
-              bottom: 110,
-            }}
-          >
-            <button type="button" onClick={() => { setContextMenu(null); goToTab(contextMenu.tab); }}>
-              <i className="fas fa-arrow-up-right-from-square" /> Open {contextMenu.tab.label}
-            </button>
-            <button type="button" className="accent" onClick={openOnlineSheet}>
-              <i className="fas fa-video" /> Call who’s online
-              {onlineCount > 0 && <span className="ctx-count">{onlineCount}</span>}
-            </button>
-            <button type="button" onClick={() => setAsDefault(contextMenu.tab)}>
-              <i className="fas fa-house" /> Open on next visit
-            </button>
-            <button type="button" onClick={() => { setContextMenu(null); scrollToTop(); }}>
-              <i className="fas fa-arrow-up" /> Scroll to top
+        <div className="echo-glass-wrap">
+          <div className="echo-glass-bg" onClick={() => setContextMenu(null)} />
+          <div className="echo-glass-panel">
+            <div className="echo-glass-handle" />
+            <p className="echo-glass-title">{contextMenu.tab.label}</p>
+
+            <div className="echo-glass-grid">
+              <button
+                type="button"
+                className="echo-glass-tile"
+                onClick={() => {
+                  setContextMenu(null);
+                  goToTab(contextMenu.tab);
+                }}
+              >
+                <span className="echo-glass-icon">
+                  <i className="fas fa-arrow-up-right-from-square" />
+                </span>
+                <span className="echo-glass-label">Open</span>
+              </button>
+
+              <button
+                type="button"
+                className="echo-glass-tile echo-glass-tile-accent"
+                onClick={openOnlineSheet}
+              >
+                <span className="echo-glass-icon">
+                  <i className="fas fa-video" />
+                </span>
+                <span className="echo-glass-label">Call online</span>
+                {onlineCount > 0 && <span className="echo-glass-chip">{onlineCount}</span>}
+              </button>
+
+              <button
+                type="button"
+                className="echo-glass-tile"
+                onClick={() => setAsDefault(contextMenu.tab)}
+              >
+                <span className="echo-glass-icon">
+                  <i className="fas fa-house" />
+                </span>
+                <span className="echo-glass-label">Next visit</span>
+              </button>
+
+              <button
+                type="button"
+                className="echo-glass-tile"
+                onClick={() => {
+                  setContextMenu(null);
+                  scrollToTop();
+                }}
+              >
+                <span className="echo-glass-icon">
+                  <i className="fas fa-arrow-up" />
+                </span>
+                <span className="echo-glass-label">Top</span>
+              </button>
+            </div>
+
+            <button type="button" className="echo-glass-cancel" onClick={() => setContextMenu(null)}>
+              Cancel
             </button>
           </div>
         </div>
       )}
 
-      {/* Mini online page */}
+      {/* Online callers sheet */}
       {onlineSheetOpen && (
         <div className="echo-online-wrap">
           <div className="echo-online-bg" onClick={() => setOnlineSheetOpen(false)} />
@@ -525,17 +660,21 @@ const BottomNav = () => {
             <div className="online-head">
               <div>
                 <h3>Who’s online</h3>
-                <p>{onlineLoading ? 'Loading…' : `${onlineUsers.length} available to call`}</p>
+                <p>
+                  {onlineLoading
+                    ? 'Connecting to presence…'
+                    : `${onlineUsers.length} online on ECHO`}
+                </p>
               </div>
               <button type="button" className="online-close" onClick={() => setOnlineSheetOpen(false)}>
                 <i className="fas fa-xmark" />
               </button>
             </div>
 
+            {onlineError && <div className="online-error">{onlineError}</div>}
+
             <div className="online-list">
-              {onlineLoading && (
-                <div className="online-empty">Finding people online…</div>
-              )}
+              {onlineLoading && <div className="online-empty">Finding people online…</div>}
               {!onlineLoading && onlineUsers.length === 0 && (
                 <div className="online-empty">
                   <i className="fas fa-moon" style={{ marginBottom: 8, opacity: 0.5 }} />
@@ -552,7 +691,13 @@ const BottomNav = () => {
                   >
                     <div className="online-avatar">
                       {person.avatar ? (
-                        <img src={person.avatar} alt="" onError={(e) => { e.currentTarget.style.display = 'none'; }} />
+                        <img
+                          src={person.avatar}
+                          alt=""
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
                       ) : (
                         <span>{initials(person.name)}</span>
                       )}
@@ -560,10 +705,16 @@ const BottomNav = () => {
                     </div>
                     <div className="online-meta">
                       <span className="online-name">{person.name}</span>
-                      <span className="online-sub">Online · Tap to video call</span>
+                      <span className="online-sub">
+                        {callingUid === person.uid ? 'Calling…' : 'Online · Tap to video call'}
+                      </span>
                     </div>
                     <span className="online-call-btn">
-                      <i className="fas fa-video" />
+                      <i
+                        className={`fas ${
+                          callingUid === person.uid ? 'fa-spinner fa-spin' : 'fa-video'
+                        }`}
+                      />
                     </span>
                   </button>
                 ))}
@@ -634,12 +785,13 @@ const BottomNav = () => {
 
       <div className="echo-v-inner">
         <div className="echo-v-side">{leftTabs.map(renderSide)}</div>
-
         <div className="echo-v-center">
           <button
             key={swingKey}
             type="button"
-            className={`echo-v-tab center ${hasPulse ? 'has-pulse' : ''} ${pulseFlash ? 'pulse-flash' : ''}`}
+            className={`echo-v-tab center ${hasPulse ? 'has-pulse' : ''} ${
+              pulseFlash ? 'pulse-flash' : ''
+            }`}
             onClick={() => onTabClick(activeTab, true)}
             onTouchStart={onCenterTouchStart}
             onTouchEnd={onCenterTouchEnd}
@@ -655,7 +807,11 @@ const BottomNav = () => {
                 <span className="pulse-ring r3" />
               </>
             )}
-            <div className={`echo-v-icon center-icon ${spinningId === activeTab.id ? 'silky-spin' : ''}`}>
+            <div
+              className={`echo-v-icon center-icon ${
+                spinningId === activeTab.id ? 'silky-spin' : ''
+              }`}
+            >
               <i className={`fas ${activeTab.icon}`} />
               {getBadge(activeTab) && (
                 <span
@@ -677,7 +833,6 @@ const BottomNav = () => {
             </span>
           </button>
         </div>
-
         <div className="echo-v-side">{rightTabs.map(renderSide)}</div>
       </div>
 
@@ -746,8 +901,8 @@ const BottomNav = () => {
           border: 2px solid rgba(167,139,250,0.55); pointer-events: none; z-index: 1;
           animation: echoPulse 2.4s cubic-bezier(0.22, 1, 0.36, 1) infinite;
         }
-        .pulse-ring.r2 { animation-delay: 0.7s; border-color: rgba(108,60,225,0.4); }
-        .pulse-ring.r3 { animation-delay: 1.4s; border-color: rgba(236,72,153,0.35); }
+        .pulse-ring.r2 { animation-delay: 0.7s; }
+        .pulse-ring.r3 { animation-delay: 1.4s; }
         @keyframes echoPulse {
           0% { transform: scale(0.85); opacity: 0.7; }
           70% { transform: scale(1.85); opacity: 0; }
@@ -756,9 +911,7 @@ const BottomNav = () => {
         .silky-spin { animation: silkySpin 0.95s cubic-bezier(0.45, 0.05, 0.2, 1) infinite; }
         @keyframes silkySpin {
           0% { transform: rotate(0deg) scale(1); }
-          25% { transform: rotate(90deg) scale(1.07); }
-          50% { transform: rotate(180deg) scale(1.02); }
-          75% { transform: rotate(270deg) scale(1.07); }
+          50% { transform: rotate(180deg) scale(1.05); }
           100% { transform: rotate(360deg) scale(1); }
         }
         .echo-v-label {
@@ -775,7 +928,6 @@ const BottomNav = () => {
         .echo-v-preview, .echo-v-toast {
           position: absolute; left: 50%; transform: translateX(-50%); bottom: 100px; z-index: 60;
           border-radius: 12px; padding: 8px 14px; font-size: 12px; color: #fff; white-space: nowrap;
-          max-width: min(320px, calc(100vw - 24px));
         }
         .echo-v-preview {
           display: flex; align-items: center; gap: 8px; pointer-events: auto;
@@ -784,35 +936,91 @@ const BottomNav = () => {
         .echo-v-preview .dot { width: 8px; height: 8px; border-radius: 50%; background: #EF4444; }
         .echo-v-toast { background: rgba(108,60,225,0.95); font-weight: 600; pointer-events: none; }
 
-        .echo-v-ctx-wrap, .echo-v-sheet-wrap, .echo-online-wrap {
+        /* iPhone glassmorphism grid */
+        .echo-glass-wrap {
+          position: fixed; inset: 0; z-index: 95; pointer-events: auto;
+          display: flex; align-items: flex-end; justify-content: center;
+        }
+        .echo-glass-bg {
+          position: absolute; inset: 0;
+          background: rgba(0,0,0,0.35);
+          backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+        }
+        .echo-glass-panel {
+          position: relative; z-index: 2;
+          width: min(360px, calc(100vw - 24px));
+          margin: 0 12px calc(96px + env(safe-area-inset-bottom, 0px));
+          padding: 12px 14px 14px;
+          border-radius: 22px;
+          background: linear-gradient(165deg, rgba(255,255,255,0.16), rgba(40,36,56,0.55) 45%, rgba(18,16,28,0.72));
+          border: 1px solid rgba(255,255,255,0.18);
+          box-shadow: 0 20px 50px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.22);
+          backdrop-filter: blur(28px) saturate(180%);
+          -webkit-backdrop-filter: blur(28px) saturate(180%);
+          animation: glassIn 0.32s cubic-bezier(0.22, 1, 0.36, 1);
+        }
+        @keyframes glassIn {
+          from { opacity: 0; transform: translateY(18px) scale(0.96); }
+          to { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        .echo-glass-handle {
+          width: 36px; height: 4px; border-radius: 4px; margin: 0 auto 10px;
+          background: rgba(255,255,255,0.28);
+        }
+        .echo-glass-title {
+          margin: 0 0 12px; text-align: center; font-size: 13px; font-weight: 650;
+          color: rgba(255,255,255,0.72);
+        }
+        .echo-glass-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .echo-glass-tile {
+          position: relative;
+          display: flex; flex-direction: column; align-items: flex-start; justify-content: space-between;
+          gap: 18px; min-height: 88px; padding: 14px; border-radius: 18px;
+          border: 1px solid rgba(255,255,255,0.14);
+          background: linear-gradient(145deg, rgba(255,255,255,0.14), rgba(255,255,255,0.05));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), 0 8px 20px rgba(0,0,0,0.18);
+          color: #fff; cursor: pointer; font-family: inherit;
+          -webkit-tap-highlight-color: transparent;
+          transition: transform 0.15s ease, background 0.15s ease;
+        }
+        .echo-glass-tile:active {
+          transform: scale(0.96);
+          background: linear-gradient(145deg, rgba(255,255,255,0.2), rgba(255,255,255,0.08));
+        }
+        .echo-glass-tile-accent {
+          background: linear-gradient(145deg, rgba(167,139,250,0.35), rgba(108,60,225,0.28));
+          border-color: rgba(196,181,253,0.35);
+        }
+        .echo-glass-icon {
+          width: 36px; height: 36px; border-radius: 12px;
+          display: flex; align-items: center; justify-content: center;
+          background: rgba(255,255,255,0.12); border: 1px solid rgba(255,255,255,0.12);
+          font-size: 15px; color: #e9e0ff;
+        }
+        .echo-glass-tile-accent .echo-glass-icon {
+          background: rgba(108,60,225,0.35); color: #fff;
+        }
+        .echo-glass-label { font-size: 13px; font-weight: 650; }
+        .echo-glass-chip {
+          position: absolute; top: 10px; right: 10px;
+          min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px;
+          background: #10b981; color: #fff; font-size: 10px; font-weight: 700;
+          display: flex; align-items: center; justify-content: center;
+        }
+        .echo-glass-cancel {
+          width: 100%; margin-top: 12px; padding: 14px; border-radius: 16px;
+          border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.08);
+          color: #fff; font-size: 15px; font-weight: 650; cursor: pointer; font-family: inherit;
+        }
+        .echo-glass-cancel:active { background: rgba(255,255,255,0.14); }
+
+        .echo-v-sheet-wrap, .echo-online-wrap {
           position: fixed; inset: 0; z-index: 90; pointer-events: auto;
         }
-        .echo-v-ctx-bg, .echo-v-sheet-bg, .echo-online-bg {
+        .echo-v-sheet-bg, .echo-online-bg {
           position: absolute; inset: 0; background: rgba(0,0,0,0.4);
         }
-        .echo-v-ctx {
-          position: absolute; width: 220px;
-          background: rgba(24,20,36,0.97);
-          border: 1px solid rgba(167,139,250,0.25);
-          border-radius: 14px; overflow: hidden;
-          box-shadow: 0 16px 40px rgba(0,0,0,0.45);
-        }
-        .echo-v-ctx button {
-          width: 100%; padding: 12px 14px; border: none; background: transparent;
-          color: #fff; font-size: 13px; font-weight: 600; text-align: left;
-          cursor: pointer; font-family: inherit;
-          border-bottom: 1px solid rgba(255,255,255,0.06);
-          display: flex; align-items: center; gap: 10px;
-        }
-        .echo-v-ctx button.accent { color: #c4b5fd; }
-        .echo-v-ctx button i { width: 16px; font-size: 12px; color: #a78bfa; }
-        .echo-v-ctx button:last-child { border-bottom: none; }
-        .ctx-count {
-          margin-left: auto; background: #10B981; color: #fff;
-          font-size: 10px; padding: 1px 6px; border-radius: 999px;
-        }
 
-        /* Online mini page */
         .echo-online-sheet {
           position: absolute; left: 0; right: 0; bottom: 0;
           max-height: min(72vh, 520px);
@@ -824,30 +1032,28 @@ const BottomNav = () => {
           animation: sheetUp 0.28s cubic-bezier(0.22, 1, 0.36, 1);
         }
         @keyframes sheetUp {
-          from { transform: translateY(24%); opacity: 0.6; }
-          to { transform: translateY(0); opacity: 1; }
+          from { transform: translateY(24%); }
+          to { transform: translateY(0); }
         }
         .echo-online-sheet .handle {
           width: 36px; height: 4px; border-radius: 4px; margin: 0 auto 12px;
           background: rgba(255,255,255,0.2);
         }
         .online-head {
-          display: flex; align-items: flex-start; justify-content: space-between;
+          display: flex; justify-content: space-between; align-items: flex-start;
           padding: 0 16px 12px; border-bottom: 1px solid rgba(255,255,255,0.06);
         }
-        .online-head h3 {
-          margin: 0; font-size: 17px; font-weight: 700; color: #fff;
-        }
-        .online-head p {
-          margin: 4px 0 0; font-size: 12px; color: rgba(255,255,255,0.5);
-        }
+        .online-head h3 { margin: 0; font-size: 17px; font-weight: 700; color: #fff; }
+        .online-head p { margin: 4px 0 0; font-size: 12px; color: rgba(255,255,255,0.5); }
         .online-close {
           width: 32px; height: 32px; border-radius: 10px; border: none;
           background: rgba(255,255,255,0.06); color: #fff; cursor: pointer;
         }
-        .online-list {
-          overflow-y: auto; padding: 8px 10px; flex: 1;
+        .online-error {
+          margin: 8px 16px 0; padding: 8px 12px; border-radius: 10px;
+          background: rgba(239,68,68,0.15); color: #fecaca; font-size: 12px;
         }
+        .online-list { overflow-y: auto; padding: 8px 10px; flex: 1; }
         .online-empty {
           text-align: center; color: rgba(255,255,255,0.45);
           padding: 36px 16px; font-size: 13px;
@@ -858,14 +1064,8 @@ const BottomNav = () => {
           padding: 10px 12px; border-radius: 14px; border: none;
           background: transparent; color: #fff; cursor: pointer;
           font-family: inherit; text-align: left;
-          transition: background 0.15s;
         }
-        .online-row:hover, .online-row:active {
-          background: rgba(108,60,225,0.14);
-        }
-        .online-row.calling {
-          background: rgba(16,185,129,0.15);
-        }
+        .online-row:active, .online-row.calling { background: rgba(108,60,225,0.14); }
         .online-avatar {
           position: relative; width: 44px; height: 44px; border-radius: 50%;
           overflow: hidden; flex-shrink: 0;
@@ -873,9 +1073,7 @@ const BottomNav = () => {
           display: flex; align-items: center; justify-content: center;
           font-weight: 700; font-size: 14px;
         }
-        .online-avatar img {
-          width: 100%; height: 100%; object-fit: cover;
-        }
+        .online-avatar img { width: 100%; height: 100%; object-fit: cover; }
         .online-dot {
           position: absolute; bottom: 1px; right: 1px;
           width: 11px; height: 11px; border-radius: 50%;
@@ -886,23 +1084,16 @@ const BottomNav = () => {
           display: block; font-size: 14px; font-weight: 650;
           overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
         }
-        .online-sub {
-          display: block; font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 2px;
-        }
+        .online-sub { display: block; font-size: 11px; color: rgba(255,255,255,0.45); margin-top: 2px; }
         .online-call-btn {
           width: 40px; height: 40px; border-radius: 12px;
           background: rgba(108,60,225,0.25); color: #c4b5fd;
           display: flex; align-items: center; justify-content: center;
-          flex-shrink: 0;
-        }
-        .online-row.calling .online-call-btn {
-          background: rgba(16,185,129,0.3); color: #6ee7b7;
         }
 
         .echo-v-sheet {
           position: absolute; left: 0; right: 0; bottom: 0;
-          background: rgba(16,14,24,0.97);
-          border-radius: 18px 18px 0 0;
+          background: rgba(16,14,24,0.97); border-radius: 18px 18px 0 0;
           padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
           border-top: 1px solid rgba(167,139,250,0.2);
         }
@@ -914,9 +1105,7 @@ const BottomNav = () => {
           margin: 0 0 12px; text-align: center; color: rgba(255,255,255,0.6);
           font-size: 12px; font-weight: 600;
         }
-        .echo-v-sheet .grid {
-          display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;
-        }
+        .echo-v-sheet .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
         .echo-v-sheet .grid button {
           display: flex; flex-direction: column; align-items: center; gap: 6px;
           padding: 14px 6px; border-radius: 14px; border: 1px solid rgba(255,255,255,0.08);
@@ -930,7 +1119,9 @@ const BottomNav = () => {
           .echo-v-icon.center-icon { width: 50px; height: 50px; }
         }
         @media (prefers-reduced-motion: reduce) {
-          .silky-spin, .echo-v-tab.center, .pulse-ring, .echo-online-sheet { animation: none !important; }
+          .silky-spin, .echo-v-tab.center, .pulse-ring, .echo-glass-panel, .echo-online-sheet {
+            animation: none !important;
+          }
         }
       `}</style>
     </nav>
@@ -938,4 +1129,3 @@ const BottomNav = () => {
 };
 
 export default BottomNav;
-
