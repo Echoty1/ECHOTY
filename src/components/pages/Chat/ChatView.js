@@ -17,6 +17,7 @@ import { sortMessages as sortMessagesByTime } from '../../../utils/sortMessages'
 import { useProfile } from '../../../contexts/ProfileContext';
 import { auth, db } from '../../../services/firebase';
 import { apiUrl } from '../../../utils/api';
+import SwipeToReply from './SwipeToReply';
 import {
   loadMessagesFromCache,
   upsertMessageInCache,
@@ -871,8 +872,11 @@ const ChatView = () => {
   };
 
   const handleReply = (msg) => {
-    if (msg.senderId === user?.uid) return;
-    const senderName = partnerProfile?.name || location.state?.userName || 'User';
+    const isOwnMsg = String(msg.senderId || '') === String(user?.uid || '');
+    const senderName = isOwnMsg
+      ? (currentUserProfile?.name || 'You')
+      : (partnerProfile?.name || location.state?.userName || 'User');
+
     let textSnippet;
     if (msg.type === 'media') {
       if (msg.mediaType === 'video') textSnippet = '🎬 Video';
@@ -1287,7 +1291,7 @@ const ChatView = () => {
       ? { ...msg.replyTo, senderName: msg.replyTo.senderName || 'User' }
       : null;
 
-    const showReply = !isOwn && !isAi;
+    const showReply = !isAi;
     let allowEdit = false;
     if (isOwn && userId !== ECHO_AI_ID) {
       if (msg.type === 'text') allowEdit = true;
@@ -1315,24 +1319,36 @@ const ChatView = () => {
 
     const sentClock = formatMsgClock(msg);
 
-    const shell = (inner) => (
-      <div
-        key={msg.id}
-        className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${Date.now() - (msg.timestamp || 0) < 1600 ? (isOwn ? 'just-sent' : 'just-received') : ''} ${isTideExpired(msg) ? 'tide-leaving' : ''}`}
-        ref={(el) => {
-          if (el) messageRefs.current[msg.id] = el;
-        }}
-      >
-        <div className={`message-stack ${isOwn ? 'own' : 'partner'}`}>
-          <div className={`message-bubble ${isOwn ? 'own' : 'partner'}`}>
-            {inner}
-            {sentClock ? <div className="message-meta-time">{sentClock}</div> : null}
-            {renderTide(msg)}
+    const shell = (inner) => {
+      const row = (
+        <div
+          key={msg.id}
+          className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${Date.now() - (msg.timestamp || 0) < 1600 ? (isOwn ? 'just-sent' : 'just-received') : ''} ${isTideExpired(msg) ? 'tide-leaving' : ''}`}
+          ref={(el) => {
+            if (el) messageRefs.current[msg.id] = el;
+          }}
+        >
+          <div className={`message-stack ${isOwn ? 'own' : 'partner'}`}>
+            <div className={`message-bubble ${isOwn ? 'own' : 'partner'}`}>
+              {inner}
+              {sentClock ? <div className="message-meta-time">{sentClock}</div> : null}
+              {renderTide(msg)}
+            </div>
           </div>
+          {renderReactions(msg.reactions, msg.id)}
         </div>
-        {renderReactions(msg.reactions, msg.id)}
-      </div>
-    );
+      );
+
+      if (showReply) {
+        return (
+          <SwipeToReply key={msg.id} direction={isOwn ? 'left' : 'right'} onReply={() => handleReply(msg)}>
+            {row}
+          </SwipeToReply>
+        );
+      }
+
+      return row;
+    };
 
     if (msg.type === 'echomoji') {
       const skinObj = msg.skinId ? getSkinById(msg.skinId) : null;
