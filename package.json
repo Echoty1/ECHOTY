@@ -36,8 +36,6 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
-    "ajv": "^8.0.0",
-    "ajv-keywords": "^5.1.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "react-scripts": "5.0.1",
     "typescript": "^4.9.5"
