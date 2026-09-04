@@ -27,7 +27,7 @@ import { listEchoArchive, removeEchoArchive } from '../../../services/echoArchiv
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Settings = () => {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { themePreference, setTheme } = useTheme();
 
@@ -66,6 +66,49 @@ const Settings = () => {
       return true;
     }
   });
+
+  const [sessions, setSessions] = useState([]);
+  const [loadingSessions, setLoadingSessions] = useState(true);
+  const currentDeviceId = (typeof window !== 'undefined' && localStorage.getItem('echo_device_id')) || '';
+
+  const getOsIcon = (os) => {
+    const key = String(os || '').toLowerCase();
+    if (key.includes('win')) return { prefix: 'fab', icon: 'fa-windows' };
+    if (key.includes('mac') || key.includes('ios')) return { prefix: 'fab', icon: 'fa-apple' };
+    if (key.includes('android')) return { prefix: 'fab', icon: 'fa-android' };
+    if (key.includes('linux')) return { prefix: 'fab', icon: 'fa-linux' };
+    return { prefix: 'fas', icon: 'fa-desktop' };
+  };
+
+  useEffect(() => {
+    if (!user?.uid) return undefined;
+    const unsub = onValue(ref(db, `sessions/${user.uid}`), (snapshot) => {
+      const data = snapshot.val();
+      if (!data) {
+        setSessions([]);
+        setLoadingSessions(false);
+        return;
+      }
+      const list = Object.entries(data).map(([deviceId, info]) => ({
+        deviceId,
+        ...info,
+        isCurrent: deviceId === currentDeviceId,
+      }));
+      const seen = new Set();
+      const unique = [];
+      list
+        .sort((a, b) => Number(b.isCurrent) - Number(a.isCurrent) || (b.lastActive || 0) - (a.lastActive || 0))
+        .forEach((row) => {
+          const key = row.fingerprint || `${row.os}|${row.browser}|${row.screen}`;
+          if (seen.has(key)) return;
+          seen.add(key);
+          unique.push(row);
+        });
+      setSessions(unique);
+      setLoadingSessions(false);
+    });
+    return () => unsub();
+  }, [user?.uid, currentDeviceId]);
 
   const toggleChatBg = () => {
     setChatBgEnabled((prev) => {
@@ -504,8 +547,8 @@ const Settings = () => {
       <SEO title="Settings" description="Manage your ECHO account settings." />
       <StructuredData />
       <div className="settings-page">
-
         <div className="settings-content">
+          <div className="settings-grid-3">
           {/* ─── THEME CARD ─────────────────────────────────────── */}
           <div className="settings-card">
             <h2><i className="fas fa-palette" /> Theme</h2>
@@ -577,29 +620,62 @@ const Settings = () => {
 
           {/* ─── CHAT MANAGEMENT CARD ───────────────────────────── */}
           <div className="settings-card">
-            <h2><i className="fas fa-bookmark" /> Bookmarks</h2>
-            <p>Messages you saved on this device. Maximum 10. They stay even after ECHO Tides removes the chat copy.</p>
-            {bookmarks.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)', marginTop: 8 }}>No bookmarks yet. Hover a message and tap the bookmark.</p>
+            <h2><i className="fas fa-laptop" style={{ color: '#60A5FA' }} /> Devices</h2>
+            <p>Devices signed into this account. You can sign out another device from here.</p>
+            {loadingSessions ? (
+              <p style={{ color: 'var(--text-muted)' }}>Loading devices…</p>
+            ) : sessions.length === 0 ? (
+              <p style={{ color: 'var(--text-muted)' }}>No saved devices yet. Sign in again to register this one.</p>
             ) : (
-              <ul className="echo-bookmark-list">
-                {bookmarks.map((row) => (
-                  <li key={row.archiveId} className="echo-bookmark-item">
-                    <div>
-                      <strong>{row.message?.senderId === user.uid ? 'You' : (row.message?.senderName || 'User')}</strong>
-                      <span className="echo-bookmark-source"> · {row.source === 'community' ? 'Community' : 'Chat'}</span>
-                      <p>{row.message?.text || (row.message?.mediaType ? 'Media' : 'Saved message')}</p>
+              <div className="sessions-list">
+                {sessions.map((session) => (
+                  <div key={session.deviceId} className="session-item">
+                    <div className="session-icon"><i className={`${getOsIcon(session.os).prefix} ${getOsIcon(session.os).icon}`} /></div>
+                    <div className="session-info">
+                      <div className="session-name">
+                        {session.os || 'Device'} · {session.browser || 'Browser'}
+                        {session.isCurrent && <span className="session-current-badge">Current</span>}
+                      </div>
+                      <div className="session-details">
+                        {session.screen || ''} · {session.lastActive ? new Date(session.lastActive).toLocaleString() : ''}
+                      </div>
                     </div>
-                    <button type="button" onClick={async () => {
-                      await removeEchoArchive(row.archiveId);
-                      setBookmarks(await listEchoArchive(user.uid));
-                    }}>Remove</button>
-                  </li>
+                    {session.isCurrent ? (
+                      <button type="button" className="session-logout-btn" title="Log out this device" onClick={() => {
+                        setConfirmModal({
+                          isOpen: true,
+                          title: 'Log out this device?',
+                          message: 'You will be signed out here. You can sign in again anytime.',
+                          confirmText: 'Log Out',
+                          showCancel: true,
+                          showInput: false,
+                          onConfirm: async () => { await logout(); navigate('/login'); },
+                        });
+                      }}><i className="fas fa-sign-out-alt" /></button>
+                    ) : (
+                      <button type="button" className="session-logout-btn" title="Log out this device" onClick={() => {
+                        const label = `${session.os} · ${session.browser}`;
+                        setConfirmModal({
+                          isOpen: true,
+                          title: `Log out ${label}?`,
+                          message: 'That device will be signed out.',
+                          confirmText: 'Log Out',
+                          showCancel: true,
+                          showInput: false,
+                          onConfirm: async () => {
+                            await remove(ref(db, `sessions/${user.uid}/${session.deviceId}`));
+                            setToast({ message: `Signed out ${label}`, type: 'success' });
+                            setTimeout(() => setToast(null), 2500);
+                          },
+                        });
+                      }}><i className="fas fa-sign-out-alt" /></button>
+                    )}
+                  </div>
                 ))}
-              </ul>
+              </div>
             )}
           </div>
-
+          </div>
           <div className="settings-card chat-management">
             <h2><i className="fas fa-comment-slash" /> Chat Management</h2>
             <p>Manage your conversations. Actions affect both you and the other person.</p>

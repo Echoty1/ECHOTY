@@ -1,8 +1,13 @@
-// src/services/firebase.js
 import { initializeApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
+import {
+  initializeAuth,
+  getAuth,
+  indexedDBLocalPersistence,
+  browserLocalPersistence,
+  browserPopupRedirectResolver,
+} from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
-import { getStorage } from 'firebase/storage'; // ADD THIS
+import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -15,19 +20,26 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
 
-// Validate required config
 const missingKeys = Object.entries(firebaseConfig)
-  .filter(([key, value]) => !value && key !== 'measurementId') // measurementId is optional
+  .filter(([key, value]) => !value && key !== 'measurementId')
   .map(([key]) => key);
 
 if (missingKeys.length > 0) {
-  console.error(
-    `❌ Firebase config missing required keys: ${missingKeys.join(', ')}. ` +
-    `Please set them in your environment variables (REACT_APP_FIREBASE_*).`
-  );
+  console.error(`Firebase config missing: ${missingKeys.join(', ')}`);
 }
 
 const app = initializeApp(firebaseConfig);
-export const auth = getAuth(app);
+
+let auth;
+try {
+  auth = initializeAuth(app, {
+    persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+    popupRedirectResolver: browserPopupRedirectResolver,
+  });
+} catch (err) {
+  auth = getAuth(app);
+}
+
+export { auth };
 export const db = getDatabase(app);
-export const storage = getStorage(app); // ADD THIS
+export const storage = getStorage(app);

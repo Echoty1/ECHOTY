@@ -4,6 +4,67 @@ import { auth, db } from '../services/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { ref, set, update, onDisconnect, onValue, remove, get, runTransaction } from 'firebase/database';
 import { initPresence } from '../services/presenceService';
+import { isUnverifiedPasswordUser } from '../utils/emailGate';
+
+const getDeviceId = () => {
+  try {
+    let id = localStorage.getItem('echo_device_id');
+    if (!id) {
+      id = (crypto.randomUUID && crypto.randomUUID()) || `dev_${Date.now()}_${Math.random().toString(16).slice(2)}`;
+      localStorage.setItem('echo_device_id', id);
+    }
+    return id;
+  } catch {
+    return `dev_${Date.now()}`;
+  }
+};
+
+const parseOs = (platform, ua) => {
+  const p = String(platform || '');
+  const u = String(ua || '');
+  if (/Win/i.test(p) && !/Windows Phone/i.test(p + u)) return 'Windows';
+  if (/Mac/i.test(p) && !/iPhone|iPad/i.test(p + u)) return 'macOS';
+  if (/CrOS|Chrome OS/i.test(p) || /CrOS/i.test(u)) return 'ChromeOS';
+  if (/Android/i.test(p)) return 'Android';
+  if (/iPhone/i.test(p)) return 'iOS';
+  if (/iPad/i.test(p)) return 'iPadOS';
+  if (/Linux/i.test(p)) return 'Linux';
+  if (/Win/i.test(p)) return 'Windows';
+  if (/Android/i.test(u) && !/Win|MacIntel|Linux x86|CrOS/i.test(p)) return 'Android';
+  if (/iPhone/i.test(u) && !/Win|MacIntel|Linux x86/i.test(p)) return 'iOS';
+  if (/iPad/i.test(u) && !/Win|MacIntel|Linux x86/i.test(p)) return 'iPadOS';
+  if (/Windows Phone|WPDesktop/i.test(u)) return 'Windows';
+  if (/Win/i.test(u)) return 'Windows';
+  if (/Mac OS X|Macintosh/i.test(u) && !/iPhone|iPad/i.test(u)) return 'macOS';
+  if (/Ubuntu/i.test(u)) return 'Linux';
+  if (/Linux/i.test(u) && !/Android/i.test(u)) return 'Linux';
+  return 'Unknown';
+};
+
+const getDeviceInfo = () => {
+  const ua = navigator.userAgent || '';
+  const platform = navigator.userAgentData?.platform || navigator.platform || '';
+  const os = parseOs(platform, ua);
+  let browser = 'Unknown';
+  if (/Edg\//i.test(ua)) browser = 'Edge';
+  else if (/OPR\/|Opera/i.test(ua)) browser = 'Opera';
+  else if (/SamsungBrowser/i.test(ua)) browser = 'Samsung Internet';
+  else if (/Firefox|FxiOS/i.test(ua)) browser = 'Firefox';
+  else if (/CriOS/i.test(ua)) browser = 'Chrome';
+  else if (/Chrome/i.test(ua)) browser = 'Chrome';
+  else if (/Safari/i.test(ua)) browser = 'Safari';
+  return { os, browser, screen: `${window.screen.width}×${window.screen.height}` };
+};
+
+const refineDeviceOs = async (fallback) => {
+  try {
+    if (navigator.userAgentData?.getHighEntropyValues) {
+      const high = await navigator.userAgentData.getHighEntropyValues(['platform']);
+      if (high?.platform) return parseOs(high.platform, navigator.userAgent || '');
+    }
+  } catch (_) {}
+  return fallback;
+};
 
 export const AuthContext = createContext();
 
@@ -14,27 +75,21 @@ export const AuthProvider = ({ children }) => {
   const presenceCleanupRef = useRef(null);
   const accountCleanupRef = useRef(null);
   const profileUnsubRef = useRef(null);
+  const sessionCleanupRef = useRef(null);
+  const loggingOutRef = useRef(false);
 
-  // ─── Update daily login count using userDailyLogins path ────
   const updateDailyLogin = async (uid) => {
     if (!uid) return;
     const today = new Date().toISOString().split('T')[0];
     try {
       const userLoginRef = ref(db, `userDailyLogins/${uid}/${today}`);
       const snap = await get(userLoginRef);
-      if (snap.exists()) {
-        console.log(`✅ ${uid} already logged in today (${today})`);
-        return;
-      }
+      if (snap.exists()) return;
       await set(userLoginRef, true);
       await update(ref(db, `profiles/${uid}`), { lastLoginDate: today });
-      console.log(`✅ Daily login marked for ${uid} (${today})`);
-    } catch (err) {
-      console.warn(`❌ Failed to mark daily login for ${uid}:`, err);
-    }
+    } catch (_) {}
   };
 
-  // ─── Clean up all listeners ──────────────────────────────────
   const cleanupAll = () => {
     if (presenceCleanupRef.current) {
       presenceCleanupRef.current();
@@ -48,6 +103,10 @@ export const AuthProvider = ({ children }) => {
       profileUnsubRef.current();
       profileUnsubRef.current = null;
     }
+    if (sessionCleanupRef.current) {
+      sessionCleanupRef.current();
+      sessionCleanupRef.current = null;
+    }
   };
 
   useEffect(() => {
@@ -57,7 +116,54 @@ export const AuthProvider = ({ children }) => {
       if (firebaseUser) {
         try {
           const uid = firebaseUser.uid;
-          console.log('👤 User authenticated:', uid);
+          if (isUnverifiedPasswordUser(firebaseUser, 'k9Cs6QPfDRNTputzic7V3xRUof63')) {
+            setUser(null);
+            setLoading(false);
+            return;
+          }
+
+          const deviceId = getDeviceId();
+          const info = getDeviceInfo();
+          const fingerprint = `${info.os}|${info.browser}|${info.screen}`;
+          const sessionRef = ref(db, `sessions/${uid}/${deviceId}`);
+          let sessionLive = false;
+          get(sessionRef).then((snap) => {
+            const prev = snap.exists() ? snap.val() : {};
+            return set(sessionRef, {
+              deviceId,
+              os: info.os,
+              browser: info.browser,
+              screen: info.screen,
+              fingerprint,
+              lastActive: Date.now(),
+              createdAt: prev.createdAt || Date.now(),
+              isCurrent: true,
+            });
+          }).then(async () => {
+            sessionLive = true;
+            onDisconnect(sessionRef).update({ lastActive: Date.now(), isCurrent: false }).catch(() => {});
+            const realOs = await refineDeviceOs(info.os);
+            if (realOs && realOs !== info.os) {
+              await update(sessionRef, { os: realOs, fingerprint: `${realOs}|${info.browser}|${info.screen}` }).catch(() => {});
+            }
+            return get(ref(db, `sessions/${uid}`));
+          }).then((all) => {
+            const rows = all && all.exists() ? all.val() : {};
+            Object.entries(rows).forEach(([id, row]) => {
+              if (id === deviceId) return;
+              const same =
+                row &&
+                (row.fingerprint === fingerprint ||
+                  (row.os === info.os && row.browser === info.browser && row.screen === info.screen));
+              if (same) remove(ref(db, `sessions/${uid}/${id}`)).catch(() => {});
+            });
+          }).catch(() => {});
+          sessionCleanupRef.current = onValue(sessionRef, (snap) => {
+            if (loggingOutRef.current) return;
+            if (sessionLive && !snap.exists() && auth.currentUser) {
+              signOut(auth).catch(() => {});
+            }
+          });
 
           presenceCleanupRef.current = initPresence(uid);
 
@@ -88,7 +194,6 @@ export const AuthProvider = ({ children }) => {
             async (snapshot) => {
               if (snapshot.exists()) {
                 const profileData = snapshot.val();
-                console.log('📂 Existing profile loaded for:', uid);
 
                 const googleName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
                 const currentName = profileData.name || profileData.displayName || profileData.username || '';
@@ -116,9 +221,7 @@ export const AuthProvider = ({ children }) => {
                 }
 
                 if (needsUpdate) {
-                  update(profileRef, updatedData)
-                    .then(() => console.log('✅ Updated profile for:', uid))
-                    .catch((err) => console.warn('Could not update profile:', err));
+                  update(profileRef, updatedData).catch(() => {});
                   Object.assign(profileData, updatedData);
                 }
 
@@ -131,18 +234,15 @@ export const AuthProvider = ({ children }) => {
 
                 await updateDailyLogin(uid);
                 setLoading(false);
-
               } else {
-                // Profile does not exist – create one
                 const name = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
-                console.log('👤 Creating new profile for:', uid, name);
                 const newProfile = {
                   name,
                   searchName: name.toLowerCase(),
                   avatar: '',
                   mood: 'neutral',
                   activeSkin: null,
-                  bio: 'New to ECHO! 🌊',
+                  bio: 'New to ECHO!',
                   interests: [],
                   skills: [],
                   country: '',
@@ -152,10 +252,7 @@ export const AuthProvider = ({ children }) => {
                   createdAt: Date.now(),
                 };
 
-                setUser((prev) => ({
-                  ...prev,
-                  ...newProfile,
-                }));
+                setUser((prev) => ({ ...prev, ...newProfile }));
 
                 try {
                   await set(profileRef, newProfile);
@@ -173,18 +270,13 @@ export const AuthProvider = ({ children }) => {
                     }),
                   ]);
                   await updateDailyLogin(uid);
-                  console.log('✅ New profile created and daily login counted for:', uid);
-                } catch (err) {
-                  console.warn('Error creating profile or auxiliary nodes:', err);
+                } catch (_) {
                 } finally {
                   setLoading(false);
                 }
               }
             },
-            (error) => {
-              console.error('❌ Profile listener error for', uid, error);
-              setLoading(false);
-            }
+            () => setLoading(false)
           );
           profileUnsubRef.current = unsubscribeProfile;
 
@@ -192,7 +284,6 @@ export const AuthProvider = ({ children }) => {
           const unsubAccount = onValue(accountRef, (snap) => {
             const data = snap.val();
             if (data?.forceLogout === true) {
-              console.log(`🔴 Force logout for ${uid}`);
               signOut(auth).catch(() => {});
               remove(ref(db, `accounts/${uid}/forceLogout`)).catch(() => {});
             }
@@ -207,13 +298,10 @@ export const AuthProvider = ({ children }) => {
             }
           });
           accountCleanupRef.current = unsubAccount;
-
-        } catch (err) {
-          console.error('❌ Auth error:', err);
+        } catch (_) {
           setLoading(false);
         }
       } else {
-        console.log('🔴 User signed out');
         cleanupAll();
         setUser(null);
         setBanInfo({ isBanned: false, reason: '', bannedAt: null });
@@ -228,22 +316,25 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   const handleLogout = async () => {
+    loggingOutRef.current = true;
+    const uid = user?.uid || auth.currentUser?.uid;
+    const deviceId = localStorage.getItem('echo_device_id');
     cleanupAll();
-    if (user) {
-      try {
-        await set(ref(db, `presence/online/${user.uid}`), false);
-      } catch (err) {}
-    }
-    await signOut(auth);
+    try {
+      if (uid && deviceId) {
+        onDisconnect(ref(db, `sessions/${uid}/${deviceId}`)).cancel().catch(() => {});
+      }
+    } catch (_) {}
+    try {
+      await signOut(auth);
+    } catch (_) {}
+    if (uid && deviceId) remove(ref(db, `sessions/${uid}/${deviceId}`)).catch(() => {});
+    loggingOutRef.current = false;
   };
 
   const value = { user, loading, logout: handleLogout, banInfo };
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = () => {

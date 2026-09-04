@@ -1,84 +1,62 @@
-// public/service-worker.js
 /* eslint-disable no-restricted-globals */
+const CACHE_NAME = 'echo-v2-cache-v4';
 
-const CACHE_NAME = 'echo-v2-cache-v3';
+const PASS_THROUGH = [
+  'googleapis.com',
+  'gstatic.com',
+  'google.com',
+  'firebaseio.com',
+  'firebasestorage.googleapis.com',
+  'cloudinary.com',
+  'onrender.com',
+  'myhappr.com',
+];
 
-// ─── Install: skip waiting to activate immediately ────────────
+function shouldBypass(url) {
+  try {
+    const host = new URL(url).hostname;
+    return PASS_THROUGH.some((part) => host.includes(part));
+  } catch {
+    return true;
+  }
+}
+
 self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting());
 });
 
-// ─── Activate: claim clients and clean old caches ─────────────
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cacheName) => {
-          if (cacheName !== CACHE_NAME) {
-            return caches.delete(cacheName);
-          }
-        })
-      );
-    }).then(() => self.clients.claim())
+    caches.keys().then((names) =>
+      Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name)))
+    ).then(() => self.clients.claim())
   );
 });
 
-// ─── Fetch: skip non-GET requests; network-first for navigation ──
 self.addEventListener('fetch', (event) => {
   const request = event.request;
-
-  // ─── Skip non‑GET requests (POST, PUT, DELETE, etc.) ──
-  if (request.method !== 'GET') {
-    event.respondWith(fetch(request));
+  if (request.method !== 'GET' || shouldBypass(request.url)) {
     return;
   }
 
-  const url = new URL(request.url);
-
-  // ─── For navigation requests (HTML pages) – network first ──
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request)
-        .then((response) => {
-          // Cache the new response for offline
-          const responseClone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
-          });
-          return response;
-        })
-        .catch(() => {
-          // Fallback to cache if offline
-          return caches.match(request);
-        })
+        .then((response) => response)
+        .catch(() => caches.match(request))
     );
     return;
   }
 
-  // ─── For static assets – cache‑first with network fallback ──
   event.respondWith(
-    caches.match(request).then((response) => {
-      if (response) {
-        // Return cached response but also update in background
-        fetch(request).then((networkResponse) => {
-          if (networkResponse && networkResponse.status === 200) {
-            caches.open(CACHE_NAME).then((cache) => {
-              cache.put(request, networkResponse);
-            });
-          }
-        }).catch(() => {});
-        return response;
-      }
-
-      return fetch(request).then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const responseClone = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseClone);
-          });
+    fetch(request)
+      .then((networkResponse) => {
+        if (networkResponse && networkResponse.status === 200 && networkResponse.type === 'basic') {
+          const copy = networkResponse.clone();
+          caches.open(CACHE_NAME).then((cache) => cache.put(request, copy)).catch(() => {});
         }
         return networkResponse;
-      });
-    })
+      })
+      .catch(() => caches.match(request).then((cached) => cached || Response.error()))
   );
 });

@@ -15,8 +15,9 @@ root.render(
 );
 
 serviceWorkerRegistration.register({
-  onUpdate: () => {
-    console.log('🔄 Service worker updated – reloading...');
-    window.location.reload();
+  onUpdate: (registration) => {
+    if (registration?.waiting) {
+      registration.waiting.postMessage({ type: 'SKIP_WAITING' });
+    }
   },
 });

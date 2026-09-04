@@ -91,9 +91,11 @@ const MessageMenu = ({
   };
 
   const handleToggle = (e) => {
-    if (isTouchDevice) {
+    if (!isTouchDevice) return;
+    if (!showActions) {
+      e.preventDefault();
       e.stopPropagation();
-      setShowActions((prev) => !prev);
+      setShowActions(true);
     }
   };
 

@@ -12,7 +12,6 @@ import Avatar from '../common/Avatar';
 import { preloadMedia } from '../../utils/mediaCache';
 import NotificationModal from '../common/NotificationModal';
 import ConfirmModal from '../common/ConfirmModal';
-import './NavbarCommunity.css';
 
 const ECHO_AI_GIF = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
 
@@ -82,6 +81,7 @@ const Navbar = memo(() => {
   const isCoinsRoute = location.pathname === '/coins';
   const isOtherRoute = location.pathname === '/other';
   const isBookmarksRoute = location.pathname === '/bookmarks';
+  const isLegalRoute = location.pathname === '/legal';
 
   const showBackButton =
     isChatRoute ||
@@ -94,7 +94,8 @@ const Navbar = memo(() => {
     isReportRoute ||
     isCoinsRoute ||
     isOtherRoute ||
-    isBookmarksRoute;
+    isBookmarksRoute ||
+    isLegalRoute;
 
   // ─── Back destination ───────────────────────────────────────
   const getBackDestination = () => {
@@ -104,7 +105,7 @@ const Navbar = memo(() => {
       if (fromCommunity) return `/community/${fromCommunity}`;
       return '/chats';
     }
-    if (isProfileRoute || isSettingsRoute || isOtherRoute || isBookmarksRoute) return '/other';
+    if (isProfileRoute || isSettingsRoute || isOtherRoute || isBookmarksRoute || isLegalRoute) return '/other';
     if (isAboutRoute || isTermsRoute || isPrivacyRoute || isReportRoute) return '/other';
     if (isCoinsRoute) return '/shop';
     return '/';
@@ -397,6 +398,7 @@ const Navbar = memo(() => {
             {isCoinsRoute && 'Get Coins'}
             {isOtherRoute && 'Other'}
             {isBookmarksRoute && 'Bookmarks'}
+            {isLegalRoute && 'Legal & Policies'}
           </span>
         )}
 

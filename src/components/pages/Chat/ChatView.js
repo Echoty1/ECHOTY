@@ -70,14 +70,18 @@ const sanitizeName = (rawName, userId) => {
 
 const msgTime = (m) => {
   if (!m) return 0;
-  const t = m.timestamp;
-  if (typeof t === 'number' && !Number.isNaN(t)) return t;
+  const raw = m.timestamp ?? m.createdAt ?? m.clientTs ?? m.time;
+  let t = raw;
   if (t && typeof t === 'object') {
-    if (typeof t.toMillis === 'function') return t.toMillis();
-    if (typeof t.seconds === 'number') return t.seconds * 1000;
+    if (typeof t.toMillis === 'function') t = t.toMillis();
+    else if (typeof t.seconds === 'number') t = t.seconds * 1000;
+    else t = Number(t);
+  } else {
+    t = Number(t);
   }
-  if (typeof m.clientTs === 'number') return m.clientTs;
-  return 0;
+  if (!Number.isFinite(t) || t <= 0) return 0;
+  if (t < 1e12) t *= 1000;
+  return t;
 };
 
 const sortMessages = (list) => sortMessagesByTime(list);
@@ -149,6 +153,7 @@ const ChatView = () => {
   const [toast, setToast] = useState(null);
   const [bookmarkedIds, setBookmarkedIds] = useState({});
   const stampedLegacyTides = useRef(false);
+  const [tideTick, setTideTick] = useState(Date.now());
 
   // ─── Confirm Modal State ──────────────────────────────────────
   const [confirmModal, setConfirmModal] = useState({
@@ -166,6 +171,13 @@ const ChatView = () => {
   const inputRef = useRef(null);
   const inputContainerRef = useRef(null);
   const captionPreviewRef = useRef(null);
+
+  useEffect(() => {
+    const hide = Boolean(previewUrl || editingMediaMessage || mediaPreview);
+    document.body.classList.toggle('echo-hide-bottom-nav', hide);
+    return () => document.body.classList.remove('echo-hide-bottom-nav');
+  }, [previewUrl, editingMediaMessage, mediaPreview]);
+
   const isNearBottomRef = useRef(true);
   const initialScrollRef = useRef(false);
   const prevMsgCountRef = useRef(0);
@@ -179,6 +191,36 @@ const ChatView = () => {
   const moreOptionsRef = useRef(null);
   const messageRefs = useRef({});
   const clearedAtRef = useRef(0);
+
+  useEffect(() => {
+    const id = setInterval(() => setTideTick(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+
+  const pruneExpired = async (list, cId) => {
+    if (userId === ECHO_AI_ID) return list;
+    const keep = [];
+    const gone = [];
+    (list || []).forEach((m) => {
+      if (isTideExpired(m) && !bookmarkedIds[m.id] && !m.pinned) gone.push(m);
+      else keep.push(m);
+    });
+    if (gone.length && cId) {
+      const updates = {};
+      gone.forEach((m) => {
+        if (m.id && !String(m.id).startsWith('temp_')) {
+          updates[`chats/${cId}/messages/${m.id}`] = null;
+          deleteMessageFromCache(cId, m.id).catch(() => {});
+        }
+      });
+      if (keep.length === 0 && user?.uid && userId) {
+        updates[`userChats/${user.uid}/${userId}/lastMessage`] = 'Start chatting...';
+        updates[`userChats/${userId}/${user.uid}/lastMessage`] = 'Start chatting...';
+      }
+      if (Object.keys(updates).length) update(ref(db), updates).catch(() => {});
+    }
+    return keep;
+  };
 
   const closeConfirmModal = () => setConfirmModal((prev) => ({ ...prev, isOpen: false }));
   const openConfirmModal = (config) => setConfirmModal({ isOpen: true, ...config });
@@ -246,7 +288,6 @@ const ChatView = () => {
         if (msg.receiverId === user.uid && msg.isRead === false) {
           updates[`chats/${cId}/messages/${msg.key}/isRead`] = true;
           updates[`chats/${cId}/messages/${msg.key}/readAt`] = Date.now();
-          updates[`chats/${cId}/messages/${msg.key}/expiresAt`] = privateExpiresAt();
           hasUnread = true;
         }
       });
@@ -1548,9 +1589,10 @@ const ChatView = () => {
         if (userId !== ECHO_AI_ID && !stampedLegacyTides.current && visible.length) {
           stampedLegacyTides.current = true;
           const stamp = {};
-          const start = privateExpiresAt();
           visible.forEach((m) => {
-            if (m.id && !m.expiresAt) stamp[`chats/${cId}/messages/${m.id}/expiresAt`] = start;
+            if (m.id && !m.expiresAt) {
+              stamp[`chats/${cId}/messages/${m.id}/expiresAt`] = privateExpiresAt(m.timestamp || m.createdAt);
+            }
           });
           if (Object.keys(stamp).length) update(ref(db), stamp).catch(() => {});
         }
@@ -1585,6 +1627,10 @@ const ChatView = () => {
             })
           : newMessages;
         visible = sortMessages(visible);
+        visible = await pruneExpired(visible.filter((m) => userId === ECHO_AI_ID || !isTideExpired(m) || m.pinned), cId);
+        if (userId !== ECHO_AI_ID) {
+          visible = visible.filter((m) => !isTideExpired(m) || m.pinned);
+        }
 
         setMessages((prev) => {
           const pending = (prev || []).filter(

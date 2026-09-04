@@ -1,0 +1,220 @@
+/* src/components/pages/CoinPurchase/CoinPurchase.css */
+.coin-purchase-page {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 20px 16px 80px;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  min-height: 100vh;
+}
+
+/* ─── Hero ────────────────────────────────────────────────────── */
+.coin-hero {
+  text-align: center;
+  margin-bottom: 32px;
+  padding: 16px 0 10px;
+  animation: coinFadeIn 0.8s ease-out;
+}
+
+.coin-kicker {
+  margin: 0 0 6px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #8B5CF6;
+}
+
+.coin-hero h1 {
+  margin: 0 0 6px;
+  font-size: 36px;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #F59E0B, #FBBF24);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.coin-hero p {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 16px;
+}
+
+/* ─── Container ────────────────────────────────────────────────── */
+.coin-container {
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* ─── Status message ──────────────────────────────────────────── */
+.coin-status {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  border-radius: 12px;
+  margin-bottom: 20px;
+  font-size: 14px;
+  line-height: 1.5;
+  border: 1px solid transparent;
+  animation: coinFadeIn 0.4s ease-out;
+}
+
+.coin-status.status-success {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.3);
+  color: #10B981;
+}
+
+.coin-status.status-error {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #EF4444;
+}
+
+.coin-status.status-info {
+  background: rgba(108, 60, 225, 0.1);
+  border-color: rgba(108, 60, 225, 0.2);
+  color: var(--text-primary);
+}
+
+.coin-status-spinner {
+  font-size: 18px;
+  flex-shrink: 0;
+}
+
+/* ─── Package grid ────────────────────────────────────────────── */
+.coin-packages {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 14px;
+  margin-bottom: 24px;
+}
+
+.coin-package {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 16px;
+  padding: 20px 14px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.coin-package:hover {
+  transform: translateY(-4px);
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 8px 30px rgba(245, 158, 11, 0.08);
+}
+
+.coin-package:active {
+  transform: scale(0.97);
+}
+
+.coin-package-icon {
+  font-size: 28px;
+  margin-bottom: 2px;
+}
+
+.coin-package-amount {
+  font-size: 26px;
+  font-weight: 800;
+  color: #F59E0B;
+  letter-spacing: -0.5px;
+}
+
+.coin-package-price {
+  font-size: 15px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+}
+
+.coin-package-cta {
+  font-size: 12px;
+  font-weight: 600;
+  color: #8B5CF6;
+  margin-top: 8px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  background: rgba(108, 60, 225, 0.08);
+  transition: background 0.2s;
+}
+
+.coin-package:hover .coin-package-cta {
+  background: rgba(108, 60, 225, 0.15);
+}
+
+/* ─── Footer note ─────────────────────────────────────────────── */
+.coin-footer-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px 18px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.coin-footer-note i {
+  color: #8B5CF6;
+  font-size: 18px;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.coin-footer-note strong {
+  color: var(--text-secondary);
+}
+
+/* ─── Animations ──────────────────────────────────────────────── */
+@keyframes coinFadeIn {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ─── Responsive ────────────────────────────────────────────────── */
+@media (min-width: 1024px) {
+  .coin-purchase-page {
+    padding: 32px 40px 80px;
+  }
+  .coin-hero h1 {
+    font-size: 44px;
+  }
+}
+
+@media (max-width: 480px) {
+  .coin-hero h1 {
+    font-size: 28px;
+  }
+  .coin-packages {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .coin-package {
+    padding: 14px 10px;
+  }
+  .coin-package-amount {
+    font-size: 22px;
+  }
+  .coin-package-price {
+    font-size: 14px;
+  }
+  .coin-status {
+    font-size: 13px;
+    padding: 12px 14px;
+  }
+  .coin-footer-note {
+    font-size: 12px;
+    padding: 14px;
+  }
+}

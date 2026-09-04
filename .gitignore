@@ -5,4 +5,5 @@ backend/node_modules/
 backend/.env
 backend/scripts/
 jdk-17.0.20.8-hotspot/
-Brands/
+repomix-output.xml
+mynote.md

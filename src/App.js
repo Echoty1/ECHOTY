@@ -27,6 +27,7 @@ import NetworkStatus from './components/common/NetworkStatus';
 import ScrollRestoration from './components/common/ScrollRestoration';
 import UpdatePopup from './components/UpdatePopup/UpdatePopup';
 import InstallPopup from './components/InstallPopup/InstallPopup';
+import Communities from './components/pages/Communities/Communities';
 import InstallBanner from './components/common/InstallBanner';
 import { cleanAllCachedMessages } from './services/messageCleanup';
 import { getChatList } from './services/indexedDBService';
@@ -34,9 +35,6 @@ import { db } from './services/firebase';
 import Shop from './components/pages/Shop/Shop';
 import AdminPanel from './components/pages/Admin/AdminPanel';
 import BanScreen from './components/BanScreen/BanScreen';
-import Communities from './components/pages/Communities/Communities';
-import { CommunityProvider } from './contexts/CommunityContext';
-import CommunityChat from './components/pages/CommunityChat/CommunityChat';
 import { APP_VERSION } from './version';
 // src/App.js – add this route inside the Routes block
 import Legal from './components/pages/Other/Legal';
@@ -426,12 +424,10 @@ function AppContent() {
           <Route path="/bookmarks" element={<Bookmarks />} />
           <Route path="/coins" element={<CoinPurchase />} />
           <Route path="/about" element={<About />} />
-          <Route path="/control" element={<AdminPanel />} />
-          <Route path="/communities" element={<Communities />} />
-          <Route path="/community/:communityId/:tab" element={<CommunityChat />} />
-          <Route path="/community/:communityId" element={<CommunityChat />} />
+          <Route path="/control" element={<AdminPanel />} />  
           <Route path="/shop" element={<Shop />} />
           <Route path="/legal" element={<Legal />} />
+          <Route path="/communities" element={<Communities />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
@@ -466,10 +462,8 @@ function App() {
             <ProfileProvider>
               <CacheProvider>
                 <CallProvider>
-                  <CommunityProvider>
                     <ScrollRestoration />
                     <AppContent />
-                  </CommunityProvider>
                 </CallProvider>
               </CacheProvider>
             </ProfileProvider>

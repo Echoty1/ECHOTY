@@ -5,7 +5,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import { apiUrl } from '../../../utils/api';
-
+import './CoinPurchase.css';
 
 const packages = [
   { coins: 500, price: 1000, productId: '105w82207h' },
@@ -31,6 +31,7 @@ const CoinPurchase = () => {
   const [polling, setPolling] = useState(false);
   const pollRef = useRef(null);
 
+  // ─── Polling for payment status ──────────────────────────────
   useEffect(() => {
     const pendingRef = sessionStorage.getItem('selar_payment_ref');
     const pendingUid = sessionStorage.getItem('selar_payment_uid');
@@ -89,6 +90,7 @@ const CoinPurchase = () => {
     };
   }, [user?.uid]);
 
+  // ─── Handle package selection ─────────────────────────────────
   const handlePackageClick = async (pkg) => {
     if (!user?.uid) {
       alert('Please log in to purchase coins.');
@@ -129,110 +131,46 @@ const CoinPurchase = () => {
     <>
       <SEO title="Get Coins" description="Purchase coins on ECHO." />
       <StructuredData />
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          minHeight: '100vh',
-          background: 'var(--bg-primary)',
-          padding: '20px',
-          boxSizing: 'border-box',
-        }}
-      >
-        <div
-          style={{
-            width: '100%',
-            maxWidth: '600px',
-            background: 'var(--bg-secondary)',
-            borderRadius: '24px',
-            padding: '32px 28px',
-            border: '1px solid var(--border-color)',
-            boxShadow: '0 8px 40px var(--shadow-color)',
-            boxSizing: 'border-box',
-          }}
-        >
-          <h2 style={{ fontSize: 24, fontWeight: 700, margin: '0 0 4px', color: 'var(--text-primary)' }}>
-            💰 Get Coins
-          </h2>
-          <p style={{ color: 'var(--text-secondary)', fontSize: 14, margin: '0 0 24px' }}>
-            Pay with <strong>Selar</strong> (card or bank transfer). Coins are added automatically after payment is
-            confirmed.
-          </p>
+      <div className="coin-purchase-page">
+        <header className="coin-hero">
+          <p className="coin-kicker">ECHO</p>
+          <h1>Get Coins</h1>
+          <p>Buy coins to unlock exclusive skins, GIFs, and more.</p>
+        </header>
 
+        <div className="coin-container">
           {statusMsg && (
             <div
-              style={{
-                background:
-                  statusOk === true
-                    ? 'rgba(16,185,129,0.15)'
-                    : statusOk === false
-                    ? 'rgba(239,68,68,0.15)'
-                    : 'rgba(108,60,225,0.12)',
-                border: `1px solid ${
-                  statusOk === true ? '#10B981' : statusOk === false ? '#EF4444' : '#6C3CE1'
-                }`,
-                borderRadius: 12,
-                padding: '12px 16px',
-                marginBottom: 16,
-                textAlign: 'center',
-                color: statusOk === true ? '#10B981' : statusOk === false ? '#EF4444' : 'var(--text-primary)',
-                fontSize: 14,
-              }}
+              className={`coin-status ${
+                statusOk === true ? 'status-success' : statusOk === false ? 'status-error' : 'status-info'
+              }`}
             >
-              {polling && statusOk === null ? <i className="fas fa-spinner fa-spin" style={{ marginRight: 8 }} /> : null}
-              {statusMsg}
+              {polling && statusOk === null && <i className="fas fa-spinner fa-spin coin-status-spinner" />}
+              <span>{statusMsg}</span>
             </div>
           )}
 
-          <div
-            style={{
-              background: 'var(--bg-card)',
-              borderRadius: 16,
-              padding: 20,
-              border: '1px solid var(--border-color)',
-              marginBottom: 24,
-            }}
-          >
-            <div style={{ fontSize: 14, color: 'var(--text-secondary)', marginBottom: 12 }}>📦 Select a package:</div>
-            {/* ─── 3 columns on tablet/desktop ─────────────────── */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: 10 }}>
-              {packages.map((pkg) => (
-                <div
-                  key={pkg.coins}
-                  onClick={() => handlePackageClick(pkg)}
-                  style={{
-                    background: 'var(--bg-input)',
-                    borderRadius: 12,
-                    padding: 12,
-                    textAlign: 'center',
-                    border: '1px solid var(--border-color)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <div style={{ fontSize: 20, fontWeight: 700, color: '#F59E0B' }}>🪙 {pkg.coins}</div>
-                  <div style={{ fontSize: 14, color: 'var(--text-primary)', marginTop: 4 }}>
-                    ₦{pkg.price.toLocaleString()}
-                  </div>
-                  <div style={{ fontSize: 11, color: '#6C3CE1', marginTop: 6, fontWeight: 600 }}>Pay with Selar →</div>
-                </div>
-              ))}
-            </div>
+          <div className="coin-packages">
+            {packages.map((pkg) => (
+              <div
+                key={pkg.coins}
+                className="coin-package"
+                onClick={() => handlePackageClick(pkg)}
+              >
+                <div className="coin-package-icon">🪙</div>
+                <div className="coin-package-amount">{pkg.coins}</div>
+                <div className="coin-package-price">₦{pkg.price.toLocaleString()}</div>
+                <div className="coin-package-cta">Pay with Selar →</div>
+              </div>
+            ))}
           </div>
 
-          <div
-            style={{
-              background: 'var(--bg-input)',
-              borderRadius: 12,
-              padding: 16,
-              border: '1px solid var(--border-color)',
-              textAlign: 'center',
-            }}
-          >
-            <p style={{ fontSize: 13, color: 'var(--text-muted)', margin: 0 }}>
-              💳 Selar supports <strong>card</strong> and <strong>bank transfer</strong>. After paying, keep this tab
+          <div className="coin-footer-note">
+            <i className="fas fa-shield-alt" />
+            <span>
+              Selar supports <strong>card</strong> and <strong>bank transfer</strong>. After paying, keep this tab
               open briefly or return later — coins credit when our server receives confirmation.
-            </p>
+            </span>
           </div>
         </div>
       </div>

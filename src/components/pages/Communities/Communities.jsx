@@ -1,509 +1,409 @@
 // src/components/pages/Communities/Communities.jsx
-import React, { useEffect, useState, useMemo, useCallback, memo } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ref, onValue, set, runTransaction, push, get } from 'firebase/database';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
-import { db } from '../../../services/firebase';
-import { useAuth } from '../../../hooks/useAuth';
-import { useCommunity } from '../../../contexts/CommunityContext';
-import { getCommunityRules, RULES_PENALTY } from '../../../constants/communityRules';
-import { getCache, setCache } from '../../../services/cacheService';
 import './Communities.css';
 
-const FALLBACK_IMAGE = '/images/communities/default.png';
-const COMMUNITIES_CACHE_KEY = 'communities_list';
-const MEMBERSHIP_CACHE_KEY = 'user_memberships';
-const CACHE_TTL = 60; // 1 minute
-
-const guessCategory = (name = '') => {
-  const n = name.toLowerCase();
-  if (n.includes('game')) return 'gaming';
-  if (n.includes('music')) return 'music';
-  if (n.includes('tech')) return 'tech';
-  if (n.includes('movie') || n.includes('film')) return 'movies';
-  if (n.includes('art')) return 'art';
-  if (n.includes('fit')) return 'fitness';
-  if (n.includes('book') || n.includes('read')) return 'books';
-  return 'general';
-};
-
-const guessIcon = (category) => {
-  const map = {
-    gaming: '🎮', music: '🎵', tech: '💻', movies: '🎬',
-    art: '🎨', fitness: '💪', books: '📚', general: '🌐'
-  };
-  return map[category] || '🌐';
-};
-
-// ─── Memoized Skeleton Card ────────────────────────────────────
-const SkeletonCard = memo(() => (
-  <div className="community-card skeleton">
-    <div className="skeleton-image" />
-    <div className="skeleton-body">
-      <div className="skeleton-line" style={{ width: '70%' }} />
-      <div className="skeleton-line" style={{ width: '90%' }} />
-      <div className="skeleton-line" style={{ width: '50%' }} />
-    </div>
-  </div>
-));
-
-// ─── Memoized Community Card ────────────────────────────────────
-const CommunityCard = memo(({ community, isMember, isJoining, isLeaving, onJoin, onLeave, onOpen }) => {
-  const busy = isJoining || isLeaving;
-
-  return (
-    <div
-      className="community-card"
-      style={{
-        '--card-bg': community.bgColor || '#12121a',
-      }}
-    >
-      <div className="community-card-image">
-        <img
-          src={community.image}
-          alt={community.name}
-          loading="lazy"
-          onError={(e) => {
-            e.currentTarget.src = FALLBACK_IMAGE;
-          }}
-        />
-        <div className="community-card-overlay" />
-        {isMember && (
-          <span className="community-card-member">Member</span>
-        )}
-      </div>
-
-      <div className="community-card-body">
-        <h3>{community.name}</h3>
-        <p className="community-description">{community.description}</p>
-        <div className="community-card-meta">
-          <span className="community-member-count">
-            <i className="fas fa-users" />
-            {community.memberCount.toLocaleString()}
-          </span>
-        </div>
-
-        <div className="community-card-actions">
-          {isMember ? (
-            <>
-              <button
-                className="community-join-btn joined"
-                onClick={() => onOpen(community)}
-              >
-                <i className="fas fa-comment" /> Open
-              </button>
-              <button
-                className="community-leave-btn"
-                onClick={() => onLeave(community)}
-                disabled={busy}
-              >
-                {isLeaving ? (
-                  <i className="fas fa-spinner fa-spin" />
-                ) : (
-                  <i className="fas fa-sign-out-alt" />
-                )}
-                <span>Leave</span>
-              </button>
-            </>
-          ) : (
-            <button
-              className="community-join-btn"
-              onClick={() => onJoin(community)}
-              disabled={busy}
-            >
-              {isJoining ? (
-                <>
-                  <i className="fas fa-spinner fa-spin" /> Joining…
-                </>
-              ) : (
-                <>
-                  <i className="fas fa-plus" /> Join
-                </>
-              )}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-});
-
-// ─── Rules Modal ────────────────────────────────────────────────
-const RulesModal = memo(({ community, onAccept, onCancel, accepting }) => (
-  <div className="community-rules-overlay" role="dialog" aria-modal="true">
-    <div className="community-rules-modal">
-      <h2>Rules · {community.name}</h2>
-      <p className="community-rules-intro">Please read and accept these rules before joining.</p>
-      <ul className="community-rules-list">
-        {getCommunityRules(community.name).map((rule, i) => (
-          <li key={i}>{rule}</li>
-        ))}
-      </ul>
-      <p className="community-rules-penalty">{RULES_PENALTY}</p>
-      <div className="community-rules-actions">
-        <button
-          className="community-rules-cancel"
-          disabled={accepting}
-          onClick={onCancel}
-        >
-          Cancel
-        </button>
-        <button
-          className="community-rules-accept"
-          disabled={accepting}
-          onClick={onAccept}
-        >
-          {accepting ? 'Joining…' : 'I agree · Join'}
-        </button>
-      </div>
-    </div>
-  </div>
-));
-
-// ─── Leave Modal ────────────────────────────────────────────────
-const LeaveModal = memo(({ community, onLeave, onCancel, leaving }) => (
-  <div className="community-rules-overlay" role="dialog" aria-modal="true">
-    <div className="community-rules-modal">
-      <h2>Leave {community.name}?</h2>
-      <p className="community-rules-intro">
-        You can rejoin anytime. Your past messages will stay in the community.
-      </p>
-      <div className="community-rules-actions">
-        <button
-          className="community-rules-cancel"
-          disabled={leaving}
-          onClick={onCancel}
-        >
-          Cancel
-        </button>
-        <button
-          className="community-leave-confirm"
-          disabled={leaving}
-          onClick={onLeave}
-        >
-          {leaving ? 'Leaving…' : 'Leave community'}
-        </button>
-      </div>
-    </div>
-  </div>
-));
-
-// ─── Main Communities Component ────────────────────────────────
 const Communities = () => {
-  const navigate = useNavigate();
-  const { user } = useAuth();
-  const { setCurrentCommunity } = useCommunity();
+  const [email, setEmail] = useState('');
+  const [isValid, setIsValid] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [status, setStatus] = useState({ type: '', message: '' });
+  const [isHovered, setIsHovered] = useState(false);
 
-  const [communities, setCommunities] = useState([]);
-  const [userCommunities, setUserCommunities] = useState({});
-  const [loading, setLoading] = useState(true);
-  const [joiningId, setJoiningId] = useState(null);
-  const [leavingId, setLeavingId] = useState(null);
-  const [error, setError] = useState('');
-  const [userName, setUserName] = useState('');
-  const [rulesModal, setRulesModal] = useState(null);
-  const [leaveModal, setLeaveModal] = useState(null);
-  const [acceptingRules, setAcceptingRules] = useState(false);
+  const cardRef = useRef(null);
+  const canvasRef = useRef(null);
+  const formRef = useRef(null);
+  const inputWrapperRef = useRef(null);
 
-  // ─── Load user name ────────────────────────────────────────────
-  useEffect(() => {
-    if (!user?.uid) return;
-    const loadName = async () => {
-      try {
-        const snapshot = await get(ref(db, `profiles/${user.uid}`));
-        const data = snapshot.exists() ? snapshot.val() : {};
-        setUserName(data.name || user.displayName || user.email?.split('@')[0] || 'User');
-      } catch {
-        setUserName(user.displayName || user.email?.split('@')[0] || 'User');
+  const API_KEY = 'ba3520abdd284d90a3f237fc4094bd75';
+  const API_URL = 'https://emailreputation.abstractapi.com/v1/';
+  const FORMSPREE_URL = 'https://formspree.io/f/myeyzgra';
+  const CACHE_KEY = 'echo_email_cache';
+  const SUBMITTED_KEY = 'echo_submitted_emails';
+
+  // ─── Cache helpers ──────────────────────────────────────────────
+  const getCachedEmailStatus = useCallback((email) => {
+    try {
+      const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
+      return cache[email] || null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const setCachedEmailStatus = useCallback((email, status) => {
+    try {
+      const cache = JSON.parse(localStorage.getItem(CACHE_KEY) || '{}');
+      cache[email] = { status, checkedAt: Date.now() };
+      localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
+    } catch (e) {
+      console.warn('Failed to write to cache:', e);
+    }
+  }, []);
+
+  // ─── Check if email has been submitted before ──────────────────
+  const isEmailSubmitted = useCallback((email) => {
+    try {
+      const submitted = JSON.parse(localStorage.getItem(SUBMITTED_KEY) || '[]');
+      return submitted.includes(email);
+    } catch {
+      return false;
+    }
+  }, []);
+
+  const markEmailSubmitted = useCallback((email) => {
+    try {
+      const submitted = JSON.parse(localStorage.getItem(SUBMITTED_KEY) || '[]');
+      if (!submitted.includes(email)) {
+        submitted.push(email);
+        localStorage.setItem(SUBMITTED_KEY, JSON.stringify(submitted));
       }
-    };
-    loadName();
-  }, [user]);
+    } catch (e) {
+      console.warn('Failed to mark email as submitted:', e);
+    }
+  }, []);
 
-  // ─── Load communities with caching ────────────────────────────
+  // ─── Particles animation ──────────────────────────────────────
   useEffect(() => {
-    let isMounted = true;
-    let communitiesUnsub = null;
-    let membershipUnsub = null;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
 
-    const loadData = async () => {
-      try {
-        // ─── Try cache first ──────────────────────────────────────
-        const cachedCommunities = await getCache(COMMUNITIES_CACHE_KEY);
-        if (cachedCommunities && cachedCommunities.length > 0) {
-          if (isMounted) {
-            setCommunities(cachedCommunities);
-            setLoading(false);
-          }
-        }
+    let particles = [];
+    let animationId;
 
-        // ─── Listen to communities ────────────────────────────────
-        const communitiesRef = ref(db, 'communities');
-        communitiesUnsub = onValue(
-          communitiesRef,
-          (snapshot) => {
-            if (!isMounted) return;
-            const data = snapshot.val() || {};
-            const list = Object.entries(data).map(([id, c]) => {
-              const category = c.category || guessCategory(c.name);
-              return {
-                id,
-                name: c.name || 'Unnamed Community',
-                description: c.description || '',
-                image: c.image || FALLBACK_IMAGE,
-                memberCount: Number(c.memberCount || 0),
-                category,
-                icon: c.icon || guessIcon(category),
-                bgColor: c.bgColor || '#12121a',
-              };
-            });
-            list.sort((a, b) => a.name.localeCompare(b.name));
-            setCommunities(list);
-            setLoading(false);
-            // Cache the list
-            setCache(COMMUNITIES_CACHE_KEY, list, CACHE_TTL).catch(() => {});
-          },
-          () => {
-            if (isMounted) {
-              setError('Could not load communities.');
-              setLoading(false);
-            }
-          }
-        );
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+    window.addEventListener('resize', resize);
+    resize();
 
-        // ─── Listen to user memberships ────────────────────────────
-        if (user?.uid) {
-          const membershipRef = ref(db, `userCommunities/${user.uid}`);
-          membershipUnsub = onValue(membershipRef, (snap) => {
-            if (isMounted) {
-              const data = snap.val() || {};
-              setUserCommunities(data);
-              // Cache memberships
-              setCache(`${MEMBERSHIP_CACHE_KEY}_${user.uid}`, data, CACHE_TTL).catch(() => {});
-            }
-          });
-        } else {
-          setUserCommunities({});
-        }
-      } catch (err) {
-        console.warn('Communities load error:', err);
-        if (isMounted) {
-          setError('Failed to load communities.');
-          setLoading(false);
+    class Particle {
+      constructor() { this.reset(); }
+      reset() {
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * canvas.height;
+        this.size = Math.random() * 2 + 0.5;
+        this.speedX = (Math.random() - 0.5) * 0.4;
+        this.speedY = (Math.random() - 0.5) * 0.4;
+        this.opacity = Math.random() * 0.5 + 0.2;
+      }
+      update() {
+        this.x += this.speedX;
+        this.y += this.speedY;
+        if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) {
+          this.reset();
         }
       }
-    };
-
-    // ─── Try cached memberships ──────────────────────────────────
-    if (user?.uid) {
-      getCache(`${MEMBERSHIP_CACHE_KEY}_${user.uid}`).then((cached) => {
-        if (cached && isMounted) {
-          setUserCommunities(cached);
-        }
-      });
+      draw() {
+        ctx.fillStyle = `rgba(168, 85, 247, ${this.opacity})`;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
 
-    loadData();
+    for (let i = 0; i < 40; i++) {
+      particles.push(new Particle());
+    }
+
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach(p => { p.update(); p.draw(); });
+      animationId = requestAnimationFrame(animate);
+    };
+    animate();
 
     return () => {
-      isMounted = false;
-      if (communitiesUnsub) communitiesUnsub();
-      if (membershipUnsub) membershipUnsub();
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', resize);
     };
-  }, [user?.uid]);
+  }, []);
 
-  // ─── Handlers ──────────────────────────────────────────────────
-  const openCommunity = useCallback((community) => {
-    setCurrentCommunity({
-      id: community.id,
-      name: community.name,
-      memberCount: community.memberCount,
-      image: community.image,
-    });
-    navigate(`/community/${community.id}/wall`);
-  }, [navigate, setCurrentCommunity]);
+  // ─── 3D Tilt ──────────────────────────────────────────────────
+  useEffect(() => {
+    const card = cardRef.current;
+    if (!card) return;
 
-  const handleJoin = useCallback(async (community) => {
-    if (!user?.uid) {
-      setError('Please sign in to join communities.');
+    const onMove = (e) => {
+      const { clientX, clientY } = e;
+      const { innerWidth, innerHeight } = window;
+      const rotateX = ((clientY - innerHeight / 2) / innerHeight) * -12;
+      const rotateY = ((clientX - innerWidth / 2) / innerWidth) * 12;
+      card.style.transform = `rotateX(${rotateX}deg) rotateY(${rotateY}deg)`;
+    };
+    const onLeave = () => {
+      card.style.transform = 'rotateX(0deg) rotateY(0deg)';
+    };
+
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseleave', onLeave);
+    return () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseleave', onLeave);
+    };
+  }, []);
+
+  // ─── Email validation ─────────────────────────────────────────
+  const validateEmailWithApi = useCallback(async (email) => {
+    try {
+      const url = `${API_URL}?api_key=${API_KEY}&email=${encodeURIComponent(email)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      return data?.email_deliverability?.status === 'deliverable';
+    } catch (err) {
+      console.warn('Validation API error, allowing submission:', err.message);
+      return true;
+    }
+  }, []);
+
+  const handleEmailChange = useCallback(async (e) => {
+    const value = e.target.value.trim();
+    setEmail(value);
+
+    const wrapper = inputWrapperRef.current;
+    if (!value) {
+      wrapper?.classList.remove('valid', 'invalid');
+      setIsValid(false);
+      setStatus({ type: '', message: '' });
       return;
     }
-    if (joiningId || leavingId) return;
-    if (userCommunities[community.id] === true) {
-      openCommunity(community);
+
+    // Quick format check
+    const formatOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+    if (!formatOk) {
+      wrapper?.classList.add('invalid');
+      wrapper?.classList.remove('valid');
+      setIsValid(false);
+      setStatus({ type: '', message: '' });
       return;
     }
-    setJoiningId(community.id);
-    setError('');
+
+    // ─── Check if already submitted ──────────────────────────────
+    if (isEmailSubmitted(value)) {
+      wrapper?.classList.add('valid');
+      wrapper?.classList.remove('invalid');
+      setIsValid(false);
+      setStatus({
+        type: 'info',
+        message: '📩 You\'ve already joined the waitlist! We\'ll keep you posted.'
+      });
+      return;
+    }
+
+    // ─── Check cache first ──────────────────────────────────────
+    const cached = getCachedEmailStatus(value);
+    if (cached) {
+      if (cached.status === 'valid') {
+        wrapper?.classList.add('valid');
+        wrapper?.classList.remove('invalid');
+        setIsValid(true);
+        setStatus({ type: '', message: '' });
+      } else {
+        wrapper?.classList.add('invalid');
+        wrapper?.classList.remove('valid');
+        setIsValid(false);
+        setStatus({ type: '', message: '' });
+      }
+      return;
+    }
+
+    // ─── Not in cache – call API ────────────────────────────────
+    setIsVerifying(true);
+    wrapper?.classList.remove('valid', 'invalid');
+    setStatus({ type: '', message: '' });
+
+    const valid = await validateEmailWithApi(value);
+    setIsVerifying(false);
+
+    setCachedEmailStatus(value, valid ? 'valid' : 'invalid');
+
+    if (valid) {
+      wrapper?.classList.add('valid');
+      wrapper?.classList.remove('invalid');
+      setIsValid(true);
+    } else {
+      wrapper?.classList.add('invalid');
+      wrapper?.classList.remove('valid');
+      setIsValid(false);
+    }
+  }, [getCachedEmailStatus, setCachedEmailStatus, validateEmailWithApi, isEmailSubmitted]);
+
+  // ─── Form submission ───────────────────────────────────────────
+  const handleSubmit = useCallback(async (e) => {
+    e.preventDefault();
+
+    // Double-check if already submitted
+    if (isEmailSubmitted(email)) {
+      setStatus({
+        type: 'info',
+        message: '📩 You\'ve already joined the waitlist! We\'ll keep you posted.'
+      });
+      return;
+    }
+
+    if (!isValid) {
+      setStatus({ type: 'error', message: '❌ Please enter a valid email address.' });
+      return;
+    }
+
+    setIsSubmitting(true);
+    setStatus({ type: '', message: '' });
 
     try {
-      await set(ref(db, `userCommunities/${user.uid}/${community.id}`), true);
-      await runTransaction(ref(db, `communities/${community.id}/memberCount`), (n) =>
-        (Number(n) || 0) + 1
-      );
-      await push(ref(db, `communityChats/${community.id}/messages`), {
-        senderId: user.uid,
-        text: `${userName || 'Someone'} joined the community`,
-        timestamp: Date.now(),
-        type: 'system',
-        system: true,
+      const formData = new FormData();
+      formData.append('email', email);
+
+      const res = await fetch(FORMSPREE_URL, {
+        method: 'POST',
+        body: formData,
+        headers: { 'Accept': 'application/json' }
       });
-      setUserCommunities((p) => ({ ...p, [community.id]: true }));
-      setCurrentCommunity({ ...community, memberCount: community.memberCount + 1 });
-      navigate(`/community/${community.id}/wall`);
+
+      if (res.ok) {
+        // Mark as submitted so we don't send again
+        markEmailSubmitted(email);
+        setStatus({
+          type: 'success',
+          message: "✅ You're on the list! We'll let you know when access opens up."
+        });
+        setEmail('');
+        const wrapper = inputWrapperRef.current;
+        wrapper?.classList.remove('valid', 'invalid');
+        setIsValid(false);
+        formRef.current?.reset();
+      } else {
+        setStatus({ type: 'error', message: '❌ Something went wrong. Please try again.' });
+      }
     } catch (err) {
-      try {
-        await set(ref(db, `userCommunities/${user.uid}/${community.id}`), null);
-      } catch (_) {}
-      setError(`Failed to join: ${err.message || 'Please try again.'}`);
+      setStatus({ type: 'error', message: '❌ Network error. Please check your connection.' });
     } finally {
-      setJoiningId(null);
+      setIsSubmitting(false);
     }
-  }, [user, joiningId, leavingId, userCommunities, userName, navigate, setCurrentCommunity, openCommunity]);
+  }, [email, isValid, isEmailSubmitted, markEmailSubmitted]);
 
-  const handleLeave = useCallback(async (community) => {
-    if (!user?.uid || !userCommunities[community.id]) return;
-    setLeavingId(community.id);
-    setError('');
-
+  // ─── Copy link ─────────────────────────────────────────────────
+  const copyLink = useCallback(async () => {
+    const url = window.location.href;
+    const payload = {
+      title: 'Brand Community · ECHO',
+      text: 'Check out Brand Community by ECHO!',
+      url,
+    };
     try {
-      await push(ref(db, `communityChats/${community.id}/messages`), {
-        senderId: 'system',
-        type: 'system',
-        text: `${userName || 'Someone'} left the community`,
-        timestamp: Date.now(),
-        system: true,
-      });
-      await set(ref(db, `userCommunities/${user.uid}/${community.id}`), null);
-      await runTransaction(ref(db, `communities/${community.id}/memberCount`), (n) =>
-        Math.max(0, (Number(n) || 0) - 1)
-      );
-      setUserCommunities((p) => {
-        const next = { ...p };
-        delete next[community.id];
-        return next;
-      });
+      if (navigator.share) {
+        await navigator.share(payload);
+        return;
+      }
     } catch (err) {
-      setError(`Failed to leave: ${err.message || 'Please try again.'}`);
-    } finally {
-      setLeavingId(null);
-      setLeaveModal(null);
+      if (err && err.name === 'AbortError') return;
     }
-  }, [user, userCommunities, userName]);
-
-  // ─── Render ────────────────────────────────────────────────────
-  if (loading && communities.length === 0) {
-    return (
-      <div className="communities-page">
-        <div className="communities-header">
-          <h1>🌍 Communities</h1>
-          <p>Loading realms…</p>
-        </div>
-        <div className="communities-grid skeleton-grid">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
-            <SkeletonCard key={i} />
-          ))}
-        </div>
-      </div>
-    );
-  }
+    try {
+      await navigator.clipboard.writeText(url);
+      const toast = document.getElementById('toast');
+      toast?.classList.add('active');
+      setTimeout(() => toast?.classList.remove('active'), 2500);
+    } catch (_) {}
+  }, []);
 
   return (
     <>
-      <SEO title="ECHO – Communities" description="Explore communities on ECHO." />
+      <SEO title="Brand Communities – ECHO" description="Brand communities coming soon on ECHO." />
       <StructuredData />
+      <div className="brand-community-page">
+        {/* ─── Particles Canvas ────────────────────────────────────── */}
+        <canvas ref={canvasRef} id="particleCanvas" className="particle-canvas" />
 
-      <div className="communities-page">
-        <div className="communities-header">
-          <h1>🌍 Communities</h1>
-          <p>Find your people. Explore realms.</p>
+        {/* ─── Ambient Background ─────────────────────────────────── */}
+        <div className="crystal-bg" />
+        <div className="rings">
+          <span></span>
+          <span></span>
+          <span></span>
         </div>
 
-        <a
-          className="echo-brand-banner"
-          href="https://brand.echoty.xyz"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <span className="echo-brand-orb o1" aria-hidden="true" />
-          <span className="echo-brand-orb o2" aria-hidden="true" />
-          <span className="echo-brand-orb o3" aria-hidden="true" />
-          <div className="echo-brand-inner">
-            <div className="echo-brand-copy">
-              <p className="echo-brand-kicker">ECHO Brand</p>
-              <h3 className="echo-brand-title">Want your own community?</h3>
-              <p className="echo-brand-sub">Create it on brand.echoty.xyz</p>
+        {/* ─── Card ────────────────────────────────────────────────── */}
+        <div className="card-wrapper">
+          <div
+            className="container"
+            ref={cardRef}
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+          >
+            {/* Logo */}
+            <div className="logo">
+              <div className="logo-icon">E</div>
+              <span className="logo-text">ECHO</span>
             </div>
-            <span className="echo-brand-cta">Visit brand.echoty.xyz</span>
+
+            <div className="badge-container">
+              <div className="badge">
+                <span className="badge-dot" />
+                Brand Community · Coming Soon
+              </div>
+              <div className="counter-badge">✨ 1,420+ joined</div>
+            </div>
+
+            <h1>
+              Your brand, <br /><span>your community</span>
+            </h1>
+
+            <p className="sub">
+              We're building a dedicated space for brands to manage their communities — moderate posts, engage members, and grow together. Stay tuned.
+            </p>
+
+            {/* ─── Form ────────────────────────────────────────────── */}
+            <form ref={formRef} onSubmit={handleSubmit} noValidate>
+              <div className="form-wrap">
+                <div className="input-box-wrapper" ref={inputWrapperRef}>
+                  <input
+                    type="email"
+                    name="email"
+                    value={email}
+                    onChange={handleEmailChange}
+                    placeholder="Enter your email to get notified"
+                    required
+                    autoComplete="email"
+                    disabled={isSubmitting}
+                  />
+                  <span className="input-status input-status-valid">✓</span>
+                  <span className="input-status input-status-invalid">✕</span>
+                </div>
+                <button
+                  type="submit"
+                  disabled={!isValid || isVerifying || isSubmitting}
+                >
+                  {isVerifying ? 'Verifying…' : isSubmitting ? 'Submitting…' : 'Notify me'}
+                </button>
+              </div>
+
+              {status.type === 'success' && (
+                <div className="fs-message success visible">{status.message}</div>
+              )}
+              {status.type === 'error' && (
+                <div className="fs-message error visible">{status.message}</div>
+              )}
+              {status.type === 'info' && (
+                <div className="fs-message info visible">{status.message}</div>
+              )}
+            </form>
+
+            {/* ─── Share Bar ────────────────────────────────────────── */}
+            <div className="share-bar">
+              <button className="share-btn share-main" type="button" onClick={copyLink} title="Share">
+                Share this page
+              </button>
+            </div>
+
+            <div className="footer">
+              <a href="https://echoty.xyz" target="_blank" rel="noopener noreferrer">echoty.xyz</a> · <span>Discover. Connect. Echo.</span>
+            </div>
           </div>
-        </a>
-
-        {error && (
-          <div className="communities-error">
-            <i className="fas fa-exclamation-circle" />
-            <span>{error}</span>
-            <button className="communities-error-dismiss" onClick={() => setError('')}>
-              ✕
-            </button>
-          </div>
-        )}
-
-        {communities.length === 0 ? (
-          <div className="communities-empty">
-            <i className="fas fa-users" />
-            <h2>No communities yet</h2>
-            <p>Seed communities in Firebase to get started.</p>
-          </div>
-        ) : (
-          <div className="communities-grid">
-            {communities.map((community) => {
-              const isMember = userCommunities[community.id] === true;
-              const isJoining = joiningId === community.id;
-              const isLeaving = leavingId === community.id;
-
-              return (
-                <CommunityCard
-                  key={community.id}
-                  community={community}
-                  isMember={isMember}
-                  isJoining={isJoining}
-                  isLeaving={isLeaving}
-                  onJoin={() => setRulesModal({ community })}
-                  onLeave={() => setLeaveModal({ community })}
-                  onOpen={openCommunity}
-                />
-              );
-            })}
-          </div>
-        )}
-
-
-        {rulesModal && (
-          <RulesModal
-            community={rulesModal.community}
-            accepting={acceptingRules}
-            onAccept={async () => {
-              setAcceptingRules(true);
-              try {
-                await handleJoin(rulesModal.community);
-                setRulesModal(null);
-              } finally {
-                setAcceptingRules(false);
-              }
-            }}
-            onCancel={() => setRulesModal(null)}
-          />
-        )}
-
-        {leaveModal && (
-          <LeaveModal
-            community={leaveModal.community}
-            leaving={!!leavingId}
-            onLeave={() => handleLeave(leaveModal.community)}
-            onCancel={() => setLeaveModal(null)}
-          />
-        )}
+        </div>
       </div>
     </>
   );

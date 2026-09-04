@@ -614,6 +614,11 @@
   padding: 12px;
   text-align: center;
   transition: all 0.2s;
+  /* ─── Center items ───────────────────────────────────────────── */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-start;
 }
 .shop-item:hover {
   transform: translateY(-2px);
@@ -636,6 +641,7 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  width: 100%;
 }
 .shop-item-limited {
   font-size: 10px;
@@ -657,6 +663,7 @@
 }
 .shop-item-actions {
   margin-top: 8px;
+  width: 100%;
 }
 .shop-btn {
   padding: 4px 12px;
@@ -728,6 +735,7 @@
   to { transform: rotate(360deg); }
 }
 
+/* ─── Mobile: Center items properly ───────────────────────────── */
 @media (max-width: 480px) {
   .shop-header {
     flex-wrap: wrap;
@@ -763,6 +771,71 @@
     margin-top: 16px;
     margin-bottom: 24px;
   }
+
+  /* ─── Grid: single column on very small phones ──────────────── */
+  .shop-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+    justify-items: center;
+  }
+
+  /* ─── Each skin item centered ────────────────────────────────── */
+  .shop-item {
+    padding: 14px 10px;
+    width: 100%;
+    max-width: 160px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .shop-item .echomoji {
+    margin: 0 auto;
+  }
+
+  .shop-item-name {
+    font-size: 12px;
+  }
+
+  .shop-btn {
+    font-size: 10px;
+    padding: 4px 8px;
+    max-width: 80px;
+  }
+
+  .gif-item .gif-preview {
+    width: 80px;
+    height: 80px;
+  }
+}
+
+/* ─── Even smaller phones ─────────────────────────────────────── */
+@media (max-width: 380px) {
+  .shop-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 10px;
+  }
+
+  .shop-item {
+    max-width: 130px;
+    padding: 10px 8px;
+  }
+
+  .shop-item .echomoji {
+    width: 40px !important;
+    height: 40px !important;
+  }
+
+  .shop-item-name {
+    font-size: 11px;
+  }
+
+  .shop-btn {
+    font-size: 9px;
+    padding: 3px 6px;
+    max-width: 70px;
+  }
 }
 
 .page-back-header {
@@ -778,8 +851,6 @@
   backdrop-filter: blur(8px);
   margin-bottom: 8px;
 }
-
-/* src/components/pages/Shop/Shop.css */
 
 /* ─── Skeleton Loader ────────────────────────────────────────── */
 @keyframes shimmer {
