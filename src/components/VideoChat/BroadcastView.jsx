@@ -15,6 +15,11 @@ const BroadcastView = ({ onEnd, stream }) => {
   const [confirmEnd, setConfirmEnd] = useState(false);
 
   useEffect(() => {
+    document.body.classList.add('echo-hide-bottom-nav');
+    return () => document.body.classList.remove('echo-hide-bottom-nav');
+  }, []);
+
+  useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
       videoRef.current.play().catch(() => {});

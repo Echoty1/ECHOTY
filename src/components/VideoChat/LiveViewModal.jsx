@@ -62,6 +62,11 @@ const LiveViewModal = ({ broadcasterId, broadcasterName, broadcasterAvatar, onCl
   }, []);
 
   useEffect(() => {
+    document.body.classList.add('echo-hide-bottom-nav');
+    return () => document.body.classList.remove('echo-hide-bottom-nav');
+  }, []);
+
+  useEffect(() => {
     if (!broadcasterId || !user?.uid) return undefined;
     const seat = ref(db, `live/${broadcasterId}/viewers/${user.uid}`);
     set(seat, Date.now()).catch(() => {});

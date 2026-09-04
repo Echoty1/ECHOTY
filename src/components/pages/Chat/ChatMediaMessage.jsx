@@ -16,6 +16,79 @@ const LoadingSpinner = () => (
 );
 
 // ─── Upload overlay (for sender) ──────────────────────────────
+
+const ZoomLightbox = ({ src, alt, caption, onClose }) => {
+  const [scale, setScale] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const pinch = useRef(null);
+  const lastTap = useRef(0);
+
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    document.body.classList.add('echo-hide-bottom-nav');
+    return () => {
+      document.body.style.overflow = prev;
+      document.body.classList.remove('echo-hide-bottom-nav');
+    };
+  }, []);
+
+  const dist = (a, b) => Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
+
+  const onTouchStart = (e) => {
+    if (e.touches.length === 2) {
+      pinch.current = { start: dist(e.touches[0], e.touches[1]), scale };
+    }
+  };
+  const onTouchMove = (e) => {
+    if (e.touches.length === 2 && pinch.current) {
+      e.preventDefault();
+      const next = pinch.current.scale * (dist(e.touches[0], e.touches[1]) / pinch.current.start);
+      setScale(Math.min(4, Math.max(1, next)));
+    } else if (e.touches.length === 1 && scale > 1) {
+      setPos((p) => ({
+        x: p.x + e.touches[0].clientX - (pinch.current?.lx || e.touches[0].clientX),
+        y: p.y + e.touches[0].clientY - (pinch.current?.ly || e.touches[0].clientY),
+      }));
+      pinch.current = { ...(pinch.current || {}), lx: e.touches[0].clientX, ly: e.touches[0].clientY };
+    }
+  };
+  const onTouchEnd = () => { pinch.current = null; };
+  const onDoubleTap = () => {
+    const now = Date.now();
+    if (now - lastTap.current < 280) {
+      if (scale > 1) { setScale(1); setPos({ x: 0, y: 0 }); }
+      else setScale(2.2);
+    }
+    lastTap.current = now;
+  };
+
+  return ReactDOM.createPortal(
+    <div className="media-lightbox-overlay" onClick={onClose}>
+      <div
+        className="media-lightbox-content"
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
+        <img
+          src={src}
+          alt={alt}
+          className="media-lightbox-image"
+          onClick={onDoubleTap}
+          style={{ transform: `translate(${pos.x}px, ${pos.y}px) scale(${scale})` }}
+        />
+        {caption && <div className="media-lightbox-caption">{caption}</div>}
+        <button type="button" className="media-lightbox-close" onClick={onClose}>
+          <i className="fas fa-times" />
+        </button>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
 const UploadOverlay = () => (
   <div className="media-upload-overlay">
     <LoadingSpinner />
@@ -327,15 +400,7 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading, disablePre
         </div>
         {caption && <div className="chat-media-caption">{caption}</div>}
         {lightboxOpen && !disablePreview && (
-          <div className="media-lightbox-overlay" onClick={closeLightbox}>
-            <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()}>
-              <img src={imageSrc} alt={caption || 'Image'} className="media-lightbox-image" />
-              {caption && <div className="media-lightbox-caption">{caption}</div>}
-              <button className="media-lightbox-close" onClick={closeLightbox}>
-                <i className="fas fa-times" />
-              </button>
-            </div>
-          </div>
+          <ZoomLightbox src={imageSrc} alt={caption || 'Image'} caption={caption} onClose={closeLightbox} />
         )}
       </>
     );
@@ -366,15 +431,7 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading, disablePre
       </div>
       {caption && <div className="chat-media-caption">{caption}</div>}
       {lightboxOpen && !loadError && !disablePreview && (
-        <div className="media-lightbox-overlay" onClick={closeLightbox}>
-          <div className="media-lightbox-content" onClick={(e) => e.stopPropagation()}>
-            <img src={imageSrc} alt={caption || 'Image'} className="media-lightbox-image" />
-            {caption && <div className="media-lightbox-caption">{caption}</div>}
-            <button className="media-lightbox-close" onClick={closeLightbox}>
-              <i className="fas fa-times" />
-            </button>
-          </div>
-        </div>
+        <ZoomLightbox src={imageSrc} alt={caption || 'Image'} caption={caption} onClose={closeLightbox} />
       )}
     </>
   );

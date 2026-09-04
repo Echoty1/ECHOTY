@@ -153,6 +153,25 @@ const BottomNav = () => {
     setSpinningId(null);
   }, [location.pathname]);
 
+  const [liveHidden, setLiveHidden] = useState(
+    typeof document !== 'undefined' && document.body.classList.contains('echo-hide-bottom-nav')
+  );
+  useEffect(() => {
+    const check = () => {
+      const bodyHide = document.body.classList.contains('echo-hide-bottom-nav');
+      const liveUi = Boolean(
+        document.querySelector(
+          '.broadcast-view, .live-view-modal, .LiveViewModal, [data-echo-live="open"]'
+        )
+      );
+      setLiveHidden(bodyHide || liveUi);
+    };
+    check();
+    const mo = new MutationObserver(check);
+    mo.observe(document.body, { attributes: true, attributeFilter: ['class'], childList: true, subtree: true });
+    return () => mo.disconnect();
+  }, []);
+
   const recountOnline = useCallback(() => {
     const me = user?.uid;
     const ids = new Set();
@@ -505,9 +524,11 @@ const BottomNav = () => {
     );
   };
 
+  if (liveHidden) return null;
+
   return (
     <nav
-      className={`echo-v-nav ${hidden ? 'is-hidden' : ''}`}
+      className={`echo-v-nav ${hidden ? 'is-hidden' : ''} ${liveHidden ? 'is-live-hidden' : ''}`}
       aria-label="Bottom navigation"
       onTouchStart={onNavPointerDown}
       onTouchMove={onNavPointerMove}

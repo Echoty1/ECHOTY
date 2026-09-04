@@ -2372,3 +2372,87 @@ body.light .echo-rings-bg.is-ended .echo-bg-ring.r3 {
 .message-bubble.own .echo-tide-chip { background: rgba(0,0,0,0.18); color: rgba(255,255,255,0.8); }
 .message-bubble.partner .echo-tide-chip { background: rgba(108,60,225,0.12); color: #c4b5fd; }
 .echo-tide-chip i { font-size: 8px !important; opacity: 0.85; }
+
+.chat-media-image-wrapper {
+  max-width: min(100%, 280px);
+  width: 100%;
+  overflow: hidden;
+}
+.chat-media-image {
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: min(52vh, 320px);
+  object-fit: contain;
+}
+.media-lightbox-overlay {
+  inset: 0;
+  width: 100vw;
+  height: 100dvh;
+  max-width: 100vw;
+  padding: 12px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.media-lightbox-content {
+  width: min(100%, 100vw);
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 24px);
+  overflow: hidden;
+}
+.media-lightbox-image {
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - 96px);
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  touch-action: none;
+  transform-origin: center center;
+}
+@media (max-width: 480px) {
+  .chat-media-image-wrapper { max-width: min(100%, 72vw); }
+  .chat-media-image { max-height: 42vh; }
+  .media-lightbox-close { top: 8px; right: 8px; }
+}
+
+.message-row .message-bubble {
+  max-width: min(82vw, 480px) !important;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+.chat-media-image-wrapper,
+.chat-media-video-wrapper {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+.chat-media-image,
+.chat-media-video {
+  width: 100% !important;
+  max-width: 100% !important;
+  height: auto !important;
+  max-height: min(48vh, 340px) !important;
+  object-fit: contain !important;
+  display: block !important;
+}
+.media-lightbox-overlay {
+  width: 100vw !important;
+  height: 100dvh !important;
+  max-width: 100vw !important;
+  padding: 8px !important;
+  box-sizing: border-box !important;
+  overflow: hidden !important;
+}
+.media-lightbox-content {
+  width: min(100vw - 16px, 100%) !important;
+  max-width: calc(100vw - 16px) !important;
+  max-height: calc(100dvh - 16px) !important;
+  box-sizing: border-box !important;
+}
+.media-lightbox-image {
+  width: 100% !important;
+  max-width: calc(100vw - 16px) !important;
+  height: auto !important;
+  max-height: calc(100dvh - 88px) !important;
+  object-fit: contain !important;
+}

@@ -491,59 +491,75 @@ const PRODUCT_COINS = {
   '3363k13i67': 5000,
 };
 
-/** Create pending payment when user clicks a package */
-app.post('/api/create-pending-payment', async (req, res) => {
-  try {
-    const { reference, uid, productId, coins, price } = req.body || {};
-    if (!reference || !uid || !productId) {
-      return res.status(400).json({ success: false, message: 'Missing fields' });
-    }
-    const coinAmount = Number(coins) || PRODUCT_COINS[productId];
-    if (!coinAmount) {
-      return res.status(400).json({ success: false, message: 'Unknown product' });
-    }
+// ─── Subscription product IDs ──────────────────────────────────
+const SUBSCRIPTION_PRODUCTS = {
+  '12k858853g': 'starter',
+  '8271t6z877': 'pro',
+  '3193j31388': 'enterprise',
+};
 
-    const existing = await db.ref(`pendingPayments/${reference}`).once('value');
-    if (existing.exists() && existing.val().status === 'completed') {
-      return res.json({ success: true, message: 'Already completed' });
-    }
+const SUBSCRIPTION_PLANS = {
+  starter: { name: 'Starter', price: 15 },
+  pro: { name: 'Pro', price: 30 },
+  enterprise: { name: 'Enterprise', price: 50 },
+};
 
-    await db.ref(`pendingPayments/${reference}`).set({
-      uid,
-      productId,
-      coins: coinAmount,
-      price: Number(price) || 0,
-      status: 'pending',
-      createdAt: Date.now(),
-    });
-
-    console.log(`🧾 Pending payment created: ${reference} → ${uid} (+${coinAmount})`);
-    res.json({ success: true, reference });
-  } catch (err) {
-    console.error('create-pending-payment', err);
-    res.status(500).json({ success: false, message: err.message });
+// ─── Subscription fulfillment ──────────────────────────────────
+async function fulfillBrandSubscription(reference, source = 'webhook') {
+  if (!reference || typeof reference !== 'string') {
+    return { ok: false, message: 'Invalid reference' };
   }
-});
+  reference = reference.trim();
 
-/** Client polls this — NOT Selar */
-app.get('/api/payment-status', async (req, res) => {
-  try {
-    const reference = req.query.reference;
-    if (!reference) return res.status(400).json({ status: 'error', message: 'Missing reference' });
-
-    const snap = await db.ref(`pendingPayments/${reference}`).once('value');
-    if (!snap.exists()) return res.json({ status: 'unknown' });
-
-    const data = snap.val();
-    res.json({
-      status: data.status || 'pending',
-      coinsAdded: data.coinsAdded || null,
-      message: data.message || null,
-    });
-  } catch (err) {
-    res.status(500).json({ status: 'error', message: err.message });
+  const pendingRef = db.ref(`pendingPayments/${reference}`);
+  const snap = await pendingRef.once('value');
+  if (!snap.exists()) {
+    return { ok: false, message: 'Unknown reference' };
   }
-});
+  const pending = snap.val();
+  if (pending.status === 'completed') {
+    return { ok: true, already: true, plan: pending.plan };
+  }
+
+  const uid = pending.uid;
+  const plan = pending.plan || 'starter';
+  const price = Number(pending.price) || SUBSCRIPTION_PLANS[plan]?.price || 0;
+
+  if (!uid) return { ok: false, message: 'Invalid pending data' };
+
+  // ─── Store subscription in Firebase ─────────────────────────────
+  const subRef = db.ref(`brandSubscriptions/${uid}`);
+  await subRef.set({
+    status: 'active',
+    plan: plan,
+    price: price,
+    currency: 'USD',
+    interval: 'month',
+    startDate: Date.now(),
+    lastPayment: Date.now(),
+    source: source,
+    reference: reference,
+  });
+
+  // Also store in user's profile for easy access
+  const profileRef = db.ref(`profiles/${uid}`);
+  await profileRef.update({
+    brandSubscription: {
+      status: 'active',
+      plan: plan,
+      startDate: Date.now(),
+    }
+  });
+
+  await pendingRef.update({
+    status: 'completed',
+    completedAt: Date.now(),
+    source,
+  });
+
+  console.log(`✅ [Subscription] ${plan} plan activated for ${uid} (ref ${reference})`);
+  return { ok: true, plan, uid };
+}
 
 /**
  * Credit coins once. Idempotent on reference.
@@ -594,6 +610,75 @@ async function fulfillPayment(reference, source = 'webhook') {
   return { ok: true, coins, newCoins };
 }
 
+/** Create pending payment when user clicks a package */
+app.post('/api/create-pending-payment', async (req, res) => {
+  try {
+    const { reference, uid, productId, coins, price, plan } = req.body || {};
+    if (!reference || !uid || !productId) {
+      return res.status(400).json({ success: false, message: 'Missing fields' });
+    }
+
+    // Check if it's a subscription product
+    const isSubscription = !!SUBSCRIPTION_PRODUCTS[productId];
+    const coinAmount = Number(coins) || PRODUCT_COINS[productId];
+
+    if (!isSubscription && !coinAmount) {
+      return res.status(400).json({ success: false, message: 'Unknown product' });
+    }
+
+    const existing = await db.ref(`pendingPayments/${reference}`).once('value');
+    if (existing.exists() && existing.val().status === 'completed') {
+      return res.json({ success: true, message: 'Already completed' });
+    }
+
+    const payload = {
+      uid,
+      productId,
+      status: 'pending',
+      createdAt: Date.now(),
+      price: Number(price) || 0,
+    };
+
+    if (isSubscription) {
+      payload.coins = 0;
+      payload.plan = plan || SUBSCRIPTION_PRODUCTS[productId];
+      payload.isSubscription = true;
+    } else {
+      payload.coins = coinAmount;
+      payload.plan = null;
+      payload.isSubscription = false;
+    }
+
+    await db.ref(`pendingPayments/${reference}`).set(payload);
+
+    console.log(`🧾 Pending payment created: ${reference} → ${uid} ${isSubscription ? `(subscription ${payload.plan})` : `(+${coinAmount} coins)`}`);
+    res.json({ success: true, reference });
+  } catch (err) {
+    console.error('create-pending-payment', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+/** Client polls this — NOT Selar */
+app.get('/api/payment-status', async (req, res) => {
+  try {
+    const reference = req.query.reference;
+    if (!reference) return res.status(400).json({ status: 'error', message: 'Missing reference' });
+
+    const snap = await db.ref(`pendingPayments/${reference}`).once('value');
+    if (!snap.exists()) return res.json({ status: 'unknown' });
+
+    const data = snap.val();
+    res.json({
+      status: data.status || 'pending',
+      coinsAdded: data.coinsAdded || null,
+      message: data.message || null,
+    });
+  } catch (err) {
+    res.status(500).json({ status: 'error', message: err.message });
+  }
+});
+
 /** Optional webhook (kept; not required if you only use IMAP) */
 app.post('/api/selar-webhook', async (req, res) => {
   try {
@@ -629,11 +714,21 @@ app.post('/api/selar-webhook', async (req, res) => {
       return res.status(400).json({ success: false, message: 'No reference in payload' });
     }
 
-    const result = await fulfillPayment(reference, 'selar-webhook');
+    // Check if it's a subscription product
+    const snap = await db.ref(`pendingPayments/${reference}`).once('value');
+    const isSubscription = snap.exists() && snap.val()?.isSubscription === true;
+
+    let result;
+    if (isSubscription) {
+      result = await fulfillBrandSubscription(reference, 'selar-webhook');
+    } else {
+      result = await fulfillPayment(reference, 'selar-webhook');
+    }
+
     if (!result.ok) {
       return res.status(400).json({ success: false, message: result.message });
     }
-    res.json({ success: true, coins: result.coins, already: !!result.already });
+    res.json({ success: true, ...result });
   } catch (err) {
     console.error('selar-webhook error', err);
     res.status(500).json({ success: false, message: err.message });
@@ -651,7 +746,19 @@ app.post('/api/admin/complete-payment', async (req, res) => {
     }
     const { reference } = req.body || {};
     if (!reference) return res.status(400).json({ error: 'Missing reference' });
-    const result = await fulfillPayment(reference, 'admin');
+
+    // Check if it's a subscription
+    const snap = await db.ref(`pendingPayments/${reference}`).once('value');
+    if (!snap.exists()) return res.status(404).json({ error: 'Reference not found' });
+    const isSubscription = snap.val()?.isSubscription === true;
+
+    let result;
+    if (isSubscription) {
+      result = await fulfillBrandSubscription(reference, 'admin');
+    } else {
+      result = await fulfillPayment(reference, 'admin');
+    }
+
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -822,9 +929,16 @@ async function pollSelarEmails() {
           // Compare emails (case-insensitive)
           if (userEmail.toLowerCase() === buyerEmail.toLowerCase()) {
             console.log(`✅ Found matching pending order: ${refKey} for ${order.uid}`);
-            const result = await fulfillPayment(refKey, 'email-poller');
+            // Check if subscription
+            const isSubscription = order.isSubscription === true;
+            let result;
+            if (isSubscription) {
+              result = await fulfillBrandSubscription(refKey, 'email-poller');
+            } else {
+              result = await fulfillPayment(refKey, 'email-poller');
+            }
             if (result.ok) {
-              console.log(`✅ Credited ${result.coins} coins to ${order.uid}`);
+              console.log(`✅ ${isSubscription ? 'Subscription' : 'Coins'} credited to ${order.uid}`);
               matched = true;
             } else {
               console.warn(`⚠️ Fulfillment failed: ${result.message}`);

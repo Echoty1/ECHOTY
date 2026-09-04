@@ -340,7 +340,19 @@
   }
 }
 
-body.echo-hide-bottom-nav .echo-v-nav {
-  transform: translateY(120%) !important;
+body.echo-hide-bottom-nav .echo-v-nav,
+.echo-v-nav.is-live-hidden {
+  transform: translate3d(0, 180%, 0) !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
   pointer-events: none !important;
+  height: 0 !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+}
+@supports (-webkit-touch-callout: none) {
+  body.echo-hide-bottom-nav .echo-v-nav,
+  .echo-v-nav.is-live-hidden {
+    display: none !important;
+  }
 }
