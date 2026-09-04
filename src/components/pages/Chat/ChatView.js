@@ -140,9 +140,9 @@ const ChatView = () => {
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
-  const [hoveredMessageId, setHoveredMessageId] = useState(null);
-  const [hoverMenuAnchor, setHoverMenuAnchor] = useState(null); // Discord style hover menu position
-  const [activeHoverMenuId, setActiveHoverMenuId] = useState(null); // Which message has the menu open
+  
+  // ─── NEW: Simple inline message option state ────────────────────
+  const [activeMessageMenuId, setActiveMessageMenuId] = useState(null);
 
   // ─── Typing Indicators ──────────────────────────────────────
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
@@ -997,7 +997,7 @@ const ChatView = () => {
       originalMessage: msg,
     });
     setNewMessage('');
-    setActiveHoverMenuId(null); // Close hover menu
+    setActiveMessageMenuId(null); // Close inline menu
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [user, partnerProfile, currentUserProfile, location.state?.userName]);
 
@@ -1032,7 +1032,7 @@ const ChatView = () => {
 
     setShowReactionPicker(true);
     setReactingMessageId(messageId);
-    setActiveHoverMenuId(null); // Close hover menu
+    setActiveMessageMenuId(null); // Close inline menu
   }, [showReactionPicker, reactingMessageId]);
 
   const handleReactionSelect = async (emoji, msgIdOverride = null) => {
@@ -1108,7 +1108,7 @@ const ChatView = () => {
       }
       setShowReactionPicker(true);
       setReactingMessageId(msg.id);
-      setActiveHoverMenuId(null);
+      setActiveMessageMenuId(null);
     }, 400);
   };
 
@@ -1142,7 +1142,7 @@ const ChatView = () => {
       return;
     }
     setEditingMessage(msg);
-    setActiveHoverMenuId(null); // Close hover menu
+    setActiveMessageMenuId(null);
   };
 
   const saveEditedMessage = async (newText) => {
@@ -1185,7 +1185,7 @@ const ChatView = () => {
 
   const handleDeleteMessage = (msgId) => {
     setDeletingMessageId(msgId);
-    setActiveHoverMenuId(null); // Close hover menu
+    setActiveMessageMenuId(null); // Close inline menu
     openConfirmModal({
       title: 'Delete Message',
       message: 'Are you sure you want to delete this message? This action cannot be undone.',
@@ -1222,7 +1222,7 @@ const ChatView = () => {
     } else {
       set(bookmarkRef, { bookmarkedAt: Date.now() }).catch(() => {});
     }
-    setActiveHoverMenuId(null);
+    setActiveMessageMenuId(null);
   };
 
   const handleCopy = async (msg) => {
@@ -1239,7 +1239,7 @@ const ChatView = () => {
       document.body.removeChild(ta);
       setToast({ message: 'Copied to clipboard', type: 'success' });
     }
-    setActiveHoverMenuId(null);
+    setActiveMessageMenuId(null);
   };
 
   const handleEndEcho = () => {
@@ -1554,6 +1554,31 @@ const ChatView = () => {
     );
   };
 
+  // Helper to render action buttons inline (Discord Style)
+  const renderInlineActions = (msg) => {
+    const isOwn = String(msg.senderId || '') === String(user?.uid || '');
+    const isAi = msg.senderId === ECHO_AI_ID;
+    const allowEdit = isOwn && userId !== ECHO_AI_ID && msg.type !== 'audio';
+    const allowDelete = isOwn || (userId === ECHO_AI_ID && isAi);
+    
+    return (
+      <div className="message-inline-actions">
+        {isAi || userId === ECHO_AI_ID ? null : (
+          <button onClick={(e) => { e.stopPropagation(); handleReact(msg.id); }}>😀</button>
+        )}
+        <button onClick={(e) => { e.stopPropagation(); handleReply(msg); }}>↩️</button>
+        {allowEdit && (
+          <button onClick={(e) => { e.stopPropagation(); handleEditMessage(msg); }}>✏️</button>
+        )}
+        <button onClick={(e) => { e.stopPropagation(); handleCopy(msg); }}>📋</button>
+        <button onClick={(e) => { e.stopPropagation(); saveMessageToArchive(msg); }}>🔖</button>
+        {allowDelete && (
+          <button onClick={(e) => { e.stopPropagation(); handleDeleteMessage(msg.id); }}>🗑️</button>
+        )}
+      </div>
+    );
+  };
+
   const renderMessage = (msg) => {
     if (msg.type === 'system' || msg.system) {
       return (
@@ -1572,16 +1597,6 @@ const ChatView = () => {
       : null;
 
     const showReply = !isAi;
-    let allowEdit = false;
-    if (isOwn && userId !== ECHO_AI_ID) {
-      if (msg.type === 'text') allowEdit = true;
-      else if (msg.type === 'media' && msg.mediaType !== 'audio') allowEdit = true;
-    }
-
-    let copyText = null;
-    if (msg.type === 'text' && msg.text) copyText = msg.text;
-
-    const allowDelete = isOwn || (userId === ECHO_AI_ID && (isOwn || isAi));
 
     const handleMediaClick = () => {
       if (msg.type === 'media') {
@@ -1600,27 +1615,15 @@ const ChatView = () => {
     const sentClock = formatMsgClock(msg);
 
     const shell = (inner) => {
-      const isHovered = hoveredMessageId === msg.id;
       const row = (
         <div
-          className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${Date.now() - (msg.timestamp || 0) < 1600 ? (isOwn ? 'just-sent' : 'just-received') : ''} ${isTideExpired(msg) ? 'tide-leaving' : ''} ${isHovered ? 'is-hovered' : ''}`}
+          className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
           ref={(el) => {
             if (el) messageRefs.current[msg.id] = el;
           }}
-          onMouseEnter={(e) => {
-            setHoveredMessageId(msg.id);
-            const targetEl = e.currentTarget;
-            const rect = targetEl.getBoundingClientRect();
-            setHoverMenuAnchor({
-              top: rect.top + rect.height / 2,
-              left: isOwn ? rect.left - 160 : rect.right + 160
-            });
-            setActiveHoverMenuId(msg.id);
-          }}
-          onMouseLeave={() => {
-            setHoveredMessageId(null);
-            setActiveHoverMenuId(null);
-          }}
+          onClick={() => setActiveMessageMenuId(activeMessageMenuId === msg.id ? null : msg.id)}
+          onMouseEnter={() => setActiveMessageMenuId(msg.id)}
+          onMouseLeave={() => setActiveMessageMenuId(null)}
           onTouchStart={(e) => handleTouchStart(msg, e)}
           onTouchEnd={() => handleTouchEnd(msg)}
           onTouchMove={handleTouchMove}
@@ -1638,6 +1641,13 @@ const ChatView = () => {
               {renderTide(msg)}
             </div>
             {renderReactions(msg.reactions, msg.id, isOwn)}
+            
+            {/* ─── Simple Inline Menu ─── */}
+            {activeMessageMenuId === msg.id && (
+              <div className="message-inline-menu-wrapper" onClick={(e) => e.stopPropagation()}>
+                {renderInlineActions(msg)}
+              </div>
+            )}
           </div>
         </div>
       );
@@ -2148,38 +2158,39 @@ const ChatView = () => {
           0%, 100% { background: transparent; }
           20% { background: rgba(255, 215, 0, 0.3); }
         }
-        
-        /* Discord style hover menu */
-        .message-hover-menu {
-          position: fixed;
-          z-index: 1050;
+
+        /* Inline Message Actions (Discord Style) */
+        .message-inline-menu-wrapper {
+          position: absolute;
+          bottom: -35px;
+          left: 0;
+          right: 0;
           display: flex;
-          gap: 4px;
-          background: var(--bg-primary, #fff);
-          border: 1px solid var(--border-color, #e5e7eb);
-          border-radius: 24px;
-          padding: 4px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-          transform: translate(-50%, -50%);
-          transition: opacity 0.15s ease;
-        }
-        .message-hover-btn {
-          width: 32px;
-          height: 32px;
-          display: flex;
-          align-items: center;
           justify-content: center;
-          border: none;
+          z-index: 10;
+        }
+        .message-inline-actions {
+          display: flex;
+          gap: 6px;
+          background: var(--bg-primary, #ffffff);
+          border: 1px solid var(--border-color, #e5e7eb);
+          padding: 4px 8px;
+          border-radius: 16px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        .message-inline-actions button {
           background: transparent;
-          border-radius: 50%;
+          border: none;
           cursor: pointer;
           font-size: 16px;
-          color: var(--text-secondary, #555);
+          padding: 4px;
+          border-radius: 50%;
           transition: background 0.2s, transform 0.1s;
+          color: var(--text-secondary, #555);
         }
-        .message-hover-btn:hover {
-          background: var(--bg-hover, #eee);
-          transform: scale(1.1);
+        .message-inline-actions button:hover {
+          background: var(--bg-hover, #eaeaea);
+          transform: scale(1.2);
         }
       `}</style>
 
@@ -2282,45 +2293,6 @@ const ChatView = () => {
                 ))}
               </div>
             </div>
-          </div>
-        )}
-
-        {/* ─── Discord Style Hover Menu ─────────────────────────── */}
-        {activeHoverMenuId && hoverMenuAnchor && (
-          <div
-            className="message-hover-menu"
-            style={{ top: hoverMenuAnchor.top, left: hoverMenuAnchor.left }}
-            onMouseEnter={(e) => {
-              // Keep menu open while hovering over it
-              const msg = messages.find(m => m.id === activeHoverMenuId);
-              if(msg) setHoveredMessageId(msg.id);
-            }}
-            onMouseLeave={() => setActiveHoverMenuId(null)}
-          >
-            <button
-              className="message-hover-btn"
-              title="Add Reaction"
-              onClick={() => handleReact(activeHoverMenuId)}
-            >
-              😀
-            </button>
-            <button
-              className="message-hover-btn"
-              title="Reply"
-              onClick={() => {
-                const msg = messages.find(m => m.id === activeHoverMenuId);
-                if (msg) handleReply(msg);
-              }}
-            >
-              ↩️
-            </button>
-            <button
-              className="message-hover-btn"
-              title="More Options"
-              onClick={() => setShowMoreOptions(true)}
-            >
-              ⋯
-            </button>
           </div>
         )}
 
