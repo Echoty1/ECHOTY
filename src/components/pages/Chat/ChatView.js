@@ -32,7 +32,6 @@ import StructuredData from '../../common/StructuredData';
 import Avatar from '../../common/Avatar';
 import ChatMediaMessage from './ChatMediaMessage';
 import AudioPlayer from './AudioPlayer';
-import MessageMenu from './MessageMenu';
 import { saveToEchoArchive, listEchoArchive, removeEchoArchive } from '../../../services/echoArchive';
 import { privateExpiresAt, isTideExpired, tideProgress, formatTideLeft, PRIVATE_TTL_MS } from '../../../utils/echoTides';
 import ReplyPreview from './ReplyPreview';
@@ -65,18 +64,6 @@ const REACTION_BAR_HEIGHT = 48;
 const REACTION_BAR_GAP = 12;
 const REACTION_ARROW_SIZE = 12;
 const REACTION_BAR_HALF_WIDTH = 150;
-
-// ─── Quick Responses ────────────────────────────────────────────
-const QUICK_RESPONSES = [
-  '👍 Thanks!',
-  '😊 Sounds good',
-  '✅ Will do',
-  '📌 Noted',
-  '⏰ Let me check',
-  '👋 Hey!',
-  '💯 Agreed',
-  '🙏 Appreciate it'
-];
 
 const sanitizeName = (rawName, userId) => {
   if (!rawName) return 'User';
@@ -159,23 +146,6 @@ const ChatView = () => {
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
   const typingTimeoutRef = useRef(null);
 
-  // ─── NEW: Message Search ─────────────────────────────────────
-  const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [showSearch, setShowSearch] = useState(false);
-
-  // ─── NEW: Quick Responses ────────────────────────────────────
-  const [showQuickResponses, setShowQuickResponses] = useState(false);
-
-  // ─── NEW: Dark Mode ──────────────────────────────────────────
-  const [darkMode, setDarkMode] = useState(() => {
-    try {
-      return localStorage.getItem('echo-dark-mode') === 'true';
-    } catch {
-      return false;
-    }
-  });
-
   // ─── Touch gesture refs ──────────────────────────────────────
   const touchTimerRef = useRef(null);
   const lastTapRef = useRef({ time: 0, msgId: null });
@@ -188,6 +158,7 @@ const ChatView = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showCaptionEmoji, setShowCaptionEmoji] = useState(false);
   const fileInputRef = useRef(null);
+  const wallpaperInputRef = useRef(null); // NEW: Ref for wallpaper
   const captionInputRef = useRef(null);
 
   // ─── File size warning modal ──────────────────────────────────
@@ -242,12 +213,6 @@ const ChatView = () => {
     const id = setInterval(() => setTideTick(Date.now()), 30000);
     return () => clearInterval(id);
   }, []);
-
-  // ─── NEW: Dark Mode Effect ──────────────────────────────────
-  useEffect(() => {
-    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
-    localStorage.setItem('echo-dark-mode', String(darkMode));
-  }, [darkMode]);
 
   // ─── NEW: Typing Indicator Listener ──────────────────────────
   useEffect(() => {
@@ -425,38 +390,14 @@ const ChatView = () => {
     setIsNearBottom(isNear);
   }, []);
 
-  // ─── NEW: Toggle Dark Mode ──────────────────────────────────
-  const toggleDarkMode = () => setDarkMode(prev => !prev);
-
-  // ─── NEW: Message Search ────────────────────────────────────
-  const handleSearch = useCallback((query) => {
-    setSearchQuery(query);
-    if (!query.trim()) {
-      setSearchResults([]);
-      return;
-    }
-    const results = messages.filter(msg => 
-      msg.text?.toLowerCase().includes(query.toLowerCase()) ||
-      msg.caption?.toLowerCase().includes(query.toLowerCase())
-    );
-    setSearchResults(results);
-  }, [messages]);
-
-  // ─── NEW: Jump to Search Result ────────────────────────────
-  const jumpToSearchResult = (messageId) => {
-    const el = messageRefs.current[messageId];
-    if (el) {
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      el.classList.add('highlight-flash');
-      setTimeout(() => el.classList.remove('highlight-flash'), 2000);
-    }
-  };
-
-  // ─── NEW: Quick Response Handler ────────────────────────────
-  const handleQuickResponse = (response) => {
-    setNewMessage(response);
-    setShowQuickResponses(false);
-    setTimeout(() => inputRef.current?.focus(), 100);
+  // ─── NEW: Wallpaper Handler (Need to implement logic) ────────
+  const handleWallpaperSelect = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    // TODO: Add your wallpaper logic here, e.g. applying the image as background of messagesContainerRef
+    // Example: const url = URL.createObjectURL(file); messagesContainerRef.current.style.backgroundImage = `url(${url})`;
+    console.log("Wallpaper selected:", file);
+    e.target.value = '';
   };
 
   // ─── NEW: Typing Handler ────────────────────────────────────
@@ -1144,36 +1085,8 @@ const ChatView = () => {
 
   // ─── Touch Gesture handlers ────────────────────────────────────
   const handleTouchStart = (msg, e) => {
+    // REMOVED: Long press reaction logic. Long press now does nothing.
     if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-    const targetEl = e?.currentTarget || null;
-    const rect = targetEl ? targetEl.getBoundingClientRect() : null;
-    touchTimerRef.current = setTimeout(() => {
-      if (window.navigator?.vibrate) {
-        window.navigator.vibrate(50);
-      }
-      // Open reaction picker on long press
-      const msgElement = messageRefs.current[msg.id];
-      if (msgElement) {
-        const msgRect = msgElement.getBoundingClientRect();
-        const windowHeight = window.innerHeight;
-        const windowWidth = window.innerWidth;
-
-        let top = msgRect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP - REACTION_ARROW_SIZE;
-        let flipped = false;
-
-        if (top < 60) {
-          top = msgRect.bottom + REACTION_BAR_GAP + REACTION_ARROW_SIZE;
-          flipped = true;
-        }
-
-        let left = msgRect.left + msgRect.width / 2 - REACTION_BAR_HALF_WIDTH;
-        left = Math.max(10, Math.min(left, windowWidth - 20));
-
-        setReactionPickerAnchor({ top, left, flipped });
-      }
-      setShowReactionPicker(true);
-      setReactingMessageId(msg.id);
-    }, 400);
   };
 
   const handleTouchEnd = (msg) => {
@@ -1639,11 +1552,6 @@ const ChatView = () => {
       else if (msg.type === 'media' && msg.mediaType !== 'audio') allowEdit = true;
     }
 
-    let copyText = null;
-    if (msg.type === 'text' && msg.text) copyText = msg.text;
-
-    const allowDelete = isOwn || (userId === ECHO_AI_ID && (isOwn || isAi));
-
     const handleMediaClick = () => {
       if (msg.type === 'media') {
         if (msg.mediaType === 'video') {
@@ -1705,17 +1613,7 @@ const ChatView = () => {
     if (msg.type === 'echomoji') {
       const skinObj = msg.skinId ? getSkinById(msg.skinId) : null;
       return shell(
-        <MessageMenu
-          isOwn={isOwn}
-          canDelete={allowDelete}
-          onDelete={() => handleDeleteMessage(msg.id)}
-          onReply={showReply ? () => handleReply(msg) : null}
-          onEdit={null}
-          onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg.id)}
-          onSave={() => saveMessageToArchive(msg)}
-          saved={!!bookmarkedIds[msg.id]}
-          copyText={null}
-        >
+        <>
           {replyToDisplay && (
             <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />
           )}
@@ -1728,7 +1626,7 @@ const ChatView = () => {
               animated={true}
             />
           </div>
-        </MessageMenu>
+        </>
       );
     }
 
@@ -1782,37 +1680,17 @@ const ChatView = () => {
         }
       }
       return shell(
-        <MessageMenu
-          isOwn={isOwn}
-          canDelete={allowDelete}
-          onDelete={() => handleDeleteMessage(msg.id)}
-          onReply={showReply ? () => handleReply(msg) : null}
-          onEdit={allowEdit ? () => handleEditMessage(msg) : null}
-          onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg.id)}
-          onSave={() => saveMessageToArchive(msg)}
-          saved={!!bookmarkedIds[msg.id]}
-          copyText={null}
-        >
+        <>
           {replyToDisplay && (
             <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />
           )}
           {content}
-        </MessageMenu>
+        </>
       );
     }
 
     return shell(
-      <MessageMenu
-        isOwn={isOwn}
-        canDelete={allowDelete}
-        onDelete={() => handleDeleteMessage(msg.id)}
-        onReply={showReply ? () => handleReply(msg) : null}
-        onEdit={allowEdit ? () => handleEditMessage(msg) : null}
-        onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg.id)}
-        onSave={() => saveMessageToArchive(msg)}
-        saved={!!bookmarkedIds[msg.id]}
-        copyText={copyText}
-      >
+      <>
         {replyToDisplay && (
           <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />
         )}
@@ -1824,7 +1702,7 @@ const ChatView = () => {
           )}
           {msg.isEdited && <span className="message-edited-badge">(edited)</span>}
         </div>
-      </MessageMenu>
+      </>
     );
   };
 
@@ -2231,7 +2109,7 @@ const ChatView = () => {
 
       <SEO title={`Chat with ${displayName}`} description={`Chat with ${displayName} on ECHO.`} />
       <StructuredData />
-      <div className={`chat-view ${darkMode ? 'dark-theme' : 'light-theme'}`}>
+      <div className="chat-view">
         <VideoAudioProvider>
           {chatBgEnabled && (
             <div className="echo-rings-bg is-active" aria-hidden="true">
@@ -2275,28 +2153,6 @@ const ChatView = () => {
             <div ref={messagesEndRef} />
           </div>
         </VideoAudioProvider>
-
-        {showSearch && (
-          <div className="search-overlay">
-            <input
-              type="text"
-              placeholder="Search messages..."
-              value={searchQuery}
-              onChange={(e) => handleSearch(e.target.value)}
-              autoFocus
-            />
-            <button onClick={() => setShowSearch(false)}>✕</button>
-            {searchResults.length > 0 && (
-              <div className="search-results">
-                {searchResults.map((msg) => (
-                  <div key={msg.id} onClick={() => jumpToSearchResult(msg.id)}>
-                    {msg.text || msg.caption || 'Media'}
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
 
         {showEmojiPicker && (
           <ChatEmojiPicker
@@ -2381,31 +2237,14 @@ const ChatView = () => {
               <i className="fas fa-microphone" />
             </button>
 
+            {/* NEW: Choose Wallpaper button */}
             <button
               type="button"
-              className="chat-quick-reply-btn"
-              onClick={() => setShowQuickResponses(!showQuickResponses)}
-              title="Quick replies"
+              className="chat-wallpaper-btn"
+              onClick={() => wallpaperInputRef.current?.click()}
+              title="Choose Wallpaper"
             >
-              ⚡
-            </button>
-
-            <button
-              type="button"
-              className="chat-search-btn"
-              onClick={() => setShowSearch(!showSearch)}
-              title="Search"
-            >
-              🔍
-            </button>
-
-            <button
-              type="button"
-              className="chat-dark-mode-btn"
-              onClick={toggleDarkMode}
-              title={darkMode ? 'Light mode' : 'Dark mode'}
-            >
-              {darkMode ? '☀️' : '🌙'}
+              🖼️
             </button>
 
             <div className="chat-more-wrapper" ref={moreOptionsRef}>
@@ -2459,6 +2298,15 @@ const ChatView = () => {
               onChange={handleFileSelect}
             />
 
+            {/* NEW: Wallpaper file input */}
+            <input
+              type="file"
+              ref={wallpaperInputRef}
+              accept="image/*"
+              style={{ display: 'none' }}
+              onChange={handleWallpaperSelect}
+            />
+
             <textarea
               ref={inputRef}
               className="chat-input"
@@ -2495,21 +2343,6 @@ const ChatView = () => {
               <i className="fas fa-paper-plane" />
             </button>
           </div>
-
-          {showQuickResponses && (
-            <div className="quick-responses">
-              {QUICK_RESPONSES.map((response) => (
-                <button
-                  key={response}
-                  type="button"
-                  className="quick-response-btn"
-                  onClick={() => handleQuickResponse(response)}
-                >
-                  {response}
-                </button>
-              ))}
-            </div>
-          )}
         </form>
 
         {showVoiceRecorder && (
