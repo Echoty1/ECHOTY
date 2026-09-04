@@ -37,7 +37,7 @@ import { saveToEchoArchive, listEchoArchive, removeEchoArchive } from '../../../
 import { privateExpiresAt, isTideExpired, tideProgress, formatTideLeft, PRIVATE_TTL_MS } from '../../../utils/echoTides';
 import ReplyPreview from './ReplyPreview';
 import RepliedMessage from './RepliedMessage';
-import SwipeToReply from './SwipeToReply'; // ✅ Merged from second file
+import SwipeToReply from './SwipeToReply';
 import EditMessageModal from './EditMessageModal';
 import EditMediaCaptionModal from './EditMediaCaptionModal';
 import ChatEmojiPicker from './ChatEmojiPicker';
@@ -61,7 +61,6 @@ const MAX_VIDEO_DURATION = 30 * 60; // 30 minutes
 const ECHO_AI_ID = 'echo_ai_assistant';
 
 // ─── Quick-reaction bar geometry ─────────────────────────────────
-// ✅ Merged from second file
 const REACTION_BAR_HEIGHT = 48;
 const REACTION_BAR_GAP = 12;
 const REACTION_ARROW_SIZE = 12;
@@ -124,10 +123,6 @@ const ChatView = () => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loadingMessages, setLoadingMessages] = useState(true);
-  useEffect(() => {
-    const t = setTimeout(() => setLoadingMessages(false), 1200);
-    return () => clearTimeout(t);
-  }, []);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isAILoading, setIsAILoading] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
@@ -141,15 +136,14 @@ const ChatView = () => {
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [reactingMessageId, setReactingMessageId] = useState(null);
-  const [reactionPickerAnchor, setReactionPickerAnchor] = useState(null); // ✅ Merged from second file
+  const [reactionPickerAnchor, setReactionPickerAnchor] = useState(null);
   const [reactionViewer, setReactionViewer] = useState(null);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
-  const [hoveredMessageId, setHoveredMessageId] = useState(null); // ✅ Merged from second file
+  const [hoveredMessageId, setHoveredMessageId] = useState(null);
 
   // ─── Touch gesture refs ──────────────────────────────────────
-  // ✅ Merged from second file
   const touchTimerRef = useRef(null);
   const lastTapRef = useRef({ time: 0, msgId: null });
 
@@ -199,68 +193,11 @@ const ChatView = () => {
   const messageRefs = useRef({});
   const clearedAtRef = useRef(0);
 
-  // ✅ Merged from second file: touch handler for swipe to reply
-  const handleMessageTouch = useCallback((e, msg) => {
-    const touch = e.changedTouches?.[0] || e.touches?.[0];
-    if (!touch) return;
-
-    const now = Date.now();
-    const isDoubleTap = (
-      lastTapRef.current.msgId === msg.id &&
-      now - lastTapRef.current.time < 300
-    );
-
-    if (isDoubleTap) {
-      // Double tap = reaction
-      e.preventDefault();
-      handleReact(msg.id);
-      lastTapRef.current = { time: 0, msgId: null };
-      return;
-    }
-
-    lastTapRef.current = { time: now, msgId: msg.id };
-
-    // For swipe detection, we need a longer press
-    if (touchTimerRef.current) {
-      clearTimeout(touchTimerRef.current);
-    }
-
-    touchTimerRef.current = setTimeout(() => {
-      // Long press = open reply
-      handleReply(msg);
-      touchTimerRef.current = null;
-    }, 500);
-
-    // Store touch start position for swipe detection
-    const touchStart = { x: touch.clientX, y: touch.clientY };
-    
-    const handleTouchMove = (moveEvent) => {
-      const moveTouch = moveEvent.changedTouches?.[0];
-      if (!moveTouch) return;
-      
-      const dx = moveTouch.clientX - touchStart.x;
-      const dy = moveTouch.clientY - touchStart.y;
-      
-      // If swiped right > 50px, trigger reply
-      if (dx > 50 && Math.abs(dy) < 100) {
-        if (touchTimerRef.current) {
-          clearTimeout(touchTimerRef.current);
-          touchTimerRef.current = null;
-        }
-        handleReply(msg);
-        document.removeEventListener('touchmove', handleTouchMove);
-      }
-    };
-
-    document.addEventListener('touchmove', handleTouchMove, { passive: false });
-    document.addEventListener('touchend', () => {
-      if (touchTimerRef.current) {
-        clearTimeout(touchTimerRef.current);
-        touchTimerRef.current = null;
-      }
-      document.removeEventListener('touchmove', handleTouchMove);
-    }, { once: true });
-  }, [handleReply, handleReact]);
+  // ─── Effects ──────────────────────────────────────────────────
+  useEffect(() => {
+    const t = setTimeout(() => setLoadingMessages(false), 1200);
+    return () => clearTimeout(t);
+  }, []);
 
   useEffect(() => {
     const hide = Boolean(previewUrl || editingMediaMessage || mediaPreview);
@@ -273,6 +210,7 @@ const ChatView = () => {
     return () => clearInterval(id);
   }, []);
 
+  // ─── Helper Functions ────────────────────────────────────────
   const pruneExpired = async (list, cId) => {
     if (userId === ECHO_AI_ID) return list;
     const keep = [];
@@ -364,7 +302,7 @@ const ChatView = () => {
         if (msg.receiverId === user.uid && msg.isRead === false) {
           updates[`chats/${cId}/messages/${msg.key}/isRead`] = true;
           updates[`chats/${cId}/messages/${msg.key}/readAt`] = Date.now();
-          updates[`chats/${cId}/messages/${msg.key}/expiresAt`] = privateExpiresAt(); // ✅ Merged from second file
+          updates[`chats/${cId}/messages/${msg.key}/expiresAt`] = privateExpiresAt();
           hasUnread = true;
         }
       });
@@ -432,7 +370,7 @@ const ChatView = () => {
     setIsNearBottom(isNear);
   }, []);
 
-  // ─── Handle Send Text ──────────────────────────────────────
+  // ─── Message Handlers ────────────────────────────────────────
   const handleSendText = async (e) => {
     e?.preventDefault?.();
     const textToSend = (typeof e === 'string' ? e : newMessage).trim();
@@ -522,6 +460,17 @@ const ChatView = () => {
           const errBody = await response.json().catch(() => ({}));
           throw new Error(errBody.error || 'AI request failed');
         }
+        const data = await response.json();
+        // Add AI response to messages
+        if (data.reply) {
+          setMessages((prev) => prev.concat({
+            id: `ai_${Date.now()}`,
+            senderId: ECHO_AI_ID,
+            text: data.reply,
+            timestamp: Date.now(),
+            type: 'text',
+          }));
+        }
       } catch (err) {
         setMessages((prev) => prev.concat({
           id: `ai_err_${Date.now()}`,
@@ -575,45 +524,6 @@ const ChatView = () => {
     clearMessageCache(cId);
   };
 
-  // ─── Handle Reaction ──────────────────────────────────────
-  // ✅ Enhanced with reaction picker positioning from second file
-  const handleReact = useCallback((messageId) => {
-    if (showReactionPicker && reactingMessageId === messageId) {
-      setShowReactionPicker(false);
-      setReactingMessageId(null);
-      setReactionPickerAnchor(null);
-      return;
-    }
-
-    // Find the message element to position the reaction picker
-    const msgElement = messageRefs.current[messageId];
-    if (msgElement) {
-      const rect = msgElement.getBoundingClientRect();
-      const windowHeight = window.innerHeight;
-      const windowWidth = window.innerWidth;
-
-      // Calculate position above the message
-      let top = rect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP - REACTION_ARROW_SIZE;
-      let flipped = false;
-
-      // If not enough space above, place below
-      if (top < 60) {
-        top = rect.bottom + REACTION_BAR_GAP + REACTION_ARROW_SIZE;
-        flipped = true;
-      }
-
-      // Calculate horizontal position (centered)
-      let left = rect.left + rect.width / 2 - REACTION_BAR_HALF_WIDTH;
-      left = Math.max(10, Math.min(left, windowWidth - 20));
-
-      setReactionPickerAnchor({ top, left, flipped });
-    }
-
-    setShowReactionPicker(true);
-    setReactingMessageId(messageId);
-  }, [showReactionPicker, reactingMessageId]);
-
-  // ─── Send Media Message ────────────────────────────────────
   const sendMediaMessage = async (retryMessageId = null) => {
     let file = selectedFile;
     let caption = captionText.trim();
@@ -782,7 +692,6 @@ const ChatView = () => {
     }
   };
 
-  // ─── Voice Send ────────────────────────────────────────────
   const handleVoiceSend = async (audioBlob, duration) => {
     if (ended) {
       try {
@@ -932,7 +841,6 @@ const ChatView = () => {
     }
   };
 
-  // ─── File and Media Handlers ──────────────────────────────
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -1029,8 +937,6 @@ const ChatView = () => {
     }
   };
 
-  // ─── Reply Handler ─────────────────────────────────────────
-  // ✅ Enhanced from second file with proper sender name handling
   const handleReply = useCallback((msg) => {
     const isOwnMsg = String(msg.senderId || '') === String(user?.uid || '');
     const senderName = isOwnMsg
@@ -1059,7 +965,38 @@ const ChatView = () => {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [user, partnerProfile, currentUserProfile, location.state?.userName]);
 
-  // ─── Edit Message ──────────────────────────────────────────
+  const handleReact = useCallback((messageId) => {
+    if (showReactionPicker && reactingMessageId === messageId) {
+      setShowReactionPicker(false);
+      setReactingMessageId(null);
+      setReactionPickerAnchor(null);
+      return;
+    }
+
+    const msgElement = messageRefs.current[messageId];
+    if (msgElement) {
+      const rect = msgElement.getBoundingClientRect();
+      const windowHeight = window.innerHeight;
+      const windowWidth = window.innerWidth;
+
+      let top = rect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP - REACTION_ARROW_SIZE;
+      let flipped = false;
+
+      if (top < 60) {
+        top = rect.bottom + REACTION_BAR_GAP + REACTION_ARROW_SIZE;
+        flipped = true;
+      }
+
+      let left = rect.left + rect.width / 2 - REACTION_BAR_HALF_WIDTH;
+      left = Math.max(10, Math.min(left, windowWidth - 20));
+
+      setReactionPickerAnchor({ top, left, flipped });
+    }
+
+    setShowReactionPicker(true);
+    setReactingMessageId(messageId);
+  }, [showReactionPicker, reactingMessageId]);
+
   const handleEditMessage = (msg) => {
     if (msg.senderId !== user?.uid) return;
     if (msg.type === 'media' && msg.mediaType === 'audio') return;
@@ -1070,7 +1007,6 @@ const ChatView = () => {
     setEditingMessage(msg);
   };
 
-  // ─── Save Edited Message ──────────────────────────────────
   const saveEditedMessage = async (newText) => {
     if (!editingMessage || !user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -1083,13 +1019,13 @@ const ChatView = () => {
       });
       setEditingMessage(null);
       clearMessageCache(cId);
+      setToast({ message: 'Message updated successfully', type: 'success' });
     } catch (err) {
       console.error('Edit failed:', err);
       setToast({ message: 'Failed to edit message', type: 'error' });
     }
   };
 
-  // ─── Save Edited Media Caption ────────────────────────────
   const saveEditedMediaCaption = async (newCaption) => {
     if (!editingMediaMessage || !user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -1102,18 +1038,18 @@ const ChatView = () => {
       });
       setEditingMediaMessage(null);
       clearMessageCache(cId);
+      setToast({ message: 'Caption updated successfully', type: 'success' });
     } catch (err) {
       console.error('Edit caption failed:', err);
       setToast({ message: 'Failed to edit caption', type: 'error' });
     }
   };
 
-  // ─── Delete Message ────────────────────────────────────────
   const handleDeleteMessage = (msgId) => {
     setDeletingMessageId(msgId);
     openConfirmModal({
       title: 'Delete Message',
-      message: 'Are you sure you want to delete this message?',
+      message: 'Are you sure you want to delete this message? This action cannot be undone.',
       confirmText: 'Delete',
       cancelText: 'Cancel',
       onConfirm: () => confirmDeleteMessage(msgId),
@@ -1128,31 +1064,317 @@ const ChatView = () => {
       deleteMessageFromCache(cId, msgId).catch(() => {});
       setDeletingMessageId(null);
       clearMessageCache(cId);
+      setToast({ message: 'Message deleted successfully', type: 'success' });
     } catch (err) {
       console.error('Delete failed:', err);
       setToast({ message: 'Failed to delete message', type: 'error' });
     }
   };
 
-  // ─── Bookmark Handler ──────────────────────────────────────
   const handleBookmark = (msgId) => {
     setBookmarkedIds((prev) => ({
       ...prev,
       [msgId]: !prev[msgId],
     }));
-    // Also persist to Firebase if needed
+    // Persist to Firebase
+    const cId = [user.uid, userId].sort().join('_');
+    const bookmarkRef = ref(db, `userChats/${user.uid}/${userId}/bookmarks/${msgId}`);
+    if (bookmarkedIds[msgId]) {
+      remove(bookmarkRef).catch(() => {});
+    } else {
+      set(bookmarkRef, { bookmarkedAt: Date.now() }).catch(() => {});
+    }
   };
 
-  // ─── Render ─────────────────────────────────────────────────
-  // (The render method would include all UI components)
-  // Note: The actual render method is omitted for brevity but
-  // would combine all features from both versions.
-
+  // ─── Render ──────────────────────────────────────────────────
   return (
-    // JSX with all components merged
-    <div className="chat-view">
-      {/* Chat header, messages, input bar, etc. */}
-      {/* All features from both files included */}
+    <div className="chat-view-container">
+      <SEO title={`Chat with ${partnerProfile?.name || 'User'}`} />
+      <StructuredData type="WebPage" />
+      
+      {/* Chat Header */}
+      <div className="chat-header">
+        <button className="back-button" onClick={() => navigate(-1)}>
+          ←
+        </button>
+        <div className="chat-header-info">
+          <Avatar 
+            src={partnerProfile?.avatar || location.state?.userAvatar} 
+            alt={partnerProfile?.name || 'User'}
+            size="medium"
+          />
+          <div className="chat-header-text">
+            <h3>{partnerProfile?.name || location.state?.userName || 'User'}</h3>
+            <span className="chat-status">
+              {partnerProfile?.online ? '🟢 Online' : 'Offline'}
+            </span>
+          </div>
+        </div>
+        <div className="chat-header-actions">
+          <button onClick={() => setShowMoreOptions(!showMoreOptions)}>
+            ⋮
+          </button>
+        </div>
+      </div>
+
+      {/* Messages Container */}
+      <div 
+        className="messages-container" 
+        ref={messagesContainerRef}
+        onScroll={handleScroll}
+      >
+        {loadingMessages ? (
+          <div className="skeleton-container">
+            {[1, 2, 3, 4, 5].map((i) => (
+              <SkeletonMessage key={i} />
+            ))}
+          </div>
+        ) : (
+          <>
+            {messages.length === 0 && (
+              <div className="empty-state">
+                <h3>No messages yet</h3>
+                <p>Say hello to start the conversation!</p>
+              </div>
+            )}
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                ref={(el) => (messageRefs.current[msg.id] = el)}
+                className={`message-wrapper ${msg.senderId === user?.uid ? 'own' : 'other'}`}
+                onMouseEnter={() => setHoveredMessageId(msg.id)}
+                onMouseLeave={() => setHoveredMessageId(null)}
+              >
+                {msg.replyTo && (
+                  <RepliedMessage replyData={msg.replyTo} />
+                )}
+                <div className="message-bubble">
+                  {msg.type === 'text' && (
+                    <div className="message-text">{msg.text}</div>
+                  )}
+                  {msg.type === 'media' && (
+                    <ChatMediaMessage
+                      message={msg}
+                      onPreview={() => setMediaPreview(msg)}
+                    />
+                  )}
+                  {msg.type === 'echomoji' && (
+                    <ECHOMOJI mood={msg.mood} skin={msg.skin} />
+                  )}
+                  {msg.isEdited && (
+                    <span className="edited-indicator">(edited)</span>
+                  )}
+                  <div className="message-footer">
+                    <span className="message-time">{formatMsgClock(msg)}</span>
+                    {msg.isRead && msg.senderId === user?.uid && (
+                      <span className="read-receipt">✓✓</span>
+                    )}
+                    {msg.pending && (
+                      <span className="sending-indicator">⋯</span>
+                    )}
+                  </div>
+                </div>
+                {hoveredMessageId === msg.id && msg.senderId !== user?.uid && (
+                  <div className="message-actions">
+                    <button onClick={() => handleReply(msg)}>↩️</button>
+                    <button onClick={() => handleReact(msg.id)}>😊</button>
+                  </div>
+                )}
+                <SwipeToReply
+                  onReply={() => handleReply(msg)}
+                  messageId={msg.id}
+                />
+              </div>
+            ))}
+            {isAILoading && (
+              <div className="ai-typing">
+                <span>ECHO AI is thinking...</span>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </>
+        )}
+      </div>
+
+      {/* Reply Preview */}
+      {replyTo && (
+        <ReplyPreview
+          senderName={replyTo.senderName}
+          textSnippet={replyTo.textSnippet}
+          onCancel={() => setReplyTo(null)}
+        />
+      )}
+
+      {/* Input Area */}
+      <div className="input-area" ref={inputContainerRef}>
+        <button 
+          className="emoji-button"
+          onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+        >
+          😊
+        </button>
+        <div className="input-wrapper">
+          <input
+            ref={inputRef}
+            type="text"
+            value={newMessage}
+            onChange={(e) => setNewMessage(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSendText();
+              }
+            }}
+            onPaste={handlePaste}
+            placeholder={`Message ${partnerProfile?.name || 'User'}...`}
+            className="message-input"
+          />
+        </div>
+        <button 
+          className="attachment-button"
+          onClick={() => fileInputRef.current?.click()}
+        >
+          📎
+        </button>
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*,video/*"
+          onChange={handleFileSelect}
+          style={{ display: 'none' }}
+        />
+        <button 
+          className="voice-button"
+          onClick={() => setShowVoiceRecorder(!showVoiceRecorder)}
+        >
+          🎤
+        </button>
+        {newMessage.trim() && (
+          <button 
+            className="send-button"
+            onClick={handleSendText}
+          >
+            Send
+          </button>
+        )}
+      </div>
+
+      {/* Voice Recorder */}
+      {showVoiceRecorder && (
+        <VoiceRecorder
+          onSend={handleVoiceSend}
+          onCancel={() => setShowVoiceRecorder(false)}
+        />
+      )}
+
+      {/* Emoji Picker */}
+      {showEmojiPicker && (
+        <ChatEmojiPicker
+          onEmojiSelect={(emoji) => {
+            setNewMessage((prev) => prev + emoji);
+            setShowEmojiPicker(false);
+          }}
+          onClose={() => setShowEmojiPicker(false)}
+        />
+      )}
+
+      {/* Reaction Picker */}
+      {showReactionPicker && reactionPickerAnchor && reactingMessageId && (
+        <div 
+          className="reaction-picker"
+          style={{
+            position: 'fixed',
+            top: reactionPickerAnchor.top,
+            left: reactionPickerAnchor.left,
+            zIndex: 1000,
+          }}
+        >
+          <ChatEmojiPicker
+            onEmojiSelect={(emoji) => {
+              // Add reaction to message
+              const cId = [user.uid, userId].sort().join('_');
+              const reactionRef = ref(db, `chats/${cId}/messages/${reactingMessageId}/reactions/${user.uid}`);
+              set(reactionRef, emoji);
+              setShowReactionPicker(false);
+              setReactingMessageId(null);
+              setReactionPickerAnchor(null);
+            }}
+            onClose={() => {
+              setShowReactionPicker(false);
+              setReactingMessageId(null);
+              setReactionPickerAnchor(null);
+            }}
+          />
+        </div>
+      )}
+
+      {/* Media Preview */}
+      {mediaPreview && (
+        <MediaPreview
+          src={mediaPreview.mediaUrl}
+          type={mediaPreview.mediaType}
+          onClose={() => setMediaPreview(null)}
+        />
+      )}
+
+      {/* Video Preview */}
+      {videoPreview && (
+        <CustomVideoPlayer
+          src={videoPreview.mediaUrl}
+          onClose={() => setVideoPreview(null)}
+        />
+      )}
+
+      {/* Edit Message Modal */}
+      {editingMessage && (
+        <EditMessageModal
+          message={editingMessage}
+          onSave={saveEditedMessage}
+          onCancel={() => setEditingMessage(null)}
+        />
+      )}
+
+      {/* Edit Media Caption Modal */}
+      {editingMediaMessage && (
+        <EditMediaCaptionModal
+          message={editingMediaMessage}
+          onSave={saveEditedMediaCaption}
+          onCancel={() => setEditingMediaMessage(null)}
+        />
+      )}
+
+      {/* Confirm Modal */}
+      {confirmModal.isOpen && (
+        <ConfirmModal
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmText={confirmModal.confirmText}
+          cancelText={confirmModal.cancelText}
+          onConfirm={() => {
+            confirmModal.onConfirm?.();
+            closeConfirmModal();
+          }}
+          onCancel={closeConfirmModal}
+        />
+      )}
+
+      {/* Toast Notifications */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
+      )}
+
+      {/* File Size Error Modal */}
+      {fileSizeError && (
+        <Modal
+          title="File Too Large"
+          message={`File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`}
+          onClose={() => setFileSizeError(false)}
+        />
+      )}
     </div>
   );
 };
