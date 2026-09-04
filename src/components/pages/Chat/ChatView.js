@@ -141,7 +141,7 @@ const ChatView = () => {
   const [mediaPreview, setMediaPreview] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
   
-  // ─── NEW: Simple inline message option state ────────────────────
+  // ─── Simple inline message option state ───────────────────────
   const [activeMessageMenuId, setActiveMessageMenuId] = useState(null);
 
   // ─── Typing Indicators ──────────────────────────────────────
@@ -997,7 +997,7 @@ const ChatView = () => {
       originalMessage: msg,
     });
     setNewMessage('');
-    setActiveMessageMenuId(null); // Close inline menu
+    setActiveMessageMenuId(null); 
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [user, partnerProfile, currentUserProfile, location.state?.userName]);
 
@@ -1032,7 +1032,7 @@ const ChatView = () => {
 
     setShowReactionPicker(true);
     setReactingMessageId(messageId);
-    setActiveMessageMenuId(null); // Close inline menu
+    setActiveMessageMenuId(null); 
   }, [showReactionPicker, reactingMessageId]);
 
   const handleReactionSelect = async (emoji, msgIdOverride = null) => {
@@ -1185,7 +1185,7 @@ const ChatView = () => {
 
   const handleDeleteMessage = (msgId) => {
     setDeletingMessageId(msgId);
-    setActiveMessageMenuId(null); // Close inline menu
+    setActiveMessageMenuId(null);
     openConfirmModal({
       title: 'Delete Message',
       message: 'Are you sure you want to delete this message? This action cannot be undone.',
@@ -1562,18 +1562,18 @@ const ChatView = () => {
     const allowDelete = isOwn || (userId === ECHO_AI_ID && isAi);
     
     return (
-      <div className="message-inline-actions">
+      <div className={`message-inline-actions ${isOwn ? 'own' : 'partner'}`}>
         {isAi || userId === ECHO_AI_ID ? null : (
-          <button onClick={(e) => { e.stopPropagation(); handleReact(msg.id); }}>😀</button>
+          <button onClick={(e) => { e.stopPropagation(); handleReact(msg.id); }} title="React">😀</button>
         )}
-        <button onClick={(e) => { e.stopPropagation(); handleReply(msg); }}>↩️</button>
+        <button onClick={(e) => { e.stopPropagation(); handleReply(msg); }} title="Reply">↩️</button>
         {allowEdit && (
-          <button onClick={(e) => { e.stopPropagation(); handleEditMessage(msg); }}>✏️</button>
+          <button onClick={(e) => { e.stopPropagation(); handleEditMessage(msg); }} title="Edit">✏️</button>
         )}
-        <button onClick={(e) => { e.stopPropagation(); handleCopy(msg); }}>📋</button>
-        <button onClick={(e) => { e.stopPropagation(); saveMessageToArchive(msg); }}>🔖</button>
+        <button onClick={(e) => { e.stopPropagation(); handleCopy(msg); }} title="Copy">📋</button>
+        <button onClick={(e) => { e.stopPropagation(); saveMessageToArchive(msg); }} title="Save">🔖</button>
         {allowDelete && (
-          <button onClick={(e) => { e.stopPropagation(); handleDeleteMessage(msg.id); }}>🗑️</button>
+          <button onClick={(e) => { e.stopPropagation(); handleDeleteMessage(msg.id); }} title="Delete">🗑️</button>
         )}
       </div>
     );
@@ -2161,22 +2161,25 @@ const ChatView = () => {
 
         /* Inline Message Actions (Discord Style) */
         .message-inline-menu-wrapper {
-          position: absolute;
-          bottom: -35px;
-          left: 0;
-          right: 0;
           display: flex;
-          justify-content: center;
+          width: 100%;
+          margin-top: 6px;
           z-index: 10;
+        }
+        .message-inline-actions.own {
+          justify-content: flex-end;
+        }
+        .message-inline-actions.partner {
+          justify-content: flex-start;
         }
         .message-inline-actions {
           display: flex;
-          gap: 6px;
+          gap: 4px;
           background: var(--bg-primary, #ffffff);
           border: 1px solid var(--border-color, #e5e7eb);
           padding: 4px 8px;
-          border-radius: 16px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          border-radius: 12px;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.1);
         }
         .message-inline-actions button {
           background: transparent;
