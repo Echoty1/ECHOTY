@@ -32,7 +32,6 @@ import StructuredData from '../../common/StructuredData';
 import Avatar from '../../common/Avatar';
 import ChatMediaMessage from './ChatMediaMessage';
 import AudioPlayer from './AudioPlayer';
-import MessageMenu from './MessageMenu';
 import { saveToEchoArchive, listEchoArchive, removeEchoArchive } from '../../../services/echoArchive';
 import { privateExpiresAt, isTideExpired, tideProgress, formatTideLeft, PRIVATE_TTL_MS } from '../../../utils/echoTides';
 import ReplyPreview from './ReplyPreview';
@@ -142,9 +141,8 @@ const ChatView = () => {
   const [mediaPreview, setMediaPreview] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
   const [hoveredMessageId, setHoveredMessageId] = useState(null);
-
-  // ─── Profile Menu State ──────────────────────────────────────
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
+  const [hoverMenuAnchor, setHoverMenuAnchor] = useState(null); // Discord style hover menu position
+  const [activeHoverMenuId, setActiveHoverMenuId] = useState(null); // Which message has the menu open
 
   // ─── Typing Indicators ──────────────────────────────────────
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
@@ -162,7 +160,6 @@ const ChatView = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showCaptionEmoji, setShowCaptionEmoji] = useState(false);
   const fileInputRef = useRef(null);
-  const wallpaperInputRef = useRef(null); // Ref for wallpaper
   const captionInputRef = useRef(null);
 
   // ─── File size warning modal ──────────────────────────────────
@@ -200,13 +197,6 @@ const ChatView = () => {
   const moreOptionsRef = useRef(null);
   const messageRefs = useRef({});
   const clearedAtRef = useRef(0);
-
-  // ─── NEW: Listen for Profile Menu Trigger from Parent ─────────
-  useEffect(() => {
-    const openMenu = () => setShowProfileMenu(true);
-    window.addEventListener('open-chat-profile-menu', openMenu);
-    return () => window.removeEventListener('open-chat-profile-menu', openMenu);
-  }, []);
 
   // ─── Effects ──────────────────────────────────────────────────
   useEffect(() => {
@@ -400,24 +390,6 @@ const ChatView = () => {
     isNearBottomRef.current = isNear;
     setIsNearBottom(isNear);
   }, []);
-
-  // ─── Profile Menu Handler ──────────────────────────────
-  const handleOpenProfileMenu = () => {
-    // Try to trigger it on the parent header first
-    window.dispatchEvent(new CustomEvent('open-chat-profile-menu'));
-    // Fallback: Also open locally if parent isn't wired up
-    setShowProfileMenu(true);
-  };
-
-  // ─── Wallpaper Handler ─────────────────────────────────
-  const handleWallpaperSelect = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setShowProfileMenu(false); // Close menu after selection
-    // TODO: Apply wallpaper to messagesContainerRef
-    console.log("Wallpaper selected:", file);
-    e.target.value = '';
-  };
 
   // ─── Typing Handler ────────────────────────────────────
   const handleTyping = useCallback(() => {
@@ -1025,6 +997,7 @@ const ChatView = () => {
       originalMessage: msg,
     });
     setNewMessage('');
+    setActiveHoverMenuId(null); // Close hover menu
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [user, partnerProfile, currentUserProfile, location.state?.userName]);
 
@@ -1059,6 +1032,7 @@ const ChatView = () => {
 
     setShowReactionPicker(true);
     setReactingMessageId(messageId);
+    setActiveHoverMenuId(null); // Close hover menu
   }, [showReactionPicker, reactingMessageId]);
 
   const handleReactionSelect = async (emoji, msgIdOverride = null) => {
@@ -1113,7 +1087,6 @@ const ChatView = () => {
       if (window.navigator?.vibrate) {
         window.navigator.vibrate(50);
       }
-      // Open reaction picker on long press
       const msgElement = messageRefs.current[msg.id];
       if (msgElement) {
         const msgRect = msgElement.getBoundingClientRect();
@@ -1135,6 +1108,7 @@ const ChatView = () => {
       }
       setShowReactionPicker(true);
       setReactingMessageId(msg.id);
+      setActiveHoverMenuId(null);
     }, 400);
   };
 
@@ -1146,7 +1120,6 @@ const ChatView = () => {
     const now = Date.now();
     const lastTap = lastTapRef.current;
     if (lastTap.msgId === msg.id && now - lastTap.time < 300) {
-      // Double tap = heart reaction
       handleReactionSelect('❤️', msg.id);
       lastTapRef.current = { time: 0, msgId: null };
     } else {
@@ -1169,6 +1142,7 @@ const ChatView = () => {
       return;
     }
     setEditingMessage(msg);
+    setActiveHoverMenuId(null); // Close hover menu
   };
 
   const saveEditedMessage = async (newText) => {
@@ -1211,6 +1185,7 @@ const ChatView = () => {
 
   const handleDeleteMessage = (msgId) => {
     setDeletingMessageId(msgId);
+    setActiveHoverMenuId(null); // Close hover menu
     openConfirmModal({
       title: 'Delete Message',
       message: 'Are you sure you want to delete this message? This action cannot be undone.',
@@ -1247,6 +1222,7 @@ const ChatView = () => {
     } else {
       set(bookmarkRef, { bookmarkedAt: Date.now() }).catch(() => {});
     }
+    setActiveHoverMenuId(null);
   };
 
   const handleCopy = async (msg) => {
@@ -1263,6 +1239,7 @@ const ChatView = () => {
       document.body.removeChild(ta);
       setToast({ message: 'Copied to clipboard', type: 'success' });
     }
+    setActiveHoverMenuId(null);
   };
 
   const handleEndEcho = () => {
@@ -1630,8 +1607,20 @@ const ChatView = () => {
           ref={(el) => {
             if (el) messageRefs.current[msg.id] = el;
           }}
-          onMouseEnter={() => setHoveredMessageId(msg.id)}
-          onMouseLeave={() => setHoveredMessageId(null)}
+          onMouseEnter={(e) => {
+            setHoveredMessageId(msg.id);
+            const targetEl = e.currentTarget;
+            const rect = targetEl.getBoundingClientRect();
+            setHoverMenuAnchor({
+              top: rect.top + rect.height / 2,
+              left: isOwn ? rect.left - 160 : rect.right + 160
+            });
+            setActiveHoverMenuId(msg.id);
+          }}
+          onMouseLeave={() => {
+            setHoveredMessageId(null);
+            setActiveHoverMenuId(null);
+          }}
           onTouchStart={(e) => handleTouchStart(msg, e)}
           onTouchEnd={() => handleTouchEnd(msg)}
           onTouchMove={handleTouchMove}
@@ -1667,17 +1656,7 @@ const ChatView = () => {
     if (msg.type === 'echomoji') {
       const skinObj = msg.skinId ? getSkinById(msg.skinId) : null;
       return shell(
-        <MessageMenu
-          isOwn={isOwn}
-          canDelete={allowDelete}
-          onDelete={() => handleDeleteMessage(msg.id)}
-          onReply={showReply ? () => handleReply(msg) : null}
-          onEdit={null}
-          onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg.id)}
-          onSave={() => saveMessageToArchive(msg)}
-          saved={!!bookmarkedIds[msg.id]}
-          copyText={null}
-        >
+        <>
           {replyToDisplay && (
             <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />
           )}
@@ -1690,7 +1669,7 @@ const ChatView = () => {
               animated={true}
             />
           </div>
-        </MessageMenu>
+        </>
       );
     }
 
@@ -1744,37 +1723,17 @@ const ChatView = () => {
         }
       }
       return shell(
-        <MessageMenu
-          isOwn={isOwn}
-          canDelete={allowDelete}
-          onDelete={() => handleDeleteMessage(msg.id)}
-          onReply={showReply ? () => handleReply(msg) : null}
-          onEdit={allowEdit ? () => handleEditMessage(msg) : null}
-          onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg.id)}
-          onSave={() => saveMessageToArchive(msg)}
-          saved={!!bookmarkedIds[msg.id]}
-          copyText={null}
-        >
+        <>
           {replyToDisplay && (
             <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />
           )}
           {content}
-        </MessageMenu>
+        </>
       );
     }
 
     return shell(
-      <MessageMenu
-        isOwn={isOwn}
-        canDelete={allowDelete}
-        onDelete={() => handleDeleteMessage(msg.id)}
-        onReply={showReply ? () => handleReply(msg) : null}
-        onEdit={allowEdit ? () => handleEditMessage(msg) : null}
-        onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg.id)}
-        onSave={() => saveMessageToArchive(msg)}
-        saved={!!bookmarkedIds[msg.id]}
-        copyText={copyText}
-      >
+      <>
         {replyToDisplay && (
           <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />
         )}
@@ -1786,7 +1745,7 @@ const ChatView = () => {
           )}
           {msg.isEdited && <span className="message-edited-badge">(edited)</span>}
         </div>
-      </MessageMenu>
+      </>
     );
   };
 
@@ -2189,54 +2148,38 @@ const ChatView = () => {
           0%, 100% { background: transparent; }
           20% { background: rgba(255, 215, 0, 0.3); }
         }
-        .chat-profile-menu-backdrop {
+        
+        /* Discord style hover menu */
+        .message-hover-menu {
           position: fixed;
-          inset: 0;
-          background: rgba(0, 0, 0, 0.5);
-          z-index: 1100;
-        }
-        .chat-profile-menu {
-          position: absolute;
-          top: 0;
-          left: 0;
-          right: 0;
-          z-index: 1101;
-          background: var(--bg-primary, #ffffff);
-          border-radius: 0 0 20px 20px;
-          padding: 20px;
-          box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+          z-index: 1050;
           display: flex;
-          flex-direction: column;
-          gap: 15px;
-          animation: slideDown 0.2s ease-out;
-        }
-        @keyframes slideDown {
-          from { transform: translateY(-100%); opacity: 0; }
-          to { transform: translateY(0); opacity: 1; }
-        }
-        .chat-profile-menu-header {
-          display: flex;
-          align-items: center;
-          gap: 15px;
-        }
-        .chat-profile-menu-close {
-          margin-left: auto;
-          background: none;
-          border: none;
-          font-size: 18px;
-          cursor: pointer;
-        }
-        .chat-inner-profile-header {
-          position: sticky;
-          top: 0;
-          z-index: 10;
+          gap: 4px;
           background: var(--bg-primary, #fff);
-          padding: 10px;
+          border: 1px solid var(--border-color, #e5e7eb);
+          border-radius: 24px;
+          padding: 4px;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+          transform: translate(-50%, -50%);
+          transition: opacity 0.15s ease;
+        }
+        .message-hover-btn {
+          width: 32px;
+          height: 32px;
           display: flex;
           align-items: center;
-          gap: 10px;
+          justify-content: center;
+          border: none;
+          background: transparent;
+          border-radius: 50%;
           cursor: pointer;
-          border-bottom: 1px solid var(--border-color, #eee);
+          font-size: 16px;
+          color: var(--text-secondary, #555);
+          transition: background 0.2s, transform 0.1s;
+        }
+        .message-hover-btn:hover {
+          background: var(--bg-hover, #eee);
+          transform: scale(1.1);
         }
       `}</style>
 
@@ -2253,16 +2196,6 @@ const ChatView = () => {
           )}
 
           <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll}>
-            
-            {/* FALLBACK PROFILE HEADER: Trigger menu if parent header doesn't */}
-            <div className="chat-inner-profile-header" onClick={handleOpenProfileMenu}>
-              <Avatar uid={userId} size="small" />
-              <div>
-                <div style={{ fontWeight: 'bold' }}>{displayName}</div>
-                <div style={{ fontSize: '12px', color: 'green' }}>Online</div>
-              </div>
-            </div>
-
             {loadingMessages && messages.length === 0 ? (
               <div className="chat-skeleton-list">
                 <SkeletonMessage />
@@ -2352,30 +2285,42 @@ const ChatView = () => {
           </div>
         )}
 
-        {/* ─── PROFILE MENU MODAL ─────────────────────────────────────── */}
-        {showProfileMenu && (
-          <div className="chat-profile-menu-backdrop" onClick={() => setShowProfileMenu(false)}>
-            <div className="chat-profile-menu" onClick={(e) => e.stopPropagation()}>
-              <div className="chat-profile-menu-header">
-                <Avatar uid={userId} size="medium" />
-                <div>
-                  <h3>{displayName}</h3>
-                  <p style={{ margin: 0, color: 'var(--text-muted)' }}>Profile</p>
-                </div>
-                <button className="chat-profile-menu-close" onClick={() => setShowProfileMenu(false)}>
-                  <i className="fas fa-times" />
-                </button>
-              </div>
-              
-              <button
-                type="button"
-                className="chat-more-option"
-                onClick={() => wallpaperInputRef.current?.click()}
-              >
-                <i className="fas fa-image" />
-                <span>Choose Chat Wallpaper</span>
-              </button>
-            </div>
+        {/* ─── Discord Style Hover Menu ─────────────────────────── */}
+        {activeHoverMenuId && hoverMenuAnchor && (
+          <div
+            className="message-hover-menu"
+            style={{ top: hoverMenuAnchor.top, left: hoverMenuAnchor.left }}
+            onMouseEnter={(e) => {
+              // Keep menu open while hovering over it
+              const msg = messages.find(m => m.id === activeHoverMenuId);
+              if(msg) setHoveredMessageId(msg.id);
+            }}
+            onMouseLeave={() => setActiveHoverMenuId(null)}
+          >
+            <button
+              className="message-hover-btn"
+              title="Add Reaction"
+              onClick={() => handleReact(activeHoverMenuId)}
+            >
+              😀
+            </button>
+            <button
+              className="message-hover-btn"
+              title="Reply"
+              onClick={() => {
+                const msg = messages.find(m => m.id === activeHoverMenuId);
+                if (msg) handleReply(msg);
+              }}
+            >
+              ↩️
+            </button>
+            <button
+              className="message-hover-btn"
+              title="More Options"
+              onClick={() => setShowMoreOptions(true)}
+            >
+              ⋯
+            </button>
           </div>
         )}
 
@@ -2456,15 +2401,6 @@ const ChatView = () => {
               accept="image/*,video/*"
               style={{ display: 'none' }}
               onChange={handleFileSelect}
-            />
-
-            {/* NEW: Wallpaper file input (Hidden) */}
-            <input
-              type="file"
-              ref={wallpaperInputRef}
-              accept="image/*"
-              style={{ display: 'none' }}
-              onChange={handleWallpaperSelect}
             />
 
             <textarea
