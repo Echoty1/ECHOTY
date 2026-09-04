@@ -32,6 +32,7 @@ import StructuredData from '../../common/StructuredData';
 import Avatar from '../../common/Avatar';
 import ChatMediaMessage from './ChatMediaMessage';
 import AudioPlayer from './AudioPlayer';
+import MessageMenu from './MessageMenu';
 import { saveToEchoArchive, listEchoArchive, removeEchoArchive } from '../../../services/echoArchive';
 import { privateExpiresAt, isTideExpired, tideProgress, formatTideLeft, PRIVATE_TTL_MS } from '../../../utils/echoTides';
 import ReplyPreview from './ReplyPreview';
@@ -142,6 +143,9 @@ const ChatView = () => {
   const [videoPreview, setVideoPreview] = useState(null);
   const [hoveredMessageId, setHoveredMessageId] = useState(null);
 
+  // ─── NEW: Profile Menu State ──────────────────────────────────
+  const [showProfileMenu, setShowProfileMenu] = useState(false);
+
   // ─── NEW: Typing Indicators ──────────────────────────────────
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
   const typingTimeoutRef = useRef(null);
@@ -158,7 +162,7 @@ const ChatView = () => {
   const [uploadProgress, setUploadProgress] = useState(0);
   const [showCaptionEmoji, setShowCaptionEmoji] = useState(false);
   const fileInputRef = useRef(null);
-  const wallpaperInputRef = useRef(null); // NEW: Ref for wallpaper
+  const wallpaperInputRef = useRef(null); // Ref for wallpaper
   const captionInputRef = useRef(null);
 
   // ─── File size warning modal ──────────────────────────────────
@@ -214,7 +218,7 @@ const ChatView = () => {
     return () => clearInterval(id);
   }, []);
 
-  // ─── NEW: Typing Indicator Listener ──────────────────────────
+  // ─── Typing Indicator Listener ──────────────────────────────
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -390,17 +394,23 @@ const ChatView = () => {
     setIsNearBottom(isNear);
   }, []);
 
-  // ─── NEW: Wallpaper Handler (Need to implement logic) ────────
+  // ─── NEW: Profile Menu Handler ──────────────────────────────
+  const handleOpenProfileMenu = () => {
+    setShowProfileMenu(true);
+  };
+
+  // ─── NEW: Wallpaper Handler ─────────────────────────────────
   const handleWallpaperSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setShowProfileMenu(false); // Close menu after selection
     // TODO: Add your wallpaper logic here, e.g. applying the image as background of messagesContainerRef
     // Example: const url = URL.createObjectURL(file); messagesContainerRef.current.style.backgroundImage = `url(${url})`;
     console.log("Wallpaper selected:", file);
     e.target.value = '';
   };
 
-  // ─── NEW: Typing Handler ────────────────────────────────────
+  // ─── Typing Handler ────────────────────────────────────
   const handleTyping = useCallback(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -978,7 +988,7 @@ const ChatView = () => {
     }
   };
 
-  // ─── NEW: Enhanced Reply Handler with Touch Support ──────────
+  // ─── Reply Handler ──────────────────────────────────────────
   const handleReply = useCallback((msg) => {
     const isOwnMsg = String(msg.senderId || '') === String(user?.uid || '');
     const senderName = isOwnMsg
@@ -1007,7 +1017,7 @@ const ChatView = () => {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [user, partnerProfile, currentUserProfile, location.state?.userName]);
 
-  // ─── NEW: Enhanced Reaction Handler with Positioning ─────────
+  // ─── Reaction Handler ─────────────────────────────────────────
   const handleReact = useCallback((messageId) => {
     if (showReactionPicker && reactingMessageId === messageId) {
       setShowReactionPicker(false);
@@ -1085,8 +1095,36 @@ const ChatView = () => {
 
   // ─── Touch Gesture handlers ────────────────────────────────────
   const handleTouchStart = (msg, e) => {
-    // REMOVED: Long press reaction logic. Long press now does nothing.
     if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+    const targetEl = e?.currentTarget || null;
+    const rect = targetEl ? targetEl.getBoundingClientRect() : null;
+    touchTimerRef.current = setTimeout(() => {
+      if (window.navigator?.vibrate) {
+        window.navigator.vibrate(50);
+      }
+      // Open reaction picker on long press
+      const msgElement = messageRefs.current[msg.id];
+      if (msgElement) {
+        const msgRect = msgElement.getBoundingClientRect();
+        const windowHeight = window.innerHeight;
+        const windowWidth = window.innerWidth;
+
+        let top = msgRect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP - REACTION_ARROW_SIZE;
+        let flipped = false;
+
+        if (top < 60) {
+          top = msgRect.bottom + REACTION_BAR_GAP + REACTION_ARROW_SIZE;
+          flipped = true;
+        }
+
+        let left = msgRect.left + msgRect.width / 2 - REACTION_BAR_HALF_WIDTH;
+        left = Math.max(10, Math.min(left, windowWidth - 20));
+
+        setReactionPickerAnchor({ top, left, flipped });
+      }
+      setShowReactionPicker(true);
+      setReactingMessageId(msg.id);
+    }, 400);
   };
 
   const handleTouchEnd = (msg) => {
@@ -1552,6 +1590,11 @@ const ChatView = () => {
       else if (msg.type === 'media' && msg.mediaType !== 'audio') allowEdit = true;
     }
 
+    let copyText = null;
+    if (msg.type === 'text' && msg.text) copyText = msg.text;
+
+    const allowDelete = isOwn || (userId === ECHO_AI_ID && (isOwn || isAi));
+
     const handleMediaClick = () => {
       if (msg.type === 'media') {
         if (msg.mediaType === 'video') {
@@ -1613,7 +1656,17 @@ const ChatView = () => {
     if (msg.type === 'echomoji') {
       const skinObj = msg.skinId ? getSkinById(msg.skinId) : null;
       return shell(
-        <>
+        <MessageMenu
+          isOwn={isOwn}
+          canDelete={allowDelete}
+          onDelete={() => handleDeleteMessage(msg.id)}
+          onReply={showReply ? () => handleReply(msg) : null}
+          onEdit={null}
+          onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg.id)}
+          onSave={() => saveMessageToArchive(msg)}
+          saved={!!bookmarkedIds[msg.id]}
+          copyText={null}
+        >
           {replyToDisplay && (
             <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />
           )}
@@ -1626,7 +1679,7 @@ const ChatView = () => {
               animated={true}
             />
           </div>
-        </>
+        </MessageMenu>
       );
     }
 
@@ -1680,17 +1733,37 @@ const ChatView = () => {
         }
       }
       return shell(
-        <>
+        <MessageMenu
+          isOwn={isOwn}
+          canDelete={allowDelete}
+          onDelete={() => handleDeleteMessage(msg.id)}
+          onReply={showReply ? () => handleReply(msg) : null}
+          onEdit={allowEdit ? () => handleEditMessage(msg) : null}
+          onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg.id)}
+          onSave={() => saveMessageToArchive(msg)}
+          saved={!!bookmarkedIds[msg.id]}
+          copyText={null}
+        >
           {replyToDisplay && (
             <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />
           )}
           {content}
-        </>
+        </MessageMenu>
       );
     }
 
     return shell(
-      <>
+      <MessageMenu
+        isOwn={isOwn}
+        canDelete={allowDelete}
+        onDelete={() => handleDeleteMessage(msg.id)}
+        onReply={showReply ? () => handleReply(msg) : null}
+        onEdit={allowEdit ? () => handleEditMessage(msg) : null}
+        onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg.id)}
+        onSave={() => saveMessageToArchive(msg)}
+        saved={!!bookmarkedIds[msg.id]}
+        copyText={copyText}
+      >
         {replyToDisplay && (
           <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />
         )}
@@ -1702,7 +1775,7 @@ const ChatView = () => {
           )}
           {msg.isEdited && <span className="message-edited-badge">(edited)</span>}
         </div>
-      </>
+      </MessageMenu>
     );
   };
 
@@ -2105,6 +2178,43 @@ const ChatView = () => {
           0%, 100% { background: transparent; }
           20% { background: rgba(255, 215, 0, 0.3); }
         }
+        .chat-profile-menu-backdrop {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.5);
+          z-index: 1100;
+        }
+        .chat-profile-menu {
+          position: absolute;
+          top: 0;
+          left: 0;
+          right: 0;
+          z-index: 1101;
+          background: var(--bg-primary, #ffffff);
+          border-radius: 0 0 20px 20px;
+          padding: 20px;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+          display: flex;
+          flex-direction: column;
+          gap: 15px;
+          animation: slideDown 0.2s ease-out;
+        }
+        @keyframes slideDown {
+          from { transform: translateY(-100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        .chat-profile-menu-header {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+        }
+        .chat-profile-menu-close {
+          margin-left: auto;
+          background: none;
+          border: none;
+          font-size: 18px;
+          cursor: pointer;
+        }
       `}</style>
 
       <SEO title={`Chat with ${displayName}`} description={`Chat with ${displayName} on ECHO.`} />
@@ -2209,6 +2319,33 @@ const ChatView = () => {
           </div>
         )}
 
+        {/* ─── NEW: Profile Menu Trigger & Modal ─────────────────────────── */}
+        {showProfileMenu && (
+          <div className="chat-profile-menu-backdrop" onClick={() => setShowProfileMenu(false)}>
+            <div className="chat-profile-menu" onClick={(e) => e.stopPropagation()}>
+              <div className="chat-profile-menu-header">
+                <Avatar uid={userId} size="medium" />
+                <div>
+                  <h3>{displayName}</h3>
+                  <p style={{ margin: 0, color: 'var(--text-muted)' }}>Profile</p>
+                </div>
+                <button className="chat-profile-menu-close" onClick={() => setShowProfileMenu(false)}>
+                  <i className="fas fa-times" />
+                </button>
+              </div>
+              
+              <button
+                type="button"
+                className="chat-more-option"
+                onClick={() => wallpaperInputRef.current?.click()}
+              >
+                <i className="fas fa-image" />
+                <span>Choose Chat Wallpaper</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
           {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
           <div className="chat-input-row">
@@ -2235,16 +2372,6 @@ const ChatView = () => {
               title="Voice note"
             >
               <i className="fas fa-microphone" />
-            </button>
-
-            {/* NEW: Choose Wallpaper button */}
-            <button
-              type="button"
-              className="chat-wallpaper-btn"
-              onClick={() => wallpaperInputRef.current?.click()}
-              title="Choose Wallpaper"
-            >
-              🖼️
             </button>
 
             <div className="chat-more-wrapper" ref={moreOptionsRef}>
