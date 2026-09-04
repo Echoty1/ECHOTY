@@ -143,10 +143,10 @@ const ChatView = () => {
   const [videoPreview, setVideoPreview] = useState(null);
   const [hoveredMessageId, setHoveredMessageId] = useState(null);
 
-  // ─── NEW: Profile Menu State ──────────────────────────────────
+  // ─── Profile Menu State ──────────────────────────────────────
   const [showProfileMenu, setShowProfileMenu] = useState(false);
 
-  // ─── NEW: Typing Indicators ──────────────────────────────────
+  // ─── Typing Indicators ──────────────────────────────────────
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
   const typingTimeoutRef = useRef(null);
 
@@ -200,6 +200,13 @@ const ChatView = () => {
   const moreOptionsRef = useRef(null);
   const messageRefs = useRef({});
   const clearedAtRef = useRef(0);
+
+  // ─── NEW: Listen for Profile Menu Trigger from Parent ─────────
+  useEffect(() => {
+    const openMenu = () => setShowProfileMenu(true);
+    window.addEventListener('open-chat-profile-menu', openMenu);
+    return () => window.removeEventListener('open-chat-profile-menu', openMenu);
+  }, []);
 
   // ─── Effects ──────────────────────────────────────────────────
   useEffect(() => {
@@ -394,18 +401,20 @@ const ChatView = () => {
     setIsNearBottom(isNear);
   }, []);
 
-  // ─── NEW: Profile Menu Handler ──────────────────────────────
+  // ─── Profile Menu Handler ──────────────────────────────
   const handleOpenProfileMenu = () => {
+    // Try to trigger it on the parent header first
+    window.dispatchEvent(new CustomEvent('open-chat-profile-menu'));
+    // Fallback: Also open locally if parent isn't wired up
     setShowProfileMenu(true);
   };
 
-  // ─── NEW: Wallpaper Handler ─────────────────────────────────
+  // ─── Wallpaper Handler ─────────────────────────────────
   const handleWallpaperSelect = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setShowProfileMenu(false); // Close menu after selection
-    // TODO: Add your wallpaper logic here, e.g. applying the image as background of messagesContainerRef
-    // Example: const url = URL.createObjectURL(file); messagesContainerRef.current.style.backgroundImage = `url(${url})`;
+    // TODO: Apply wallpaper to messagesContainerRef
     console.log("Wallpaper selected:", file);
     e.target.value = '';
   };
@@ -462,7 +471,7 @@ const ChatView = () => {
       };
     }
 
-    setMessages((prev) => [...prev, optimisticMsg]);
+    setMessages((prev) => sortMessages([...prev, optimisticMsg]));
     prevMsgCountRef.current += 1;
     if (isNearBottomRef.current) {
       requestAnimationFrame(() => scrollToBottom(true));
@@ -514,22 +523,22 @@ const ChatView = () => {
         }
         const data = await response.json();
         if (data.reply) {
-          setMessages((prev) => prev.concat({
+          setMessages((prev) => sortMessages(prev.concat({
             id: `ai_${Date.now()}`,
             senderId: ECHO_AI_ID,
             text: data.reply,
             timestamp: Date.now(),
             type: 'text',
-          }));
+          })));
         }
       } catch (err) {
-        setMessages((prev) => prev.concat({
+        setMessages((prev) => sortMessages(prev.concat({
           id: `ai_err_${Date.now()}`,
           senderId: ECHO_AI_ID,
           text: 'ECHO AI could not reply. Check that the backend is running.',
           timestamp: Date.now(),
           type: 'text',
-        }));
+        })));
       } finally {
         setIsAILoading(false);
       }
@@ -650,7 +659,8 @@ const ChatView = () => {
       setReplyTo(null);
     }
 
-    setMessages((prev) => [...prev, optimisticMsg]);
+    setMessages((prev) => sortMessages([...prev, optimisticMsg]));
+    
     setPreviewUrl(null);
     setSelectedFile(null);
     setCaptionText('');
@@ -688,11 +698,11 @@ const ChatView = () => {
       }
       await set(newMsgRef, realMsg);
       setMessages((prev) =>
-        prev.map((m) =>
+        sortMessages(prev.map((m) =>
           m.id === tempId
             ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined }
             : m
-        )
+        ))
       );
       URL.revokeObjectURL(blobUrl);
 
@@ -783,7 +793,8 @@ const ChatView = () => {
       };
       setReplyTo(null);
     }
-    setMessages((prev) => [...prev, optimisticMsg]);
+    
+    setMessages((prev) => sortMessages([...prev, optimisticMsg]));
 
     try {
       const formData = new FormData();
@@ -840,11 +851,11 @@ const ChatView = () => {
       }
       await set(newMsgRef, realMsg);
       setMessages((prev) =>
-        prev.map((m) =>
+        sortMessages(prev.map((m) =>
           m.id === tempId
             ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined }
             : m
-        )
+        ))
       );
       URL.revokeObjectURL(blobUrl);
 
@@ -2215,6 +2226,18 @@ const ChatView = () => {
           font-size: 18px;
           cursor: pointer;
         }
+        .chat-inner-profile-header {
+          position: sticky;
+          top: 0;
+          z-index: 10;
+          background: var(--bg-primary, #fff);
+          padding: 10px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          cursor: pointer;
+          border-bottom: 1px solid var(--border-color, #eee);
+        }
       `}</style>
 
       <SEO title={`Chat with ${displayName}`} description={`Chat with ${displayName} on ECHO.`} />
@@ -2230,6 +2253,16 @@ const ChatView = () => {
           )}
 
           <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll}>
+            
+            {/* FALLBACK PROFILE HEADER: Trigger menu if parent header doesn't */}
+            <div className="chat-inner-profile-header" onClick={handleOpenProfileMenu}>
+              <Avatar uid={userId} size="small" />
+              <div>
+                <div style={{ fontWeight: 'bold' }}>{displayName}</div>
+                <div style={{ fontSize: '12px', color: 'green' }}>Online</div>
+              </div>
+            </div>
+
             {loadingMessages && messages.length === 0 ? (
               <div className="chat-skeleton-list">
                 <SkeletonMessage />
@@ -2319,7 +2352,7 @@ const ChatView = () => {
           </div>
         )}
 
-        {/* ─── NEW: Profile Menu Trigger & Modal ─────────────────────────── */}
+        {/* ─── PROFILE MENU MODAL ─────────────────────────────────────── */}
         {showProfileMenu && (
           <div className="chat-profile-menu-backdrop" onClick={() => setShowProfileMenu(false)}>
             <div className="chat-profile-menu" onClick={(e) => e.stopPropagation()}>
@@ -2425,7 +2458,7 @@ const ChatView = () => {
               onChange={handleFileSelect}
             />
 
-            {/* NEW: Wallpaper file input */}
+            {/* NEW: Wallpaper file input (Hidden) */}
             <input
               type="file"
               ref={wallpaperInputRef}
