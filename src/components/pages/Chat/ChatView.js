@@ -29,6 +29,7 @@ import { cacheMedia } from '../../../utils/mediaCache';
 import { VideoAudioProvider } from '../../../contexts/VideoAudioContext';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
+import Avatar from '../../common/Avatar';
 import ChatMediaMessage from './ChatMediaMessage';
 import AudioPlayer from './AudioPlayer';
 import MessageMenu from './MessageMenu';
@@ -64,6 +65,18 @@ const REACTION_BAR_HEIGHT = 48;
 const REACTION_BAR_GAP = 12;
 const REACTION_ARROW_SIZE = 12;
 const REACTION_BAR_HALF_WIDTH = 150;
+
+// ─── Quick Responses ────────────────────────────────────────────
+const QUICK_RESPONSES = [
+  '👍 Thanks!',
+  '😊 Sounds good',
+  '✅ Will do',
+  '📌 Noted',
+  '⏰ Let me check',
+  '👋 Hey!',
+  '💯 Agreed',
+  '🙏 Appreciate it'
+];
 
 const sanitizeName = (rawName, userId) => {
   if (!rawName) return 'User';
@@ -109,7 +122,6 @@ const formatReactionCount = (n) => {
   return String(count);
 };
 
-// ─── QUICK FIX: Add handleKeyDown function ────────────────────
 const ChatView = () => {
   const { userId } = useParams();
   const { user } = useAuth();
@@ -143,7 +155,28 @@ const ChatView = () => {
   const [videoPreview, setVideoPreview] = useState(null);
   const [hoveredMessageId, setHoveredMessageId] = useState(null);
 
-  // Touch gesture refs
+  // ─── NEW: Typing Indicators ──────────────────────────────────
+  const [partnerIsTyping, setPartnerIsTyping] = useState(false);
+  const typingTimeoutRef = useRef(null);
+
+  // ─── NEW: Message Search ─────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSearch, setShowSearch] = useState(false);
+
+  // ─── NEW: Quick Responses ────────────────────────────────────
+  const [showQuickResponses, setShowQuickResponses] = useState(false);
+
+  // ─── NEW: Dark Mode ──────────────────────────────────────────
+  const [darkMode, setDarkMode] = useState(() => {
+    try {
+      return localStorage.getItem('echo-dark-mode') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  // ─── Touch gesture refs ──────────────────────────────────────
   const touchTimerRef = useRef(null);
   const lastTapRef = useRef({ time: 0, msgId: null });
 
@@ -209,6 +242,28 @@ const ChatView = () => {
     const id = setInterval(() => setTideTick(Date.now()), 30000);
     return () => clearInterval(id);
   }, []);
+
+  // ─── NEW: Dark Mode Effect ──────────────────────────────────
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', darkMode ? 'dark' : 'light');
+    localStorage.setItem('echo-dark-mode', String(darkMode));
+  }, [darkMode]);
+
+  // ─── NEW: Typing Indicator Listener ──────────────────────────
+  useEffect(() => {
+    if (!user?.uid || !userId) return;
+    const cId = [user.uid, userId].sort().join('_');
+    const typingRef = ref(db, `chats/${cId}/typing/${userId}`);
+    const unsub = onValue(typingRef, (snap) => {
+      const data = snap.val();
+      if (data?.isTyping && data?.timestamp > Date.now() - 3000) {
+        setPartnerIsTyping(true);
+      } else {
+        setPartnerIsTyping(false);
+      }
+    });
+    return () => unsub();
+  }, [user?.uid, userId]);
 
   // ─── Helper Functions ────────────────────────────────────────
   const pruneExpired = async (list, cId) => {
@@ -370,13 +425,51 @@ const ChatView = () => {
     setIsNearBottom(isNear);
   }, []);
 
-  // ─── QUICK FIX: Add handleKeyDown function ────────────────────
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendText(e);
+  // ─── NEW: Toggle Dark Mode ──────────────────────────────────
+  const toggleDarkMode = () => setDarkMode(prev => !prev);
+
+  // ─── NEW: Message Search ────────────────────────────────────
+  const handleSearch = useCallback((query) => {
+    setSearchQuery(query);
+    if (!query.trim()) {
+      setSearchResults([]);
+      return;
+    }
+    const results = messages.filter(msg => 
+      msg.text?.toLowerCase().includes(query.toLowerCase()) ||
+      msg.caption?.toLowerCase().includes(query.toLowerCase())
+    );
+    setSearchResults(results);
+  }, [messages]);
+
+  // ─── NEW: Jump to Search Result ────────────────────────────
+  const jumpToSearchResult = (messageId) => {
+    const el = messageRefs.current[messageId];
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.classList.add('highlight-flash');
+      setTimeout(() => el.classList.remove('highlight-flash'), 2000);
     }
   };
+
+  // ─── NEW: Quick Response Handler ────────────────────────────
+  const handleQuickResponse = (response) => {
+    setNewMessage(response);
+    setShowQuickResponses(false);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  // ─── NEW: Typing Handler ────────────────────────────────────
+  const handleTyping = useCallback(() => {
+    if (!user?.uid || !userId) return;
+    const cId = [user.uid, userId].sort().join('_');
+    const typingRef = ref(db, `chats/${cId}/typing/${user.uid}`);
+    set(typingRef, { isTyping: true, timestamp: Date.now() });
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+    typingTimeoutRef.current = setTimeout(() => {
+      set(typingRef, { isTyping: false });
+    }, 2000);
+  }, [user?.uid, userId]);
 
   // ─── Message Handlers ────────────────────────────────────────
   const handleSendText = async (e) => {
@@ -944,11 +1037,13 @@ const ChatView = () => {
     }
   };
 
-  const handleReply = (msg) => {
+  // ─── NEW: Enhanced Reply Handler with Touch Support ──────────
+  const handleReply = useCallback((msg) => {
     const isOwnMsg = String(msg.senderId || '') === String(user?.uid || '');
     const senderName = isOwnMsg
       ? (currentUserProfile?.name || 'You')
       : (partnerProfile?.name || location.state?.userName || 'User');
+    
     let textSnippet;
     if (msg.type === 'media') {
       if (msg.mediaType === 'video') textSnippet = '🎬 Video';
@@ -959,6 +1054,7 @@ const ChatView = () => {
     } else {
       textSnippet = msg.text || 'Message';
     }
+    
     setReplyTo({
       messageId: msg.id,
       senderName: senderName,
@@ -968,6 +1064,139 @@ const ChatView = () => {
     });
     setNewMessage('');
     setTimeout(() => inputRef.current?.focus(), 100);
+  }, [user, partnerProfile, currentUserProfile, location.state?.userName]);
+
+  // ─── NEW: Enhanced Reaction Handler with Positioning ─────────
+  const handleReact = useCallback((messageId) => {
+    if (showReactionPicker && reactingMessageId === messageId) {
+      setShowReactionPicker(false);
+      setReactingMessageId(null);
+      setReactionPickerAnchor(null);
+      return;
+    }
+
+    const msgElement = messageRefs.current[messageId];
+    if (msgElement) {
+      const rect = msgElement.getBoundingClientRect();
+      const windowHeight = window.innerHeight;
+      const windowWidth = window.innerWidth;
+
+      let top = rect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP - REACTION_ARROW_SIZE;
+      let flipped = false;
+
+      if (top < 60) {
+        top = rect.bottom + REACTION_BAR_GAP + REACTION_ARROW_SIZE;
+        flipped = true;
+      }
+
+      let left = rect.left + rect.width / 2 - REACTION_BAR_HALF_WIDTH;
+      left = Math.max(10, Math.min(left, windowWidth - 20));
+
+      setReactionPickerAnchor({ top, left, flipped });
+    }
+
+    setShowReactionPicker(true);
+    setReactingMessageId(messageId);
+  }, [showReactionPicker, reactingMessageId]);
+
+  const handleReactionSelect = async (emoji, msgIdOverride = null) => {
+    setShowReactionPicker(false);
+    setReactionPickerAnchor(null);
+    const targetId = msgIdOverride || reactingMessageId;
+    if (!targetId || !user?.uid || !userId) return;
+    const cId = [user.uid, userId].sort().join('_');
+    const reactionRef = ref(db, `chats/${cId}/messages/${targetId}/reactions/${user.uid}`);
+    try {
+      const currentMsg = messages.find((m) => m.id === targetId);
+      const currentReaction = currentMsg?.reactions?.[user.uid];
+      if (currentReaction === emoji) {
+        await remove(reactionRef);
+      } else {
+        await set(reactionRef, emoji);
+      }
+      setReactingMessageId(null);
+    } catch (err) {
+      console.warn('Reaction error:', err);
+      if (!err.message?.includes('PERMISSION_DENIED')) {
+        alert('Failed to react. Please try again.');
+      }
+    }
+  };
+
+  const closeReactionPicker = () => {
+    setShowReactionPicker(false);
+    setReactingMessageId(null);
+    setReactionPickerAnchor(null);
+  };
+
+  // Close reaction picker on scroll/resize
+  useEffect(() => {
+    if (!showReactionPicker) return;
+    const container = messagesContainerRef.current;
+    const onDismiss = () => closeReactionPicker();
+    if (container) container.addEventListener('scroll', onDismiss);
+    window.addEventListener('resize', onDismiss);
+    return () => {
+      if (container) container.removeEventListener('scroll', onDismiss);
+      window.removeEventListener('resize', onDismiss);
+    };
+  }, [showReactionPicker]);
+
+  // ─── Touch Gesture handlers ────────────────────────────────────
+  const handleTouchStart = (msg, e) => {
+    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+    const targetEl = e?.currentTarget || null;
+    const rect = targetEl ? targetEl.getBoundingClientRect() : null;
+    touchTimerRef.current = setTimeout(() => {
+      if (window.navigator?.vibrate) {
+        window.navigator.vibrate(50);
+      }
+      // Open reaction picker on long press
+      const msgElement = messageRefs.current[msg.id];
+      if (msgElement) {
+        const msgRect = msgElement.getBoundingClientRect();
+        const windowHeight = window.innerHeight;
+        const windowWidth = window.innerWidth;
+
+        let top = msgRect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP - REACTION_ARROW_SIZE;
+        let flipped = false;
+
+        if (top < 60) {
+          top = msgRect.bottom + REACTION_BAR_GAP + REACTION_ARROW_SIZE;
+          flipped = true;
+        }
+
+        let left = msgRect.left + msgRect.width / 2 - REACTION_BAR_HALF_WIDTH;
+        left = Math.max(10, Math.min(left, windowWidth - 20));
+
+        setReactionPickerAnchor({ top, left, flipped });
+      }
+      setShowReactionPicker(true);
+      setReactingMessageId(msg.id);
+    }, 400);
+  };
+
+  const handleTouchEnd = (msg) => {
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current);
+      touchTimerRef.current = null;
+    }
+    const now = Date.now();
+    const lastTap = lastTapRef.current;
+    if (lastTap.msgId === msg.id && now - lastTap.time < 300) {
+      // Double tap = heart reaction
+      handleReactionSelect('❤️', msg.id);
+      lastTapRef.current = { time: 0, msgId: null };
+    } else {
+      lastTapRef.current = { time: now, msgId: msg.id };
+    }
+  };
+
+  const handleTouchMove = () => {
+    if (touchTimerRef.current) {
+      clearTimeout(touchTimerRef.current);
+      touchTimerRef.current = null;
+    }
   };
 
   const handleEditMessage = (msg) => {
@@ -999,7 +1228,7 @@ const ChatView = () => {
     }
   };
 
-  const saveMediaCaption = async (newCaption) => {
+  const saveEditedMediaCaption = async (newCaption) => {
     if (!editingMediaMessage || !user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
     const messageId = editingMediaMessage.id;
@@ -1049,121 +1278,28 @@ const ChatView = () => {
       ...prev,
       [msgId]: !prev[msgId],
     }));
-  };
-
-  // ─── Quick-reaction bar positioning ────────────────────────────
-  const openReactionPickerFor = (msg, rectOverride = null) => {
-    if (!msg) return;
-    let rect = rectOverride;
-    if (!rect) {
-      const el = messageRefs.current[msg.id];
-      rect = el ? el.getBoundingClientRect() : null;
-    }
-
-    let top = 96;
-    let left = window.innerWidth / 2;
-    let flipped = false;
-
-    if (rect) {
-      const barTopAbove = rect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP;
-      flipped = barTopAbove < 8;
-      top = flipped ? rect.bottom + REACTION_BAR_GAP : barTopAbove;
-
-      const maxTop = window.innerHeight - REACTION_BAR_HEIGHT - 8;
-      if (top > maxTop) top = maxTop;
-      if (top < 8) top = 8;
-
-      left = rect.left + rect.width / 2;
-      const minLeft = 8 + REACTION_BAR_HALF_WIDTH;
-      const maxLeft = window.innerWidth - 8 - REACTION_BAR_HALF_WIDTH;
-      if (left < minLeft) left = minLeft;
-      if (left > maxLeft) left = maxLeft;
-    }
-
-    setReactionPickerAnchor({ top, left, flipped });
-    setReactingMessageId(msg.id);
-    setShowReactionPicker(true);
-  };
-
-  const handleReact = (msg) => {
-    openReactionPickerFor(msg);
-  };
-
-  const handleReactionSelect = async (emoji, msgIdOverride = null) => {
-    setShowReactionPicker(false);
-    setReactionPickerAnchor(null);
-    const targetId = msgIdOverride || reactingMessageId;
-    if (!targetId || !user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
-    const reactionRef = ref(db, `chats/${cId}/messages/${targetId}/reactions/${user.uid}`);
-    try {
-      const currentMsg = messages.find((m) => m.id === targetId);
-      const currentReaction = currentMsg?.reactions?.[user.uid];
-      if (currentReaction === emoji) {
-        await remove(reactionRef);
-      } else {
-        await set(reactionRef, emoji);
-      }
-      setReactingMessageId(null);
-    } catch (err) {
-      console.warn('Reaction error:', err);
-      if (!err.message?.includes('PERMISSION_DENIED')) {
-        alert('Failed to react. Please try again.');
-      }
-    }
-  };
-
-  const closeReactionPicker = () => {
-    setShowReactionPicker(false);
-    setReactingMessageId(null);
-    setReactionPickerAnchor(null);
-  };
-
-  // Close the floating bar if the list scrolls or the viewport resizes
-  useEffect(() => {
-    if (!showReactionPicker) return;
-    const container = messagesContainerRef.current;
-    const onDismiss = () => closeReactionPicker();
-    if (container) container.addEventListener('scroll', onDismiss);
-    window.addEventListener('resize', onDismiss);
-    return () => {
-      if (container) container.removeEventListener('scroll', onDismiss);
-      window.removeEventListener('resize', onDismiss);
-    };
-  }, [showReactionPicker]);
-
-  // ─── Touch Gesture handlers ────────────────────────────────────
-  const handleTouchStart = (msg, e) => {
-    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-    const targetEl = e?.currentTarget || null;
-    const rect = targetEl ? targetEl.getBoundingClientRect() : null;
-    touchTimerRef.current = setTimeout(() => {
-      if (window.navigator?.vibrate) {
-        window.navigator.vibrate(50);
-      }
-      openReactionPickerFor(msg, rect);
-    }, 400);
-  };
-
-  const handleTouchEnd = (msg) => {
-    if (touchTimerRef.current) {
-      clearTimeout(touchTimerRef.current);
-      touchTimerRef.current = null;
-    }
-    const now = Date.now();
-    const lastTap = lastTapRef.current;
-    if (lastTap.msgId === msg.id && now - lastTap.time < 300) {
-      handleReactionSelect('❤️', msg.id);
-      lastTapRef.current = { time: 0, msgId: null };
+    const bookmarkRef = ref(db, `userChats/${user.uid}/${userId}/bookmarks/${msgId}`);
+    if (bookmarkedIds[msgId]) {
+      remove(bookmarkRef).catch(() => {});
     } else {
-      lastTapRef.current = { time: now, msgId: msg.id };
+      set(bookmarkRef, { bookmarkedAt: Date.now() }).catch(() => {});
     }
   };
 
-  const handleTouchMove = () => {
-    if (touchTimerRef.current) {
-      clearTimeout(touchTimerRef.current);
-      touchTimerRef.current = null;
+  const handleCopy = async (msg) => {
+    const text = msg.type === 'media' ? msg.mediaUrl || msg.caption || '' : msg.text || '';
+    try {
+      await navigator.clipboard.writeText(text);
+      setToast({ message: 'Copied to clipboard', type: 'success' });
+    } catch (_) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      setToast({ message: 'Copied to clipboard', type: 'success' });
     }
   };
 
@@ -1209,9 +1345,10 @@ const ChatView = () => {
           });
           setEnded(true);
           setEndedByName(myName);
+          setToast({ message: 'ECHO ended successfully', type: 'success' });
         } catch (err) {
           console.error('Failed to end ECHO:', err);
-          alert('Failed to end ECHO. Please try again.');
+          setToast({ message: 'Failed to end ECHO. Please try again.', type: 'error' });
         }
       },
     });
@@ -1234,19 +1371,6 @@ const ChatView = () => {
     const t = setTimeout(() => jumpToMessage(focusId), 250);
     return () => clearTimeout(t);
   }, [location.search, messages.length]);
-
-  const openUserChat = (senderId) => {
-    if (!senderId || senderId === user?.uid || senderId === 'system') return;
-    const profile = getProfile?.(senderId);
-    navigate(`/chat/${senderId}`, {
-      state: {
-        fromCommunity: location.state?.fromCommunity || null,
-        userName: profile?.name || 'User',
-        userAvatar: profile?.avatar || '',
-        returnTo: 'chat',
-      },
-    });
-  };
 
   const handleEmojiSelect = (emoji) => {
     const target = focusedField.current;
@@ -1279,6 +1403,13 @@ const ChatView = () => {
     } else {
       setNewMessage((prev) => prev + emoji);
       setTimeout(() => inputRef.current?.focus(), 0);
+    }
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendText(e);
     }
   };
 
@@ -1580,7 +1711,7 @@ const ChatView = () => {
           onDelete={() => handleDeleteMessage(msg.id)}
           onReply={showReply ? () => handleReply(msg) : null}
           onEdit={null}
-          onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg)}
+          onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg.id)}
           onSave={() => saveMessageToArchive(msg)}
           saved={!!bookmarkedIds[msg.id]}
           copyText={null}
@@ -1657,7 +1788,7 @@ const ChatView = () => {
           onDelete={() => handleDeleteMessage(msg.id)}
           onReply={showReply ? () => handleReply(msg) : null}
           onEdit={allowEdit ? () => handleEditMessage(msg) : null}
-          onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg)}
+          onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg.id)}
           onSave={() => saveMessageToArchive(msg)}
           saved={!!bookmarkedIds[msg.id]}
           copyText={null}
@@ -1677,7 +1808,7 @@ const ChatView = () => {
         onDelete={() => handleDeleteMessage(msg.id)}
         onReply={showReply ? () => handleReply(msg) : null}
         onEdit={allowEdit ? () => handleEditMessage(msg) : null}
-        onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg)}
+        onReact={isAi || userId === ECHO_AI_ID ? null : () => handleReact(msg.id)}
         onSave={() => saveMessageToArchive(msg)}
         saved={!!bookmarkedIds[msg.id]}
         copyText={copyText}
@@ -2089,11 +2220,18 @@ const ChatView = () => {
           transform: translateX(-50%) rotate(45deg);
           z-index: 999;
         }
+        .highlight-flash {
+          animation: highlightFlash 1.6s ease;
+        }
+        @keyframes highlightFlash {
+          0%, 100% { background: transparent; }
+          20% { background: rgba(255, 215, 0, 0.3); }
+        }
       `}</style>
 
       <SEO title={`Chat with ${displayName}`} description={`Chat with ${displayName} on ECHO.`} />
       <StructuredData />
-      <div className="chat-view">
+      <div className={`chat-view ${darkMode ? 'dark-theme' : 'light-theme'}`}>
         <VideoAudioProvider>
           {chatBgEnabled && (
             <div className="echo-rings-bg is-active" aria-hidden="true">
@@ -2127,9 +2265,38 @@ const ChatView = () => {
                 </div>
               </div>
             )}
+            {partnerIsTyping && (
+              <div className="typing-indicator-container">
+                <span className="typing-dot" />
+                <span className="typing-dot" />
+                <span className="typing-dot" />
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
         </VideoAudioProvider>
+
+        {showSearch && (
+          <div className="search-overlay">
+            <input
+              type="text"
+              placeholder="Search messages..."
+              value={searchQuery}
+              onChange={(e) => handleSearch(e.target.value)}
+              autoFocus
+            />
+            <button onClick={() => setShowSearch(false)}>✕</button>
+            {searchResults.length > 0 && (
+              <div className="search-results">
+                {searchResults.map((msg) => (
+                  <div key={msg.id} onClick={() => jumpToSearchResult(msg.id)}>
+                    {msg.text || msg.caption || 'Media'}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {showEmojiPicker && (
           <ChatEmojiPicker
@@ -2170,6 +2337,22 @@ const ChatView = () => {
           </>
         )}
 
+        {reactionViewer && (
+          <div className="reaction-viewer-modal" onClick={() => setReactionViewer(null)}>
+            <div className="reaction-viewer-content" onClick={(e) => e.stopPropagation()}>
+              <h3>{reactionViewer.emoji} Reactions</h3>
+              <div className="reaction-viewer-list">
+                {reactionViewer.userIds.map((uid) => (
+                  <div key={uid} className="reaction-viewer-item">
+                    <Avatar uid={uid} size="small" />
+                    <span>{getProfile(uid)?.name || 'User'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
           {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
           <div className="chat-input-row">
@@ -2196,6 +2379,33 @@ const ChatView = () => {
               title="Voice note"
             >
               <i className="fas fa-microphone" />
+            </button>
+
+            <button
+              type="button"
+              className="chat-quick-reply-btn"
+              onClick={() => setShowQuickResponses(!showQuickResponses)}
+              title="Quick replies"
+            >
+              ⚡
+            </button>
+
+            <button
+              type="button"
+              className="chat-search-btn"
+              onClick={() => setShowSearch(!showSearch)}
+              title="Search"
+            >
+              🔍
+            </button>
+
+            <button
+              type="button"
+              className="chat-dark-mode-btn"
+              onClick={toggleDarkMode}
+              title={darkMode ? 'Light mode' : 'Dark mode'}
+            >
+              {darkMode ? '☀️' : '🌙'}
             </button>
 
             <div className="chat-more-wrapper" ref={moreOptionsRef}>
@@ -2254,7 +2464,10 @@ const ChatView = () => {
               className="chat-input"
               placeholder={`Message ${displayName}...`}
               value={newMessage}
-              onChange={(e) => setNewMessage(e.target.value)}
+              onChange={(e) => {
+                setNewMessage(e.target.value);
+                handleTyping();
+              }}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               rows={1}
@@ -2282,6 +2495,21 @@ const ChatView = () => {
               <i className="fas fa-paper-plane" />
             </button>
           </div>
+
+          {showQuickResponses && (
+            <div className="quick-responses">
+              {QUICK_RESPONSES.map((response) => (
+                <button
+                  key={response}
+                  type="button"
+                  className="quick-response-btn"
+                  onClick={() => handleQuickResponse(response)}
+                >
+                  {response}
+                </button>
+              ))}
+            </div>
+          )}
         </form>
 
         {showVoiceRecorder && (
@@ -2302,7 +2530,7 @@ const ChatView = () => {
           onClose={() => setEditingMediaMessage(null)}
           currentCaption={editingMediaMessage?.caption || ''}
           mediaType={editingMediaMessage?.mediaType}
-          onSave={saveMediaCaption}
+          onSave={saveEditedMediaCaption}
         />
 
         {mediaPreview && (
