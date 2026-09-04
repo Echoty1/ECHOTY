@@ -1554,26 +1554,32 @@ const ChatView = () => {
     );
   };
 
-  // Helper to render action buttons inline (Discord Style)
+  // Helper to render action buttons inline (Discord Style with SVG Icons)
   const renderInlineActions = (msg) => {
     const isOwn = String(msg.senderId || '') === String(user?.uid || '');
     const isAi = msg.senderId === ECHO_AI_ID;
     const allowEdit = isOwn && userId !== ECHO_AI_ID && msg.type !== 'audio';
     const allowDelete = isOwn || (userId === ECHO_AI_ID && isAi);
     
+    // Clean SVG Icons
+    const EmojiIcon = () => <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>;
+    const ReplyIcon = () => <svg viewBox="0 0 24 24"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>;
+    const EditIcon = () => <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>;
+    const CopyIcon = () => <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>;
+    const SaveIcon = () => <svg viewBox="0 0 24 24"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>;
+    const DeleteIcon = () => <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>;
+
     return (
       <div className={`message-inline-actions ${isOwn ? 'own' : 'partner'}`}>
-        {isAi || userId === ECHO_AI_ID ? null : (
-          <button onClick={(e) => { e.stopPropagation(); handleReact(msg.id); }} title="React">😀</button>
-        )}
-        <button onClick={(e) => { e.stopPropagation(); handleReply(msg); }} title="Reply">↩️</button>
+        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleReact(msg.id); }} title="React"><EmojiIcon /></button>
+        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleReply(msg); }} title="Reply"><ReplyIcon /></button>
         {allowEdit && (
-          <button onClick={(e) => { e.stopPropagation(); handleEditMessage(msg); }} title="Edit">✏️</button>
+          <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleEditMessage(msg); }} title="Edit"><EditIcon /></button>
         )}
-        <button onClick={(e) => { e.stopPropagation(); handleCopy(msg); }} title="Copy">📋</button>
-        <button onClick={(e) => { e.stopPropagation(); saveMessageToArchive(msg); }} title="Save">🔖</button>
+        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleCopy(msg); }} title="Copy"><CopyIcon /></button>
+        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); saveMessageToArchive(msg); }} title="Save"><SaveIcon /></button>
         {allowDelete && (
-          <button onClick={(e) => { e.stopPropagation(); handleDeleteMessage(msg.id); }} title="Delete">🗑️</button>
+          <button className="message-action-btn danger" onClick={(e) => { e.stopPropagation(); handleDeleteMessage(msg.id); }} title="Delete"><DeleteIcon /></button>
         )}
       </div>
     );
@@ -2159,11 +2165,11 @@ const ChatView = () => {
           20% { background: rgba(255, 215, 0, 0.3); }
         }
 
-        /* Inline Message Actions (Discord Style) */
+        /* ── Discord-style Inline Message Actions ── */
         .message-inline-menu-wrapper {
           display: flex;
           width: 100%;
-          margin-top: 6px;
+          margin-top: 8px;
           z-index: 10;
         }
         .message-inline-actions.own {
@@ -2174,26 +2180,47 @@ const ChatView = () => {
         }
         .message-inline-actions {
           display: flex;
+          align-items: center;
           gap: 4px;
           background: var(--bg-primary, #ffffff);
-          border: 1px solid var(--border-color, #e5e7eb);
-          padding: 4px 8px;
-          border-radius: 12px;
-          box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+          border: 1px solid rgba(0,0,0,0.08);
+          padding: 3px;
+          border-radius: 20px;
+          box-shadow: 0 6px 16px rgba(0,0,0,0.08);
+          animation: menuFadeIn 0.2s ease-out;
         }
-        .message-inline-actions button {
+        @keyframes menuFadeIn {
+          from { opacity: 0; transform: translateY(-5px); }
+          to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Clean Icon Buttons */
+        .message-action-btn {
           background: transparent;
           border: none;
           cursor: pointer;
-          font-size: 16px;
-          padding: 4px;
+          width: 34px;
+          height: 34px;
           border-radius: 50%;
-          transition: background 0.2s, transform 0.1s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
           color: var(--text-secondary, #555);
+          transition: all 0.15s ease;
         }
-        .message-inline-actions button:hover {
+        .message-action-btn svg {
+          width: 18px;
+          height: 18px;
+          fill: currentColor;
+        }
+        .message-action-btn:hover {
           background: var(--bg-hover, #eaeaea);
-          transform: scale(1.2);
+          color: var(--text-primary, #333);
+          transform: scale(1.1);
+        }
+        .message-action-btn.danger:hover {
+          background: #fde8e8;
+          color: #d32f2f;
         }
       `}</style>
 
