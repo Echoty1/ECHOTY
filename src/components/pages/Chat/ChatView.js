@@ -1,5 +1,5 @@
 // src/components/pages/Chat/ChatView.js
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Fragment } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
   ref,
@@ -60,10 +60,10 @@ const MAX_VIDEO_DURATION = 30 * 60; // 30 minutes
 const ECHO_AI_ID = 'echo_ai_assistant';
 
 // ─── Quick-reaction bar geometry ─────────────────────────────────
-const REACTION_BAR_HEIGHT = 48; // approx rendered height of the pill
-const REACTION_BAR_GAP = 12;    // gap between bar and message bubble
-const REACTION_ARROW_SIZE = 12; // diamond arrow side length
-const REACTION_BAR_HALF_WIDTH = 150; // rough half-width used to clamp within viewport
+const REACTION_BAR_HEIGHT = 48;
+const REACTION_BAR_GAP = 12;
+const REACTION_ARROW_SIZE = 12;
+const REACTION_BAR_HALF_WIDTH = 150;
 
 const sanitizeName = (rawName, userId) => {
   if (!rawName) return 'User';
@@ -109,6 +109,7 @@ const formatReactionCount = (n) => {
   return String(count);
 };
 
+// ─── QUICK FIX: Add handleKeyDown function ────────────────────
 const ChatView = () => {
   const { userId } = useParams();
   const { user } = useAuth();
@@ -122,10 +123,6 @@ const ChatView = () => {
   const [messages, setMessages] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loadingMessages, setLoadingMessages] = useState(true);
-  useEffect(() => {
-    const t = setTimeout(() => setLoadingMessages(false), 1200);
-    return () => clearTimeout(t);
-  }, []);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isAILoading, setIsAILoading] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
@@ -139,7 +136,7 @@ const ChatView = () => {
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const [showReactionPicker, setShowReactionPicker] = useState(false);
   const [reactingMessageId, setReactingMessageId] = useState(null);
-  const [reactionPickerAnchor, setReactionPickerAnchor] = useState(null); // { top, left, flipped }
+  const [reactionPickerAnchor, setReactionPickerAnchor] = useState(null);
   const [reactionViewer, setReactionViewer] = useState(null);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [mediaPreview, setMediaPreview] = useState(null);
@@ -196,6 +193,12 @@ const ChatView = () => {
   const messageRefs = useRef({});
   const clearedAtRef = useRef(0);
 
+  // ─── Effects ──────────────────────────────────────────────────
+  useEffect(() => {
+    const t = setTimeout(() => setLoadingMessages(false), 1200);
+    return () => clearTimeout(t);
+  }, []);
+
   useEffect(() => {
     const hide = Boolean(previewUrl || editingMediaMessage || mediaPreview);
     document.body.classList.toggle('echo-hide-bottom-nav', hide);
@@ -207,6 +210,7 @@ const ChatView = () => {
     return () => clearInterval(id);
   }, []);
 
+  // ─── Helper Functions ────────────────────────────────────────
   const pruneExpired = async (list, cId) => {
     if (userId === ECHO_AI_ID) return list;
     const keep = [];
@@ -366,6 +370,15 @@ const ChatView = () => {
     setIsNearBottom(isNear);
   }, []);
 
+  // ─── QUICK FIX: Add handleKeyDown function ────────────────────
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendText(e);
+    }
+  };
+
+  // ─── Message Handlers ────────────────────────────────────────
   const handleSendText = async (e) => {
     e?.preventDefault?.();
     const textToSend = (typeof e === 'string' ? e : newMessage).trim();
@@ -454,6 +467,16 @@ const ChatView = () => {
         if (!response.ok) {
           const errBody = await response.json().catch(() => ({}));
           throw new Error(errBody.error || 'AI request failed');
+        }
+        const data = await response.json();
+        if (data.reply) {
+          setMessages((prev) => prev.concat({
+            id: `ai_${Date.now()}`,
+            senderId: ECHO_AI_ID,
+            text: data.reply,
+            timestamp: Date.now(),
+            type: 'text',
+          }));
         }
       } catch (err) {
         setMessages((prev) => prev.concat({
@@ -967,21 +990,12 @@ const ChatView = () => {
         isEdited: true,
         lastEditedAt: serverTimestamp(),
       });
-      const updatedMsg = { ...editingMessage, text: newText, isEdited: true };
-      await upsertMessageInCache(cId, updatedMsg);
-      await saveMessagesToCache(cId, messages);
-      clearMessageCache(cId);
       setEditingMessage(null);
-      if (isNearBottom && !scrollCooldownRef.current) {
-        scrollCooldownRef.current = true;
-        setTimeout(() => {
-          scrollCooldownRef.current = false;
-        }, 500);
-        setTimeout(() => scrollToBottom(true), 100);
-      }
+      clearMessageCache(cId);
+      setToast({ message: 'Message updated successfully', type: 'success' });
     } catch (err) {
-      console.error('Failed to edit message:', err);
-      alert('Failed to edit message. Please try again.');
+      console.error('Edit failed:', err);
+      setToast({ message: 'Failed to edit message', type: 'error' });
     }
   };
 
@@ -995,45 +1009,46 @@ const ChatView = () => {
         isEdited: true,
         lastEditedAt: serverTimestamp(),
       });
-      const updatedMsg = { ...editingMediaMessage, caption: newCaption, isEdited: true };
-      await upsertMessageInCache(cId, updatedMsg);
-      await saveMessagesToCache(cId, messages);
-      clearMessageCache(cId);
       setEditingMediaMessage(null);
+      clearMessageCache(cId);
+      setToast({ message: 'Caption updated successfully', type: 'success' });
     } catch (err) {
-      console.error('Failed to edit media caption:', err);
-      alert('Failed to edit caption. Please try again.');
+      console.error('Edit caption failed:', err);
+      setToast({ message: 'Failed to edit caption', type: 'error' });
     }
   };
 
-  const handleDeleteMessage = async (messageId) => {
+  const handleDeleteMessage = (msgId) => {
+    setDeletingMessageId(msgId);
+    openConfirmModal({
+      title: 'Delete Message',
+      message: 'Are you sure you want to delete this message? This action cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      onConfirm: () => confirmDeleteMessage(msgId),
+    });
+  };
+
+  const confirmDeleteMessage = async (msgId) => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
-    setDeletingMessageId(messageId);
-    await new Promise((resolve) => setTimeout(resolve, 300));
     try {
-      await remove(ref(db, `chats/${cId}/messages/${messageId}`));
-      await deleteMessageFromCache(cId, messageId);
+      await remove(ref(db, `chats/${cId}/messages/${msgId}`));
+      deleteMessageFromCache(cId, msgId).catch(() => {});
+      setDeletingMessageId(null);
       clearMessageCache(cId);
-      setDeletingMessageId(null);
+      setToast({ message: 'Message deleted successfully', type: 'success' });
     } catch (err) {
-      console.warn('Delete failed:', err.message);
-      setDeletingMessageId(null);
+      console.error('Delete failed:', err);
+      setToast({ message: 'Failed to delete message', type: 'error' });
     }
   };
 
-  const handleCopy = async (msg) => {
-    const text = msg.type === 'media' ? msg.mediaUrl || msg.caption || '' : msg.text || '';
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (_) {
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-    }
+  const handleBookmark = (msgId) => {
+    setBookmarkedIds((prev) => ({
+      ...prev,
+      [msgId]: !prev[msgId],
+    }));
   };
 
   // ─── Quick-reaction bar positioning ────────────────────────────
@@ -1054,7 +1069,6 @@ const ChatView = () => {
       flipped = barTopAbove < 8;
       top = flipped ? rect.bottom + REACTION_BAR_GAP : barTopAbove;
 
-      // clamp so the bar never renders past the bottom of the viewport either
       const maxTop = window.innerHeight - REACTION_BAR_HEIGHT - 8;
       if (top > maxTop) top = maxTop;
       if (top < 8) top = 8;
@@ -1105,8 +1119,7 @@ const ChatView = () => {
     setReactionPickerAnchor(null);
   };
 
-  // Close the floating bar if the list scrolls or the viewport resizes,
-  // since it's anchored with fixed screen coordinates.
+  // Close the floating bar if the list scrolls or the viewport resizes
   useEffect(() => {
     if (!showReactionPicker) return;
     const container = messagesContainerRef.current;
@@ -1117,10 +1130,9 @@ const ChatView = () => {
       if (container) container.removeEventListener('scroll', onDismiss);
       window.removeEventListener('resize', onDismiss);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showReactionPicker]);
 
-  // Touch Gesture handlers for mobile interactions
+  // ─── Touch Gesture handlers ────────────────────────────────────
   const handleTouchStart = (msg, e) => {
     if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
     const targetEl = e?.currentTarget || null;
@@ -1270,13 +1282,6 @@ const ChatView = () => {
     }
   };
 
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      handleSendText(e);
-    }
-  };
-
   const renderPreviewOverlay = () => {
     if (!previewUrl) return null;
     return (
@@ -1400,7 +1405,6 @@ const ChatView = () => {
   };
 
   const renderTide = (msg) => {
-    // tideTick is intentionally read so the chip re-renders every 30s
     void tideTick;
     if (userId === ECHO_AI_ID || msg.pinned || bookmarkedIds[msg.id]) return null;
     const fake = { ...msg, expiresAt: msg.expiresAt || (Number(msg.timestamp) || Date.now()) + PRIVATE_TTL_MS };
@@ -1409,6 +1413,74 @@ const ChatView = () => {
         <i className="fas fa-water" aria-hidden="true" />
         {formatTideLeft(fake)}
       </span>
+    );
+  };
+
+  const renderReactions = (reactions, messageId, isOwn) => {
+    if (!reactions || typeof reactions !== 'object') return null;
+    const entries = Object.entries(reactions);
+    if (entries.length === 0) return null;
+
+    const groups = {};
+    entries.forEach(([uid, emoji]) => {
+      if (!groups[emoji]) groups[emoji] = [];
+      groups[emoji].push(uid);
+    });
+
+    const openReactionViewer = (emoji, reacs, msgId) => {
+      const userIds = Object.keys(reacs).filter((uid) => reacs[uid] === emoji);
+      if (userIds.length === 0) return;
+      setReactionViewer({ emoji, userIds, messageId: msgId });
+    };
+
+    return (
+      <div
+        className="message-reactions"
+        style={{
+          position: 'absolute',
+          bottom: '-12px',
+          [isOwn ? 'left' : 'right']: '8px',
+          display: 'flex',
+          gap: '4px',
+          zIndex: 3,
+        }}
+      >
+        {Object.entries(groups).map(([emoji, uids]) => (
+          <span
+            key={emoji}
+            className="reaction-badge clickable"
+            onClick={(e) => {
+              e.stopPropagation();
+              openReactionViewer(emoji, reactions, messageId);
+            }}
+            title={`${uids.length} reaction${uids.length !== 1 ? 's' : ''}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '2px',
+              background: 'var(--bg-primary, #ffffff)',
+              border: '1px solid var(--border-color, #e2e8f0)',
+              borderRadius: '999px',
+              padding: '2px 6px',
+              fontSize: '13px',
+              lineHeight: 1,
+              boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
+          >
+            {emoji}
+            {uids.length > 1 && (
+              <span
+                className="reaction-count"
+                style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted, #64748b)' }}
+              >
+                {formatReactionCount(uids.length)}
+              </span>
+            )}
+          </span>
+        ))}
+      </div>
     );
   };
 
@@ -1496,7 +1568,7 @@ const ChatView = () => {
         );
       }
 
-      return <React.Fragment key={msg.id}>{row}</React.Fragment>;
+      return <Fragment key={msg.id}>{row}</Fragment>;
     };
 
     if (msg.type === 'echomoji') {
@@ -1622,74 +1694,6 @@ const ChatView = () => {
           {msg.isEdited && <span className="message-edited-badge">(edited)</span>}
         </div>
       </MessageMenu>
-    );
-  };
-
-  const renderReactions = (reactions, messageId, isOwn) => {
-    if (!reactions || typeof reactions !== 'object') return null;
-    const entries = Object.entries(reactions);
-    if (entries.length === 0) return null;
-
-    const groups = {};
-    entries.forEach(([uid, emoji]) => {
-      if (!groups[emoji]) groups[emoji] = [];
-      groups[emoji].push(uid);
-    });
-
-    const openReactionViewer = (emoji, reacs, msgId) => {
-      const userIds = Object.keys(reacs).filter((uid) => reacs[uid] === emoji);
-      if (userIds.length === 0) return;
-      setReactionViewer({ emoji, userIds, messageId: msgId });
-    };
-
-    return (
-      <div
-        className="message-reactions"
-        style={{
-          position: 'absolute',
-          bottom: '-12px',
-          [isOwn ? 'left' : 'right']: '8px',
-          display: 'flex',
-          gap: '4px',
-          zIndex: 3,
-        }}
-      >
-        {Object.entries(groups).map(([emoji, uids]) => (
-          <span
-            key={emoji}
-            className="reaction-badge clickable"
-            onClick={(e) => {
-              e.stopPropagation();
-              openReactionViewer(emoji, reactions, messageId);
-            }}
-            title={`${uids.length} reaction${uids.length !== 1 ? 's' : ''}`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '2px',
-              background: 'var(--bg-primary, #ffffff)',
-              border: '1px solid var(--border-color, #e2e8f0)',
-              borderRadius: '999px',
-              padding: '2px 6px',
-              fontSize: '13px',
-              lineHeight: 1,
-              boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
-              cursor: 'pointer',
-              userSelect: 'none',
-            }}
-          >
-            {emoji}
-            {uids.length > 1 && (
-              <span
-                className="reaction-count"
-                style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted, #64748b)' }}
-              >
-                {formatReactionCount(uids.length)}
-              </span>
-            )}
-          </span>
-        ))}
-      </div>
     );
   };
 
@@ -2031,6 +2035,7 @@ const ChatView = () => {
 
   const displayName = sanitizeName(location.state?.userName || partnerProfile?.name, userId);
 
+  // ─── FINAL RENDER ──────────────────────────────────────────────
   return (
     <>
       <style>{`
