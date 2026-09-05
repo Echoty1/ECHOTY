@@ -59,7 +59,7 @@ const MAX_VIDEO_DURATION = 30 * 60; // 30 minutes
 
 const ECHO_AI_ID = 'echo_ai_assistant';
 
-// ─── Quick-reaction bar geometry ─────────────────────────────────
+// âââ Quick-reaction bar geometry âââââââââââââââââââââââââââââââââ
 const REACTION_BAR_HEIGHT = 48;
 const REACTION_BAR_GAP = 12;
 const REACTION_ARROW_SIZE = 12;
@@ -116,7 +116,7 @@ const ChatView = () => {
   const location = useLocation();
   const { getProfile, fetchProfile } = useProfile();
 
-  // ─── State ──────────────────────────────────────────────────────
+  // âââ State ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const [partnerProfile, setPartnerProfile] = useState(null);
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -141,18 +141,18 @@ const ChatView = () => {
   const [mediaPreview, setMediaPreview] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
   
-  // ─── Simple inline message option state ───────────────────────
+  // âââ Simple inline message option state âââââââââââââââââââââââ
   const [activeMessageMenuId, setActiveMessageMenuId] = useState(null);
 
-  // ─── Typing Indicators ──────────────────────────────────────
+  // âââ Typing Indicators ââââââââââââââââââââââââââââââââââââââ
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
   const typingTimeoutRef = useRef(null);
 
-  // ─── Touch gesture refs ──────────────────────────────────────
+  // âââ Touch gesture refs ââââââââââââââââââââââââââââââââââââââ
   const touchTimerRef = useRef(null);
   const lastTapRef = useRef({ time: 0, msgId: null });
 
-  // ─── Upload State ─────────────────────────────────────────────
+  // âââ Upload State âââââââââââââââââââââââââââââââââââââââââââââ
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [captionText, setCaptionText] = useState('');
@@ -162,14 +162,14 @@ const ChatView = () => {
   const fileInputRef = useRef(null);
   const captionInputRef = useRef(null);
 
-  // ─── File size warning modal ──────────────────────────────────
+  // âââ File size warning modal ââââââââââââââââââââââââââââââââââ
   const [fileSizeError, setFileSizeError] = useState(false);
   const [toast, setToast] = useState(null);
   const [bookmarkedIds, setBookmarkedIds] = useState({});
   const stampedLegacyTides = useRef(false);
   const [tideTick, setTideTick] = useState(Date.now());
 
-  // ─── Confirm Modal State ──────────────────────────────────────
+  // âââ Confirm Modal State ââââââââââââââââââââââââââââââââââââââ
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     title: '',
@@ -179,7 +179,7 @@ const ChatView = () => {
     onConfirm: null,
   });
 
-  // ─── Refs ──────────────────────────────────────────────────────
+  // âââ Refs ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -192,13 +192,12 @@ const ChatView = () => {
   const isMounted = useRef(true);
   const markReadTimeout = useRef(null);
   const hasMarkedRead = useRef(false);
-  const scrollCooldownRef = useRef(false);
   const focusedField = useRef('main');
   const moreOptionsRef = useRef(null);
   const messageRefs = useRef({});
   const clearedAtRef = useRef(0);
 
-  // ─── Effects ──────────────────────────────────────────────────
+  // âââ Effects ââââââââââââââââââââââââââââââââââââââââââââââââââ
   useEffect(() => {
     const t = setTimeout(() => setLoadingMessages(false), 1200);
     return () => clearTimeout(t);
@@ -215,7 +214,7 @@ const ChatView = () => {
     return () => clearInterval(id);
   }, []);
 
-  // ─── Typing Indicator Listener ──────────────────────────────
+  // âââ Typing Indicator Listener ââââââââââââââââââââââââââââââ
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -231,7 +230,7 @@ const ChatView = () => {
     return () => unsub();
   }, [user?.uid, userId]);
 
-  // ─── Helper Functions ────────────────────────────────────────
+  // âââ Helper Functions ââââââââââââââââââââââââââââââââââââââââ
   const pruneExpired = async (list, cId) => {
     if (userId === ECHO_AI_ID) return list;
     const keep = [];
@@ -306,12 +305,12 @@ const ChatView = () => {
         if (latest.type === 'media') {
           latestMsg =
             latest.mediaType === 'video'
-              ? '🎬 Video'
+              ? 'ð¬ Video'
               : latest.mediaType === 'audio'
-              ? '🎤 Voice note'
-              : '📷 Image';
+              ? 'ð¤ Voice note'
+              : 'ð· Image';
         } else if (latest.type === 'echomoji') {
-          latestMsg = `😊 ECHOMOJI (${latest.mood || 'neutral'})`;
+          latestMsg = `ð ECHOMOJI (${latest.mood || 'neutral'})`;
         } else {
           latestMsg = latest.text || '';
         }
@@ -341,7 +340,7 @@ const ChatView = () => {
       window.dispatchEvent(new CustomEvent('chat-unread-cleared', { detail: { partnerId: userId } }));
       clearMessageCache(cId);
     } catch (err) {
-      console.warn('⚠️ [Unread] markMessagesAsRead error:', err.message);
+      console.warn('â ï¸ [Unread] markMessagesAsRead error:', err.message);
     }
   };
 
@@ -350,8 +349,6 @@ const ChatView = () => {
       messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
     }
   };
-
-  const focusInput = () => setTimeout(() => inputRef.current?.focus(), 0);
 
   const uploadToCloudinary = (file, onProgress) => {
     return new Promise((resolve, reject) => {
@@ -391,7 +388,7 @@ const ChatView = () => {
     setIsNearBottom(isNear);
   }, []);
 
-  // ─── Typing Handler ────────────────────────────────────
+  // âââ Typing Handler ââââââââââââââââââââââââââââââââââââ
   const handleTyping = useCallback(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -403,7 +400,7 @@ const ChatView = () => {
     }, 2000);
   }, [user?.uid, userId]);
 
-  // ─── Message Handlers ────────────────────────────────────────
+  // âââ Message Handlers ââââââââââââââââââââââââââââââââââââââââ
   const handleSendText = async (e) => {
     e?.preventDefault?.();
     const textToSend = (typeof e === 'string' ? e : newMessage).trim();
@@ -599,7 +596,7 @@ const ChatView = () => {
     const cId = [user.uid, userId].sort().join('_');
     const tempId = `temp_${Date.now()}`;
     const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
-    const mediaIcon = mediaType === 'video' ? '🎬 Video' : '📷 Image';
+    const mediaIcon = mediaType === 'video' ? 'ð¬ Video' : 'ð· Image';
     const blobUrl = URL.createObjectURL(file);
     const currentReply = reply || replyTo;
 
@@ -834,7 +831,7 @@ const ChatView = () => {
       await patchMyUserChat(userId, {
         partnerName: location.state?.userName || partnerProfile?.name || 'User',
         partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
-        lastMessage: '🎤 Voice note',
+        lastMessage: 'ð¤ Voice note',
         lastSenderId: user.uid,
         lastUpdated: Date.now(),
         unreadCount: 0,
@@ -847,14 +844,14 @@ const ChatView = () => {
             id: user.uid,
             partnerName: currentUserProfile?.name || 'User',
             partnerAvatar: currentUserProfile?.avatar || '',
-            lastMessage: '🎤 Voice note',
+            lastMessage: 'ð¤ Voice note',
             lastSenderId: user.uid,
             lastUpdated: Date.now(),
             unreadCount: 1,
           };
         } else {
           currentData.unreadCount = (currentData.unreadCount || 0) + 1;
-          currentData.lastMessage = '🎤 Voice note';
+          currentData.lastMessage = 'ð¤ Voice note';
           currentData.lastSenderId = user.uid;
           currentData.lastUpdated = Date.now();
           return currentData;
@@ -917,15 +914,6 @@ const ChatView = () => {
     setShowMoreOptions(false);
   };
 
-  const openMediaPreview = (file) => {
-    if (!file) return;
-    setSelectedFile(file);
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    setCaptionText('');
-    setTimeout(() => captionInputRef.current?.focus(), 100);
-  };
-
   const cancelMediaPreview = () => {
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setSelectedFile(null);
@@ -971,7 +959,7 @@ const ChatView = () => {
     }
   };
 
-  // ─── Reply Handler ──────────────────────────────────────────
+  // âââ Reply Handler ââââââââââââââââââââââââââââââââââââââââââ
   const handleReply = useCallback((msg) => {
     const isOwnMsg = String(msg.senderId || '') === String(user?.uid || '');
     const senderName = isOwnMsg
@@ -980,11 +968,11 @@ const ChatView = () => {
     
     let textSnippet;
     if (msg.type === 'media') {
-      if (msg.mediaType === 'video') textSnippet = '🎬 Video';
-      else if (msg.mediaType === 'audio') textSnippet = '🎤 Voice note';
-      else textSnippet = '📷 Image';
+      if (msg.mediaType === 'video') textSnippet = 'ð¬ Video';
+      else if (msg.mediaType === 'audio') textSnippet = 'ð¤ Voice note';
+      else textSnippet = 'ð· Image';
     } else if (msg.type === 'echomoji') {
-      textSnippet = `😊 ECHOMOJI (${msg.mood || 'neutral'})`;
+      textSnippet = `ð ECHOMOJI (${msg.mood || 'neutral'})`;
     } else {
       textSnippet = msg.text || 'Message';
     }
@@ -1001,7 +989,7 @@ const ChatView = () => {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [user, partnerProfile, currentUserProfile, location.state?.userName]);
 
-  // ─── Reaction Handler ─────────────────────────────────────────
+  // âââ Reaction Handler âââââââââââââââââââââââââââââââââââââââââ
   const handleReact = useCallback((messageId) => {
     if (showReactionPicker && reactingMessageId === messageId) {
       setShowReactionPicker(false);
@@ -1013,7 +1001,6 @@ const ChatView = () => {
     const msgElement = messageRefs.current[messageId];
     if (msgElement) {
       const rect = msgElement.getBoundingClientRect();
-      const windowHeight = window.innerHeight;
       const windowWidth = window.innerWidth;
 
       let top = rect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP - REACTION_ARROW_SIZE;
@@ -1078,11 +1065,9 @@ const ChatView = () => {
     };
   }, [showReactionPicker]);
 
-  // ─── Touch Gesture handlers ────────────────────────────────────
+  // âââ Touch Gesture handlers ââââââââââââââââââââââââââââââââââââ
   const handleTouchStart = (msg, e) => {
     if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-    const targetEl = e?.currentTarget || null;
-    const rect = targetEl ? targetEl.getBoundingClientRect() : null;
     touchTimerRef.current = setTimeout(() => {
       if (window.navigator?.vibrate) {
         window.navigator.vibrate(50);
@@ -1090,7 +1075,6 @@ const ChatView = () => {
       const msgElement = messageRefs.current[msg.id];
       if (msgElement) {
         const msgRect = msgElement.getBoundingClientRect();
-        const windowHeight = window.innerHeight;
         const windowWidth = window.innerWidth;
 
         let top = msgRect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP - REACTION_ARROW_SIZE;
@@ -1120,7 +1104,7 @@ const ChatView = () => {
     const now = Date.now();
     const lastTap = lastTapRef.current;
     if (lastTap.msgId === msg.id && now - lastTap.time < 300) {
-      handleReactionSelect('❤️', msg.id);
+      handleReactionSelect('â¤ï¸', msg.id);
       lastTapRef.current = { time: 0, msgId: null };
     } else {
       lastTapRef.current = { time: now, msgId: msg.id };
@@ -1208,21 +1192,6 @@ const ChatView = () => {
       console.error('Delete failed:', err);
       setToast({ message: 'Failed to delete message', type: 'error' });
     }
-  };
-
-  const handleBookmark = (msgId) => {
-    setBookmarkedIds((prev) => ({
-      ...prev,
-      [msgId]: !prev[msgId],
-    }));
-    const cId = [user.uid, userId].sort().join('_');
-    const bookmarkRef = ref(db, `userChats/${user.uid}/${userId}/bookmarks/${msgId}`);
-    if (bookmarkedIds[msgId]) {
-      remove(bookmarkRef).catch(() => {});
-    } else {
-      set(bookmarkRef, { bookmarkedAt: Date.now() }).catch(() => {});
-    }
-    setActiveMessageMenuId(null);
   };
 
   const handleCopy = async (msg) => {
@@ -1436,7 +1405,7 @@ const ChatView = () => {
     );
   };
 
-  // ─── Render message ────────────────────────────────────────────
+  // âââ Render message ââââââââââââââââââââââââââââââââââââââââââââ
   useEffect(() => {
     if (!user?.uid) return;
     listEchoArchive(user.uid).then((rows) => {
@@ -1554,14 +1523,12 @@ const ChatView = () => {
     );
   };
 
-  // Helper to render action buttons inline (Discord Style with SVG Icons)
   const renderInlineActions = (msg) => {
     const isOwn = String(msg.senderId || '') === String(user?.uid || '');
     const isAi = msg.senderId === ECHO_AI_ID;
     const allowEdit = isOwn && userId !== ECHO_AI_ID && msg.type !== 'audio';
     const allowDelete = isOwn || (userId === ECHO_AI_ID && isAi);
     
-    // Clean SVG Icons
     const EmojiIcon = () => <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>;
     const ReplyIcon = () => <svg viewBox="0 0 24 24"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>;
     const EditIcon = () => <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>;
@@ -1648,7 +1615,6 @@ const ChatView = () => {
             </div>
             {renderReactions(msg.reactions, msg.id, isOwn)}
             
-            {/* ─── Simple Inline Menu ─── */}
             {activeMessageMenuId === msg.id && (
               <div className="message-inline-menu-wrapper" onClick={(e) => e.stopPropagation()}>
                 {renderInlineActions(msg)}
@@ -1779,7 +1745,7 @@ const ChatView = () => {
     };
   }, [userId]);
 
-  // ─── UseEffect: clear unread ──────────────────────────────────
+  // âââ UseEffect: clear unread ââââââââââââââââââââââââââââââââââ
   useEffect(() => {
     if (!user?.uid || !userId) return;
     clearUnreadInstantly();
@@ -1793,7 +1759,7 @@ const ChatView = () => {
     };
   }, [user?.uid, userId]);
 
-  // ─── UseEffect: messages listener ────────────────────────────
+  // âââ UseEffect: messages listener ââââââââââââââââââââââââââââ
   useEffect(() => {
     if (!user?.uid || !userId) {
       setLoadingMessages(false);
@@ -1922,14 +1888,14 @@ const ChatView = () => {
         }
       },
       (error) => {
-        console.error('❌ [ChatView] Firebase listener error:', error);
+        console.error('â [ChatView] Firebase listener error:', error);
         setLoadingMessages(false);
         if (messages.length === 0) {
           setMessages([
             {
               id: 'error',
               senderId: 'system',
-              text: '⚠️ Could not load messages. Please check your connection.',
+              text: 'â ï¸ Could not load messages. Please check your connection.',
               timestamp: Date.now(),
               type: 'text',
               isRead: true,
@@ -1946,7 +1912,7 @@ const ChatView = () => {
     };
   }, [user?.uid, userId]);
 
-  // ─── UseEffect: partner profile ───────────────────────────────
+  // âââ UseEffect: partner profile âââââââââââââââââââââââââââââââ
   useEffect(() => {
     if (!userId) return;
     const cached = getProfile(userId);
@@ -1964,7 +1930,7 @@ const ChatView = () => {
     return () => unsub();
   }, [userId, getProfile, fetchProfile]);
 
-  // ─── UseEffect: current user profile ──────────────────────────
+  // âââ UseEffect: current user profile ââââââââââââââââââââââââââ
   useEffect(() => {
     if (!user?.uid) return;
     const myProfileRef = ref(db, `profiles/${user.uid}`);
@@ -1975,7 +1941,7 @@ const ChatView = () => {
       .catch(console.error);
   }, [user?.uid]);
 
-  // ─── UseEffect: auto-resize textarea ──────────────────────────
+  // âââ UseEffect: auto-resize textarea ââââââââââââââââââââââââââ
   useEffect(() => {
     const textarea = inputRef.current;
     if (textarea) {
@@ -1984,7 +1950,7 @@ const ChatView = () => {
     }
   }, [newMessage]);
 
-  // ─── UseEffect: click outside more options ────────────────────
+  // âââ UseEffect: click outside more options ââââââââââââââââââââ
   useEffect(() => {
     if (!showMoreOptions) return;
     const handleClickOutside = (e) => {
@@ -2044,7 +2010,7 @@ const ChatView = () => {
     };
   }, []);
 
-  // ─── UseEffect: ended flag ────────────────────────────────────
+  // âââ UseEffect: ended flag ââââââââââââââââââââââââââââââââââââ
   useEffect(() => {
     if (!user?.uid || !userId) {
       setEnded(false);
@@ -2065,7 +2031,7 @@ const ChatView = () => {
     return () => unsub();
   }, [user?.uid, userId]);
 
-  // ─── UseEffect: clearedAt ──────────────────────────────────────
+  // âââ UseEffect: clearedAt ââââââââââââââââââââââââââââââââââââââ
   useEffect(() => {
     if (!user?.uid || !userId) {
       setClearedAt(0);
@@ -2103,7 +2069,7 @@ const ChatView = () => {
 
   const displayName = sanitizeName(location.state?.userName || partnerProfile?.name, userId);
 
-  // ─── FINAL RENDER ──────────────────────────────────────────────
+  // âââ FINAL RENDER ââââââââââââââââââââââââââââââââââââââââââââââ
   return (
     <>
       <style>{`
@@ -2165,7 +2131,6 @@ const ChatView = () => {
           20% { background: rgba(255, 215, 0, 0.3); }
         }
 
-        /* ── Discord-style Inline Message Actions ── */
         .message-inline-menu-wrapper {
           display: flex;
           width: 100%;
@@ -2194,7 +2159,6 @@ const ChatView = () => {
           to { opacity: 1; transform: translateY(0); }
         }
 
-        /* Clean Icon Buttons */
         .message-action-btn {
           background: transparent;
           border: none;
@@ -2287,7 +2251,7 @@ const ChatView = () => {
               style={{ top: reactionPickerAnchor.top, left: reactionPickerAnchor.left }}
               onClick={(e) => e.stopPropagation()}
             >
-              {['❤️', '😂', '😮', '😢', '👍', '👎'].map((emoji) => (
+              {['â¤ï¸', 'ð', 'ð®', 'ð¢', 'ð', 'ð'].map((emoji) => (
                 <button
                   key={emoji}
                   type="button"
