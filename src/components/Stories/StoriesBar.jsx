@@ -1,4 +1,3 @@
-// src/components/Stories/StoriesBar.jsx
 import React, { useRef, useEffect, useState } from 'react';
 import StoryCircle from './StoryCircle';
 import { listenToUserStatuses, listenToViewedStatuses } from '../../services/statusService';
@@ -13,7 +12,7 @@ const StoriesBar = ({ currentUserId, users, ownStory, onAddStory, onViewStories 
     if (!currentUserId) return;
     const unsubViewed = listenToViewedStatuses(currentUserId, setViewedKeys);
 
-    // Loop through users and listen to each one's statuses!
+    // Loop through users and listen to each one's statuses
     const unsubs = (users || []).map(user => {
       return listenToUserStatuses(user.uid, (statuses) => {
         setStatusesMap(prev => ({ ...prev, [user.uid]: statuses }));
