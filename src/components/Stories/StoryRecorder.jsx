@@ -5,22 +5,21 @@ import './StoriesBar.css';
 const StoryRecorder = ({ userId, onClose }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const tapTimeoutRef = useRef(null);
   const lastTapRef = useRef(0);
   
   const [stream, setStream] = useState(null);
   const [snapping, setSnapping] = useState(false);
   const [memories, setMemories] = useState([]);
   const [showMemories, setShowMemories] = useState(false);
-  const [selectedMemory, setSelectedMemory] = useState(null); // When a memory is opened
-  const [facingMode, setFacingMode] = useState('user'); // 'user' or 'environment'
+  const [selectedMemory, setSelectedMemory] = useState(null);
+  const [facingMode, setFacingMode] = useState('user');
 
-  // Fetch memories
   const fetchMemories = async () => {
     const data = await getUserMemories(userId);
     setMemories(data);
   };
 
-  // Start Camera
   useEffect(() => {
     const startCamera = async () => {
       try {
@@ -47,23 +46,36 @@ const StoryRecorder = ({ userId, onClose }) => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
+      if (tapTimeoutRef.current) {
+        clearTimeout(tapTimeoutRef.current);
+      }
     };
-  }, [facingMode]); // Restart camera when facingMode changes
+  }, [facingMode]);
 
-  // Single Tap = Snap & Auto-post. Double Tap = Flip Camera.
-  const handleCameraTap = async () => {
+  // ✅ FIXED TAP LOGIC: Waits 250ms to see if it's a double tap
+  const handleCameraTap = () => {
     const now = Date.now();
     const timeSinceLastTap = now - lastTapRef.current;
 
-    // Double tap detected: Flip the camera
-    if (timeSinceLastTap < 300) {
+    // If it's a double tap (less than 250ms since last tap), flip camera
+    if (timeSinceLastTap < 250) {
+      clearTimeout(tapTimeoutRef.current); // Cancel the pending single tap snap
       lastTapRef.current = 0;
-      setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
+      setFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
       return;
     }
 
-    // Single tap: Snap & Post
+    // Otherwise, set lastTapRef and wait 250ms to see if a double tap comes
     lastTapRef.current = now;
+    tapTimeoutRef.current = setTimeout(() => {
+      // If no double tap happened in 250ms, treat it as a single tap and snap
+      if (lastTapRef.current !== 0) {
+        handleSingleTapSnap();
+      }
+    }, 250);
+  };
+
+  const handleSingleTapSnap = async () => {
     if (!videoRef.current || snapping) return;
     setSnapping(true);
 
@@ -85,20 +97,17 @@ const StoryRecorder = ({ userId, onClose }) => {
     }
   };
 
-  // Delete memory
   const handleDeleteMemory = async (statusId) => {
     if (!window.confirm("Delete this Echus?")) return;
     await deleteStatus(userId, statusId);
     fetchMemories();
   };
 
-  // Close full screen memory
   const closeMemory = () => setSelectedMemory(null);
 
   return (
     <div className="recorder-overlay">
       <div className="recorder-modal-small">
-        {/* Top Header */}
         <div className="small-camera-header">
           <h3>Create Echus</h3>
           <div className="camera-header-actions">
@@ -112,7 +121,6 @@ const StoryRecorder = ({ userId, onClose }) => {
           </div>
         </div>
 
-        {/* Camera Feed - Single Tap to snap, Double Tap to flip */}
         <div 
           className="small-camera-space" 
           onClick={handleCameraTap}
@@ -127,10 +135,8 @@ const StoryRecorder = ({ userId, onClose }) => {
           />
           <canvas ref={canvasRef} style={{ display: 'none' }} />
           {snapping && <div className="snapping-flash"></div>}
-          {!snapping && <div className="camera-tap-overlay"></div>}
         </div>
 
-        {/* Memories Grid Modal */}
         {showMemories && !selectedMemory && (
           <div className="memories-glass-panel">
             <div className="memories-header">
@@ -161,7 +167,6 @@ const StoryRecorder = ({ userId, onClose }) => {
           </div>
         )}
 
-        {/* Full Memory Viewer (Covers camera when selected) */}
         {selectedMemory && (
           <div className="memory-fullscreen-overlay" onClick={closeMemory}>
             <div className="memory-fullscreen-content" onClick={(e) => e.stopPropagation()}>
