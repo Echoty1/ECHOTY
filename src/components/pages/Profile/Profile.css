@@ -804,3 +804,29 @@
   padding: 20px;
   font-size: 14px;
 }
+
+/* ─── Echowers Tabs ─── */
+.echowers-tabs {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 15px;
+}
+
+.echowers-tabs button {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #aaa;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 10px;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.echowers-tabs button.active {
+  color: #fff;
+  border-bottom: 2px solid #0095f6;
+}
