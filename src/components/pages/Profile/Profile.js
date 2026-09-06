@@ -16,6 +16,7 @@ import MoodPicker from '../../common/MoodPicker';
 import Avatar from '../../common/Avatar';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
+import { listenToMyEchowers, listenToMyEchowerCount } from '../../../services/echowerService'; // NEW IMPORT
 import './Profile.css';
 
 const STORAGE_PREFIX = 'echo_cache_';
@@ -53,16 +54,7 @@ const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 const DEFAULT_INTEREST_TEMPLATES = [
-  '🎮 Gaming',
-  '🎵 Music',
-  '💻 Tech',
-  '🍿 Movies',
-  '🎨 Art',
-  '⛩️ Anime',
-  '🏋️ Fitness',
-  '📸 Photography',
-  '✈️ Travel',
-  '🚀 Coding',
+  '🎮 Gaming', '🎵 Music', '💻 Tech', '🍿 Movies', '🎨 Art', '⛩️ Anime', '🏋️ Fitness', '📸 Photography', '✈️ Travel', '🚀 Coding',
 ];
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
@@ -73,7 +65,7 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 const Profile = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { refreshProfile } = useProfile();
+  const { refreshProfile, profiles, fetchProfile } = useProfile(); // Added profiles/fetchProfile
 
   const [showGifLibrary, setShowGifLibrary] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
@@ -92,6 +84,11 @@ const Profile = () => {
 
   const isDemoUser = user?.uid === DEMO_UID;
 
+  // ─── Echower States ─────────────────────────────────────
+  const [showEchowersModal, setShowEchowersModal] = useState(false);
+  const [echowerCount, setEchowerCount] = useState(0);
+  const [echowingUids, setEchowingUids] = useState([]);
+
   const cachedProfile = useMemo(() => {
     if (!user?.uid) return null;
     return getFastLocal(`profile_${user.uid}`);
@@ -107,15 +104,7 @@ const Profile = () => {
   const [loading, setLoading] = useState(() => !cachedProfile);
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState(() => cachedProfile || {
-    name: '',
-    avatar: '',
-    videoUrl: '',
-    mood: 'happy',
-    activeSkin: null,
-    bio: '',
-    country: '',
-    countryCode: '',
-    city: '',
+    name: '', avatar: '', videoUrl: '', mood: 'happy', activeSkin: null, bio: '', country: '', countryCode: '', city: '',
   });
   const [unlockedGifs, setUnlockedGifs] = useState([]);
 
@@ -232,12 +221,21 @@ const Profile = () => {
       }
     );
 
+    // ─── Echower Listeners ───────────────────────────────
+    const unsubCount = listenToMyEchowerCount(user.uid, setEchowerCount);
+    const unsubEchowing = listenToMyEchowers(user.uid, (uids) => {
+      setEchowingUids(uids);
+      uids.forEach(uid => fetchProfile(uid));
+    });
+
     return () => {
       isMounted = false;
       unsubSkin();
       unsubProfile();
+      unsubCount();
+      unsubEchowing();
     };
-  }, [user?.uid, editing]);
+  }, [user?.uid, editing, fetchProfile]);
 
   const handleSave = async () => {
     if (!user) return;
@@ -330,11 +328,7 @@ const Profile = () => {
 
       const downloadUrl = data.secure_url;
 
-      const updateData = {
-        avatar: downloadUrl,
-        videoUrl: '',
-        activeSkin: null,
-      };
+      const updateData = { avatar: downloadUrl, videoUrl: '', activeSkin: null };
 
       setProfile((prev) => ({ ...prev, ...updateData }));
       setEditData((prev) => ({ ...prev, ...updateData }));
@@ -492,6 +486,18 @@ const Profile = () => {
               <Avatar src={null} name={editData?.name || profile?.name || 'User'} size={110} />
             )}
             {(editing || isDemoUser) && <div className="avatar-overlay">Tap to change</div>}
+          </div>
+
+          {/* ─── Echower Stats (Clickable) ─── */}
+          <div className="profile-stats">
+            <div className="stat" onClick={() => setShowEchowersModal(true)}>
+              <h4>{echowerCount}</h4>
+              <p>Echowers</p>
+            </div>
+            <div className="stat" onClick={() => setShowEchowersModal(true)}>
+              <h4>{echowingUids.length}</h4>
+              <p>Echowing</p>
+            </div>
           </div>
 
           {isDemoUser ? (
@@ -835,6 +841,53 @@ const Profile = () => {
               maxHeight: '70vh',
             }}
           />
+        )}
+
+        {/* ─── Echowers Modal ─── */}
+        {showEchowersModal && (
+          <div className="echowers-modal-overlay" onClick={() => setShowEchowersModal(false)}>
+            <div className="echowers-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="echowers-modal-header">
+                <h3>Echowers</h3>
+                <button className="close-btn" onClick={() => setShowEchowersModal(false)}>✕</button>
+              </div>
+              
+              <div className="echowers-stats">
+                <div className="stat-box">
+                  <h3>{echowingUids.length}</h3>
+                  <p>Echowing</p>
+                </div>
+                <div className="stat-box">
+                  <h3>{echowerCount}</h3>
+                  <p>Echowers</p>
+                </div>
+              </div>
+
+              <div className="echowers-list">
+                {echowingUids.length === 0 ? (
+                  <p className="empty-state">You aren't echowing anyone yet.</p>
+                ) : (
+                  echowingUids.map((uid) => {
+                    const profile = profiles[uid];
+                    if (!profile) return null;
+                    return (
+                      <div 
+                        key={uid} 
+                        className="echower-item"
+                        onClick={() => navigate(`/chat/${uid}`)}
+                      >
+                        <Avatar src={profile.avatar} name={profile.name} size={50} />
+                        <div className="item-info">
+                          <strong>{profile.name}</strong>
+                          <span>{profile.bio || 'No bio yet'}</span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </>
