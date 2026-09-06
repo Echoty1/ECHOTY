@@ -119,7 +119,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
     const rawAvatar = profile?.avatar || chat.partnerAvatar || '';
     if (rawAvatar) preloadMedia(rawAvatar);
 
-    // Prefer userChats payload (realtime) – avoid extra DB round-trips
     let lastSenderId = chat.lastSenderId || '';
     const isSender = lastSenderId === user.uid;
     let rawLastMessage = chat.lastMessage || 'Start chatting...';
@@ -211,8 +210,8 @@ const ChatItem = memo(({ chat, onStartChat }) => {
   return (
     <div className="chat-item regular-chat-item" onClick={() => onStartChat(chat)}>
       <div className="chat-avatar" onClick={(e) => {
-        e.stopPropagation(); // Stop chat from opening
-        navigate(`/user/${chat.id}`); // Open profile
+        e.stopPropagation(); 
+        navigate(`/user/${chat.id}`); 
       }}>
         <Avatar key={chat.avatar} src={chat.avatar} name={chat.name} size={48} />
         <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
@@ -282,7 +281,6 @@ const Chats = () => {
   const isDemoUser = user?.uid === DEMO_UID;
   const isSupportUser = user?.uid === SUPPORT_UID;
 
-  // ─── Load cached chat list from IndexedDB on mount ────────────
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -309,7 +307,6 @@ const Chats = () => {
     loadCached();
   }, [user?.uid, isDemoUser, isSupportUser]);
 
-  // ─── Listen for chat-read events ──────────────────────────────
   useEffect(() => {
     const handleChatRead = (event) => {
       const { userId } = event.detail;
@@ -337,7 +334,6 @@ const Chats = () => {
     return () => window.removeEventListener('chat-unread-cleared', handleUnreadCleared);
   }, []);
 
-  // Instant list patches from ChatView (send / read) without waiting for full reload
   useEffect(() => {
     const handleListUpdate = (event) => {
       const { partnerId, patch } = event.detail || {};
@@ -347,7 +343,6 @@ const Chats = () => {
         if (idx === -1) return prev;
         const next = [...prev];
         next[idx] = { ...next[idx], ...patch };
-        // Move updated chat to top
         const [item] = next.splice(idx, 1);
         next.unshift(item);
         return next;
@@ -357,7 +352,6 @@ const Chats = () => {
     return () => window.removeEventListener('chat-list-update', handleListUpdate);
   }, []);
 
-  // ─── Presence listener ──────────────────────────────────────
   useEffect(() => {
     if (!user) return;
     const presenceRef = ref(db, 'presence/online');
@@ -377,7 +371,6 @@ const Chats = () => {
     };
   }, [user]);
 
-  // ─── Firebase listener for userChats ──────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -432,7 +425,6 @@ const Chats = () => {
     };
   }, [user?.uid, onlineUsers, cacheKey, isDemoUser, isSupportUser]);
 
-  // ─── Infinite scroll ──────────────────────────────────────────
   const loadChats = useCallback(
     async (loadMore = false) => {
       if (!user || isLoadingMore) return;
@@ -513,7 +505,6 @@ const Chats = () => {
     loadingChats,
   ]);
 
-  // ─── Search (local-first, then network – no per-user fetches) ──
   const performSearch = async (queryText) => {
     const trimmed = queryText.trim().toLowerCase();
     if (trimmed.length < 1) {
@@ -523,7 +514,6 @@ const Chats = () => {
     }
     setIsSearching(true);
 
-    // 1) Instant: filter conversations already on this device
     const localHits = (recentChats || [])
       .filter((c) => {
         const n = (c.name || '').toLowerCase();
@@ -542,10 +532,9 @@ const Chats = () => {
       }));
     if (localHits.length) {
       setResults(localHits);
-      setIsSearching(false); // show local immediately
+      setIsSearching(false);
     }
 
-    // 2) Network search – use cached searchProfiles payload as-is (no extra gets)
     try {
       const searchRes = await searchProfiles(trimmed, user.uid, 50);
       const rawResults = Array.isArray(searchRes)
@@ -569,7 +558,6 @@ const Chats = () => {
           isOnline: !!onlineUsers[u.id],
         }));
 
-      // Merge: local first, then remote without duplicates
       const seen = new Set(localHits.map((x) => x.id));
       const merged = [...localHits];
       for (const r of remote) {
