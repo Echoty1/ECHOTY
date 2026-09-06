@@ -1,4 +1,4 @@
-/* Main wrapper */
+/* ─── Main Wrapper ─── */
 .stories-bar-container {
   position: fixed;
   bottom: 90px;
@@ -9,7 +9,7 @@
   pointer-events: auto;
 }
 
-/* Scrolling */
+/* ─── Scrolling ─── */
 .stories-bar-scroll {
   display: flex;
   gap: 16px;
@@ -23,7 +23,7 @@
   display: none;
 }
 
-/* Circle */
+/* ─── Circle ─── */
 .story-circle-wrapper {
   display: flex;
   flex-direction: column;
@@ -113,7 +113,7 @@
   text-align: center;
 }
 
-/* Recorder */
+/* ─── Recorder Overlay ─── */
 .recorder-overlay {
   position: fixed;
   inset: 0;
@@ -138,6 +138,7 @@
   overflow: hidden;
 }
 
+/* ─── Camera Header ─── */
 .small-camera-header {
   display: flex;
   justify-content: space-between;
@@ -184,6 +185,7 @@
   cursor: pointer;
 }
 
+/* ─── Camera Space ─── */
 .small-camera-space {
   width: 100%;
   aspect-ratio: 1 / 1;
@@ -199,11 +201,13 @@
   transform: scale(0.98);
 }
 
+/* ─── Video Feed (No hard-coded transform! JS controls this) ─── */
 .small-video-feed {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scaleX(-1);
+  transition: transform 0.15s ease-out;
+  transform-origin: center center;
 }
 
 .snapping-flash {
@@ -219,7 +223,39 @@
   to { opacity: 0; }
 }
 
-/* Memories Glass Panel */
+/* ─── Switch Camera Button ─── */
+.switch-camera-btn {
+  position: absolute;
+  bottom: 15px;
+  right: 15px;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 10;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+}
+
+.switch-camera-btn:hover {
+  background: rgba(0, 0, 0, 0.8);
+  border-color: rgba(255, 255, 255, 0.5);
+  transform: scale(1.05);
+}
+
+.switch-camera-btn:active {
+  transform: scale(0.95);
+}
+
+/* ─── Memories Glass Panel ─── */
 .memories-glass-panel {
   position: absolute;
   top: 20px;
@@ -313,298 +349,7 @@
   justify-content: center;
 }
 
-/* Viewer */
-.viewer-overlay {
-  position: fixed;
-  inset: 0;
-  background: #000;
-  z-index: 10000;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  color: #fff;
-  transition: opacity 0.3s ease;
-}
-
-.progress-bar-container {
-  position: absolute;
-  top: 10px;
-  left: 5%;
-  right: 5%;
-  display: flex;
-  gap: 4px;
-  z-index: 10;
-}
-
-.progress-segment {
-  flex: 1;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  background: #fff;
-  transition: width 0.1s linear;
-}
-
-.viewer-header {
-  position: absolute;
-  top: 20px;
-  left: 15px;
-  right: 15px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  z-index: 10;
-}
-
-.viewer-header-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.owner-name {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.viewer-time {
-  font-size: 12px;
-  color: rgba(255,255,255,0.7);
-}
-
-.close-viewer {
-  background: transparent;
-  border: none;
-  color: #fff;
-  font-size: 20px;
-  cursor: pointer;
-}
-
-.viewer-tap-area {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-}
-
-.viewer-image-container {
-  max-width: 100%;
-  max-height: 80vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
-}
-
-.viewer-image {
-  max-width: 100%;
-  max-height: 80vh;
-  object-fit: contain;
-}
-
-/* =========================================
-   PREMIUM INSTAGRAM-STYLE VIEWER LAYOUT
-   ========================================= */
-
-/* Full-screen container */
-.viewer-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  z-index: 10000;
-  display: flex;
-  flex-direction: column;
-  color: #fff;
-  cursor: pointer;
-  user-select: none;
-}
-
-/* Top section (progress + header) */
-.viewer-top-section {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 10;
-  padding: 15px 15px 0 15px;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%);
-}
-
-/* Progress Bars */
-.viewer-progress-container {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 15px;
-  width: 100%;
-}
-
-.viewer-progress-segment {
-  flex: 1;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.viewer-progress-fill {
-  height: 100%;
-  background: #ffffff;
-  border-radius: 10px;
-  transition: width 0.1s linear;
-}
-
-/* Glassmorphism User Header */
-.viewer-user-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-radius: 50px;
-  padding: 6px 6px 6px 6px;
-}
-
-.viewer-user-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-/* Avatar Ring */
-.viewer-avatar-ring {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  padding: 2px;
-  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.viewer-avatar {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid #000; /* Creates a clean gap */
-}
-
-.viewer-text-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.viewer-username {
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.2px;
-  line-height: 1.2;
-}
-
-.viewer-time {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-/* Close Button */
-.viewer-close-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  color: #fff;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.2s ease;
-  margin-right: 4px;
-}
-
-.viewer-close-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-/* Main Image Area */
-.viewer-main-area {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 15px 30px 15px;
-}
-
-/* High Quality Image Container */
-.viewer-image-wrapper {
-  max-width: 100%;
-  max-height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  animation: viewerZoomIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-/* Perfect, uncompressed image rendering */
-.viewer-image {
-  max-width: 100%;
-  max-height: 85vh;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  display: block;
-  -webkit-user-drag: none;
-  user-select: none;
-}
-
-@keyframes viewerZoomIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* Camera Tap Overlay (Let's user know where to tap) */
-.camera-tap-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 5;
-  background: transparent;
-  pointer-events: none;
-  border-radius: 20px;
-}
-
-/* Mirroring for front camera video feed */
-.small-video-feed.mirror {
-  transform: scaleX(-1);
-}
-
-/* Full Screen Memory Overlay */
+/* ─── Full Memory Overlay ─── */
 .memory-fullscreen-overlay {
   position: fixed;
   top: 0;
@@ -676,90 +421,6 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
-/* Camera Text Overlay */
-.camera-text-overlay {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 5;
-  pointer-events: none;
-  max-width: 90%;
-  text-align: center;
-}
-
-.camera-text-overlay span {
-  font-size: 28px;
-  font-weight: 800;
-  color: #fff;
-  text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
-  word-wrap: break-word;
-}
-
-/* Text Input Popup */
-.camera-text-input-popup {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  z-index: 20;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 16px;
-  padding: 15px;
-  width: 85%;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.camera-text-input-popup input {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 8px;
-  color: #fff;
-  padding: 12px;
-  font-size: 16px;
-  text-align: center;
-}
-
-.camera-text-input-popup input:focus {
-  outline: none;
-  border-color: #0095f6;
-}
-
-.text-input-actions {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.text-input-actions button {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  color: #fff;
-  padding: 8px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.text-input-actions button:first-child {
-  background: #0095f6;
-}
-
-.text-input-actions button:hover {
-  opacity: 0.9;
-}
-
-/* Apply Zoom to Video */
-.small-video-feed {
-  transition: transform 0.2s ease-out;
-  transform-origin: center;
-}
 .delete-memory-btn {
   background: #ff3040;
   color: #fff;
@@ -767,4 +428,170 @@
 
 .delete-memory-btn:hover {
   background: #d6001c;
+}
+
+/* ─── Viewer Overlay (Instagram Style) ─── */
+.viewer-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.92);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+}
+
+.viewer-top-section {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 10;
+  padding: 15px 15px 0 15px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%);
+}
+
+.viewer-progress-container {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 15px;
+  width: 100%;
+}
+
+.viewer-progress-segment {
+  flex: 1;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 10px;
+  overflow: hidden;
+}
+
+.viewer-progress-fill {
+  height: 100%;
+  background: #ffffff;
+  border-radius: 10px;
+  transition: width 0.1s linear;
+}
+
+.viewer-user-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-radius: 50px;
+  padding: 6px;
+}
+
+.viewer-user-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.viewer-avatar-ring {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  padding: 2px;
+  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.viewer-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #000;
+}
+
+.viewer-text-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.viewer-username {
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+}
+
+.viewer-time {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.viewer-close-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #fff;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  margin-right: 4px;
+}
+
+.viewer-close-btn:hover {
+  background: rgba(255, 255, 255, 0.25);
+}
+
+.viewer-main-area {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 80px 15px 30px 15px;
+}
+
+.viewer-image-wrapper {
+  max-width: 100%;
+  max-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20px;
+  overflow: hidden;
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  animation: viewerZoomIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.viewer-image {
+  max-width: 100%;
+  max-height: 85vh;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  display: block;
+  -webkit-user-drag: none;
+  user-select: none;
+}
+
+@keyframes viewerZoomIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
 }
