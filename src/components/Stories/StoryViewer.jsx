@@ -12,12 +12,10 @@ const StoryViewer = ({ stories, ownerName, viewerId, onClose }) => {
     setProgress(0);
     if (!currentStory) return;
 
-    // Mark as viewed
     if (currentStory.userId && currentStory.id && viewerId) {
       markStatusViewed(currentStory.userId, currentStory.id, viewerId);
     }
 
-    // Auto-advance timer
     const interval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
@@ -36,7 +34,6 @@ const StoryViewer = ({ stories, ownerName, viewerId, onClose }) => {
     if (currentIndex < stories.length - 1) {
       setCurrentIndex(prev => prev + 1);
     } else {
-      // No more stories, close
       onClose();
     }
   };
@@ -56,15 +53,29 @@ const StoryViewer = ({ stories, ownerName, viewerId, onClose }) => {
 
       {/* Header */}
       <div className="viewer-header">
-        <span className="owner-name">{ownerName || 'User'}</span>
+        <div className="viewer-header-info">
+          <span className="owner-name">{ownerName || 'User'}</span>
+          <span className="viewer-time">Now</span>
+        </div>
         <button className="close-viewer" onClick={onClose}>✕</button>
       </div>
 
-      {/* MAIN AREA - Click to advance */}
+      {/* Main Image Area */}
       <div className="viewer-tap-area" onClick={handleNext}>
         <div className="viewer-image-container">
           <img src={currentStory.imageUrl} alt="Story" className="viewer-image" />
           {currentStory.caption && <p className="viewer-caption">{currentStory.caption}</p>}
+        </div>
+      </div>
+
+      {/* Footer */}
+      <div className="viewer-footer">
+        <button className="viewer-reply-input">
+          <span>Reply to {ownerName || 'user'}...</span>
+        </button>
+        <div className="viewer-footer-icons">
+          <span className="icon">❤️</span>
+          <span className="icon">💬</span>
         </div>
       </div>
     </div>
