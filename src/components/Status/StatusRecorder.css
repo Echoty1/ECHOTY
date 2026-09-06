@@ -1,0 +1,173 @@
+.status-recorder-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.status-recorder-card {
+  width: 100%;
+  max-width: 380px;
+  background: var(--bg-card, #1e1b2e);
+  border-radius: 28px;
+  padding: 28px 24px 32px;
+  position: relative;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+}
+
+.recorder-close {
+  position: absolute;
+  top: 16px;
+  right: 18px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #aaa);
+  font-size: 28px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.recorder-title {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+  text-align: center;
+}
+
+.recorder-subtitle {
+  margin: 0 0 28px;
+  font-size: 14px;
+  color: var(--text-secondary, #aaa);
+  text-align: center;
+}
+
+.recorder-main {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 24px;
+}
+
+.record-circle {
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 0 40px rgba(139, 92, 246, 0.5);
+  transition: transform 0.2s;
+}
+
+.record-circle.pulsing {
+  animation: pulseRecord 1.4s ease-in-out infinite;
+}
+
+@keyframes pulseRecord {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 40px rgba(139, 92, 246, 0.5); }
+  50% { transform: scale(1.08); box-shadow: 0 0 60px rgba(139, 92, 246, 0.8); }
+}
+
+.mic-icon {
+  font-size: 48px;
+}
+
+.timer-display {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary, #fff);
+  letter-spacing: 1px;
+}
+
+.timer-display span {
+  font-size: 16px;
+  opacity: 0.5;
+  font-weight: 500;
+}
+
+.record-action-btn {
+  padding: 16px 40px;
+  border-radius: 50px;
+  border: none;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  color: white;
+  transition: all 0.2s;
+}
+
+.record-action-btn.start {
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  box-shadow: 0 8px 25px rgba(139, 92, 246, 0.4);
+}
+
+.record-action-btn.stop {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  box-shadow: 0 8px 25px rgba(239, 68, 68, 0.4);
+}
+
+.preview-main {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.preview-audio {
+  width: 100%;
+  border-radius: 12px;
+}
+
+.caption-input {
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(139, 92, 246, 0.3);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-primary, #fff);
+  font-size: 15px;
+  outline: none;
+}
+
+.caption-input::placeholder {
+  color: #888;
+}
+
+.preview-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.btn-secondary {
+  flex: 1;
+  padding: 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: var(--text-primary, #fff);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-primary {
+  flex: 1.4;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+  color: white;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
