@@ -22,7 +22,6 @@ export const createVoiceStatus = async (userId, { audioUrl, duration, caption = 
 
   await set(statusRef, data);
 
-  // Update the owner index so the StatusBar can show it
   await update(ref(db, `statusOwners/${userId}`), {
     lastStatusAt: serverTimestamp(),
     lastStatusId: statusId,
