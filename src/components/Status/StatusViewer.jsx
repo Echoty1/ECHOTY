@@ -1,3 +1,4 @@
+// src/components/Status/StatusViewer.jsx
 import React, { useEffect, useState, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../contexts/ProfileContext';
@@ -6,6 +7,8 @@ import {
   markStatusViewed,
   addReaction,
 } from '../../services/statusService';
+import { ref, remove } from 'firebase/database';
+import { db } from '../../services/firebase';
 import { STATUS_EMOJIS } from './statusEmojis';
 import Avatar from '../common/Avatar';
 import './StatusViewer.css';
@@ -17,9 +20,11 @@ const StatusViewer = ({ userId, onClose }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   const audioRef = useRef(null);
   const progressInterval = useRef(null);
+  const isOwn = user?.uid === userId;
 
   const profile = profiles[userId] || {};
   const currentStatus = statuses[currentIndex];
@@ -35,10 +40,8 @@ const StatusViewer = ({ userId, onClose }) => {
   useEffect(() => {
     if (!currentStatus || !user) return;
 
-    // Mark as viewed
     markStatusViewed(userId, currentStatus.id, user.uid);
 
-    // Auto play
     if (audioRef.current) {
       audioRef.current.src = currentStatus.audioUrl;
       audioRef.current.play().catch(() => {});
@@ -88,6 +91,24 @@ const StatusViewer = ({ userId, onClose }) => {
     await addReaction(userId, currentStatus.id, emoji, user.uid);
   };
 
+  const handleDelete = async () => {
+    if (!currentStatus || !isOwn) return;
+    try {
+      await remove(ref(db, `statuses/${userId}/${currentStatus.id}`));
+      // If this was the last one, also clean statusOwners
+      if (statuses.length <= 1) {
+        await remove(ref(db, `statusOwners/${userId}`));
+      }
+      setShowDeleteConfirm(false);
+      if (statuses.length <= 1) {
+        onClose();
+      }
+    } catch (err) {
+      console.error(err);
+      alert('Failed to delete Echo');
+    }
+  };
+
   if (!currentStatus) return null;
 
   return (
@@ -115,8 +136,8 @@ const StatusViewer = ({ userId, onClose }) => {
         {/* Header */}
         <div className="viewer-header">
           <div className="viewer-user">
-            <Avatar src={profile.avatar} name={profile.name} size={40} />
-            <div>
+            <Avatar src={profile.avatar} name={profile.name} size={42} />
+            <div className="viewer-user-info">
               <div className="viewer-name">{profile.name || 'User'}</div>
               <div className="viewer-time">
                 {currentStatus.createdAt
@@ -125,20 +146,36 @@ const StatusViewer = ({ userId, onClose }) => {
                       minute: '2-digit',
                     })
                   : ''}
+                {currentStatus.filter && currentStatus.filter !== 'normal' && (
+                  <span className="filter-tag"> • {currentStatus.filter}</span>
+                )}
               </div>
             </div>
           </div>
-          <button className="viewer-close" onClick={onClose}>
-            ×
-          </button>
+
+          <div className="viewer-actions">
+            {isOwn && (
+              <button
+                className="viewer-delete-btn"
+                onClick={() => setShowDeleteConfirm(true)}
+                title="Delete Echo"
+              >
+                🗑️
+              </button>
+            )}
+            <button className="viewer-close-btn" onClick={onClose} title="Close">
+              ✕
+            </button>
+          </div>
         </div>
 
         {/* Main content */}
         <div className="viewer-content">
           <div className="voice-visual">
             <div className={`big-avatar ${isPlaying ? 'playing' : ''}`}>
-              <Avatar src={profile.avatar} name={profile.name} size={140} />
+              <Avatar src={profile.avatar} name={profile.name} size={150} />
             </div>
+
             {currentStatus.caption && (
               <p className="status-caption">{currentStatus.caption}</p>
             )}
@@ -152,13 +189,13 @@ const StatusViewer = ({ userId, onClose }) => {
           />
         </div>
 
-        {/* Navigation zones */}
+        {/* Navigation zones (tap left / right) */}
         <div className="nav-zones">
           <div className="nav-left" onClick={goPrev} />
           <div className="nav-right" onClick={goNext} />
         </div>
 
-        {/* Custom emoji reactions */}
+        {/* Reaction bar */}
         <div className="reaction-bar">
           {STATUS_EMOJIS.map((item) => (
             <button
@@ -171,6 +208,22 @@ const StatusViewer = ({ userId, onClose }) => {
             </button>
           ))}
         </div>
+
+        {/* Delete confirmation */}
+        {showDeleteConfirm && (
+          <div className="delete-confirm-overlay">
+            <div className="delete-confirm-box">
+              <h3>Delete this Echo?</h3>
+              <p>This cannot be undone.</p>
+              <div className="delete-confirm-actions">
+                <button onClick={() => setShowDeleteConfirm(false)}>Cancel</button>
+                <button className="danger" onClick={handleDelete}>
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
