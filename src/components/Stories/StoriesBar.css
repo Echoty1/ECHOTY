@@ -40,7 +40,7 @@
   height: 68px;
   border-radius: 50%;
   padding: 3px;
-  background: #3f3f46;
+  background: rgba(139, 92, 246, 0.4); /* Transparent Purple */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -51,7 +51,7 @@
 
 .story-circle-wrapper:hover .story-ring {
   transform: scale(1.05);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
 }
 
 .story-circle-wrapper:active .story-ring {
@@ -63,9 +63,10 @@
   background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
 }
 
+/* 🔵 "Your Echus" Circle (Transparent Purple) */
 .story-ring.own {
-  background: #3f3f46;
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(139, 92, 246, 0.6); /* Transparent Purple */
+  border: 1px solid rgba(139, 92, 246, 0.8);
 }
 
 /* Avatar */
@@ -73,13 +74,13 @@
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: #000;
+  background: rgba(139, 92, 246, 0.3); /* Transparent Purple Background */
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   overflow: hidden;
-  border: 2px solid #1a1a1a;
+  border: 2px solid rgba(139, 92, 246, 0.5);
 }
 
 .story-img {
@@ -109,7 +110,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid #000;
+  border: 2px solid rgba(139, 92, 246, 0.8); /* Purple border instead of black */
   line-height: 1;
   z-index: 3;
 }
@@ -125,7 +126,7 @@
   text-align: center;
 }
 
-/* ─── THE STACKED GRID (Peeking from behind) ─── */
+/* ─── THE STACKED GRID (Peeking from behind - Transparent Purple) ─── */
 .story-circle-wrapper::before,
 .story-circle-wrapper::after {
   content: '';
@@ -133,7 +134,7 @@
   top: 3px;
   bottom: 3px;
   border-radius: 50%;
-  background: #222;
+  background: rgba(139, 92, 246, 0.25); /* Transparent Purple */
   pointer-events: none;
   transition: transform 0.2s ease;
   z-index: -1;
@@ -151,7 +152,7 @@
   left: -11px;
   right: 11px;
   transform: rotate(-8deg);
-  background: #2a2a2a;
+  background: rgba(139, 92, 246, 0.15); /* Lighter transparent purple */
 }
 
 /* When hovering, the stack expands slightly */
