@@ -1,7 +1,5 @@
-// src/components/Status/StatusCircle.jsx
 import React from 'react';
 import Avatar from '../common/Avatar';
-import './StatusBar.css';
 
 const StatusCircle = ({
   isOwn = false,
@@ -13,33 +11,123 @@ const StatusCircle = ({
 }) => {
   const handleClick = () => {
     if (isOwn) {
-      onAdd?.();           // Always open recorder for own circle
+      if (hasStatus) onView?.();
+      else onAdd?.();
     } else {
       onView?.();
     }
   };
 
   return (
-    <div className="status-circle-wrapper" onClick={handleClick}>
+    <div
+      onClick={handleClick}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        cursor: 'pointer',
+        gap: '2px',
+        flexShrink: 0,
+        width: '68px',
+        padding: '2px 0',
+      }}
+    >
       <div
-        className={`status-ring ${hasStatus ? 'has-status' : ''} ${isOwn ? 'own' : ''}`}
+        style={{
+          width: '60px',
+          height: '60px',
+          borderRadius: '50%',
+          padding: '2px',
+          background: hasStatus 
+            ? 'linear-gradient(135deg, #F77737, #FCAF45, #FFDC80)'
+            : '#E4E6EB',
+          position: 'relative',
+          transition: 'transform 0.15s ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.transform = 'scale(1.05)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.transform = 'scale(1)';
+        }}
       >
-        <div className="status-avatar-inner">
-          <Avatar 
-            src={avatar} 
-            name={name} 
-            size={58} 
-          />
-
-          {/* Plus badge only for own empty circle */}
-          {isOwn && (
-            <div className="add-badge">+</div>
+        <div
+          style={{
+            width: '100%',
+            height: '100%',
+            borderRadius: '50%',
+            overflow: 'hidden',
+            border: '2.5px solid #FFFFFF',
+            position: 'relative',
+            background: '#FFFFFF',
+          }}
+        >
+          <Avatar src={avatar} name={name} size={55} />
+          
+          {isOwn && !hasStatus && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: '-1px',
+                right: '-1px',
+                width: '18px',
+                height: '18px',
+                borderRadius: '50%',
+                background: '#0095F6',
+                color: 'white',
+                fontSize: '13px',
+                fontWeight: '300',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2.5px solid #FFFFFF',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+              }}
+            >
+              +
+            </div>
+          )}
+          
+          {isOwn && hasStatus && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: '-1px',
+                right: '-1px',
+                width: '18px',
+                height: '18px',
+                borderRadius: '50%',
+                background: '#0095F6',
+                color: 'white',
+                fontSize: '8px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                border: '2.5px solid #FFFFFF',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                paddingLeft: '1.5px',
+              }}
+            >
+              ▶
+            </div>
           )}
         </div>
       </div>
-
-      <span className="status-name">
-        {isOwn ? 'Your Echo' : (name?.split(' ')[0] || 'User')}
+      
+      <span
+        style={{
+          fontSize: '11px',
+          color: '#262626',
+          textAlign: 'center',
+          maxWidth: '68px',
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+          fontWeight: 400,
+          marginTop: '1px',
+        }}
+      >
+        {isOwn ? 'Your Echo' : name?.split(' ')[0] || 'User'}
       </span>
     </div>
   );
