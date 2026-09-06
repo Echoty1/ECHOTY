@@ -1,3 +1,4 @@
+// src/components/Status/StatusCircle.jsx
 import React from 'react';
 import Avatar from '../common/Avatar';
 import './StatusBar.css';
@@ -12,8 +13,7 @@ const StatusCircle = ({
 }) => {
   const handleClick = () => {
     if (isOwn) {
-      if (hasStatus) onView?.();
-      else onAdd?.();
+      onAdd?.();           // Always open recorder for own circle
     } else {
       onView?.();
     }
@@ -25,17 +25,21 @@ const StatusCircle = ({
         className={`status-ring ${hasStatus ? 'has-status' : ''} ${isOwn ? 'own' : ''}`}
       >
         <div className="status-avatar-inner">
-          <Avatar src={avatar} name={name} size={56} />
-          {isOwn && !hasStatus && (
+          <Avatar 
+            src={avatar} 
+            name={name} 
+            size={58} 
+          />
+
+          {/* Plus badge only for own empty circle */}
+          {isOwn && (
             <div className="add-badge">+</div>
-          )}
-          {isOwn && hasStatus && (
-            <div className="view-badge">▶</div>
           )}
         </div>
       </div>
+
       <span className="status-name">
-        {isOwn ? 'Your Echo' : name?.split(' ')[0] || 'User'}
+        {isOwn ? 'Your Echo' : (name?.split(' ')[0] || 'User')}
       </span>
     </div>
   );
