@@ -12,6 +12,7 @@ const StoryViewer = ({ stories, ownerName, viewerId, onClose }) => {
     setProgress(0);
     if (!currentStory) return;
 
+    // Mark as viewed the exact moment it opens
     if (currentStory.userId && currentStory.id && viewerId) {
       markStatusViewed(currentStory.userId, currentStory.id, viewerId);
     }
@@ -64,20 +65,10 @@ const StoryViewer = ({ stories, ownerName, viewerId, onClose }) => {
       <div className="viewer-tap-area" onClick={handleNext}>
         <div className="viewer-image-container">
           <img src={currentStory.imageUrl} alt="Story" className="viewer-image" />
-          {currentStory.caption && <p className="viewer-caption">{currentStory.caption}</p>}
         </div>
       </div>
 
-      {/* Footer */}
-      <div className="viewer-footer">
-        <button className="viewer-reply-input">
-          <span>Reply to {ownerName || 'user'}...</span>
-        </button>
-        <div className="viewer-footer-icons">
-          <span className="icon">❤️</span>
-          <span className="icon">💬</span>
-        </div>
-      </div>
+      {/* No Reply Footer here anymore - Clean UI */}
     </div>
   );
 };
