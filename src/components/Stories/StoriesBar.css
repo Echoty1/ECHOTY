@@ -585,3 +585,102 @@
     transform: scale(1);
   }
 }
+
+/* Camera Tap Overlay (Let's user know where to tap) */
+.camera-tap-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 5;
+  background: transparent;
+  pointer-events: none;
+  border-radius: 20px;
+}
+
+/* Mirroring for front camera video feed */
+.small-video-feed.mirror {
+  transform: scaleX(-1);
+}
+
+/* Full Screen Memory Overlay */
+.memory-fullscreen-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10001;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+
+.memory-fullscreen-content {
+  max-width: 90vw;
+  max-height: 80vh;
+  background: rgba(30, 30, 30, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 15px;
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
+  animation: memoryZoomIn 0.3s ease;
+  cursor: default;
+}
+
+@keyframes memoryZoomIn {
+  from { transform: scale(0.9); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.memory-fullscreen-content img {
+  max-width: 100%;
+  max-height: 60vh;
+  border-radius: 12px;
+  object-fit: contain;
+}
+
+.memory-fullscreen-actions {
+  display: flex;
+  gap: 15px;
+  width: 100%;
+  justify-content: center;
+}
+
+.cancel-memory-btn, .delete-memory-btn {
+  padding: 10px 24px;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.cancel-memory-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.cancel-memory-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.delete-memory-btn {
+  background: #ff3040;
+  color: #fff;
+}
+
+.delete-memory-btn:hover {
+  background: #d6001c;
+}
