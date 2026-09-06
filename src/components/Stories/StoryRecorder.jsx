@@ -1,3 +1,4 @@
+// src/components/Stories/StoryRecorder.jsx
 import React, { useRef, useState, useEffect } from 'react';
 import { createImageStatus, getUserMemories, deleteStatus } from '../../services/statusService';
 import './StoriesBar.css';
@@ -14,7 +15,6 @@ const StoryRecorder = ({ userId, onClose }) => {
   const [showMemories, setShowMemories] = useState(false);
   const [selectedMemory, setSelectedMemory] = useState(null);
   const [facingMode, setFacingMode] = useState('user');
-  
   const [zoomLevel, setZoomLevel] = useState(1);
 
   const fetchMemories = async () => {
@@ -52,7 +52,7 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
   }, [facingMode]);
 
-  // ✅ FIX: JavaScript applies the transform (zoom + mirror) here
+  // Ensure correct mirroring when camera switches
   useEffect(() => {
     if (videoRef.current) {
       const mirror = facingMode === 'user' ? 'scaleX(-1)' : '';
@@ -113,18 +113,27 @@ const StoryRecorder = ({ userId, onClose }) => {
     }
 
     context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-
     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
 
     try {
-      // ✅ FIX: Auto-post
+      // ⚠️ CHECK: Make sure userId is not undefined/null!
+      if (!userId) {
+        console.error("❌ User ID is missing!");
+        alert("User ID is missing. Please log out and log back in.");
+        setSnapping(false);
+        return;
+      }
+
+      // Try to post!
       await createImageStatus(userId, { imageUrl: imageDataUrl, caption: '' });
-      setSnapping(false);
       
-      // ✅ FIX: Fetch memories immediately after posting, so it updates right away!
-      await fetchMemories(); 
+      // If it worked, update memories and reset!
+      setSnapping(false);
+      await fetchMemories();
+
     } catch (err) {
-      console.error("Error auto-posting:", err);
+      console.error("❌ Error saving status:", err);
+      alert(`Failed to post Echus: ${err.message}`);
       setSnapping(false);
     }
   };
@@ -157,14 +166,7 @@ const StoryRecorder = ({ userId, onClose }) => {
           onTouchMove={handleTouchMove}
           style={{ opacity: snapping ? 0.6 : 1, pointerEvents: snapping ? 'none' : 'auto' }}
         >
-          <video 
-            ref={videoRef} 
-            autoPlay 
-            playsInline 
-            muted 
-            className="small-video-feed"
-          />
-          
+          <video ref={videoRef} autoPlay playsInline muted className="small-video-feed" />
           <canvas ref={canvasRef} style={{ display: 'none' }} />
           {snapping && <div className="snapping-flash"></div>}
 
@@ -229,7 +231,6 @@ const StoryRecorder = ({ userId, onClose }) => {
             </div>
           </div>
         )}
-
       </div>
     </div>
   );
