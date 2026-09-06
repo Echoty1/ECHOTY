@@ -1,10 +1,12 @@
+/* StatusBar.css - Improved */
+
 .echo-status-bar {
   display: flex;
-  gap: 14px;
+  gap: 16px;
   align-items: center;
   overflow-x: auto;
-  padding: 6px 4px;
-  max-width: 70vw;
+  padding: 8px 4px;
+  max-width: 75vw;
   scrollbar-width: none;
 }
 
@@ -16,40 +18,42 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .status-ring {
-  width: 64px;
-  height: 64px;
+  width: 68px;
+  height: 68px;
   border-radius: 50%;
   padding: 3px;
-  background: #555;
+  background: #3f3f46;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s;
+  transition: transform 0.2s ease;
 }
 
-.status-circle-wrapper:hover .status-ring {
-  transform: scale(1.05);
+.status-circle-wrapper:active .status-ring {
+  transform: scale(0.94);
 }
 
+/* Gradient ring when someone has an unviewed status */
 .status-ring.has-status {
-  background: linear-gradient(135deg, #8b5cf6, #ec4899, #f59e0b);
+  background: linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6);
 }
 
-.status-ring.own.has-status {
-  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+/* Own circle */
+.status-ring.own {
+  background: #3f3f46;
 }
 
 .status-avatar-inner {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: var(--bg-primary, #0f0f13);
+  background: #09090b;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -57,29 +61,29 @@
   overflow: hidden;
 }
 
-.add-badge,
-.view-badge {
+.add-badge {
   position: absolute;
-  bottom: -2px;
-  right: -2px;
+  bottom: 0;
+  right: 0;
   width: 22px;
   height: 22px;
   border-radius: 50%;
   background: #8b5cf6;
   color: white;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid var(--bg-primary, #0f0f13);
+  border: 2.5px solid #09090b;
+  line-height: 1;
 }
 
 .status-name {
   font-size: 11px;
   font-weight: 600;
   color: var(--text-primary, #fff);
-  max-width: 64px;
+  max-width: 68px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
