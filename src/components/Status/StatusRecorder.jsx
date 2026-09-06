@@ -1,37 +1,80 @@
 // src/components/StatusRecorder.jsx
-import React, { useRef, useState } from 'react';
-import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import React, { useRef, useState, useEffect } from 'react';
+import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
 import { createImageStatus } from '../services/statusService';
 import './StatusRecorder.css';
 
 const StatusRecorder = ({ userId, onClose }) => {
-  const [image, setImage] = useState(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+  
+  const [stream, setStream] = useState(null);
+  const [snappedImage, setSnappedImage] = useState(null);
   const [caption, setCaption] = useState('');
   const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef(null);
+  const [error, setError] = useState('');
 
-  const handleFileChange = (e) => {
-    if (e.target.files && e.target.files[0]) {
-      const file = e.target.files[0];
-      const reader = new FileReader();
-      reader.onloadend = () => setImage(reader.result);
-      reader.readAsDataURL(file);
-    }
+  // Start the camera when the component mounts
+  useEffect(() => {
+    const startCamera = async () => {
+      try {
+        const mediaStream = await navigator.mediaDevices.getUserMedia({ 
+          video: { facingMode: "user" }, // Front camera
+          audio: false 
+        });
+        setStream(mediaStream);
+        if (videoRef.current) {
+          videoRef.current.srcObject = mediaStream;
+        }
+      } catch (err) {
+        console.error("Error accessing camera:", err);
+        setError("Camera access denied. Please allow camera permissions.");
+      }
+    };
+
+    startCamera();
+
+    // Cleanup: stop the camera when component unmounts
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+      }
+    };
+  }, []);
+
+  // Take the photo
+  const handleSnap = () => {
+    if (!videoRef.current) return;
+
+    const canvas = canvasRef.current;
+    const context = canvas.getContext('2d');
+    
+    // Set canvas to the exact size of the video feed
+    canvas.width = videoRef.current.videoWidth;
+    canvas.height = videoRef.current.videoHeight;
+    
+    // Draw the current video frame to the canvas
+    context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
+    
+    // Convert to base64 data URL
+    const imageDataUrl = canvas.toDataURL('image/jpeg');
+    setSnappedImage(imageDataUrl);
+  };
+
+  const retake = () => {
+    setSnappedImage(null);
   };
 
   const handlePost = async () => {
-    if (!image || !userId) return;
+    if (!snappedImage || !userId) return;
     setUploading(true);
 
     try {
       const storage = getStorage();
       const imageRef = storageRef(storage, `statuses/${userId}/${Date.now()}.jpg`);
 
-      // Convert base64 to blob for upload
-      const response = await fetch(image);
-      const blob = await response.blob();
-
-      await uploadBytes(imageRef, blob);
+      // Upload the base64 string directly
+      await uploadString(imageRef, snappedImage, 'data_url');
       const downloadURL = await getDownloadURL(imageRef);
 
       // Save to database
@@ -49,21 +92,35 @@ const StatusRecorder = ({ userId, onClose }) => {
     <div className="status-recorder-overlay">
       <div className="status-recorder-modal">
         <h2>Create New Story</h2>
-        
-        {!image ? (
-          <div className="upload-area" onClick={() => fileInputRef.current.click()}>
-            <p>Click to snap a picture</p>
-            <input 
-              type="file" 
-              accept="image/*" 
-              ref={fileInputRef} 
-              onChange={handleFileChange} 
-              style={{ display: 'none' }} 
+
+        {/* Error message if camera fails */}
+        {error && <div className="camera-error">{error}</div>}
+
+        {!snappedImage ? (
+          <div className="camera-view">
+            {/* Live Video Feed */}
+            <video 
+              ref={videoRef} 
+              autoPlay 
+              playsInline 
+              muted 
+              className="video-feed"
             />
+            {/* Hidden Canvas for capturing */}
+            <canvas ref={canvasRef} style={{ display: 'none' }} />
+            
+            {/* Snap Button */}
+            <button className="snap-btn" onClick={handleSnap} disabled={!stream}>
+              <div className="snap-btn-inner"></div>
+            </button>
           </div>
         ) : (
           <>
-            <img src={image} alt="Preview" className="image-preview" />
+            {/* Preview of snapped image */}
+            <div className="snapped-preview">
+              <img src={snappedImage} alt="Preview" className="image-preview" />
+            </div>
+            
             <input 
               type="text" 
               placeholder="Add a caption..." 
@@ -71,8 +128,9 @@ const StatusRecorder = ({ userId, onClose }) => {
               onChange={(e) => setCaption(e.target.value)} 
               className="caption-input"
             />
+            
             <div className="modal-actions">
-              <button onClick={() => setImage(null)} disabled={uploading}>Retake</button>
+              <button onClick={retake} disabled={uploading}>Retake</button>
               <button onClick={handlePost} disabled={uploading}>
                 {uploading ? 'Posting...' : 'Share to Story'}
               </button>
