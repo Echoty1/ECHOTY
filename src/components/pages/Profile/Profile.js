@@ -16,7 +16,7 @@ import MoodPicker from '../../common/MoodPicker';
 import Avatar from '../../common/Avatar';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
-import { listenToMyEchowers, listenToMyEchowerCount } from '../../../services/echowerService';
+import { listenToMyEchowers, listenToMyEchowerCount, listenToMyEchowingCount } from '../../../services/echowerService';
 import './Profile.css';
 
 const STORAGE_PREFIX = 'echo_cache_';
@@ -84,17 +84,11 @@ const Profile = () => {
 
   const isDemoUser = user?.uid === DEMO_UID;
 
-  // ─── Echower States (Fully Decoupled from Profile State) ──────
+  // ─── Echower States (Separated correctly) ───
   const [showEchowersModal, setShowEchowersModal] = useState(false);
-  
-  // Followers: People who follow ME
-  const [followerUids, setFollowerUids] = useState([]);
-  
-  // Following: People I am following
-  const [followingUids, setFollowingUids] = useState([]);
-  
-  // Tab State for the modal
-  const [activeEchowersTab, setActiveEchowersTab] = useState('followers'); // 'followers' or 'following'
+  const [followerUids, setFollowerUids] = useState([]); // People FOLLOWING me
+  const [followingUids, setFollowingUids] = useState([]); // People I FOLLOW
+  const [activeEchowersTab, setActiveEchowersTab] = useState('followers');
 
   const cachedProfile = useMemo(() => {
     if (!user?.uid) return null;
@@ -501,7 +495,7 @@ const Profile = () => {
             {(editing || isDemoUser) && <div className="avatar-overlay">Tap to change</div>}
           </div>
 
-          {/* ─── Echower Stats (Clickable) ─── */}
+          {/* ─── Echower Stats (Correct Counts) ─── */}
           <div className="profile-stats">
             <div className="stat" onClick={() => { setActiveEchowersTab('followers'); setShowEchowersModal(true); }}>
               <h4>{followerUids.length}</h4>
