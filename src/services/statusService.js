@@ -43,12 +43,6 @@ export const markStatusViewed = async (ownerId, statusId, viewerId) => {
   });
 };
 
-export const addReaction = (ownerId, statusId, emoji, userId) => {
-  return update(ref(db, `statuses/${ownerId}/${statusId}/reactions/${emoji}`), {
-    [userId]: true,
-  });
-};
-
 export const deleteStatus = async (userId, statusId) => {
   await remove(ref(db, `statuses/${userId}/${statusId}`));
 
@@ -59,6 +53,14 @@ export const deleteStatus = async (userId, statusId) => {
   if (!stillHas) {
     await remove(ref(db, `statusOwners/${userId}`));
   }
+};
+
+// Gets all expired statuses for the "Memories" section
+export const getUserMemories = async (userId) => {
+  const snap = await get(ref(db, `statuses/${userId}`));
+  const data = snap.val() || {};
+  const now = Date.now();
+  return Object.values(data).filter((s) => s.expiresAt <= now).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 };
 
 export const listenToStatusOwners = (callback) => {
@@ -77,6 +79,13 @@ export const listenToUserStatuses = (userId, callback) => {
     const valid = Object.values(data)
       .filter((s) => s.expiresAt > now)
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+    Object.values(data)
+      .filter((s) => s.expiresAt <= now)
+      .forEach((s) => {
+        remove(ref(db, `statuses/${userId}/${s.id}`)).catch(() => {});
+      });
+
     callback(valid);
   });
   return () => off(statusesRef);
