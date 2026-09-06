@@ -1,34 +1,17 @@
 import React, { useRef } from 'react';
 import StatusCircle from './StatusCircle';
+import './StatusBar.css'; // Make sure to import the CSS
 
 const StatusBar = ({ users, ownStatus, onAddStatus, onViewStatus }) => {
   const scrollRef = useRef(null);
 
   return (
-    <div
-      style={{
-        background: '#FFFFFF',
-        borderBottom: '1px solid #EFEFEF',
-        padding: '4px 0',
-        position: 'relative',
-        overflow: 'hidden',
-      }}
-    >
+    <div className="echo-status-container">
       <div
         ref={scrollRef}
-        className="status-bar-scroll"
-        style={{
-          display: 'flex',
-          gap: '10px',
-          overflowX: 'auto',
-          overflowY: 'hidden',
-          padding: '4px 16px 4px 10px',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-          WebkitOverflowScrolling: 'touch',
-        }}
+        className="echo-status-bar"
       >
-        {/* Your own status circle - first item with left offset */}
+        {/* Your own status circle */}
         <StatusCircle
           isOwn={true}
           hasStatus={!!ownStatus}
@@ -54,18 +37,7 @@ const StatusBar = ({ users, ownStatus, onAddStatus, onViewStatus }) => {
       </div>
       
       {/* Subtle gradient fade on the left edge */}
-      <div
-        style={{
-          position: 'absolute',
-          left: 0,
-          top: 0,
-          bottom: 0,
-          width: '40px',
-          background: 'linear-gradient(to right, rgba(255,255,255,0.9), rgba(255,255,255,0))',
-          pointerEvents: 'none',
-          zIndex: 2,
-        }}
-      />
+      <div className="status-fade-left" />
     </div>
   );
 };
