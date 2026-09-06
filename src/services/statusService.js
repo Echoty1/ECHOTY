@@ -3,7 +3,7 @@ import { db } from './firebase';
 
 const EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-export const createVoiceStatus = async (userId, { audioUrl, duration, caption = '' }) => {
+export const createVoiceStatus = async (userId, { audioUrl, duration, caption = '', filter = 'normal' }) => {
   const statusRef = push(ref(db, `statuses/${userId}`));
   const statusId = statusRef.key;
 
@@ -14,6 +14,7 @@ export const createVoiceStatus = async (userId, { audioUrl, duration, caption = 
     audioUrl,
     duration,
     caption,
+    filter,
     createdAt: serverTimestamp(),
     expiresAt: Date.now() + EXPIRY_MS,
     views: {},
