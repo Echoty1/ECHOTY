@@ -25,12 +25,17 @@ const StoriesBar = ({ currentUserId, users, ownStory, onAddStory, onViewStories 
     };
   }, [currentUserId, users]);
 
-  // ✅ FIX: This now checks if the viewer has viewed ALL the stories (which means they should disappear)
+  // THE FIX: Check if a user has NO unviewed stories left. If so, remove them instantly.
   const visibleUsers = (users || []).filter(user => {
     const statuses = statusesMap[user.uid] || [];
+    
+    // If there are no stories at all, hide
+    if (statuses.length === 0) return false;
+
+    // Filter out stories that have already been viewed
     const unseen = statuses.filter(s => !viewedKeys[`${user.uid}_${s.id}`]);
 
-    // If there are NO unseen stories left (they viewed them all), hide the circle!
+    // Only show if at least ONE story is unviewed
     return unseen.length > 0;
   });
 
