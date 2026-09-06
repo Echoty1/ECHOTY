@@ -13,6 +13,9 @@ import LiveViewModal from '../../VideoChat/LiveViewModal';
 import BroadcastView from '../../VideoChat/BroadcastView';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
+import StoriesBar from '../../Stories/StoriesBar'; // NEW IMPORT
+import StoryRecorder from '../../Stories/StoryRecorder'; // NEW IMPORT
+import StoryViewer from '../../Stories/StoryViewer'; // NEW IMPORT
 import './Home.css';
 import { isRealDisplayName, filterVisibleUsers } from '../../../utils/userIntegrity';
 
@@ -69,6 +72,10 @@ const Home = () => {
   const [loading, setLoading] = useState(true);
   const [selectedUser, setSelectedUser] = useState(null);
   const [viewingLive, setViewingLive] = useState(null);
+
+  // ─── New Story States ─────────────────────────────────────
+  const [showRecorder, setShowRecorder] = useState(false);
+  const [viewingStory, setViewingStory] = useState(null);
 
   // ─── Live broadcasting states ────────────────────────────────
   const [isLive, setIsLive] = useState(false);
@@ -723,6 +730,28 @@ const Home = () => {
           </div>
         </div>
 
+        {/* ──────────────────────────────────────────────── */}
+        {/* STORIES BAR – Bottom Left (opposite Support ECHO) */}
+        {/* ──────────────────────────────────────────────── */}
+        <div
+          style={{
+            position: 'fixed',
+            bottom: '90px',
+            left: '0',
+            zIndex: 9999,
+            width: '100%',
+            maxWidth: '450px',
+            pointerEvents: 'auto',
+          }}
+        >
+          <StoriesBar 
+            users={onlineUsers} 
+            ownStory={null} 
+            onAddStory={() => setShowRecorder(true)} 
+            onViewStory={(story) => setViewingStory(story)} 
+          />
+        </div>
+
         {/* User Preview Modal */}
         {selectedUser && (
           <UserPreviewModal
@@ -746,6 +775,25 @@ const Home = () => {
             broadcasterName={viewingLive.name}
             broadcasterAvatar={viewingLive.avatar || profiles[viewingLive.uid]?.avatar || ''}
             onClose={closeLiveView}
+          />
+        )}
+
+        {/* Story Recorder Modal */}
+        {showRecorder && (
+          <StoryRecorder 
+            userId={user?.uid} 
+            onClose={() => setShowRecorder(false)} 
+          />
+        )}
+
+        {/* Story Viewer Modal */}
+        {viewingStory && (
+          <StoryViewer 
+            story={viewingStory} 
+            ownerName={viewingStory.userName || 'User'} 
+            viewerId={user?.uid} 
+            onClose={() => setViewingStory(null)} 
+            onNext={() => setViewingStory(null)} 
           />
         )}
       </div>
