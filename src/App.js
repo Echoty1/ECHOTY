@@ -13,6 +13,7 @@ import Home from './components/pages/Home/Home';
 import Chats from './components/pages/Chats/Chats';
 import ChatView from './components/pages/Chat/ChatView';
 import Profile from './components/pages/Profile/Profile';
+import UserProfile from './components/pages/UserProfile/UserProfile'; // ✅ NEW IMPORT
 import Other from './components/pages/Other/Other';
 import Bookmarks from './components/pages/Other/Bookmarks';
 import DesktopInstallPrompt from './components/common/DesktopInstallPrompt';
@@ -310,6 +311,7 @@ function AppContent() {
           <Route path="/chats" element={<Chats />} />
           <Route path="/chat/:userId" element={<ChatView />} />
           <Route path="/profile" element={<Profile />} />
+          <Route path="/user/:uid" element={<UserProfile />} /> {/* ✅ NEW ROUTE ADDED */}
           <Route path="/other" element={<Other />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/bookmarks" element={<Bookmarks />} />
