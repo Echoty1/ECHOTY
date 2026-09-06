@@ -48,9 +48,6 @@ const StatusBar = ({ users, ownStatus, onAddStatus, onViewStatus }) => {
           />
         ))}
       </div>
-      
-      {/* Fade gradient - NEVER blocks clicks */}
-      <div className="status-fade-left" />
     </div>
   );
 };
