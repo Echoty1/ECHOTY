@@ -267,3 +267,78 @@
   background: #ef4444;
   color: #fff;
 }
+
+/* View count button */
+.view-count-btn {
+  margin-top: 12px;
+  background: rgba(255, 255, 255, 0.12);
+  border: none;
+  color: #fff;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+}
+
+/* Seen by modal */
+.seen-by-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 60;
+}
+
+.seen-by-box {
+  width: 100%;
+  max-height: 55%;
+  background: #1c1629;
+  border-radius: 24px 24px 0 0;
+  padding: 20px 16px 30px;
+  overflow-y: auto;
+}
+
+.seen-by-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.seen-by-header h3 {
+  margin: 0;
+  color: #fff;
+  font-size: 18px;
+}
+
+.seen-by-header button {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.seen-by-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.seen-by-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #fff;
+  font-weight: 500;
+}
+
+.seen-empty {
+  text-align: center;
+  color: #888;
+  padding: 20px 0;
+}
