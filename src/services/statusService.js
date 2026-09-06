@@ -5,29 +5,39 @@ import { db } from './firebase';
 const EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export const createImageStatus = async (userId, { imageUrl, caption = '' }) => {
-  const statusRef = push(ref(db, `statuses/${userId}`));
-  const statusId = statusRef.key;
+  try {
+    // 1. Create a new reference under statuses/{userId}
+    const statusRef = push(ref(db, `statuses/${userId}`));
+    const statusId = statusRef.key;
 
-  const data = {
-    id: statusId,
-    userId,
-    type: 'image',
-    imageUrl,
-    caption,
-    createdAt: serverTimestamp(),
-    expiresAt: Date.now() + EXPIRY_MS,
-    views: {},
-    reactions: {},
-  };
+    const data = {
+      id: statusId,
+      userId,
+      type: 'image',
+      imageUrl,
+      caption,
+      createdAt: serverTimestamp(),
+      expiresAt: Date.now() + EXPIRY_MS,
+      views: {},
+      reactions: {},
+    };
 
-  await set(statusRef, data);
+    // 2. Write the status
+    await set(statusRef, data);
+    console.log('✅ Status posted successfully');
 
-  await update(ref(db, `statusOwners/${userId}`), {
-    lastStatusAt: serverTimestamp(),
-    lastStatusId: statusId,
-  });
+    // 3. Update owner index
+    await update(ref(db, `statusOwners/${userId}`), {
+      lastStatusAt: serverTimestamp(),
+      lastStatusId: statusId,
+    });
+    console.log('✅ Status Owner updated');
 
-  return statusId;
+    return statusId;
+  } catch (err) {
+    console.error('❌ Error posting status:', err);
+    throw err;
+  }
 };
 
 export const markStatusViewed = async (ownerId, statusId, viewerId) => {
@@ -55,11 +65,10 @@ export const deleteStatus = async (userId, statusId) => {
   }
 };
 
-// Get ALL statuses for "Memories" (including the newly snapped ones)
+// Get all statuses for "Memories" (including newly snapped ones)
 export const getUserMemories = async (userId) => {
   const snap = await get(ref(db, `statuses/${userId}`));
   const data = snap.val() || {};
-  // Sort by newest first, show everything regardless of expiry
   return Object.values(data).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 };
 
