@@ -14,7 +14,6 @@
   flex-direction: column;
   background: var(--bg-primary);
   overflow: hidden;
-  /* rings are absolute inside this fixed shell */
   margin: 0 !important;
   padding: 0 !important;
   width: 100%;
@@ -39,11 +38,10 @@
   -webkit-overflow-scrolling: touch;
   transition: padding-bottom 0.25s ease;
   position: relative;
-  z-index: 2; /* above rings – no blur on messages */
+  z-index: 2;
   background: transparent;
 }
 
-/* Full-width row keeps TIME order (not grouped by sender) */
 .message-row {
   display: flex;
   flex-direction: column;
@@ -550,14 +548,14 @@ body.light .message-bubble.own:active {
   right: 0;
   background: var(--bg-secondary);
   backdrop-filter: blur(20px);
-  padding: 20px 16px 90px; /* increased bottom padding to avoid nav */
+  padding: 20px 16px 90px;
   border-top: 1px solid var(--border-color);
   display: flex;
   flex-direction: column;
   gap: 12px;
   max-height: 70vh;
   overflow-y: auto;
-  z-index: 999999; /* higher than bottom nav */
+  z-index: 999999;
   animation: slideUp 0.3s ease-out;
 }
 @keyframes slideUp {
@@ -663,7 +661,8 @@ body.light .chat-input-container {
 }
 .chat-attach-btn,
 .chat-emoji-btn,
-.chat-voice-btn {
+.chat-voice-btn,
+.chat-halo-btn {
   background: none;
   border: none;
   color: var(--text-muted);
@@ -678,6 +677,27 @@ body.light .chat-input-container {
 .chat-voice-btn:hover {
   color: #a78bfa;
 }
+
+/* ✨ Echo Halo Button (Orange Glowing button) */
+.chat-halo-btn {
+  background: linear-gradient(135deg, #ff0080, #ff8c00);
+  color: white;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  font-size: 18px;
+  box-shadow: 0 0 15px rgba(255, 0, 128, 0.3);
+  transition: transform 0.2s, box-shadow 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-halo-btn:hover {
+  transform: scale(1.1);
+  box-shadow: 0 0 25px rgba(255, 140, 0, 0.5);
+}
+
 .chat-input {
   flex: 1;
   padding: 12px 18px;
@@ -711,10 +731,73 @@ body.light .chat-input-container {
   cursor: not-allowed;
 }
 
+/* ✨ Echo Halo Overlay (View Once) */
+.echo-halo-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.95);
+  z-index: 10000;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.echo-halo-content {
+  position: relative;
+  width: 90%;
+  max-width: 400px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 20px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.echo-halo-header {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  color: #fff;
+  font-weight: 800;
+  font-size: 16px;
+  margin-bottom: 15px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.echo-halo-timer {
+  color: #ff0080;
+}
+
+.echo-halo-image-wrapper {
+  width: 100%;
+  max-height: 60vh;
+}
+
+.echo-halo-image-wrapper img {
+  width: 100%;
+  max-height: 60vh;
+  object-fit: contain;
+  border-radius: 12px;
+}
+
+.echo-halo-caption {
+  color: #fff;
+  text-align: center;
+  margin-top: 15px;
+  font-size: 16px;
+}
+
 @media (max-width: 480px) {
   .chat-attach-btn,
   .chat-emoji-btn,
-  .chat-voice-btn {
+  .chat-voice-btn,
+  .chat-halo-btn {
     font-size: 18px !important;
     padding: 2px 6px !important;
   }
@@ -739,15 +822,9 @@ body.light .chat-input-container {
   .chat-input-container {
     padding: 8px 12px;
   }
-  .chat-send-btn {
-    width: 36px;
-    height: 36px;
-  }
-  .chat-attach-btn,
-  .chat-emoji-btn,
-  .chat-voice-btn {
-    font-size: 18px;
-    padding: 2px 6px;
+  .chat-halo-btn {
+    width: 34px;
+    height: 34px;
   }
   .media-preview-overlay {
     padding: 16px 12px;
@@ -1424,7 +1501,6 @@ body.light .chat-input-container {
   letter-spacing: 0.3px;
 }
 
-/* Emoji picker inline */
 .emoji-picker-inline {
   background: var(--bg-secondary);
   border-top: 1px solid var(--border-color);
@@ -1560,7 +1636,6 @@ body.light .chat-input-container {
   }
 }
 
-/* Echo Input */
 .echo-input-wrapper {
   flex: 1;
   position: relative;
@@ -1728,7 +1803,6 @@ body.light .chat-input-container {
   cursor: not-allowed;
 }
 
-/* Markdown */
 .message-bubble.partner .markdown-body {
   font-size: inherit;
   line-height: 1.4;
@@ -1786,7 +1860,6 @@ body.light .chat-input-container {
   color: #d4c4ff;
 }
 
-/* Table styles */
 .message-bubble.partner .markdown-body table {
   border-collapse: collapse;
   width: 100%;
@@ -1867,7 +1940,6 @@ body.light .chat-input-container {
   }
 }
 
-/* ─── ECHO pulsing rings (full background, calm motion) ─── */
 .echo-rings-bg {
   position: absolute;
   inset: 0;
@@ -1985,13 +2057,11 @@ body.light .echo-rings-bg.is-ended .echo-bg-ring.r3 {
   }
 }
 
-/* system message stays readable above rings */
 .message-bubble.system {
   position: relative;
   z-index: 2;
 }
 
-/* ─── More options (⋯ next to emoji) ─────────────────────────── */
 .chat-more-wrapper {
   position: relative;
   display: inline-flex;
@@ -2015,7 +2085,6 @@ body.light .echo-rings-bg.is-ended .echo-bg-ring.r3 {
   color: #a78bfa;
 }
 
-/* Opens upward, aligned to the left of the ⋯ so it stays on-screen */
 .chat-more-options-popup {
   position: absolute;
   bottom: calc(100% + 10px);
@@ -2089,7 +2158,6 @@ body.light .echo-rings-bg.is-ended .echo-bg-ring.r3 {
   }
 }
 
-/* ─── Extra-compact chat chrome on phones ───────────────────── */
 @media (max-width: 480px) {
   .chat-input-container {
     padding: 6px 8px !important;
@@ -2099,7 +2167,8 @@ body.light .echo-rings-bg.is-ended .echo-bg-ring.r3 {
   }
   .chat-emoji-btn,
   .chat-more-btn,
-  .chat-voice-btn {
+  .chat-voice-btn,
+  .chat-halo-btn {
     font-size: 17px !important;
     padding: 2px 4px !important;
   }
@@ -2206,8 +2275,6 @@ body.light .echo-rings-bg.is-ended .echo-bg-ring.r3 {
 .message-time-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .message-row.own .message-time-row { justify-content: flex-end; }
 
-/* compact action icons */
-
 .message-actions {
   display: flex !important;
   gap: 6px !important;
@@ -2294,8 +2361,6 @@ body.light .echo-rings-bg.is-ended .echo-bg-ring.r3 {
   max-width: 100%;
 }
 
-
-/* short bubbles stay one line; actions stay a horizontal row */
 .message-row { position: relative; }
 .message-wrapper { width: auto; max-width: min(50%, 560px); }
 .message-row.own .message-wrapper { margin-left: auto; }
