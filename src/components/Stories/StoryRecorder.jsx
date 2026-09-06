@@ -6,7 +6,6 @@ const StoryRecorder = ({ userId, onClose }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const tapTimeoutRef = useRef(null);
-  const longPressTimeoutRef = useRef(null);
   const lastTapRef = useRef(0);
 
   const [stream, setStream] = useState(null);
@@ -16,11 +15,7 @@ const StoryRecorder = ({ userId, onClose }) => {
   const [selectedMemory, setSelectedMemory] = useState(null);
   const [facingMode, setFacingMode] = useState('user');
   
-  // New states for Text & Zoom
-  const [isLongPressed, setIsLongPressed] = useState(false);
-  const [showTextInput, setShowTextInput] = useState(false);
-  const [textOverlay, setTextOverlay] = useState('');
-  const [tempText, setTempText] = useState('');
+  // Zoom state
   const [zoomLevel, setZoomLevel] = useState(1);
 
   const fetchMemories = async () => {
@@ -56,7 +51,6 @@ const StoryRecorder = ({ userId, onClose }) => {
         stream.getTracks().forEach(track => track.stop());
       }
       if (tapTimeoutRef.current) clearTimeout(tapTimeoutRef.current);
-      if (longPressTimeoutRef.current) clearTimeout(longPressTimeoutRef.current);
     };
   }, [facingMode]);
 
@@ -88,45 +82,26 @@ const StoryRecorder = ({ userId, onClose }) => {
     }
   };
 
-  // Long Press to show text
-  const handlePointerDown = (e) => {
-    e.preventDefault();
-    lastTapRef.current = Date.now();
-
-    // Long Press Timer (500ms)
-    longPressTimeoutRef.current = setTimeout(() => {
-      setIsLongPressed(true);
-      setShowTextInput(true);
-      setTempText(textOverlay); // Prefill existing text
-    }, 500);
-  };
-
+  // ✅ FIXED TAP LOGIC: Double tap switches camera, Single tap snaps
   const handlePointerUp = () => {
-    clearTimeout(longPressTimeoutRef.current);
-    
-    // If it wasn't a long press, treat as a tap
-    if (!isLongPressed) {
-      const now = Date.now();
-      const timeSinceLastTap = now - lastTapRef.current;
+    const now = Date.now();
+    const timeSinceLastTap = now - lastTapRef.current;
 
-      // Double tap logic
-      if (timeSinceLastTap < 250) {
-        clearTimeout(tapTimeoutRef.current);
-        lastTapRef.current = 0;
-        setFacingMode(prev => prev === 'user' ? 'environment' : 'user');
-        return;
-      }
-
-      // Single tap snap logic with delay
-      lastTapRef.current = now;
-      tapTimeoutRef.current = setTimeout(() => {
-        if (lastTapRef.current !== 0) {
-          handleSnap();
-        }
-      }, 250);
-    } else {
-      setIsLongPressed(false);
+    // If it's a double tap (within 250ms), switch camera immediately
+    if (timeSinceLastTap < 250) {
+      clearTimeout(tapTimeoutRef.current); // Cancel pending single tap snap
+      lastTapRef.current = 0;
+      setFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
+      return;
     }
+
+    // Otherwise, set last tap and wait 250ms to see if a double tap comes
+    lastTapRef.current = now;
+    tapTimeoutRef.current = setTimeout(() => {
+      if (lastTapRef.current !== 0) {
+        handleSnap(); // If no double tap came, snap
+      }
+    }, 250);
   };
 
   const handleSnap = async () => {
@@ -146,23 +121,12 @@ const StoryRecorder = ({ userId, onClose }) => {
 
     // Apply zoom via scale
     context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
-    
-    // Apply Text Overlay
-    if (textOverlay) {
-      context.font = 'bold 32px Arial';
-      context.fillStyle = 'white';
-      context.strokeStyle = 'black';
-      context.lineWidth = 4;
-      context.textAlign = 'center';
-      context.strokeText(textOverlay, canvas.width / 2, canvas.height / 2);
-      context.fillText(textOverlay, canvas.width / 2, canvas.height / 2);
-    }
 
     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
 
     try {
       // Snap & Auto-post (does not close camera)
-      await createImageStatus(userId, { imageUrl: imageDataUrl, caption: textOverlay });
+      await createImageStatus(userId, { imageUrl: imageDataUrl, caption: '' });
       setSnapping(false);
       fetchMemories();
     } catch (err) {
@@ -192,15 +156,13 @@ const StoryRecorder = ({ userId, onClose }) => {
           </div>
         </div>
 
-        {/* Camera Space with Long Press, Tap, & Zoom */}
+        {/* Camera Space with Double-Tap, Snap, & Zoom */}
         <div 
           className="small-camera-space"
-          onPointerDown={handlePointerDown}
-          onPointerUp={handlePointerUp}
-          onPointerLeave={handlePointerUp}
+          onClick={handlePointerUp}
           onWheel={handleWheelZoom}
           onTouchMove={handleTouchMove}
-          style={{ opacity: snapping ? 0.6 : 1 }}
+          style={{ opacity: snapping ? 0.6 : 1, pointerEvents: snapping ? 'none' : 'auto' }}
         >
           <video 
             ref={videoRef} 
@@ -210,36 +172,6 @@ const StoryRecorder = ({ userId, onClose }) => {
             className="small-video-feed"
           />
           
-          {/* Text Overlay (Shows current text even before snapping) */}
-          {!showTextInput && textOverlay && (
-            <div className="camera-text-overlay">
-              <span>{textOverlay}</span>
-            </div>
-          )}
-
-          {/* Text Input Popup */}
-          {showTextInput && (
-            <div className="camera-text-input-popup" onClick={(e) => e.stopPropagation()}>
-              <input 
-                type="text" 
-                autoFocus 
-                placeholder="Type your text..." 
-                value={tempText}
-                onChange={(e) => setTempText(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') {
-                    setTextOverlay(tempText);
-                    setShowTextInput(false);
-                  }
-                }}
-              />
-              <div className="text-input-actions">
-                <button onClick={() => { setTextOverlay(tempText); setShowTextInput(false); }}>Done</button>
-                <button onClick={() => { setTempText(''); setTextOverlay(''); setShowTextInput(false); }}>Clear</button>
-              </div>
-            </div>
-          )}
-
           <canvas ref={canvasRef} style={{ display: 'none' }} />
           {snapping && <div className="snapping-flash"></div>}
 
