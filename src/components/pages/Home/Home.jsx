@@ -22,7 +22,6 @@ import { isRealDisplayName, filterVisibleUsers } from '../../../utils/userIntegr
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 
-// ─── Home Skeleton ──────────────────────────────────────────────
 const HomeSkeleton = () => {
   return (
     <div className="home-page" style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
@@ -73,11 +72,9 @@ const Home = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [viewingLive, setViewingLive] = useState(null);
 
-  // ─── Story States ─────────────────────────────────────
   const [showRecorder, setShowRecorder] = useState(false);
   const [viewingStories, setViewingStories] = useState(null);
 
-  // ─── Live broadcasting states ────────────────────────────────
   const [isLive, setIsLive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
   const [peerError, setPeerError] = useState(null);
@@ -90,14 +87,12 @@ const Home = () => {
   const isDemoUser = user?.uid === DEMO_UID;
   const isSupportUser = user?.uid === SUPPORT_UID;
 
-  // ─── 0. Request Push Notification Permissions ────────────────
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
   }, []);
 
-  // ─── 1. PeerJS Setup (with retry) ─────────────────────────────
   useEffect(() => {
     if (!user) return;
     let peerInstance = null;
@@ -178,7 +173,6 @@ const Home = () => {
     };
   }, [user]);
 
-  // ─── 2. Camera Logic ─────────────────────────────────────────
   const startCamera = async () => {
     try {
       const constraints = {
@@ -288,7 +282,6 @@ const Home = () => {
     else startCamera();
   };
 
-  // ─── 3. Firebase Presence Logic ──────────────────────────────
   useEffect(() => {
     if (!user) return;
     const presenceRef = ref(db, 'presence/online');
@@ -332,7 +325,6 @@ const Home = () => {
     };
   }, [user, isDemoUser, isSupportUser, profiles, fetchProfile]);
 
-  // ─── 4. Listen for Live Users ──────────────────────────────────
   useEffect(() => {
     if (!user) return;
     const liveRef = ref(db, 'live');
@@ -354,7 +346,6 @@ const Home = () => {
     return () => unsubLive();
   }, [user, fetchProfile]);
 
-  // ─── 5. Handlers ──────────────────────────────────────────────
   const openUserPreview = (uid) => {
     const profile = profiles[uid];
     if (profile) {
@@ -386,7 +377,6 @@ const Home = () => {
 
   const closeLiveView = () => setViewingLive(null);
 
-  // ─── 6. Build Online + Live Users List ───────────────────────
   const combinedUids = Array.from(new Set([...onlineUids, ...liveUids])).filter((id) => !bannedUids.has(id));
   const onlineUsers = filterVisibleUsers(
     combinedUids
@@ -409,7 +399,6 @@ const Home = () => {
       .filter(Boolean)
   ).sort((a, b) => (b.isLive ? 1 : 0) - (a.isLive ? 1 : 0));
 
-  // ─── 7. Render ──────────────────────────────────────────────────
   if (isLive && broadcastStream) {
     return <BroadcastView onEnd={stopCamera} stream={broadcastStream} />;
   }
@@ -436,7 +425,6 @@ const Home = () => {
           background: 'var(--bg-primary)',
         }}
       >
-        {/* Live background layers (same as before) */}
         {isLive && (
           <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 0, background: '#000' }}>
             {cameraError ? (
@@ -511,7 +499,6 @@ const Home = () => {
             overflowY: 'auto',
           }}
         >
-          {/* LIVE NOW section (unchanged) */}
           <div style={{ width: '100%', boxSizing: 'border-box', marginBottom: '25px', position: 'relative' }}>
             <div
               style={{
@@ -538,7 +525,6 @@ const Home = () => {
                 transition: 'background 0.35s ease, border 0.35s ease, box-shadow 0.35s ease',
               }}
             >
-              {/* ... same LIVE NOW header + users scroll as before ... */}
               <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '10px', flexWrap: 'wrap' }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -694,7 +680,6 @@ const Home = () => {
             </section>
           </div>
 
-          {/* Go Live Button */}
           <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '20px', width: '100%' }}>
             <button
               onClick={toggleLive}
@@ -730,9 +715,7 @@ const Home = () => {
           </div>
         </div>
 
-        {/* ──────────────────────────────────────────────── */}
-        {/* STORIES BAR – Bottom Left (opposite Support ECHO) */}
-        {/* ──────────────────────────────────────────────── */}
+        {/* STORIES BAR – Bottom Left */}
         <div
           style={{
             position: 'fixed',
@@ -753,7 +736,6 @@ const Home = () => {
           />
         </div>
 
-        {/* User Preview Modal */}
         {selectedUser && (
           <UserPreviewModal
             user={selectedUser}
@@ -769,7 +751,6 @@ const Home = () => {
           />
         )}
 
-        {/* Live Viewer Modal */}
         {viewingLive && (
           <LiveViewModal
             broadcasterId={viewingLive.uid}
@@ -779,7 +760,6 @@ const Home = () => {
           />
         )}
 
-        {/* Story Recorder Modal */}
         {showRecorder && (
           <StoryRecorder 
             userId={user?.uid} 
@@ -787,7 +767,6 @@ const Home = () => {
           />
         )}
 
-        {/* Story Viewer Modal */}
         {viewingStories && (
           <StoryViewer 
             stories={viewingStories} 
@@ -799,7 +778,6 @@ const Home = () => {
         )}
       </div>
 
-      {/* Keep all your existing <style> block */}
       <style>{`
         @keyframes pulse {
           0%, 100% { opacity: 1; transform: scale(1); }
@@ -871,42 +849,3 @@ const Home = () => {
           <button
             type="button"
             onClick={() => {
-              setPeerError(null);
-              window.location.reload();
-            }}
-            style={{
-              background: '#fff',
-              color: '#EF4444',
-              border: 'none',
-              borderRadius: '20px',
-              padding: '6px 12px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              fontSize: '13px',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Try again
-          </button>
-          <button
-            type="button"
-            onClick={() => setPeerError(null)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#fff',
-              fontSize: '18px',
-              cursor: 'pointer',
-              lineHeight: 1,
-            }}
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
-        </div>
-      )}
-    </>
-  );
-};
-
-export default Home;
