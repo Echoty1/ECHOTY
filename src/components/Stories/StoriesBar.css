@@ -12,7 +12,7 @@
 /* ─── Scrolling ─── */
 .stories-bar-scroll {
   display: flex;
-  gap: 16px;
+  gap: 14px;
   overflow-x: auto;
   padding: 10px 16px;
   scrollbar-width: none;
@@ -31,8 +31,10 @@
   gap: 7px;
   cursor: pointer;
   flex-shrink: 0;
+  position: relative;
 }
 
+/* The 3D Curve Glow */
 .story-ring {
   width: 68px;
   height: 68px;
@@ -42,21 +44,31 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: transform 0.2s ease;
+  transition: transform 0.15s ease;
+  position: relative;
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+}
+
+.story-circle-wrapper:hover .story-ring {
+  transform: scale(1.05);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
 }
 
 .story-circle-wrapper:active .story-ring {
-  transform: scale(0.94);
+  transform: scale(0.92);
 }
 
+/* Instagram Style Gradient */
 .story-ring.has-story {
   background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
 }
 
 .story-ring.own {
   background: #3f3f46;
+  border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
+/* Avatar */
 .story-avatar-inner {
   width: 100%;
   height: 100%;
@@ -67,7 +79,7 @@
   justify-content: center;
   position: relative;
   overflow: hidden;
-  border: 2px solid #000;
+  border: 2px solid #1a1a1a;
 }
 
 .story-img {
@@ -111,6 +123,44 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   text-align: center;
+}
+
+/* ─── THE STACKED GRID (Peeking from behind) ─── */
+.story-circle-wrapper::before,
+.story-circle-wrapper::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 50%;
+  background: #222;
+  pointer-events: none;
+  transition: transform 0.2s ease;
+  z-index: -1;
+}
+
+/* 1st layer behind */
+.story-circle-wrapper::before {
+  left: -6px;
+  right: 6px;
+  transform: rotate(-4deg);
+}
+
+/* 2nd layer behind (curved) */
+.story-circle-wrapper::after {
+  left: -11px;
+  right: 11px;
+  transform: rotate(-8deg);
+  background: #2a2a2a;
+}
+
+/* When hovering, the stack expands slightly */
+.story-circle-wrapper:hover::before {
+  transform: rotate(-3deg);
+}
+
+.story-circle-wrapper:hover::after {
+  transform: rotate(-6deg);
 }
 
 /* ─── Recorder Overlay ─── */
@@ -446,343 +496,7 @@
   color: #fff;
   cursor: pointer;
   user-select: none;
-}
-
-.viewer-top-section {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  z-index: 10;
-  padding: 15px 15px 0 15px;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.6) 0%, transparent 100%);
-}
-
-.viewer-progress-container {
-  display: flex;
-  gap: 4px;
-  margin-bottom: 15px;
-  width: 100%;
-}
-
-.viewer-progress-segment {
-  flex: 1;
-  height: 3px;
-  background: rgba(255, 255, 255, 0.2);
-  border-radius: 10px;
-  overflow: hidden;
-}
-
-.viewer-progress-fill {
-  height: 100%;
-  background: #ffffff;
-  border-radius: 10px;
-  transition: width 0.1s linear;
-}
-
-.viewer-user-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-radius: 50px;
-  padding: 6px;
-}
-
-.viewer-user-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.viewer-avatar-ring {
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  padding: 2px;
-  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.viewer-avatar {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid #000;
-}
-
-.viewer-text-info {
-  display: flex;
-  flex-direction: column;
-}
-
-.viewer-username {
-  font-size: 14px;
-  font-weight: 800;
-  letter-spacing: 0.2px;
-  line-height: 1.2;
-}
-
-.viewer-time {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.viewer-close-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: none;
-  color: #fff;
-  width: 34px;
-  height: 34px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.2s ease;
-  margin-right: 4px;
-}
-
-.viewer-close-btn:hover {
-  background: rgba(255, 255, 255, 0.25);
-}
-
-.viewer-main-area {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 80px 15px 30px 15px;
-}
-
-.viewer-image-wrapper {
-  max-width: 100%;
-  max-height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  animation: viewerZoomIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-.viewer-image {
-  max-width: 100%;
-  max-height: 85vh;
-  width: auto;
-  height: auto;
-  object-fit: contain;
-  display: block;
-  -webkit-user-drag: none;
-  user-select: none;
-}
-
-@keyframes viewerZoomIn {
-  from {
-    opacity: 0;
-    transform: scale(0.95);
-  }
-  to {
-    opacity: 1;
-    transform: scale(1);
-  }
-}
-
-/* Loading state */
-.camera-loading {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  background: #222;
-  font-size: 14px;
-  font-weight: 600;
-}
-
-/* ─── INSTAGRAM STYLE STACKED CURVE ─── */
-.stories-bar-container {
-  position: fixed;
-  bottom: 90px;
-  left: 0;
-  z-index: 9999;
-  width: 100%;
-  max-width: 450px;
-  pointer-events: auto;
-}
-
-.stories-bar-scroll {
-  display: flex;
-  gap: 14px;
-  overflow-x: auto;
-  padding: 10px 16px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.stories-bar-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-.story-circle-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  flex-shrink: 0;
-  position: relative;
-}
-
-/* The 3D Curve Glow */
-.story-ring {
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
-  padding: 3px;
-  background: #3f3f46;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.15s ease;
-  position: relative;
-  box-shadow: 0 0 0 rgba(0, 0, 0, 0);
-}
-
-.story-circle-wrapper:hover .story-ring {
-  transform: scale(1.05);
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
-}
-
-.story-circle-wrapper:active .story-ring {
-  transform: scale(0.92);
-}
-
-/* Instagram Style Gradient */
-.story-ring.has-story {
-  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
-}
-
-.story-ring.own {
-  background: #3f3f46;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-/* Avatar */
-.story-avatar-inner {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: #000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-  border: 2px solid #1a1a1a;
-}
-
-.story-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
-}
-
-.own-avatar-content {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-.add-badge {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #0095f6;
-  color: white;
-  font-size: 14px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid #000;
-  line-height: 1;
-  z-index: 3;
-}
-
-.story-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: #ffffff;
-  max-width: 68px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: center;
-}
-
-/* ─── THE STACKED GRID (Peeking from behind) ─── */
-.story-circle-wrapper::before,
-.story-circle-wrapper::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  border-radius: 50%;
-  background: #222;
-  pointer-events: none;
-  transition: transform 0.2s ease;
-  z-index: -1;
-}
-
-/* 1st layer behind */
-.story-circle-wrapper::before {
-  left: -6px;
-  right: 6px;
-  transform: rotate(-4deg);
-}
-
-/* 2nd layer behind (curved) */
-.story-circle-wrapper::after {
-  left: -11px;
-  right: 11px;
-  transform: rotate(-8deg);
-  background: #2a2a2a;
-}
-
-/* When hovering, the stack expands slightly */
-.story-circle-wrapper:hover::before {
-  transform: rotate(-3deg);
-}
-
-.story-circle-wrapper:hover::after {
-  transform: rotate(-6deg);
-}
-
-/* ─── VIEWER DISAPPEARING ANIMATION ─── */
-.viewer-overlay {
-  position: fixed;
-  inset: 0;
-  background: #000;
-  z-index: 10000;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  color: #fff;
-  transition: opacity 0.4s ease, transform 0.4s ease;
+  transition: opacity 0.3s ease, transform 0.3s ease;
 }
 
 .viewer-overlay.closing {
@@ -790,6 +504,7 @@
   transform: scale(0.95);
 }
 
+/* Progress Bar */
 .progress-bar-container {
   position: absolute;
   top: 10px;
@@ -814,6 +529,7 @@
   transition: width 0.1s linear;
 }
 
+/* Header */
 .viewer-header {
   position: absolute;
   top: 20px;
@@ -849,21 +565,31 @@
   cursor: pointer;
 }
 
+/* Main Image Area */
 .viewer-tap-area {
   flex: 1;
   display: flex;
   justify-content: center;
   align-items: center;
   cursor: pointer;
+  position: relative;
 }
 
 .viewer-image-container {
+  position: relative;
+  z-index: 2;
   max-width: 100%;
   max-height: 80vh;
   display: flex;
   justify-content: center;
   align-items: center;
   flex-direction: column;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.viewer-image-container.switching {
+  opacity: 0;
+  transform: scale(0.9);
 }
 
 .viewer-image {
@@ -884,16 +610,6 @@
   }
 }
 
-/* Smooth transition between images */
-.viewer-image-container {
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-
-.viewer-image-container.switching {
-  opacity: 0;
-  transform: scale(0.9);
-}
-
 /* Viewer Avatar Ring */
 .viewer-avatar-ring {
   width: 32px;
@@ -905,6 +621,15 @@
   align-items: center;
   justify-content: center;
 }
+
+.viewer-avatar {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #000;
+}
+
 /* ─── STACKED CURVE INSIDE VIEWER ─── */
 .stacked-stories-back {
   position: absolute;
@@ -953,40 +678,15 @@
   to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
 }
 
-/* ─── SMOOTH TRANSITIONS ─── */
-.viewer-image-container {
-  position: relative;
-  z-index: 2;
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-
-.viewer-image-container.switching {
-  opacity: 0;
-  transform: scale(0.9);
-}
-
-.viewer-overlay {
-  transition: opacity 0.3s ease, transform 0.3s ease;
-}
-
-.viewer-overlay.closing {
-  opacity: 0;
-  transform: scale(0.95);
-}
-
 /* ─── REAL CAMERA NO-GREY LOADING FIX ─── */
 .camera-loading {
-  background: transparent;
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: #aaa;
   font-size: 12px;
   font-weight: 500;
   pointer-events: none;
 }
-.viewer-avatar {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-  border: 2px solid #000;
-}
-
