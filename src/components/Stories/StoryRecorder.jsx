@@ -28,7 +28,6 @@ const StoryRecorder = ({ userId, onClose }) => {
 
     startCamera();
 
-    // Fetch memories immediately
     getUserMemories(userId).then(setMemories).catch(() => {});
 
     return () => {
@@ -38,7 +37,6 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
   }, []);
 
-  // 1. Tap to snap & Auto-Post
   const handleTapToSnap = async () => {
     if (!videoRef.current || snapping) return;
     setSnapping(true);
@@ -53,7 +51,6 @@ const StoryRecorder = ({ userId, onClose }) => {
 
     try {
       await createImageStatus(userId, { imageUrl: imageDataUrl, caption: '' });
-      // Auto-close after posting
       onClose();
     } catch (err) {
       console.error("Error auto-posting:", err);
@@ -65,15 +62,14 @@ const StoryRecorder = ({ userId, onClose }) => {
     <div className="recorder-overlay">
       <div className="recorder-modal-small">
         <div className="small-camera-header">
-          <h2>Create</h2>
+          <h3>Create New Echus</h3>
           <button className="close-btn" onClick={onClose}>✕</button>
         </div>
 
         {/* Small Camera Square */}
-        <div className="small-camera-space" onClick={handleTapToSnap}>
+        <div className="small-camera-space" onClick={handleTapToSnap} style={{ opacity: snapping ? 0.6 : 1 }}>
           <video ref={videoRef} autoPlay playsInline muted className="small-video-feed" />
           <canvas ref={canvasRef} style={{ display: 'none' }} />
-          <div className="tap-hint">{snapping ? 'Posting...' : 'Tap to Snap'}</div>
         </div>
 
         {/* Memories Section */}
