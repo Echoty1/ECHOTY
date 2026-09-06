@@ -1,3 +1,4 @@
+// src/components/Stories/StoryRecorder.jsx
 import React, { useRef, useState, useEffect } from 'react';
 import { createImageStatus, getUserMemories, deleteStatus } from '../../services/statusService';
 import './StoriesBar.css';
@@ -15,7 +16,7 @@ const StoryRecorder = ({ userId, onClose }) => {
   const [selectedMemory, setSelectedMemory] = useState(null);
   const [facingMode, setFacingMode] = useState('user');
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [cameraReady, setCameraReady] = useState(false); // NEW STATE
+  const [cameraReady, setCameraReady] = useState(false);
 
   const fetchMemories = async () => {
     try {
@@ -26,21 +27,33 @@ const StoryRecorder = ({ userId, onClose }) => {
     }
   };
 
+  // ✅ FIX: We no longer stop the stream when switching. We just keep the camera alive!
   useEffect(() => {
+    let cancelled = false;
+
     const startCamera = async () => {
       try {
+        // If switching facing modes, we need to restart the stream
         if (stream) {
           stream.getTracks().forEach(track => track.stop());
         }
+
         const mediaStream = await navigator.mediaDevices.getUserMedia({ 
           video: { facingMode: facingMode }, 
           audio: false 
         });
+
+        if (cancelled) {
+          mediaStream.getTracks().forEach(track => track.stop());
+          return;
+        }
+
         setStream(mediaStream);
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
         }
-        // ✅ Wait for video to load before allowing snap
+
+        // Wait for the video to fully load
         await new Promise((resolve) => {
           if (videoRef.current && videoRef.current.readyState >= 2) {
             resolve();
@@ -48,7 +61,10 @@ const StoryRecorder = ({ userId, onClose }) => {
             videoRef.current.onloadeddata = resolve;
           }
         });
-        setCameraReady(true); 
+
+        if (!cancelled) {
+          setCameraReady(true);
+        }
       } catch (err) {
         console.error("Camera access denied.", err);
         setCameraReady(false);
@@ -56,15 +72,21 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
 
     startCamera();
-    fetchMemories();
 
+    return () => {
+      cancelled = true;
+    };
+  }, [facingMode]);
+
+  // ✅ FIX: We stop the camera ONLY when we close the recorder
+  useEffect(() => {
     return () => {
       if (stream) {
         stream.getTracks().forEach(track => track.stop());
       }
       if (tapTimeoutRef.current) clearTimeout(tapTimeoutRef.current);
     };
-  }, [facingMode]);
+  }, []);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -93,7 +115,7 @@ const StoryRecorder = ({ userId, onClose }) => {
   };
 
   const handlePointerUp = () => {
-    if (!cameraReady || snapping) return; // ✅ Prevent snapping if camera not ready
+    if (!cameraReady || snapping) return;
 
     const now = Date.now();
     const timeSinceLastTap = now - lastTapRef.current;
@@ -131,7 +153,6 @@ const StoryRecorder = ({ userId, onClose }) => {
     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
 
     try {
-      // ✅ Ensure user ID exists
       if (!userId) {
         console.error("User ID is missing!");
         alert("User ID is missing. Please log out and log back in.");
@@ -139,10 +160,9 @@ const StoryRecorder = ({ userId, onClose }) => {
         return;
       }
 
-      // ✅ Post to Firebase
       await createImageStatus(userId, { imageUrl: imageDataUrl, caption: '' });
       
-      // ✅ Success: Reset snapping and Refresh Memories
+      // ✅ FIX: Do NOT stop or reload the stream. Just set snapping to false.
       setSnapping(false);
       await fetchMemories();
 
@@ -181,19 +201,24 @@ const StoryRecorder = ({ userId, onClose }) => {
           onTouchMove={handleTouchMove}
           style={{ opacity: snapping ? 0.6 : 1, pointerEvents: snapping ? 'none' : 'auto' }}
         >
-          {/* ✅ Show loading state until camera is ready */}
           {!cameraReady && (
             <div className="camera-loading">Loading Camera...</div>
           )}
 
+          {/* Video element stays mounted and ready */}
           <video 
             ref={videoRef} 
             autoPlay 
             playsInline 
             muted 
             className="small-video-feed"
-            style={{ display: cameraReady ? 'block' : 'none' }}
+            style={{ 
+              display: cameraReady ? 'block' : 'none',
+              opacity: cameraReady ? 1 : 0,
+              transition: 'opacity 0.15s ease'
+            }}
           />
+          
           <canvas ref={canvasRef} style={{ display: 'none' }} />
           {snapping && <div className="snapping-flash"></div>}
 
