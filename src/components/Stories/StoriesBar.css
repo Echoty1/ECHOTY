@@ -711,3 +711,23 @@
   background: transparent !important;
   color: transparent !important;
 }
+
+/* Smooth close animation */
+.viewer-overlay {
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.viewer-overlay.closing {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+/* Smooth switching between stories */
+.viewer-image-container {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.viewer-image-container.switching {
+  opacity: 0;
+  transform: scale(0.9);
+}
