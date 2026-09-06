@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { createImageStatus } from '../../services/statusService'; 
+import { createImageStatus, getUserMemories } from '../../services/statusService';
 import './StoriesBar.css';
 
 const StoryRecorder = ({ userId, onClose }) => {
@@ -7,12 +7,9 @@ const StoryRecorder = ({ userId, onClose }) => {
   const canvasRef = useRef(null);
   
   const [stream, setStream] = useState(null);
-  const [snappedImage, setSnappedImage] = useState(null);
-  const [caption, setCaption] = useState('');
-  const [uploading, setUploading] = useState(false);
-  const [error, setError] = useState('');
+  const [snapping, setSnapping] = useState(false);
+  const [memories, setMemories] = useState([]);
 
-  // 1. Start Camera
   useEffect(() => {
     const startCamera = async () => {
       try {
@@ -25,11 +22,14 @@ const StoryRecorder = ({ userId, onClose }) => {
           videoRef.current.srcObject = mediaStream;
         }
       } catch (err) {
-        setError("Camera access denied. Please allow camera permissions.");
+        console.error("Camera access denied.", err);
       }
     };
 
     startCamera();
+
+    // Fetch memories immediately
+    getUserMemories(userId).then(setMemories).catch(() => {});
 
     return () => {
       if (stream) {
@@ -38,76 +38,57 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
   }, []);
 
-  // 2. Snap and COMPRESS
-  const handleSnap = () => {
-    if (!videoRef.current) return;
+  // 1. Tap to snap & Auto-Post
+  const handleTapToSnap = async () => {
+    if (!videoRef.current || snapping) return;
+    setSnapping(true);
+
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
     context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
     
-    // Compress to 0.5 to keep DB small
     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.5);
-    setSnappedImage(imageDataUrl);
-  };
-
-  const retake = () => setSnappedImage(null);
-
-  // 3. Upload to DB directly (No Firebase Storage needed!)
-  const handlePost = async () => {
-    if (!snappedImage || !userId) return;
-    setUploading(true);
-    setError('');
 
     try {
-      // Pass base64 string directly as imageUrl
-      await createImageStatus(userId, { imageUrl: snappedImage, caption });
-      
+      await createImageStatus(userId, { imageUrl: imageDataUrl, caption: '' });
+      // Auto-close after posting
       onClose();
     } catch (err) {
-      console.error("Error posting story:", err);
-      setError(`Upload failed: ${err.message || 'Please check your internet connection.'}`);
-      setUploading(false);
+      console.error("Error auto-posting:", err);
+      setSnapping(false);
     }
   };
 
   return (
     <div className="recorder-overlay">
-      <div className="recorder-modal">
-        <h2>Create New Story</h2>
-        
-        {error && <div className="camera-error" style={{ color: '#ff4d4f', marginBottom: '10px' }}>{error}</div>}
+      <div className="recorder-modal-small">
+        <div className="small-camera-header">
+          <h2>Create</h2>
+          <button className="close-btn" onClick={onClose}>✕</button>
+        </div>
 
-        {!snappedImage ? (
-          <>
-            <video ref={videoRef} autoPlay playsInline muted className="video-feed" />
-            <canvas ref={canvasRef} style={{ display: 'none' }} />
-            <button className="snap-btn" onClick={handleSnap} disabled={!stream}>
-              <div className="snap-btn-inner"></div>
-            </button>
-          </>
-        ) : (
-          <>
-            <div className="snapped-preview">
-              <img src={snappedImage} alt="Preview" className="image-preview" />
+        {/* Small Camera Square */}
+        <div className="small-camera-space" onClick={handleTapToSnap}>
+          <video ref={videoRef} autoPlay playsInline muted className="small-video-feed" />
+          <canvas ref={canvasRef} style={{ display: 'none' }} />
+          <div className="tap-hint">{snapping ? 'Posting...' : 'Tap to Snap'}</div>
+        </div>
+
+        {/* Memories Section */}
+        <div className="memories-section">
+          <h4>Your Memories</h4>
+          {memories.length === 0 ? (
+            <p>No memories yet.</p>
+          ) : (
+            <div className="memories-scroll">
+              {memories.map((mem, idx) => (
+                <img key={idx} src={mem.imageUrl} alt="Memory" className="memory-thumb" />
+              ))}
             </div>
-            <input 
-              type="text" 
-              placeholder="Add a caption..." 
-              value={caption} 
-              onChange={(e) => setCaption(e.target.value)} 
-              className="caption-input"
-            />
-            <div className="modal-actions">
-              <button onClick={retake} disabled={uploading}>Retake</button>
-              <button onClick={handlePost} disabled={uploading} style={{ backgroundColor: uploading ? '#555' : '#0095f6' }}>
-                {uploading ? 'Posting...' : 'Share to Story'}
-              </button>
-            </div>
-          </>
-        )}
-        <button className="close-btn" onClick={onClose}>Close</button>
+          )}
+        </div>
       </div>
     </div>
   );
