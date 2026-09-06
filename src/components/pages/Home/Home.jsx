@@ -74,6 +74,7 @@ const Home = () => {
 
   const [showRecorder, setShowRecorder] = useState(false);
   const [viewingStories, setViewingStories] = useState(null);
+  const [currentStoryOwnerId, setCurrentStoryOwnerId] = useState(null);
 
   const [isLive, setIsLive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
@@ -732,7 +733,10 @@ const Home = () => {
             users={onlineUsers} 
             ownStory={null} 
             onAddStory={() => setShowRecorder(true)} 
-            onViewStories={(stories) => setViewingStories(stories)} 
+            onViewStories={(stories, ownerId) => {
+              setViewingStories(stories);
+              setCurrentStoryOwnerId(ownerId);
+            }} 
           />
         </div>
 
@@ -774,6 +778,13 @@ const Home = () => {
             ownerAvatar={viewingStories[0]?.avatar || ''} 
             viewerId={user?.uid} 
             onClose={() => setViewingStories(null)} 
+            onFinished={() => {
+              // 🚨 THE FIX: Instantly remove the user from the online list
+              if (currentStoryOwnerId) {
+                setOnlineUids(prev => prev.filter(uid => uid !== currentStoryOwnerId));
+              }
+              setViewingStories(null);
+            }} 
           />
         )}
       </div>
