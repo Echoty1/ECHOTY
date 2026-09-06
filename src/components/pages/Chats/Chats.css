@@ -204,11 +204,20 @@
   background: var(--border-color);
 }
 
+/* ─── UPDATED: Make avatar clickable with pointer & hover effect ─── */
 .chat-avatar {
   position: relative;
   width: 48px;
   height: 48px;
   flex-shrink: 0;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.chat-avatar:hover {
+  transform: scale(1.08);
+  box-shadow: 0 0 15px rgba(139, 92, 246, 0.3);
 }
 
 .user-profile-img {
