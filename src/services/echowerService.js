@@ -2,37 +2,21 @@
 import { ref, get, update, remove, onValue, push, set } from 'firebase/database';
 import { db } from './firebase';
 
-// ─────────────────────────────────────────────
-// FOLLOW / UNFOLLOW LOGIC
-// ─────────────────────────────────────────────
+// Follow a user (Updates both sides correctly)
 export const followUser = async (currentUserId, targetUserId) => {
   if (!currentUserId || !targetUserId || currentUserId === targetUserId) return;
 
-  // 1. Add to "Who I am following" list
+  // Add to "Who I am following" list
   await update(ref(db, `following/${currentUserId}/${targetUserId}`), {
     followedAt: Date.now(),
   });
 
-  // 2. Add to "Who is following me" list
+  // Add to "Who is following me" list
   await update(ref(db, `followers/${targetUserId}/${currentUserId}`), {
     followedByAt: Date.now(),
   });
 
-  // 3. Update my "Echowing" count
-  const myProfileRef = ref(db, `profiles/${currentUserId}`);
-  const mySnap = await get(myProfileRef);
-  const myData = mySnap.val() || {};
-  const myNewCount = (myData.echowingCount || 0) + 1;
-  await update(myProfileRef, { echowingCount: myNewCount });
-
-  // 4. Update their "Echower" count
-  const targetProfileRef = ref(db, `profiles/${targetUserId}`);
-  const targetSnap = await get(targetProfileRef);
-  const targetData = targetSnap.val() || {};
-  const targetNewCount = (targetData.echowerCount || 0) + 1;
-  await update(targetProfileRef, { echowerCount: targetNewCount });
-
-  // 5. Send notification
+  // Send notification
   const notifRef = push(ref(db, `notifications/${targetUserId}`));
   await set(notifRef, {
     type: 'echower',
@@ -43,33 +27,18 @@ export const followUser = async (currentUserId, targetUserId) => {
   });
 };
 
+// Unfollow a user
 export const unfollowUser = async (currentUserId, targetUserId) => {
   if (!currentUserId || !targetUserId) return;
 
-  // 1. Remove from "Who I am following"
+  // Remove from "Who I am following"
   await remove(ref(db, `following/${currentUserId}/${targetUserId}`));
 
-  // 2. Remove from "Who is following me"
+  // Remove from "Who is following me"
   await remove(ref(db, `followers/${targetUserId}/${currentUserId}`));
-
-  // 3. Decrease my count
-  const myProfileRef = ref(db, `profiles/${currentUserId}`);
-  const mySnap = await get(myProfileRef);
-  const myData = mySnap.val() || {};
-  const myNewCount = Math.max(0, (myData.echowingCount || 0) - 1);
-  await update(myProfileRef, { echowingCount: myNewCount });
-
-  // 4. Decrease their count
-  const targetProfileRef = ref(db, `profiles/${targetUserId}`);
-  const targetSnap = await get(targetProfileRef);
-  const targetData = targetSnap.val() || {};
-  const targetNewCount = Math.max(0, (targetData.echowerCount || 0) - 1);
-  await update(targetProfileRef, { echowerCount: targetNewCount });
 };
 
-// ─────────────────────────────────────────────
-// CHECKING & LISTENERS
-// ─────────────────────────────────────────────
+// Check if you are currently Echowing someone
 export const isEchowing = async (currentUserId, targetUserId) => {
   const snap = await get(ref(db, `following/${currentUserId}/${targetUserId}`));
   return snap.exists();
@@ -84,7 +53,7 @@ export const listenToMyEchowers = (currentUserId, callback) => {
   });
 };
 
-// Listen to people FOLLOWING ME (My Followers)
+// Listen to people FOLLOWING ME
 export const listenToMyEchowerCount = (targetUserId, callback) => {
   const refPath = ref(db, `followers/${targetUserId}`);
   return onValue(refPath, (snap) => {
@@ -93,17 +62,7 @@ export const listenToMyEchowerCount = (targetUserId, callback) => {
   });
 };
 
-// Listen to my Echowing count
-export const listenToMyEchowingCount = (currentUserId, callback) => {
-  const refPath = ref(db, `profiles/${currentUserId}/echowingCount`);
-  return onValue(refPath, (snap) => {
-    callback(snap.val() || 0);
-  });
-};
-
-// ─────────────────────────────────────────────
-// NOTIFICATIONS
-// ─────────────────────────────────────────────
+// Listen to real-time notifications for a user
 export const listenToNotifications = (userId, callback) => {
   const notifRef = ref(db, `notifications/${userId}`);
   return onValue(notifRef, (snap) => {
@@ -113,12 +72,14 @@ export const listenToNotifications = (userId, callback) => {
   });
 };
 
+// Mark a single notification as read
 export const markNotificationAsRead = async (userId, notificationId) => {
   await update(ref(db, `notifications/${userId}/${notificationId}`), {
     read: true,
   });
 };
 
+// Mark ALL notifications as read
 export const markAllNotificationsAsRead = async (userId) => {
   const snap = await get(ref(db, `notifications/${userId}`));
   const data = snap.val() || {};
