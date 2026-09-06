@@ -676,6 +676,90 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
+/* Camera Text Overlay */
+.camera-text-overlay {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 5;
+  pointer-events: none;
+  max-width: 90%;
+  text-align: center;
+}
+
+.camera-text-overlay span {
+  font-size: 28px;
+  font-weight: 800;
+  color: #fff;
+  text-shadow: 2px 2px 0 #000, -2px -2px 0 #000, 2px -2px 0 #000, -2px 2px 0 #000;
+  word-wrap: break-word;
+}
+
+/* Text Input Popup */
+.camera-text-input-popup {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 16px;
+  padding: 15px;
+  width: 85%;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.camera-text-input-popup input {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  color: #fff;
+  padding: 12px;
+  font-size: 16px;
+  text-align: center;
+}
+
+.camera-text-input-popup input:focus {
+  outline: none;
+  border-color: #0095f6;
+}
+
+.text-input-actions {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.text-input-actions button {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: #fff;
+  padding: 8px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.text-input-actions button:first-child {
+  background: #0095f6;
+}
+
+.text-input-actions button:hover {
+  opacity: 0.9;
+}
+
+/* Apply Zoom to Video */
+.small-video-feed {
+  transition: transform 0.2s ease-out;
+  transform-origin: center;
+}
 .delete-memory-btn {
   background: #ff3040;
   color: #fff;
