@@ -13,7 +13,6 @@ import LiveViewModal from '../../VideoChat/LiveViewModal';
 import BroadcastView from '../../VideoChat/BroadcastView';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
-import StatusBar from '../../Status/StatusBar';          // ← NEW
 import './Home.css';
 import { isRealDisplayName, filterVisibleUsers } from '../../../utils/userIntegrity';
 
@@ -722,23 +721,6 @@ const Home = () => {
               {isLive ? 'End Live Stream' : 'Go Live Now'}
             </button>
           </div>
-        </div>
-
-        {/* ──────────────────────────────────────────────── */}
-        {/* STATUS BAR – Bottom Left (opposite Support ECHO) */}
-        {/* ──────────────────────────────────────────────── */}
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '90px',          // above the bottom nav
-            left: '16px',
-            zIndex: 50,
-            display: 'flex',
-            alignItems: 'center',
-            gap: '10px',
-          }}
-        >
-          <StatusBar />
         </div>
 
         {/* User Preview Modal */}
