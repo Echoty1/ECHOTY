@@ -10,7 +10,6 @@ export const followUser = async (currentUserId, targetUserId) => {
     followedAt: Date.now(),
   });
 
-  // Update the other user's count in profiles
   const targetProfileRef = ref(db, `profiles/${targetUserId}`);
   const snap = await get(targetProfileRef);
   const data = snap.val() || {};
@@ -24,7 +23,6 @@ export const unfollowUser = async (currentUserId, targetUserId) => {
 
   await remove(ref(db, `echowers/${currentUserId}/${targetUserId}`));
 
-  // Update the other user's count in profiles
   const targetProfileRef = ref(db, `profiles/${targetUserId}`);
   const snap = await get(targetProfileRef);
   const data = snap.val() || {};
@@ -38,7 +36,7 @@ export const isEchowing = async (currentUserId, targetUserId) => {
   return snap.exists();
 };
 
-// Get ALL user IDs you are Echowing (Your "Following" list)
+// Get all user IDs you are Echowing
 export const getMyEchowers = async (currentUserId) => {
   const snap = await get(ref(db, `echowers/${currentUserId}`));
   return snap.val() ? Object.keys(snap.val()) : [];
@@ -53,7 +51,7 @@ export const listenToMyEchowers = (currentUserId, callback) => {
   });
 };
 
-// Listen to your Echower Count (from profiles)
+// Listen to your Echower Count
 export const listenToMyEchowerCount = (targetUserId, callback) => {
   const refPath = ref(db, `profiles/${targetUserId}/echowerCount`);
   return onValue(refPath, (snap) => {
