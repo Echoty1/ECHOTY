@@ -1,9 +1,27 @@
-import React, { useRef } from 'react';
+import React, { useRef, useEffect } from 'react';
 import StatusCircle from './StatusCircle';
-import './StatusBar.css'; // Make sure to import the CSS
+import './StatusBar.css';
 
 const StatusBar = ({ users, ownStatus, onAddStatus, onViewStatus }) => {
   const scrollRef = useRef(null);
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+
+    const onWheel = (event) => {
+      if (event.deltaY !== 0) {
+        event.preventDefault();
+        el.scrollLeft += event.deltaY;
+      }
+    };
+
+    el.addEventListener('wheel', onWheel, { passive: false });
+
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, []);
 
   return (
     <div className="echo-status-container">
@@ -11,7 +29,6 @@ const StatusBar = ({ users, ownStatus, onAddStatus, onViewStatus }) => {
         ref={scrollRef}
         className="echo-status-bar"
       >
-        {/* Your own status circle */}
         <StatusCircle
           isOwn={true}
           hasStatus={!!ownStatus}
@@ -22,7 +39,6 @@ const StatusBar = ({ users, ownStatus, onAddStatus, onViewStatus }) => {
           isFirst={true}
         />
         
-        {/* Other users' status circles */}
         {users?.map((user, index) => (
           <StatusCircle
             key={user.id}
@@ -36,7 +52,6 @@ const StatusBar = ({ users, ownStatus, onAddStatus, onViewStatus }) => {
         ))}
       </div>
       
-      {/* Subtle gradient fade on the left edge */}
       <div className="status-fade-left" />
     </div>
   );
