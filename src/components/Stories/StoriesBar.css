@@ -608,3 +608,278 @@
   font-size: 14px;
   font-weight: 600;
 }
+
+/* ─── INSTAGRAM STYLE STACKED CURVE ─── */
+.stories-bar-container {
+  position: fixed;
+  bottom: 90px;
+  left: 0;
+  z-index: 9999;
+  width: 100%;
+  max-width: 450px;
+  pointer-events: auto;
+}
+
+.stories-bar-scroll {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  padding: 10px 16px;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.stories-bar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.story-circle-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  flex-shrink: 0;
+  position: relative;
+}
+
+/* The 3D Curve Glow */
+.story-ring {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  padding: 3px;
+  background: #3f3f46;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s ease;
+  position: relative;
+  box-shadow: 0 0 0 rgba(0, 0, 0, 0);
+}
+
+.story-circle-wrapper:hover .story-ring {
+  transform: scale(1.05);
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.4);
+}
+
+.story-circle-wrapper:active .story-ring {
+  transform: scale(0.92);
+}
+
+/* Instagram Style Gradient */
+.story-ring.has-story {
+  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
+}
+
+.story-ring.own {
+  background: #3f3f46;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+/* Avatar */
+.story-avatar-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  border: 2px solid #1a1a1a;
+}
+
+.story-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.own-avatar-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+}
+
+.add-badge {
+  position: absolute;
+  bottom: 0;
+  right: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #0095f6;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid #000;
+  line-height: 1;
+  z-index: 3;
+}
+
+.story-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  max-width: 68px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
+
+/* ─── THE STACKED GRID (Peeking from behind) ─── */
+.story-circle-wrapper::before,
+.story-circle-wrapper::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  border-radius: 50%;
+  background: #222;
+  pointer-events: none;
+  transition: transform 0.2s ease;
+  z-index: -1;
+}
+
+/* 1st layer behind */
+.story-circle-wrapper::before {
+  left: -6px;
+  right: 6px;
+  transform: rotate(-4deg);
+}
+
+/* 2nd layer behind (curved) */
+.story-circle-wrapper::after {
+  left: -11px;
+  right: 11px;
+  transform: rotate(-8deg);
+  background: #2a2a2a;
+}
+
+/* When hovering, the stack expands slightly */
+.story-circle-wrapper:hover::before {
+  transform: rotate(-3deg);
+}
+
+.story-circle-wrapper:hover::after {
+  transform: rotate(-6deg);
+}
+
+/* ─── VIEWER DISAPPEARING ANIMATION ─── */
+.viewer-overlay {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 10000;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  color: #fff;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.viewer-overlay.closing {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+.progress-bar-container {
+  position: absolute;
+  top: 10px;
+  left: 5%;
+  right: 5%;
+  display: flex;
+  gap: 4px;
+  z-index: 10;
+}
+
+.progress-segment {
+  flex: 1;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  background: #fff;
+  transition: width 0.1s linear;
+}
+
+.viewer-header {
+  position: absolute;
+  top: 20px;
+  left: 15px;
+  right: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  z-index: 10;
+}
+
+.viewer-header-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.owner-name {
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.viewer-time {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.close-viewer {
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.viewer-tap-area {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  cursor: pointer;
+}
+
+.viewer-image-container {
+  max-width: 100%;
+  max-height: 80vh;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  flex-direction: column;
+}
+
+.viewer-image {
+  max-width: 100%;
+  max-height: 80vh;
+  object-fit: contain;
+  animation: viewerImageScale 0.3s ease;
+}
+
+@keyframes viewerImageScale {
+  from {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
