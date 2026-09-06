@@ -17,20 +17,18 @@ export const sendEchoHalo = async (senderUid, receiverUid, { imageUrl, caption =
     receiverUid,
     chatId,
     createdAt: serverTimestamp(),
-    viewed: false, // Not viewed yet
+    viewed: false,
   });
 
   return haloRef.key;
 };
 
-// 2. Listen for Halos in a chat (for both sender and receiver)
+// 2. Listen for Halos in a chat
 export const listenToChatHalos = (chatId, callback) => {
   const halosRef = ref(db, `echoHalos/${chatId}`);
   return onValue(halosRef, (snap) => {
     const data = snap.val() || {};
     const halos = Object.keys(data).map(key => ({ ...data[key], haloId: key }));
-    
-    // Only show if not viewed yet OR if it was recently sent by you
     const visibleHalos = halos.filter(h => !h.viewed);
     callback(visibleHalos);
   });
