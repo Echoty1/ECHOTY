@@ -1,6 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { getStorage, ref as storageRef, uploadString, getDownloadURL } from 'firebase/storage';
-import { createImageStatus } from '../../services/statusService';
+import { createImageStatus } from '../../services/statusService'; 
 import './StoriesBar.css';
 
 const StoryRecorder = ({ userId, onClose }) => {
@@ -39,42 +38,32 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
   }, []);
 
-  // 2. Snap and COMPRESS the image
+  // 2. Snap and COMPRESS
   const handleSnap = () => {
     if (!videoRef.current) return;
-
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
-    
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
-    
     context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
     
-    // COMPRESS: 0.6 quality reduces file size significantly
-    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.6);
+    // Compress to 0.5 to keep DB small
+    const imageDataUrl = canvas.toDataURL('image/jpeg', 0.5);
     setSnappedImage(imageDataUrl);
   };
 
   const retake = () => setSnappedImage(null);
 
-  // 3. Upload with proper error handling
+  // 3. Upload to DB directly (No Firebase Storage needed!)
   const handlePost = async () => {
     if (!snappedImage || !userId) return;
     setUploading(true);
     setError('');
 
     try {
-      const storage = getStorage();
-      // Use the uid and timestamp so we don't overwrite files
-      const imageRef = storageRef(storage, `statuses/${userId}/${Date.now()}.jpg`);
-
-      await uploadString(imageRef, snappedImage, 'data_url');
-      const downloadURL = await getDownloadURL(imageRef);
-
-      await createImageStatus(userId, { imageUrl: downloadURL, caption });
+      // Pass base64 string directly as imageUrl
+      await createImageStatus(userId, { imageUrl: snappedImage, caption });
       
-      // Success! Close the modal
       onClose();
     } catch (err) {
       console.error("Error posting story:", err);
@@ -88,7 +77,6 @@ const StoryRecorder = ({ userId, onClose }) => {
       <div className="recorder-modal">
         <h2>Create New Story</h2>
         
-        {/* Show error if any */}
         {error && <div className="camera-error" style={{ color: '#ff4d4f', marginBottom: '10px' }}>{error}</div>}
 
         {!snappedImage ? (
