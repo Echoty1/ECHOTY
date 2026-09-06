@@ -905,7 +905,83 @@
   align-items: center;
   justify-content: center;
 }
+/* ─── STACKED CURVE INSIDE VIEWER ─── */
+.stacked-stories-back {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 80%;
+  height: 80%;
+  pointer-events: none;
+  z-index: 1;
+}
 
+.back-story-layer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 20px;
+  background: #222;
+  opacity: 0.8;
+  animation: layerFadeIn 0.3s ease;
+}
+
+.layer-1 {
+  width: 100%;
+  height: 100%;
+  transform: translate(-50%, -50%) rotate(3deg);
+  background: #2a2a2a;
+}
+
+.layer-2 {
+  width: 95%;
+  height: 95%;
+  transform: translate(-50%, -50%) rotate(6deg);
+  background: #333;
+}
+
+.layer-3 {
+  width: 90%;
+  height: 90%;
+  transform: translate(-50%, -50%) rotate(9deg);
+  background: #3a3a3a;
+}
+
+@keyframes layerFadeIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* ─── SMOOTH TRANSITIONS ─── */
+.viewer-image-container {
+  position: relative;
+  z-index: 2;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+
+.viewer-image-container.switching {
+  opacity: 0;
+  transform: scale(0.9);
+}
+
+.viewer-overlay {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.viewer-overlay.closing {
+  opacity: 0;
+  transform: scale(0.95);
+}
+
+/* ─── REAL CAMERA NO-GREY LOADING FIX ─── */
+.camera-loading {
+  background: transparent;
+  color: #aaa;
+  font-size: 12px;
+  font-weight: 500;
+  pointer-events: none;
+}
 .viewer-avatar {
   width: 100%;
   height: 100%;
@@ -913,3 +989,4 @@
   object-fit: cover;
   border: 2px solid #000;
 }
+
