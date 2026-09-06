@@ -1,10 +1,13 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { markStatusViewed } from '../../services/statusService';
 import './StoriesBar.css';
 
-const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose }) => {
+const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNext }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [isClosing, setIsClosing] = useState(false);
+  const [isSwitching, setIsSwitching] = useState(false);
+  const audioRef = useRef(null);
 
   const currentStory = stories[currentIndex];
 
@@ -12,12 +15,12 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose }) => 
     setProgress(0);
     if (!currentStory) return;
 
-    // Mark as viewed the moment it opens
+    // Mark as viewed
     if (currentStory.userId && currentStory.id && viewerId) {
       markStatusViewed(currentStory.userId, currentStory.id, viewerId);
     }
 
-    // Auto-advance timer (5 seconds)
+    // Auto-advance timer
     const interval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
@@ -34,55 +37,60 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose }) => 
 
   const handleNext = () => {
     if (currentIndex < stories.length - 1) {
-      setCurrentIndex(prev => prev + 1);
+      // Animate out current image, then switch
+      setIsSwitching(true);
+      setTimeout(() => {
+        setCurrentIndex(prev => prev + 1);
+        setIsSwitching(false);
+      }, 250);
     } else {
-      onClose();
+      // All stories are gone: Beautifully fade out the whole viewer
+      setIsClosing(true);
+      setTimeout(onClose, 400);
     }
   };
+
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(onClose, 400);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (audioRef.current) {
+        audioRef.current.pause();
+      }
+    };
+  }, []);
 
   if (!currentStory) return null;
 
   return (
-    <div className="viewer-overlay" onClick={handleNext}>
-      
-      {/* TOP AREA: Progress Bars & Header */}
-      <div className="viewer-top-section" onClick={(e) => e.stopPropagation()}>
-        {/* Progress bars */}
-        <div className="viewer-progress-container">
-          {stories.map((_, idx) => (
-            <div key={idx} className={`viewer-progress-segment ${idx < currentIndex ? 'full' : idx === currentIndex ? 'active' : ''}`}>
-              <div 
-                className="viewer-progress-fill" 
-                style={{ width: idx === currentIndex ? `${progress}%` : idx < currentIndex ? '100%' : '0%' }}
-              ></div>
-            </div>
-          ))}
-        </div>
-
-        {/* Glassmorphism User Header */}
-        <div className="viewer-user-header">
-          <div className="viewer-user-info">
-            <div className="viewer-avatar-ring">
-              <img src={ownerAvatar || 'https://via.placeholder.com/40'} alt={ownerName} className="viewer-avatar" />
-            </div>
-            <div className="viewer-text-info">
-              <span className="viewer-username">{ownerName || 'User'}</span>
-              <span className="viewer-time">Just now</span>
-            </div>
+    <div className={`viewer-overlay ${isClosing ? 'closing' : ''}`}>
+      {/* Progress Bar */}
+      <div className="progress-bar-container">
+        {stories.map((_, idx) => (
+          <div key={idx} className={`progress-segment ${idx < currentIndex ? 'full' : idx === currentIndex ? 'active' : ''}`}>
+            <div className="progress-bar-fill" style={{ width: idx === currentIndex ? `${progress}%` : idx < currentIndex ? '100%' : '0%' }}></div>
           </div>
-          
-          <button className="viewer-close-btn" onClick={onClose}>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
-              <line x1="6" y1="6" x2="18" y2="18"></line>
-            </svg>
-          </button>
-        </div>
+        ))}
       </div>
 
-      {/* MAIN IMAGE AREA - Perfectly centered, high quality */}
-      <div className="viewer-main-area">
-        <div className="viewer-image-wrapper">
+      {/* Header */}
+      <div className="viewer-header">
+        <div className="viewer-header-info">
+          <div className="viewer-avatar-ring">
+            <img src={ownerAvatar || 'https://via.placeholder.com/40'} alt={ownerName} className="viewer-avatar" />
+          </div>
+          <span className="owner-name">{ownerName || 'User'}</span>
+          <span className="viewer-time">Now</span>
+        </div>
+        <button className="close-viewer" onClick={handleClose}>✕</button>
+      </div>
+
+      {/* Main Image Area with smooth transition */}
+      <div className="viewer-tap-area" onClick={handleNext}>
+        <div className={`viewer-image-container ${isSwitching ? 'switching' : ''}`}>
           <img 
             src={currentStory.imageUrl} 
             alt="Story" 
@@ -91,7 +99,6 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose }) => 
           />
         </div>
       </div>
-
     </div>
   );
 };
