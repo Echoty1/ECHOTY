@@ -26,6 +26,7 @@ const StoryRecorder = ({ userId, onClose }) => {
     }
   };
 
+  // ✅ KEEP CAMERA ALIVE! (Only restart when switching face, NEVER when snapping)
   useEffect(() => {
     let cancelled = false;
     setIsLoadingCam(true);
@@ -74,6 +75,7 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
   }, [facingMode]);
 
+  // ✅ Only stop camera when closing the app completely
   useEffect(() => {
     return () => {
       if (stream) {
