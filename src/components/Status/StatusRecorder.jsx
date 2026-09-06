@@ -12,44 +12,31 @@ const uploadToCloudinary = (file, onProgress) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, true);
-
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
         onProgress(Math.round((e.loaded / e.total) * 100));
       }
     };
-
     xhr.onload = () => {
       if (xhr.status === 200) {
         try {
           const data = JSON.parse(xhr.responseText);
           resolve(data.secure_url);
         } catch (err) {
-          reject(new Error('Invalid response from Cloudinary'));
+          reject(new Error('Invalid response'));
         }
       } else {
-        reject(new Error(`Upload failed with status ${xhr.status}`));
+        reject(new Error(`Upload failed ${xhr.status}`));
       }
     };
-
-    xhr.onerror = () => reject(new Error('Network error during upload'));
+    xhr.onerror = () => reject(new Error('Network error'));
     xhr.send(formData);
   });
 };
 
 const MAX_DURATION = 30;
-
-const VOICE_FILTERS = [
-  { id: 'normal', label: 'Normal', icon: '🎙️' },
-  { id: 'deep', label: 'Deep', icon: '🌑' },
-  { id: 'high', label: 'High', icon: '🐿️' },
-  { id: 'robot', label: 'Robot', icon: '🤖' },
-  { id: 'soft', label: 'Soft', icon: '☁️' },
-  { id: 'echo', label: 'Echo', icon: '🔁' },
-];
 
 const StatusRecorder = ({ onClose }) => {
   const { user } = useAuth();
@@ -60,7 +47,6 @@ const StatusRecorder = ({ onClose }) => {
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [selectedFilter, setSelectedFilter] = useState('normal');
 
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -69,9 +55,7 @@ const StatusRecorder = ({ onClose }) => {
 
   useEffect(() => {
     return () => {
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((t) => t.stop());
-      }
+      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
       clearInterval(timerRef.current);
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
@@ -115,8 +99,7 @@ const StatusRecorder = ({ onClose }) => {
         });
       }, 1000);
     } catch (err) {
-      console.error(err);
-      alert('Please allow microphone access to record an Echo.');
+      alert('Please allow microphone access');
     }
   };
 
@@ -124,9 +107,7 @@ const StatusRecorder = ({ onClose }) => {
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
     }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
-    }
+    if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
     clearInterval(timerRef.current);
     setIsRecording(false);
   };
@@ -137,25 +118,19 @@ const StatusRecorder = ({ onClose }) => {
     setUploadProgress(0);
 
     try {
-      const file = new File([audioBlob], `echo_status_${Date.now()}.webm`, {
-        type: 'audio/webm',
-      });
-
-      const audioUrl = await uploadToCloudinary(file, (percent) => {
-        setUploadProgress(percent);
-      });
+      const file = new File([audioBlob], `echo_${Date.now()}.webm`, { type: 'audio/webm' });
+      const audioUrl = await uploadToCloudinary(file, setUploadProgress);
 
       await createVoiceStatus(user.uid, {
         audioUrl,
         duration,
         caption: caption.trim(),
-        filter: selectedFilter,
       });
 
       onClose();
     } catch (err) {
       console.error(err);
-      alert('Failed to post your Echo. Please try again.');
+      alert('Failed to post Echo');
     } finally {
       setUploading(false);
     }
@@ -167,7 +142,6 @@ const StatusRecorder = ({ onClose }) => {
     setPreviewUrl(null);
     setDuration(0);
     setCaption('');
-    setUploadProgress(0);
   };
 
   const formatTime = (s) => {
@@ -177,75 +151,58 @@ const StatusRecorder = ({ onClose }) => {
   };
 
   return (
-    <div className="status-recorder-overlay">
-      <div className="status-recorder-card">
-        <button className="recorder-close" onClick={onClose}>
-          ×
-        </button>
+    <div className="insta-recorder-overlay">
+      {/* Top bar */}
+      <div className="insta-top-bar">
+        <button className="insta-close" onClick={onClose}>✕</button>
+        <span className="insta-title">New Echo</span>
+        <div style={{ width: 40 }} />
+      </div>
 
-        <h2 className="recorder-title">New Echo</h2>
-        <p className="recorder-subtitle">Record up to 30 seconds</p>
-
+      {/* Main visual area */}
+      <div className="insta-main-area">
         {!audioBlob ? (
-          <div className="recorder-main">
-            <div className={`record-circle ${isRecording ? 'pulsing' : ''}`}>
-              <div className="mic-icon">{isRecording ? '🔴' : '🎙️'}</div>
+          <>
+            <div className={`insta-record-circle ${isRecording ? 'recording' : ''}`}>
+              <div className="insta-mic">{isRecording ? '🔴' : '🎙️'}</div>
+              {isRecording && <div className="insta-pulse-ring" />}
             </div>
-
-            <div className="timer-display">
-              {formatTime(duration)} <span>/ 00:30</span>
-            </div>
-
-            <button
-              className={`record-action-btn ${isRecording ? 'stop' : 'start'}`}
-              onClick={isRecording ? stopRecording : startRecording}
-            >
-              {isRecording ? 'Stop Recording' : 'Start Recording'}
-            </button>
-          </div>
+            <div className="insta-timer">{formatTime(duration)} / 00:30</div>
+          </>
         ) : (
-          <div className="preview-main">
-            <audio src={previewUrl} controls className="preview-audio" />
-
-            {/* Voice Filters */}
-            <div className="filter-section">
-              <p className="filter-label">Voice Filter</p>
-              <div className="filter-grid">
-                {VOICE_FILTERS.map((f) => (
-                  <button
-                    key={f.id}
-                    type="button"
-                    className={`filter-btn ${selectedFilter === f.id ? 'active' : ''}`}
-                    onClick={() => setSelectedFilter(f.id)}
-                  >
-                    <span className="filter-icon">{f.icon}</span>
-                    <span className="filter-name">{f.label}</span>
-                  </button>
-                ))}
-              </div>
+          <div className="insta-preview">
+            <div className="insta-preview-circle">
+              <span style={{ fontSize: 48 }}>🎧</span>
             </div>
-
+            <audio src={previewUrl} controls className="insta-audio" />
             <input
-              type="text"
-              className="caption-input"
-              placeholder="Add a short caption (optional)"
+              className="insta-caption"
+              placeholder="Add a caption..."
               value={caption}
               onChange={(e) => setCaption(e.target.value)}
               maxLength={60}
             />
+          </div>
+        )}
+      </div>
 
-            {uploading && (
-              <div className="upload-progress">Uploading... {uploadProgress}%</div>
-            )}
-
-            <div className="preview-actions">
-              <button className="btn-secondary" onClick={reset} disabled={uploading}>
-                Re-record
-              </button>
-              <button className="btn-primary" onClick={handlePost} disabled={uploading}>
-                {uploading ? 'Posting...' : 'Post Echo'}
-              </button>
-            </div>
+      {/* Bottom controls */}
+      <div className="insta-bottom-bar">
+        {!audioBlob ? (
+          <button
+            className={`insta-record-btn ${isRecording ? 'stop' : ''}`}
+            onClick={isRecording ? stopRecording : startRecording}
+          >
+            {isRecording ? 'Stop' : 'Hold to Record'}
+          </button>
+        ) : (
+          <div className="insta-preview-actions">
+            <button className="insta-btn-secondary" onClick={reset} disabled={uploading}>
+              Re-record
+            </button>
+            <button className="insta-btn-primary" onClick={handlePost} disabled={uploading}>
+              {uploading ? `${uploadProgress}%` : 'Share Echo'}
+            </button>
           </div>
         )}
       </div>
