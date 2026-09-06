@@ -3,7 +3,7 @@ import StoryCircle from './StoryCircle';
 import { listenToUserStatuses, listenToViewedStatuses } from '../../services/statusService';
 import './StoriesBar.css';
 
-const StoriesBar = ({ currentUserId, users, ownStory, onAddStory, onViewStories }) => {
+const StoriesBar = ({ currentUserId, users, ownStory, onAddStory, onViewStories, onUserFinished }) => {
   const scrollRef = useRef(null);
   const [viewedKeys, setViewedKeys] = useState({});
   const [statusesMap, setStatusesMap] = useState({});
@@ -25,17 +25,15 @@ const StoriesBar = ({ currentUserId, users, ownStory, onAddStory, onViewStories 
     };
   }, [currentUserId, users]);
 
-  // THE FIX: Check if a user has NO unviewed stories left. If so, remove them instantly.
+  // ✅ THE FIX: Remove user instantly when no stories are left to view
   const visibleUsers = (users || []).filter(user => {
     const statuses = statusesMap[user.uid] || [];
     
-    // If there are no stories at all, hide
     if (statuses.length === 0) return false;
 
-    // Filter out stories that have already been viewed
+    // Check which stories are unviewed
     const unseen = statuses.filter(s => !viewedKeys[`${user.uid}_${s.id}`]);
 
-    // Only show if at least ONE story is unviewed
     return unseen.length > 0;
   });
 
@@ -79,7 +77,7 @@ const StoriesBar = ({ currentUserId, users, ownStory, onAddStory, onViewStories 
               hasStory={true}
               avatar={user.avatar}
               name={user.name}
-              onView={() => onViewStories(unseen)}
+              onView={() => onViewStories(unseen, user.uid)}
             />
           );
         })}
