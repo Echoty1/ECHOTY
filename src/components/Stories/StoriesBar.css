@@ -595,3 +595,16 @@
     transform: scale(1);
   }
 }
+
+/* Loading state */
+.camera-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  background: #222;
+  font-size: 14px;
+  font-weight: 600;
+}
