@@ -75,7 +75,7 @@ const Home = () => {
 
   // ─── Story States ─────────────────────────────────────
   const [showRecorder, setShowRecorder] = useState(false);
-  const [viewingStories, setViewingStories] = useState(null); // Holds an array of stories
+  const [viewingStories, setViewingStories] = useState(null);
 
   // ─── Live broadcasting states ────────────────────────────────
   const [isLive, setIsLive] = useState(false);
@@ -792,6 +792,7 @@ const Home = () => {
           <StoryViewer 
             stories={viewingStories} 
             ownerName={viewingStories[0]?.userName || 'User'} 
+            ownerAvatar={viewingStories[0]?.avatar || ''} 
             viewerId={user?.uid} 
             onClose={() => setViewingStories(null)} 
           />
