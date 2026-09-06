@@ -12,13 +12,16 @@ const uploadToCloudinary = (file, onProgress) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
     const xhr = new XMLHttpRequest();
     xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, true);
+
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable && onProgress) {
         onProgress(Math.round((e.loaded / e.total) * 100));
       }
     };
+
     xhr.onload = () => {
       if (xhr.status === 200) {
         try {
@@ -31,6 +34,7 @@ const uploadToCloudinary = (file, onProgress) => {
         reject(new Error(`Upload failed with status ${xhr.status}`));
       }
     };
+
     xhr.onerror = () => reject(new Error('Network error during upload'));
     xhr.send(formData);
   });
@@ -62,62 +66,191 @@ const StatusRecorder = ({ onClose }) => {
   const chunksRef = useRef([]);
   const timerRef = useRef(null);
   const streamRef = useRef(null);
-  const audioContextRef = useRef(null);
 
   useEffect(() => {
     return () => {
-      if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop());
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((t) => t.stop());
+      }
       clearInterval(timerRef.current);
       if (previewUrl) URL.revokeObjectURL(previewUrl);
-      if (audioContextRef.current) audioContextRef.current.close();
     };
   }, [previewUrl]);
 
-  // Apply simple voice effects using Web Audio API
-  const applyVoiceFilter = async (blob, filterId) => {
-    if (filterId === 'normal') return blob;
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      streamRef.current = stream;
+
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+          ? 'audio/webm;codecs=opus'
+          : 'audio/webm',
+      });
+
+      mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) chunksRef.current.push(e.data);
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunksRef.current, { type: 'audio/webm' });
+        setAudioBlob(blob);
+        setPreviewUrl(URL.createObjectURL(blob));
+      };
+
+      mediaRecorder.start(200);
+      setIsRecording(true);
+      setDuration(0);
+
+      timerRef.current = setInterval(() => {
+        setDuration((prev) => {
+          if (prev >= MAX_DURATION - 1) {
+            stopRecording();
+            return MAX_DURATION;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch (err) {
+      console.error(err);
+      alert('Please allow microphone access to record an Echo.');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((t) => t.stop());
+    }
+    clearInterval(timerRef.current);
+    setIsRecording(false);
+  };
+
+  const handlePost = async () => {
+    if (!audioBlob || !user) return;
+    setUploading(true);
+    setUploadProgress(0);
 
     try {
-      const arrayBuffer = await blob.arrayBuffer();
-      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      const file = new File([audioBlob], `echo_status_${Date.now()}.webm`, {
+        type: 'audio/webm',
+      });
 
-      const offlineCtx = new OfflineAudioContext(
-        audioBuffer.numberOfChannels,
-        audioBuffer.length,
-        audioBuffer.sampleRate
-      );
+      const audioUrl = await uploadToCloudinary(file, (percent) => {
+        setUploadProgress(percent);
+      });
 
-      const source = offlineCtx.createBufferSource();
-      source.buffer = audioBuffer;
+      await createVoiceStatus(user.uid, {
+        audioUrl,
+        duration,
+        caption: caption.trim(),
+        filter: selectedFilter,
+      });
 
-      let lastNode = source;
+      onClose();
+    } catch (err) {
+      console.error(err);
+      alert('Failed to post your Echo. Please try again.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
-      if (filterId === 'deep') {
-        // Lower pitch feel (playbackRate trick + slight filter)
-        source.playbackRate.value = 0.82;
-      } else if (filterId === 'high') {
-        source.playbackRate.value = 1.25;
-      } else if (filterId === 'robot') {
-        const waveShaper = offlineCtx.createWaveShaper();
-        waveShaper.curve = makeDistortionCurve(80);
-        waveShaper.oversample = '4x';
-        lastNode.connect(waveShaper);
-        lastNode = waveShaper;
-      } else if (filterId === 'soft') {
-        const filter = offlineCtx.createBiquadFilter();
-        filter.type = 'lowpass';
-        filter.frequency.value = 1800;
-        lastNode.connect(filter);
-        lastNode = filter;
-      } else if (filterId === 'echo') {
-        const delay = offlineCtx.createDelay(1.0);
-        delay.delayTime.value = 0.22;
-        const feedback = offlineCtx.createGain();
-        feedback.gain.value = 0.35;
-        lastNode.connect(delay);
-        delay.connect(feedback);
-        feedback.connect(delay);
-        delay.connect(offlineCtx.destination);
-      }
+  const reset = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setAudioBlob(null);
+    setPreviewUrl(null);
+    setDuration(0);
+    setCaption('');
+    setUploadProgress(0);
+  };
 
+  const formatTime = (s) => {
+    const m = Math.floor(s / 60);
+    const sec = s % 60;
+    return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  };
+
+  return (
+    <div className="status-recorder-overlay">
+      <div className="status-recorder-card">
+        <button className="recorder-close" onClick={onClose}>
+          ×
+        </button>
+
+        <h2 className="recorder-title">New Echo</h2>
+        <p className="recorder-subtitle">Record up to 30 seconds</p>
+
+        {!audioBlob ? (
+          <div className="recorder-main">
+            <div className={`record-circle ${isRecording ? 'pulsing' : ''}`}>
+              <div className="mic-icon">{isRecording ? '🔴' : '🎙️'}</div>
+            </div>
+
+            <div className="timer-display">
+              {formatTime(duration)} <span>/ 00:30</span>
+            </div>
+
+            <button
+              className={`record-action-btn ${isRecording ? 'stop' : 'start'}`}
+              onClick={isRecording ? stopRecording : startRecording}
+            >
+              {isRecording ? 'Stop Recording' : 'Start Recording'}
+            </button>
+          </div>
+        ) : (
+          <div className="preview-main">
+            <audio src={previewUrl} controls className="preview-audio" />
+
+            {/* Voice Filters */}
+            <div className="filter-section">
+              <p className="filter-label">Voice Filter</p>
+              <div className="filter-grid">
+                {VOICE_FILTERS.map((f) => (
+                  <button
+                    key={f.id}
+                    type="button"
+                    className={`filter-btn ${selectedFilter === f.id ? 'active' : ''}`}
+                    onClick={() => setSelectedFilter(f.id)}
+                  >
+                    <span className="filter-icon">{f.icon}</span>
+                    <span className="filter-name">{f.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <input
+              type="text"
+              className="caption-input"
+              placeholder="Add a short caption (optional)"
+              value={caption}
+              onChange={(e) => setCaption(e.target.value)}
+              maxLength={60}
+            />
+
+            {uploading && (
+              <div className="upload-progress">Uploading... {uploadProgress}%</div>
+            )}
+
+            <div className="preview-actions">
+              <button className="btn-secondary" onClick={reset} disabled={uploading}>
+                Re-record
+              </button>
+              <button className="btn-primary" onClick={handlePost} disabled={uploading}>
+                {uploading ? 'Posting...' : 'Post Echo'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default StatusRecorder;
