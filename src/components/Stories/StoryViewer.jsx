@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { markStatusViewed } from '../../services/statusService';
 import './StoriesBar.css';
 
@@ -41,7 +41,7 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
         setIsSwitching(false);
       }, 250);
     } else {
-      // All stories viewed -> Close with animation
+      // Last story: Fade out the viewer, then close
       setIsClosing(true);
       setTimeout(onClose, 400);
     }
@@ -78,20 +78,8 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
         <button className="close-viewer" onClick={handleClose}>✕</button>
       </div>
 
-      {/* Stacked Curve + Main Image Area */}
+      {/* Main Image Area (Tap to advance) */}
       <div className="viewer-tap-area" onClick={handleNext}>
-        
-        {/* Old snaps peeking from behind (Curved layout) */}
-        <div className="stacked-stories-back">
-          {stories.slice(currentIndex + 1, currentIndex + 4).map((_, idx) => (
-            <div 
-              key={idx} 
-              className={`back-story-layer layer-${idx + 1}`}
-            ></div>
-          ))}
-        </div>
-
-        {/* Current Story (Latest snap) */}
         <div className={`viewer-image-container ${isSwitching ? 'switching' : ''}`}>
           <img 
             src={currentStory.imageUrl} 
@@ -100,7 +88,6 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
             draggable={false}
           />
         </div>
-
       </div>
     </div>
   );
