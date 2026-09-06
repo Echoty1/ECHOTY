@@ -50,6 +50,8 @@ import AiRichText from './AiRichText';
 import { SkeletonMessage } from '../../common/SkeletonLoader';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
+// ─── ECHO HALO IMPORTS ───
+import { sendEchoHalo, listenToChatHalos, markHaloAsViewed, deleteEchoHalo } from '../../../services/echoHaloService';
 import './ChatView.css';
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
@@ -59,7 +61,7 @@ const MAX_VIDEO_DURATION = 30 * 60; // 30 minutes
 
 const ECHO_AI_ID = 'echo_ai_assistant';
 
-// âââ Quick-reaction bar geometry âââââââââââââââââââââââââââââââââ
+// ─── Quick-reaction bar geometry ───
 const REACTION_BAR_HEIGHT = 48;
 const REACTION_BAR_GAP = 12;
 const REACTION_ARROW_SIZE = 12;
@@ -116,7 +118,7 @@ const ChatView = () => {
   const location = useLocation();
   const { getProfile, fetchProfile } = useProfile();
 
-  // âââ State ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── State ───
   const [partnerProfile, setPartnerProfile] = useState(null);
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -141,18 +143,18 @@ const ChatView = () => {
   const [mediaPreview, setMediaPreview] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
   
-  // âââ Simple inline message option state âââââââââââââââââââââââ
+  // ─── Simple inline message option state ───
   const [activeMessageMenuId, setActiveMessageMenuId] = useState(null);
 
-  // âââ Typing Indicators ââââââââââââââââââââââââââââââââââââââ
+  // ─── Typing Indicators ───
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
   const typingTimeoutRef = useRef(null);
 
-  // âââ Touch gesture refs ââââââââââââââââââââââââââââââââââââââ
+  // ─── Touch gesture refs ───
   const touchTimerRef = useRef(null);
   const lastTapRef = useRef({ time: 0, msgId: null });
 
-  // âââ Upload State âââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── Upload State ───
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [captionText, setCaptionText] = useState('');
@@ -162,14 +164,14 @@ const ChatView = () => {
   const fileInputRef = useRef(null);
   const captionInputRef = useRef(null);
 
-  // âââ File size warning modal ââââââââââââââââââââââââââââââââââ
+  // ─── File size warning modal ───
   const [fileSizeError, setFileSizeError] = useState(false);
   const [toast, setToast] = useState(null);
   const [bookmarkedIds, setBookmarkedIds] = useState({});
   const stampedLegacyTides = useRef(false);
   const [tideTick, setTideTick] = useState(Date.now());
 
-  // âââ Confirm Modal State ââââââââââââââââââââââââââââââââââââââ
+  // ─── Confirm Modal State ───
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     title: '',
@@ -179,7 +181,13 @@ const ChatView = () => {
     onConfirm: null,
   });
 
-  // âââ Refs ââââââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── ECHO HALO STATES ───
+  const [halos, setHalos] = useState([]);
+  const [activeHalo, setActiveHalo] = useState(null);
+  const [haloCountdown, setHaloCountdown] = useState(5);
+  const [isHaloMode, setIsHaloMode] = useState(false);
+
+  // ─── Refs ───
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
@@ -197,7 +205,7 @@ const ChatView = () => {
   const messageRefs = useRef({});
   const clearedAtRef = useRef(0);
 
-  // âââ Effects ââââââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── Effects ───
   useEffect(() => {
     const t = setTimeout(() => setLoadingMessages(false), 1200);
     return () => clearTimeout(t);
@@ -214,7 +222,32 @@ const ChatView = () => {
     return () => clearInterval(id);
   }, []);
 
-  // âââ Typing Indicator Listener ââââââââââââââââââââââââââââââ
+  // ─── ECHO HALO LISTENER ───
+  useEffect(() => {
+    if (!user?.uid || !userId) return;
+    const cId = [user.uid, userId].sort().join('_');
+    const unsub = listenToChatHalos(cId, setHalos);
+    return () => unsub();
+  }, [user?.uid, userId]);
+
+  // ─── ECHO HALO COUNTDOWN ───
+  useEffect(() => {
+    if (!activeHalo) return;
+    setHaloCountdown(5);
+    const interval = setInterval(() => {
+      setHaloCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          handleDestroyHalo();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [activeHalo]);
+
+  // ─── Typing Indicator Listener ───
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -230,7 +263,7 @@ const ChatView = () => {
     return () => unsub();
   }, [user?.uid, userId]);
 
-  // âââ Helper Functions ââââââââââââââââââââââââââââââââââââââââ
+  // ─── Helper Functions ───
   const pruneExpired = async (list, cId) => {
     if (userId === ECHO_AI_ID) return list;
     const keep = [];
@@ -305,12 +338,12 @@ const ChatView = () => {
         if (latest.type === 'media') {
           latestMsg =
             latest.mediaType === 'video'
-              ? 'ð¬ Video'
+              ? '🎬 Video'
               : latest.mediaType === 'audio'
-              ? 'ð¤ Voice note'
-              : 'ð· Image';
+              ? '🎤 Voice note'
+              : '📷 Image';
         } else if (latest.type === 'echomoji') {
-          latestMsg = `ð ECHOMOJI (${latest.mood || 'neutral'})`;
+          latestMsg = `😤 ECHOMOJI (${latest.mood || 'neutral'})`;
         } else {
           latestMsg = latest.text || '';
         }
@@ -340,7 +373,7 @@ const ChatView = () => {
       window.dispatchEvent(new CustomEvent('chat-unread-cleared', { detail: { partnerId: userId } }));
       clearMessageCache(cId);
     } catch (err) {
-      console.warn('â ï¸ [Unread] markMessagesAsRead error:', err.message);
+      console.warn('⚠️ [Unread] markMessagesAsRead error:', err.message);
     }
   };
 
@@ -388,7 +421,7 @@ const ChatView = () => {
     setIsNearBottom(isNear);
   }, []);
 
-  // âââ Typing Handler ââââââââââââââââââââââââââââââââââââ
+  // ─── Typing Handler ───
   const handleTyping = useCallback(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -400,7 +433,35 @@ const ChatView = () => {
     }, 2000);
   }, [user?.uid, userId]);
 
-  // âââ Message Handlers ââââââââââââââââââââââââââââââââââââââââ
+  // ─── ECHO HALO HANDLERS ───
+  const handleSendHalo = async (imageUrl) => {
+    if (!user?.uid || !userId || !imageUrl) return;
+    await sendEchoHalo(user.uid, userId, { imageUrl, caption: '' });
+    setIsHaloMode(false);
+    setToast({ message: 'ECHO HALO sent! It will disappear after they view it.', type: 'success' });
+    setTimeout(() => setToast(null), 2800);
+  };
+
+  const handlePlayHalo = async (halo) => {
+    setActiveHalo(halo);
+    await markHaloAsViewed(halo.chatId, halo.haloId);
+  };
+
+  const handleDestroyHalo = async () => {
+    if (!activeHalo) return;
+    await deleteEchoHalo(activeHalo.chatId, activeHalo.haloId);
+    setActiveHalo(null);
+    setHalos(prev => prev.filter(h => h.haloId !== activeHalo.haloId));
+  };
+
+  const handleCloseHalo = () => {
+    if (activeHalo) {
+      deleteEchoHalo(activeHalo.chatId, activeHalo.haloId);
+    }
+    setActiveHalo(null);
+  };
+
+  // ─── Message Handlers ───
   const handleSendText = async (e) => {
     e?.preventDefault?.();
     const textToSend = (typeof e === 'string' ? e : newMessage).trim();
@@ -596,7 +657,7 @@ const ChatView = () => {
     const cId = [user.uid, userId].sort().join('_');
     const tempId = `temp_${Date.now()}`;
     const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
-    const mediaIcon = mediaType === 'video' ? 'ð¬ Video' : 'ð· Image';
+    const mediaIcon = mediaType === 'video' ? '🎬 Video' : '📷 Image';
     const blobUrl = URL.createObjectURL(file);
     const currentReply = reply || replyTo;
 
@@ -831,7 +892,7 @@ const ChatView = () => {
       await patchMyUserChat(userId, {
         partnerName: location.state?.userName || partnerProfile?.name || 'User',
         partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '',
-        lastMessage: 'ð¤ Voice note',
+        lastMessage: '🎤 Voice note',
         lastSenderId: user.uid,
         lastUpdated: Date.now(),
         unreadCount: 0,
@@ -844,14 +905,14 @@ const ChatView = () => {
             id: user.uid,
             partnerName: currentUserProfile?.name || 'User',
             partnerAvatar: currentUserProfile?.avatar || '',
-            lastMessage: 'ð¤ Voice note',
+            lastMessage: '🎤 Voice note',
             lastSenderId: user.uid,
             lastUpdated: Date.now(),
             unreadCount: 1,
           };
         } else {
           currentData.unreadCount = (currentData.unreadCount || 0) + 1;
-          currentData.lastMessage = 'ð¤ Voice note';
+          currentData.lastMessage = '🎤 Voice note';
           currentData.lastSenderId = user.uid;
           currentData.lastUpdated = Date.now();
           return currentData;
@@ -872,9 +933,19 @@ const ChatView = () => {
     }
   };
 
+  // ─── Updated handleFileSelect with ECHO HALO support ───
   const handleFileSelect = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    // ✨ If in Halo mode, send as Halo
+    if (isHaloMode) {
+      const url = URL.createObjectURL(file);
+      await handleSendHalo(url);
+      e.target.value = '';
+      return;
+    }
+
     if (userId === ECHO_AI_ID) {
       e.target.value = '';
       setToast({ message: 'Attachments are not available in ECHO AI chat right now.', type: 'info' });
@@ -959,7 +1030,7 @@ const ChatView = () => {
     }
   };
 
-  // âââ Reply Handler ââââââââââââââââââââââââââââââââââââââââââ
+  // ─── Reply Handler ───
   const handleReply = useCallback((msg) => {
     const isOwnMsg = String(msg.senderId || '') === String(user?.uid || '');
     const senderName = isOwnMsg
@@ -968,11 +1039,11 @@ const ChatView = () => {
     
     let textSnippet;
     if (msg.type === 'media') {
-      if (msg.mediaType === 'video') textSnippet = 'ð¬ Video';
-      else if (msg.mediaType === 'audio') textSnippet = 'ð¤ Voice note';
-      else textSnippet = 'ð· Image';
+      if (msg.mediaType === 'video') textSnippet = '🎬 Video';
+      else if (msg.mediaType === 'audio') textSnippet = '🎤 Voice note';
+      else textSnippet = '📷 Image';
     } else if (msg.type === 'echomoji') {
-      textSnippet = `ð ECHOMOJI (${msg.mood || 'neutral'})`;
+      textSnippet = `😤 ECHOMOJI (${msg.mood || 'neutral'})`;
     } else {
       textSnippet = msg.text || 'Message';
     }
@@ -989,7 +1060,7 @@ const ChatView = () => {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [user, partnerProfile, currentUserProfile, location.state?.userName]);
 
-  // âââ Reaction Handler âââââââââââââââââââââââââââââââââââââââââ
+  // ─── Reaction Handler ───
   const handleReact = useCallback((messageId) => {
     if (showReactionPicker && reactingMessageId === messageId) {
       setShowReactionPicker(false);
@@ -1065,7 +1136,7 @@ const ChatView = () => {
     };
   }, [showReactionPicker]);
 
-  // âââ Touch Gesture handlers ââââââââââââââââââââââââââââââââââââ
+  // ─── Touch Gesture handlers ───
   const handleTouchStart = (msg, e) => {
     if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
     touchTimerRef.current = setTimeout(() => {
@@ -1104,7 +1175,7 @@ const ChatView = () => {
     const now = Date.now();
     const lastTap = lastTapRef.current;
     if (lastTap.msgId === msg.id && now - lastTap.time < 300) {
-      handleReactionSelect('â¤ï¸', msg.id);
+      handleReactionSelect('❤️', msg.id);
       lastTapRef.current = { time: 0, msgId: null };
     } else {
       lastTapRef.current = { time: now, msgId: msg.id };
@@ -1405,7 +1476,7 @@ const ChatView = () => {
     );
   };
 
-  // âââ Render message ââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── Render message ───
   useEffect(() => {
     if (!user?.uid) return;
     listEchoArchive(user.uid).then((rows) => {
@@ -1745,7 +1816,7 @@ const ChatView = () => {
     };
   }, [userId]);
 
-  // âââ UseEffect: clear unread ââââââââââââââââââââââââââââââââââ
+  // ─── UseEffect: clear unread ───
   useEffect(() => {
     if (!user?.uid || !userId) return;
     clearUnreadInstantly();
@@ -1759,7 +1830,7 @@ const ChatView = () => {
     };
   }, [user?.uid, userId]);
 
-  // âââ UseEffect: messages listener ââââââââââââââââââââââââââââ
+  // ─── UseEffect: messages listener ───
   useEffect(() => {
     if (!user?.uid || !userId) {
       setLoadingMessages(false);
@@ -1888,14 +1959,14 @@ const ChatView = () => {
         }
       },
       (error) => {
-        console.error('â [ChatView] Firebase listener error:', error);
+        console.error('🔥 [ChatView] Firebase listener error:', error);
         setLoadingMessages(false);
         if (messages.length === 0) {
           setMessages([
             {
               id: 'error',
               senderId: 'system',
-              text: 'â ï¸ Could not load messages. Please check your connection.',
+              text: '⚠️ Could not load messages. Please check your connection.',
               timestamp: Date.now(),
               type: 'text',
               isRead: true,
@@ -1912,7 +1983,7 @@ const ChatView = () => {
     };
   }, [user?.uid, userId]);
 
-  // âââ UseEffect: partner profile âââââââââââââââââââââââââââââââ
+  // ─── UseEffect: partner profile ───
   useEffect(() => {
     if (!userId) return;
     const cached = getProfile(userId);
@@ -1930,7 +2001,7 @@ const ChatView = () => {
     return () => unsub();
   }, [userId, getProfile, fetchProfile]);
 
-  // âââ UseEffect: current user profile ââââââââââââââââââââââââââ
+  // ─── UseEffect: current user profile ───
   useEffect(() => {
     if (!user?.uid) return;
     const myProfileRef = ref(db, `profiles/${user.uid}`);
@@ -1941,7 +2012,7 @@ const ChatView = () => {
       .catch(console.error);
   }, [user?.uid]);
 
-  // âââ UseEffect: auto-resize textarea ââââââââââââââââââââââââââ
+  // ─── UseEffect: auto-resize textarea ───
   useEffect(() => {
     const textarea = inputRef.current;
     if (textarea) {
@@ -1950,7 +2021,7 @@ const ChatView = () => {
     }
   }, [newMessage]);
 
-  // âââ UseEffect: click outside more options ââââââââââââââââââââ
+  // ─── UseEffect: click outside more options ───
   useEffect(() => {
     if (!showMoreOptions) return;
     const handleClickOutside = (e) => {
@@ -2010,7 +2081,7 @@ const ChatView = () => {
     };
   }, []);
 
-  // âââ UseEffect: ended flag ââââââââââââââââââââââââââââââââââââ
+  // ─── UseEffect: ended flag ───
   useEffect(() => {
     if (!user?.uid || !userId) {
       setEnded(false);
@@ -2031,7 +2102,7 @@ const ChatView = () => {
     return () => unsub();
   }, [user?.uid, userId]);
 
-  // âââ UseEffect: clearedAt ââââââââââââââââââââââââââââââââââââââ
+  // ─── UseEffect: clearedAt ───
   useEffect(() => {
     if (!user?.uid || !userId) {
       setClearedAt(0);
@@ -2069,7 +2140,7 @@ const ChatView = () => {
 
   const displayName = sanitizeName(location.state?.userName || partnerProfile?.name, userId);
 
-  // âââ FINAL RENDER ââââââââââââââââââââââââââââââââââââââââââââââ
+  // ─── FINAL RENDER ───
   return (
     <>
       <style>{`
@@ -2251,7 +2322,7 @@ const ChatView = () => {
               style={{ top: reactionPickerAnchor.top, left: reactionPickerAnchor.left }}
               onClick={(e) => e.stopPropagation()}
             >
-              {['â¤ï¸', 'ð', 'ð®', 'ð¢', 'ð', 'ð'].map((emoji) => (
+              {['❤️', '😄', '😮', '😢', '🙏', '🔥'].map((emoji) => (
                 <button
                   key={emoji}
                   type="button"
@@ -2316,6 +2387,24 @@ const ChatView = () => {
               title="Voice note"
             >
               <i className="fas fa-microphone" />
+            </button>
+
+            {/* ─── SEND ECHO HALO (View Once) ─── */}
+            <button
+              type="button"
+              className="chat-halo-btn"
+              onClick={() => {
+                if (userId === ECHO_AI_ID) {
+                  setToast({ message: 'ECHO Halo is not available in ECHO AI chat.', type: 'info' });
+                  setTimeout(() => setToast(null), 2800);
+                  return;
+                }
+                setIsHaloMode(true);
+                fileInputRef.current?.click();
+              }}
+              title="Send ECHO HALO (View Once)"
+            >
+              <i className="fas fa-sun" />
             </button>
 
             <div className="chat-more-wrapper" ref={moreOptionsRef}>
@@ -2412,6 +2501,22 @@ const ChatView = () => {
         )}
 
         {renderPreviewOverlay()}
+
+        {/* ─── ECHO HALO OVERLAY (View Once) ─── */}
+        {activeHalo && (
+          <div className="echo-halo-overlay" onClick={handleCloseHalo}>
+            <div className="echo-halo-content" onClick={(e) => e.stopPropagation()}>
+              <div className="echo-halo-header">
+                <span>⚡ ECHO HALO</span>
+                <span className="echo-halo-timer">⏳ {haloCountdown}s</span>
+              </div>
+              <div className="echo-halo-image-wrapper">
+                <img src={activeHalo.imageUrl} alt="Echo Halo" />
+              </div>
+              {activeHalo.caption && <p className="echo-halo-caption">{activeHalo.caption}</p>}
+            </div>
+          </div>
+        )}
 
         <EditMessageModal
           isOpen={!!editingMessage}
