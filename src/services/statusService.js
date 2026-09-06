@@ -1,4 +1,5 @@
-import { ref, push, set, update, onValue, off, serverTimestamp, remove } from 'firebase/database';
+// src/services/statusService.js
+import { ref, push, set, update, onValue, off, serverTimestamp, remove, get } from 'firebase/database';
 import { db } from './firebase';
 
 const EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
@@ -22,6 +23,7 @@ export const createVoiceStatus = async (userId, { audioUrl, duration, caption = 
 
   await set(statusRef, data);
 
+  // Update owner index
   await update(ref(db, `statusOwners/${userId}`), {
     lastStatusAt: serverTimestamp(),
     lastStatusId: statusId,
@@ -32,10 +34,16 @@ export const createVoiceStatus = async (userId, { audioUrl, duration, caption = 
 
 export const markStatusViewed = async (ownerId, statusId, viewerId) => {
   if (!ownerId || !statusId || !viewerId) return;
-  if (ownerId === viewerId) return; // don't count own view
+  if (ownerId === viewerId) return;
 
-  return update(ref(db, `statuses/${ownerId}/${statusId}/views`), {
+  // Mark this specific status as viewed by this user
+  await update(ref(db, `statuses/${ownerId}/${statusId}/views`), {
     [viewerId]: serverTimestamp(),
+  });
+
+  // Also mark in a per-user viewed list for fast filtering on StatusBar
+  await update(ref(db, `viewedStatuses/${viewerId}`), {
+    [`${ownerId}_${statusId}`]: true,
   });
 };
 
@@ -48,11 +56,7 @@ export const addReaction = (ownerId, statusId, emoji, userId) => {
 export const deleteStatus = async (userId, statusId) => {
   await remove(ref(db, `statuses/${userId}/${statusId}`));
 
-  // Check if user still has any active statuses
-  const snap = await new Promise((resolve) => {
-    onValue(ref(db, `statuses/${userId}`), (s) => resolve(s), { onlyOnce: true });
-  });
-
+  const snap = await get(ref(db, `statuses/${userId}`));
   const remaining = snap.val() || {};
   const stillHas = Object.values(remaining).some((s) => s.expiresAt > Date.now());
 
@@ -80,4 +84,13 @@ export const listenToUserStatuses = (userId, callback) => {
     callback(valid);
   });
   return () => off(statusesRef);
+};
+
+// New: listen to what the current user has already viewed
+export const listenToViewedStatuses = (viewerId, callback) => {
+  const viewedRef = ref(db, `viewedStatuses/${viewerId}`);
+  onValue(viewedRef, (snap) => {
+    callback(snap.val() || {});
+  });
+  return () => off(viewedRef);
 };
