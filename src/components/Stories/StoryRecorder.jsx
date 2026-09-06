@@ -5,11 +5,12 @@ import './StoriesBar.css';
 const StoryRecorder = ({ userId, onClose }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
+  const streamRef = useRef(null); // 🚨 CRITICAL: We use a ref, not useState, so it NEVER resets
   const tapTimeoutRef = useRef(null);
   const lastTapRef = useRef(0);
 
-  const [stream, setStream] = useState(null);
   const [snapping, setSnapping] = useState(false);
+  const [showFlash, setShowFlash] = useState(false);
   const [memories, setMemories] = useState([]);
   const [showMemories, setShowMemories] = useState(false);
   const [selectedMemory, setSelectedMemory] = useState(null);
@@ -26,16 +27,16 @@ const StoryRecorder = ({ userId, onClose }) => {
     }
   };
 
-  // ✅ KEEP CAMERA ALIVE! (Only restart when switching face, NEVER when snapping)
   useEffect(() => {
     let cancelled = false;
-    setIsLoadingCam(true);
 
     const startCamera = async () => {
       try {
-        if (stream) {
-          stream.getTracks().forEach(track => track.stop());
+        // If switching cameras, stop the old stream
+        if (streamRef.current) {
+          streamRef.current.getTracks().forEach(track => track.stop());
         }
+
         const mediaStream = await navigator.mediaDevices.getUserMedia({ 
           video: { facingMode: facingMode }, 
           audio: false 
@@ -46,11 +47,12 @@ const StoryRecorder = ({ userId, onClose }) => {
           return;
         }
 
-        setStream(mediaStream);
+        streamRef.current = mediaStream; // Keep it permanently
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
         }
 
+        // Wait for video to be ready
         await new Promise((resolve) => {
           if (videoRef.current && videoRef.current.readyState >= 2) {
             resolve();
@@ -72,18 +74,13 @@ const StoryRecorder = ({ userId, onClose }) => {
 
     return () => {
       cancelled = true;
-    };
-  }, [facingMode]);
-
-  // ✅ Only stop camera when closing the app completely
-  useEffect(() => {
-    return () => {
-      if (stream) {
-        stream.getTracks().forEach(track => track.stop());
+      // 🚨 CRITICAL: Stop camera ONLY when component actually closes
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
       }
       if (tapTimeoutRef.current) clearTimeout(tapTimeoutRef.current);
     };
-  }, []);
+  }, [facingMode]);
 
   useEffect(() => {
     if (videoRef.current) {
@@ -135,7 +132,11 @@ const StoryRecorder = ({ userId, onClose }) => {
   const handleSnap = async () => {
     if (!videoRef.current || snapping) return;
 
+    // 🚨 CRITICAL: Instantly show the flash and camera stays open!
     setSnapping(true);
+    setShowFlash(true);
+    setTimeout(() => setShowFlash(false), 200);
+
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
     canvas.width = videoRef.current.videoWidth;
@@ -157,9 +158,13 @@ const StoryRecorder = ({ userId, onClose }) => {
         return;
       }
 
+      // Post to database in the background
       await createImageStatus(userId, { imageUrl: imageDataUrl, caption: '' });
+      
+      // 🚨 CRITICAL: Instantly stop "snapping" so it doesn't gray out, just do this immediately
       setSnapping(false);
       
+      // Then refresh memories in the background
       await fetchMemories();
 
     } catch (err) {
@@ -195,29 +200,27 @@ const StoryRecorder = ({ userId, onClose }) => {
           onClick={handlePointerUp}
           onWheel={handleWheelZoom}
           onTouchMove={handleTouchMove}
-          style={{ opacity: snapping ? 0.6 : 1, pointerEvents: snapping ? 'none' : 'auto' }}
         >
-          {isLoadingCam && (
-            <div className="camera-loading" style={{ background: 'transparent', color: '#fff', fontSize: '12px' }}>
-              Loading Camera...
-            </div>
-          )}
-
+          {/* Camera is ALWAYS visible, no hide */}
           <video 
             ref={videoRef} 
             autoPlay 
             playsInline 
             muted 
             className="small-video-feed"
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
+            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
           />
           
+          {/* Flash Effect */}
+          {showFlash && <div className="snapping-flash"></div>}
+
+          {isLoadingCam && (
+            <div className="camera-loading" style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#888', fontSize: '12px', pointerEvents: 'none' }}>
+              Loading...
+            </div>
+          )}
+
           <canvas ref={canvasRef} style={{ display: 'none' }} />
-          {snapping && <div className="snapping-flash"></div>}
 
           <button 
             className="switch-camera-btn" 
