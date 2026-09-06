@@ -1,22 +1,28 @@
-import React, { useEffect, useState } from 'react';
-import { markStatusViewed } from '../../services/statusService'; // Import from existing service
+import React, { useState, useEffect } from 'react';
+import { markStatusViewed } from '../../services/statusService';
 import './StoriesBar.css';
 
-const StoryViewer = ({ story, ownerName, viewerId, onClose, onNext }) => {
+const StoryViewer = ({ stories, ownerName, viewerId, onClose }) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
   const [progress, setProgress] = useState(0);
 
-  useEffect(() => {
-    if (!story) return;
+  const currentStory = stories[currentIndex];
 
-    if (story.userId && story.id && viewerId) {
-      markStatusViewed(story.userId, story.id, viewerId);
+  useEffect(() => {
+    setProgress(0);
+    if (!currentStory) return;
+
+    // Mark as viewed
+    if (currentStory.userId && currentStory.id && viewerId) {
+      markStatusViewed(currentStory.userId, currentStory.id, viewerId);
     }
 
+    // Auto-advance timer
     const interval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
           clearInterval(interval);
-          onNext();
+          handleNext();
           return 100;
         }
         return prev + 2;
@@ -24,28 +30,42 @@ const StoryViewer = ({ story, ownerName, viewerId, onClose, onNext }) => {
     }, 100);
 
     return () => clearInterval(interval);
-  }, [story, viewerId, onNext]);
+  }, [currentStory, currentIndex, viewerId]);
 
-  if (!story) return null;
+  const handleNext = () => {
+    if (currentIndex < stories.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+    } else {
+      // No more stories, close
+      onClose();
+    }
+  };
+
+  if (!currentStory) return null;
 
   return (
-    <div className="viewer-overlay" onClick={onClose}>
+    <div className="viewer-overlay">
+      {/* Progress Bar */}
       <div className="progress-bar-container">
-        <div className="progress-bar" style={{ width: `${progress}%` }}></div>
+        {stories.map((_, idx) => (
+          <div key={idx} className={`progress-segment ${idx < currentIndex ? 'full' : idx === currentIndex ? 'active' : ''}`}>
+            <div className="progress-bar-fill" style={{ width: idx === currentIndex ? `${progress}%` : idx < currentIndex ? '100%' : '0%' }}></div>
+          </div>
+        ))}
       </div>
 
+      {/* Header */}
       <div className="viewer-header">
         <span className="owner-name">{ownerName || 'User'}</span>
-        <button className="close-viewer">✕</button>
+        <button className="close-viewer" onClick={onClose}>✕</button>
       </div>
 
-      <div className="viewer-image-container">
-        <img src={story.imageUrl} alt="Story" className="viewer-image" />
-        {story.caption && <p className="viewer-caption">{story.caption}</p>}
-      </div>
-
-      <div className="viewer-nav">
-        <button onClick={onNext}>Next →</button>
+      {/* MAIN AREA - Click to advance */}
+      <div className="viewer-tap-area" onClick={handleNext}>
+        <div className="viewer-image-container">
+          <img src={currentStory.imageUrl} alt="Story" className="viewer-image" />
+          {currentStory.caption && <p className="viewer-caption">{currentStory.caption}</p>}
+        </div>
       </div>
     </div>
   );
