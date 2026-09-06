@@ -1,7 +1,11 @@
+// src/components/Status/StatusBar.jsx
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../contexts/ProfileContext';
-import { listenToStatusOwners } from '../../services/statusService';
+import {
+  listenToStatusOwners,
+  listenToViewedStatuses,
+} from '../../services/statusService';
 import StatusCircle from './StatusCircle';
 import StatusRecorder from './StatusRecorder';
 import StatusViewer from './StatusViewer';
@@ -11,50 +15,63 @@ const StatusBar = () => {
   const { user } = useAuth();
   const { profiles, fetchProfile } = useProfile();
   const [owners, setOwners] = useState({});
+  const [viewed, setViewed] = useState({});
   const [showRecorder, setShowRecorder] = useState(false);
   const [viewerUserId, setViewerUserId] = useState(null);
 
   useEffect(() => {
-    const unsub = listenToStatusOwners((data) => {
+    const unsubOwners = listenToStatusOwners((data) => {
       setOwners(data || {});
-      // fetch profiles for status owners
       Object.keys(data || {}).forEach((uid) => {
         if (!profiles[uid]) fetchProfile?.(uid);
       });
     });
-    return unsub;
-  }, [profiles, fetchProfile]);
+
+    let unsubViewed = () => {};
+    if (user?.uid) {
+      unsubViewed = listenToViewedStatuses(user.uid, setViewed);
+    }
+
+    return () => {
+      unsubOwners();
+      unsubViewed();
+    };
+  }, [user?.uid, profiles, fetchProfile]);
 
   const myUid = user?.uid;
-  const hasMyStatus = !!owners[myUid];
+
+  // Filter: only show statuses the current user has NOT viewed yet
+  const visibleOwners = Object.entries(owners).filter(([uid, data]) => {
+    if (uid === myUid) return false; // owner circle handled separately
+    const statusId = data?.lastStatusId;
+    if (!statusId) return false;
+    const key = `${uid}_${statusId}`;
+    return !viewed[key]; // only show if not viewed
+  });
 
   return (
     <>
       <div className="echo-status-bar">
-        {/* Your own status circle */}
+        {/* Your own circle - always shows as empty "+" ready to post */}
         <StatusCircle
           isOwn
-          hasStatus={hasMyStatus}
+          hasStatus={false}
           avatar={profiles[myUid]?.avatar || user?.photoURL}
           name="Your Echo"
           onAdd={() => setShowRecorder(true)}
-          onView={() => setViewerUserId(myUid)}
         />
 
-        {/* Other users' statuses */}
-        {Object.entries(owners)
-          .filter(([uid]) => uid !== myUid)
-          .sort((a, b) => (b[1].lastStatusAt || 0) - (a[1].lastStatusAt || 0))
-          .map(([uid]) => (
-            <StatusCircle
-              key={uid}
-              userId={uid}
-              hasStatus
-              avatar={profiles[uid]?.avatar}
-              name={profiles[uid]?.name || 'User'}
-              onView={() => setViewerUserId(uid)}
-            />
-          ))}
+        {/* Other users - only unviewed ones */}
+        {visibleOwners.map(([uid]) => (
+          <StatusCircle
+            key={uid}
+            userId={uid}
+            hasStatus={true}
+            avatar={profiles[uid]?.avatar}
+            name={profiles[uid]?.name || 'User'}
+            onView={() => setViewerUserId(uid)}
+          />
+        ))}
       </div>
 
       {showRecorder && (
