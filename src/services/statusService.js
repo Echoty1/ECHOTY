@@ -4,16 +4,16 @@ import { db } from './firebase';
 
 const EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-export const createVoiceStatus = async (userId, { audioUrl, duration, caption = '' }) => {
+// CHANGED: Now accepts imageUrl instead of audioUrl and duration
+export const createImageStatus = async (userId, { imageUrl, caption = '' }) => {
   const statusRef = push(ref(db, `statuses/${userId}`));
   const statusId = statusRef.key;
 
   const data = {
     id: statusId,
     userId,
-    type: 'voice',
-    audioUrl,
-    duration,
+    type: 'image', // Changed from 'voice'
+    imageUrl,      // Changed from 'audioUrl'
     caption,
     createdAt: serverTimestamp(),
     expiresAt: Date.now() + EXPIRY_MS,
