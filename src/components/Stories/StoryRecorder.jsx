@@ -1,5 +1,5 @@
 import React, { useRef, useState, useEffect } from 'react';
-import { createImageStatus, getUserMemories } from '../../services/statusService';
+import { createImageStatus, getUserMemories, deleteStatus } from '../../services/statusService';
 import './StoriesBar.css';
 
 const StoryRecorder = ({ userId, onClose }) => {
@@ -9,6 +9,13 @@ const StoryRecorder = ({ userId, onClose }) => {
   const [stream, setStream] = useState(null);
   const [snapping, setSnapping] = useState(false);
   const [memories, setMemories] = useState([]);
+  const [showMemories, setShowMemories] = useState(false);
+
+  // Fetch memories
+  const fetchMemories = async () => {
+    const data = await getUserMemories(userId);
+    setMemories(data);
+  };
 
   useEffect(() => {
     const startCamera = async () => {
@@ -27,8 +34,7 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
 
     startCamera();
-
-    getUserMemories(userId).then(setMemories).catch(() => {});
+    fetchMemories();
 
     return () => {
       if (stream) {
@@ -37,6 +43,7 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
   }, []);
 
+  // Tap to auto-snap and auto-post WITHOUT closing the page
   const handleTapToSnap = async () => {
     if (!videoRef.current || snapping) return;
     setSnapping(true);
@@ -51,40 +58,79 @@ const StoryRecorder = ({ userId, onClose }) => {
 
     try {
       await createImageStatus(userId, { imageUrl: imageDataUrl, caption: '' });
-      onClose();
+      setSnapping(false); // Reset so they can snap again
+      fetchMemories(); // Refresh memories silently
     } catch (err) {
       console.error("Error auto-posting:", err);
       setSnapping(false);
     }
   };
 
+  const handleDeleteMemory = async (statusId) => {
+    if (!window.confirm("Delete this Echus?")) return;
+    await deleteStatus(userId, statusId);
+    fetchMemories();
+  };
+
   return (
     <div className="recorder-overlay">
       <div className="recorder-modal-small">
+        {/* Top Header */}
         <div className="small-camera-header">
-          <h3>Create New Echus</h3>
-          <button className="close-btn" onClick={onClose}>✕</button>
+          <h3>Create Echus</h3>
+          <div className="camera-header-actions">
+            <button 
+              className="memories-btn"
+              onClick={() => setShowMemories(!showMemories)}
+            >
+              <i className="fas fa-clock"></i> Memories
+            </button>
+            <button className="close-btn" onClick={onClose}>✕</button>
+          </div>
         </div>
 
-        {/* Small Camera Square */}
-        <div className="small-camera-space" onClick={handleTapToSnap} style={{ opacity: snapping ? 0.6 : 1 }}>
+        {/* Camera Feed - Tap to snap, stays open */}
+        <div 
+          className="small-camera-space" 
+          onClick={handleTapToSnap}
+          style={{ opacity: snapping ? 0.6 : 1, pointerEvents: snapping ? 'none' : 'auto' }}
+        >
           <video ref={videoRef} autoPlay playsInline muted className="small-video-feed" />
           <canvas ref={canvasRef} style={{ display: 'none' }} />
+          {snapping && <div className="snapping-flash"></div>}
         </div>
 
-        {/* Memories Section */}
-        <div className="memories-section">
-          <h4>Your Memories</h4>
-          {memories.length === 0 ? (
-            <p>No memories yet.</p>
-          ) : (
-            <div className="memories-scroll">
-              {memories.map((mem, idx) => (
-                <img key={idx} src={mem.imageUrl} alt="Memory" className="memory-thumb" />
-              ))}
+        {/* Memories Grid Modal (Floating Overlay inside the camera modal) */}
+        {showMemories && (
+          <div className="memories-glass-panel">
+            <div className="memories-header">
+              <h4>Your Echus Memories</h4>
+              <button className="close-memories" onClick={() => setShowMemories(false)}>✕</button>
             </div>
-          )}
-        </div>
+            
+            {memories.length === 0 ? (
+              <p className="no-memories">No memories yet. Snap a photo to see it here.</p>
+            ) : (
+              <div className="memories-grid">
+                {memories.map((mem) => (
+                  <div key={mem.id} className="memory-card">
+                    <img src={mem.imageUrl} alt="Memory" />
+                    <div className="memory-info">
+                      <span>{new Date(mem.createdAt).toLocaleDateString()}</span>
+                      <button className="delete-memory" onClick={(e) => {
+                        e.stopPropagation();
+                        handleDeleteMemory(mem.id);
+                      }}>
+                        <i className="fas fa-trash"></i>
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
       </div>
     </div>
   );
