@@ -15,7 +15,6 @@ const StoryRecorder = ({ userId, onClose }) => {
   const [selectedMemory, setSelectedMemory] = useState(null);
   const [facingMode, setFacingMode] = useState('user');
   
-  // Zoom state
   const [zoomLevel, setZoomLevel] = useState(1);
 
   const fetchMemories = async () => {
@@ -23,7 +22,6 @@ const StoryRecorder = ({ userId, onClose }) => {
     setMemories(data);
   };
 
-  // Start Camera
   useEffect(() => {
     const startCamera = async () => {
       try {
@@ -31,7 +29,7 @@ const StoryRecorder = ({ userId, onClose }) => {
           stream.getTracks().forEach(track => track.stop());
         }
         const mediaStream = await navigator.mediaDevices.getUserMedia({ 
-          video: { facingMode: facingMode, zoom: { ideal: zoomLevel } }, 
+          video: { facingMode: facingMode }, 
           audio: false 
         });
         setStream(mediaStream);
@@ -54,14 +52,14 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
   }, [facingMode]);
 
-  // Apply CSS Zoom to video
+  // ✅ FIX: JavaScript applies the transform (zoom + mirror) here
   useEffect(() => {
     if (videoRef.current) {
-      videoRef.current.style.transform = `scale(${zoomLevel}) ${facingMode === 'user' ? 'scaleX(-1)' : ''}`;
+      const mirror = facingMode === 'user' ? 'scaleX(-1)' : '';
+      videoRef.current.style.transform = `scale(${zoomLevel}) ${mirror}`;
     }
   }, [zoomLevel, facingMode]);
 
-  // Handle Mouse Scroll / Ctrl + Scroll for zoom
   const handleWheelZoom = (e) => {
     if (e.ctrlKey || e.metaKey) {
       e.preventDefault();
@@ -69,7 +67,6 @@ const StoryRecorder = ({ userId, onClose }) => {
     }
   };
 
-  // Handle Touch Pinch zoom
   const handleTouchMove = (e) => {
     if (e.touches.length === 2) {
       e.preventDefault();
@@ -82,24 +79,21 @@ const StoryRecorder = ({ userId, onClose }) => {
     }
   };
 
-  // ✅ FIXED TAP LOGIC: Double tap switches camera, Single tap snaps
   const handlePointerUp = () => {
     const now = Date.now();
     const timeSinceLastTap = now - lastTapRef.current;
 
-    // If it's a double tap (within 250ms), switch camera immediately
     if (timeSinceLastTap < 250) {
-      clearTimeout(tapTimeoutRef.current); // Cancel pending single tap snap
+      clearTimeout(tapTimeoutRef.current);
       lastTapRef.current = 0;
       setFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
       return;
     }
 
-    // Otherwise, set last tap and wait 250ms to see if a double tap comes
     lastTapRef.current = now;
     tapTimeoutRef.current = setTimeout(() => {
       if (lastTapRef.current !== 0) {
-        handleSnap(); // If no double tap came, snap
+        handleSnap();
       }
     }, 250);
   };
@@ -113,22 +107,22 @@ const StoryRecorder = ({ userId, onClose }) => {
     canvas.width = videoRef.current.videoWidth;
     canvas.height = videoRef.current.videoHeight;
 
-    // ✅ FIX: Flip context back if using front camera so image isn't mirrored
     if (facingMode === 'user') {
       context.translate(canvas.width, 0);
       context.scale(-1, 1);
     }
 
-    // Apply zoom via scale
     context.drawImage(videoRef.current, 0, 0, canvas.width, canvas.height);
 
     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
 
     try {
-      // Snap & Auto-post (does not close camera)
+      // ✅ FIX: Auto-post
       await createImageStatus(userId, { imageUrl: imageDataUrl, caption: '' });
       setSnapping(false);
-      fetchMemories();
+      
+      // ✅ FIX: Fetch memories immediately after posting, so it updates right away!
+      await fetchMemories(); 
     } catch (err) {
       console.error("Error auto-posting:", err);
       setSnapping(false);
@@ -156,7 +150,6 @@ const StoryRecorder = ({ userId, onClose }) => {
           </div>
         </div>
 
-        {/* Camera Space with Double-Tap, Snap, & Zoom */}
         <div 
           className="small-camera-space"
           onClick={handlePointerUp}
@@ -175,7 +168,6 @@ const StoryRecorder = ({ userId, onClose }) => {
           <canvas ref={canvasRef} style={{ display: 'none' }} />
           {snapping && <div className="snapping-flash"></div>}
 
-          {/* Switch Camera Button */}
           <button 
             className="switch-camera-btn" 
             onClick={(e) => {
@@ -191,7 +183,6 @@ const StoryRecorder = ({ userId, onClose }) => {
           </button>
         </div>
 
-        {/* Memories */}
         {showMemories && !selectedMemory && (
           <div className="memories-glass-panel">
             <div className="memories-header">
@@ -222,7 +213,6 @@ const StoryRecorder = ({ userId, onClose }) => {
           </div>
         )}
 
-        {/* Full Memory Viewer */}
         {selectedMemory && (
           <div className="memory-fullscreen-overlay" onClick={closeMemory}>
             <div className="memory-fullscreen-content" onClick={(e) => e.stopPropagation()}>
