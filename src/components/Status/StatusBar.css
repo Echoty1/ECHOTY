@@ -1,15 +1,12 @@
-/* Main Wrapper */
 .echo-status-container {
   background: transparent;
   border-bottom: 1px solid #27272a;
   padding: 8px 0;
-  position: relative;
-  /* CHANGED: Remove overflow hidden so it doesn't cut off things weirdly */
-  overflow: visible; 
-  width: 100%;
+  /* Removed position: relative and overflow: hidden to stop it from getting crushed */
+  width: auto; 
+  min-width: 0;
 }
 
-/* The Scroller */
 .echo-status-bar {
   display: flex;
   gap: 16px;
@@ -17,38 +14,18 @@
   overflow-x: auto;
   overflow-y: hidden;
   padding: 4px 16px 4px 10px;
-  width: 100%;
+  /* Removed width: 100% */
+  width: auto; 
+  max-width: 100%;
   scrollbar-width: none;
   -ms-overflow-style: none;
   overscroll-behavior-x: contain;
-  /* Add this to ensure it takes up full width */
-  box-sizing: border-box; 
 }
 
 .echo-status-bar::-webkit-scrollbar {
   display: none;
 }
 
-/* The Left Gradient Fade */
-.status-fade-left {
-  position: absolute;
-  left: 0;
-  top: 0;
-  bottom: 0;
-  width: 30px;
-  background: linear-gradient(to right, rgba(10, 10, 10, 0.9), rgba(10, 10, 10, 0));
-  /* CRITICAL FIX: This stops it from blocking clicks! */
-  pointer-events: none; 
-  z-index: 0;
-}
-
-/* CRITICAL FIX: Make the scroll area sit ABOVE the gradient */
-.echo-status-bar {
-  position: relative;
-  z-index: 1;
-}
-
-/* The Individual Circle Wrapper */
 .status-circle-wrapper {
   display: flex;
   flex-direction: column;
@@ -56,9 +33,6 @@
   gap: 7px;
   cursor: pointer;
   flex-shrink: 0;
-  /* CRITICAL FIX: Make sure circles are clickable */
-  position: relative;
-  z-index: 2; 
 }
 
 .status-ring {
