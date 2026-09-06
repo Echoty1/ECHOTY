@@ -849,3 +849,42 @@ const Home = () => {
           <button
             type="button"
             onClick={() => {
+              setPeerError(null);
+              window.location.reload();
+            }}
+            style={{
+              background: '#fff',
+              color: '#EF4444',
+              border: 'none',
+              borderRadius: '20px',
+              padding: '6px 12px',
+              fontWeight: 700,
+              cursor: 'pointer',
+              fontSize: '13px',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            Try again
+          </button>
+          <button
+            type="button"
+            onClick={() => setPeerError(null)}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#fff',
+              fontSize: '18px',
+              cursor: 'pointer',
+              lineHeight: 1,
+            }}
+            aria-label="Dismiss"
+          >
+            ×
+          </button>
+        </div>
+      )}
+    </>
+  );
+};
+
+export default Home;
