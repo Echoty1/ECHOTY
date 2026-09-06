@@ -14,6 +14,7 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
     setProgress(0);
     if (!currentStory) return;
 
+    // Mark as viewed instantly
     if (currentStory.userId && currentStory.id && viewerId) {
       markStatusViewed(currentStory.userId, currentStory.id, viewerId);
     }
@@ -34,14 +35,13 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
 
   const handleNext = () => {
     if (currentIndex < stories.length - 1) {
-      // Animate out current image, then switch
       setIsSwitching(true);
       setTimeout(() => {
         setCurrentIndex(prev => prev + 1);
         setIsSwitching(false);
       }, 250);
     } else {
-      // All stories are gone: Beautifully fade out the whole viewer
+      // All stories viewed -> Close with animation
       setIsClosing(true);
       setTimeout(onClose, 400);
     }
@@ -56,6 +56,7 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
 
   return (
     <div className={`viewer-overlay ${isClosing ? 'closing' : ''}`}>
+      
       {/* Progress Bar */}
       <div className="progress-bar-container">
         {stories.map((_, idx) => (
@@ -80,7 +81,7 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
       {/* Stacked Curve + Main Image Area */}
       <div className="viewer-tap-area" onClick={handleNext}>
         
-        {/* OLD SNAPS PEEKING FROM THE BACK */}
+        {/* Old snaps peeking from behind (Curved layout) */}
         <div className="stacked-stories-back">
           {stories.slice(currentIndex + 1, currentIndex + 4).map((_, idx) => (
             <div 
@@ -90,7 +91,7 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
           ))}
         </div>
 
-        {/* CURRENT STORY (LATEST SNAP) */}
+        {/* Current Story (Latest snap) */}
         <div className={`viewer-image-container ${isSwitching ? 'switching' : ''}`}>
           <img 
             src={currentStory.imageUrl} 
