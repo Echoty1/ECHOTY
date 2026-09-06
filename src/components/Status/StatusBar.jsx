@@ -1,90 +1,72 @@
-// src/components/Status/StatusBar.jsx
-import React, { useEffect, useState } from 'react';
-import { useAuth } from '../../hooks/useAuth';
-import { useProfile } from '../../contexts/ProfileContext';
-import {
-  listenToStatusOwners,
-  listenToViewedStatuses,
-} from '../../services/statusService';
+import React, { useRef } from 'react';
 import StatusCircle from './StatusCircle';
-import StatusRecorder from './StatusRecorder';
-import StatusViewer from './StatusViewer';
-import './StatusBar.css';
 
-const StatusBar = () => {
-  const { user } = useAuth();
-  const { profiles, fetchProfile } = useProfile();
-  const [owners, setOwners] = useState({});
-  const [viewed, setViewed] = useState({});
-  const [showRecorder, setShowRecorder] = useState(false);
-  const [viewerUserId, setViewerUserId] = useState(null);
-
-  useEffect(() => {
-    const unsubOwners = listenToStatusOwners((data) => {
-      setOwners(data || {});
-      Object.keys(data || {}).forEach((uid) => {
-        if (!profiles[uid]) fetchProfile?.(uid);
-      });
-    });
-
-    let unsubViewed = () => {};
-    if (user?.uid) {
-      unsubViewed = listenToViewedStatuses(user.uid, setViewed);
-    }
-
-    return () => {
-      unsubOwners();
-      unsubViewed();
-    };
-  }, [user?.uid, profiles, fetchProfile]);
-
-  const myUid = user?.uid;
-
-  // Filter: only show statuses the current user has NOT viewed yet
-  const visibleOwners = Object.entries(owners).filter(([uid, data]) => {
-    if (uid === myUid) return false; // owner circle handled separately
-    const statusId = data?.lastStatusId;
-    if (!statusId) return false;
-    const key = `${uid}_${statusId}`;
-    return !viewed[key]; // only show if not viewed
-  });
+const StatusBar = ({ users, ownStatus, onAddStatus, onViewStatus }) => {
+  const scrollRef = useRef(null);
 
   return (
-    <>
-      <div className="echo-status-bar">
-        {/* Your own circle - always shows as empty "+" ready to post */}
+    <div
+      style={{
+        background: '#FFFFFF',
+        borderBottom: '1px solid #EFEFEF',
+        padding: '4px 0',
+        position: 'relative',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        ref={scrollRef}
+        className="status-bar-scroll"
+        style={{
+          display: 'flex',
+          gap: '10px',
+          overflowX: 'auto',
+          overflowY: 'hidden',
+          padding: '4px 16px 4px 10px',
+          scrollbarWidth: 'none',
+          msOverflowStyle: 'none',
+          WebkitOverflowScrolling: 'touch',
+        }}
+      >
+        {/* Your own status circle - first item with left offset */}
         <StatusCircle
-          isOwn
-          hasStatus={false}
-          avatar={profiles[myUid]?.avatar || user?.photoURL}
+          isOwn={true}
+          hasStatus={!!ownStatus}
+          avatar={ownStatus?.avatar || 'https://via.placeholder.com/70'}
           name="Your Echo"
-          onAdd={() => setShowRecorder(true)}
+          onAdd={onAddStatus}
+          onView={() => onViewStatus(ownStatus)}
+          isFirst={true}
         />
-
-        {/* Other users - only unviewed ones */}
-        {visibleOwners.map(([uid]) => (
+        
+        {/* Other users' status circles */}
+        {users?.map((user, index) => (
           <StatusCircle
-            key={uid}
-            userId={uid}
-            hasStatus={true}
-            avatar={profiles[uid]?.avatar}
-            name={profiles[uid]?.name || 'User'}
-            onView={() => setViewerUserId(uid)}
+            key={user.id}
+            isOwn={false}
+            hasStatus={user.hasStatus}
+            avatar={user.avatar}
+            name={user.name}
+            onView={() => onViewStatus(user.status)}
+            isFirst={false}
           />
         ))}
       </div>
-
-      {showRecorder && (
-        <StatusRecorder onClose={() => setShowRecorder(false)} />
-      )}
-
-      {viewerUserId && (
-        <StatusViewer
-          userId={viewerUserId}
-          onClose={() => setViewerUserId(null)}
-        />
-      )}
-    </>
+      
+      {/* Subtle gradient fade on the left edge */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          bottom: 0,
+          width: '40px',
+          background: 'linear-gradient(to right, rgba(255,255,255,0.9), rgba(255,255,255,0))',
+          pointerEvents: 'none',
+          zIndex: 2,
+        }}
+      />
+    </div>
   );
 };
 
