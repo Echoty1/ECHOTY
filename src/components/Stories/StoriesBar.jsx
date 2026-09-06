@@ -12,7 +12,6 @@ const StoriesBar = ({ currentUserId, users, ownStory, onAddStory, onViewStories 
     if (!currentUserId) return;
     const unsubViewed = listenToViewedStatuses(currentUserId, setViewedKeys);
     
-    // Fetch stories for all users
     const unsubs = (users || []).map(user => {
       return listenToUserStatuses(user.uid, (statuses) => {
         setStatusesMap(prev => ({ ...prev, [user.uid]: statuses }));
@@ -25,7 +24,6 @@ const StoriesBar = ({ currentUserId, users, ownStory, onAddStory, onViewStories 
     };
   }, [currentUserId, users]);
 
-  // Filter out users who have no unseen stories
   const visibleUsers = (users || []).filter(user => {
     const statuses = statusesMap[user.uid] || [];
     const unseen = statuses.filter(s => !viewedKeys[`${user.uid}_${s.id}`]);
@@ -56,7 +54,7 @@ const StoriesBar = ({ currentUserId, users, ownStory, onAddStory, onViewStories 
           isOwn={true}
           hasStory={!!ownStory}
           avatar={ownStory?.avatar || 'https://via.placeholder.com/70'}
-          name="Your Story"
+          name="Your Echus"
           onAdd={onAddStory}
           onView={() => onViewStories([ownStory].filter(Boolean))}
         />
