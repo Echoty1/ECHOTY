@@ -86,8 +86,15 @@ const Profile = () => {
 
   // ─── Echower States (Fully Decoupled from Profile State) ──────
   const [showEchowersModal, setShowEchowersModal] = useState(false);
-  const [echowerCount, setEchowerCount] = useState(0);
-  const [echowingUids, setEchowingUids] = useState([]);
+  
+  // Followers: People who follow ME
+  const [followerUids, setFollowerUids] = useState([]);
+  
+  // Following: People I am following
+  const [followingUids, setFollowingUids] = useState([]);
+  
+  // Tab State for the modal
+  const [activeEchowersTab, setActiveEchowersTab] = useState('followers'); // 'followers' or 'following'
 
   const cachedProfile = useMemo(() => {
     if (!user?.uid) return null;
@@ -160,7 +167,7 @@ const Profile = () => {
     };
   }, [editData.name, editing, checkNameAvailability]);
 
-  // ─── Profile listeners ─────────────────────────────────────────
+  // ─── Profile & Echower listeners ──────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -221,10 +228,16 @@ const Profile = () => {
       }
     );
 
-    // ─── Echower Listeners (Real-time & separated) ──────────────
-    const unsubCount = listenToMyEchowerCount(user.uid, setEchowerCount);
-    const unsubEchowing = listenToMyEchowers(user.uid, (uids) => {
-      setEchowingUids(uids);
+    // ─── Echower Listeners (Listening to BOTH sides!) ───────────
+    // 1. Who is following me?
+    const unsubFollowers = listenToMyEchowerCount(user.uid, (uids) => {
+      setFollowerUids(uids);
+      uids.forEach(uid => fetchProfile(uid));
+    });
+
+    // 2. Who am I following?
+    const unsubFollowing = listenToMyEchowers(user.uid, (uids) => {
+      setFollowingUids(uids);
       uids.forEach(uid => fetchProfile(uid));
     });
 
@@ -232,8 +245,8 @@ const Profile = () => {
       isMounted = false;
       unsubSkin();
       unsubProfile();
-      unsubCount();
-      unsubEchowing();
+      unsubFollowers();
+      unsubFollowing();
     };
   }, [user?.uid, editing, fetchProfile]);
 
@@ -488,14 +501,14 @@ const Profile = () => {
             {(editing || isDemoUser) && <div className="avatar-overlay">Tap to change</div>}
           </div>
 
-          {/* ─── Echower Stats (Clickable & Modern) ─── */}
+          {/* ─── Echower Stats (Clickable) ─── */}
           <div className="profile-stats">
-            <div className="stat" onClick={() => setShowEchowersModal(true)}>
-              <h4>{echowerCount}</h4>
+            <div className="stat" onClick={() => { setActiveEchowersTab('followers'); setShowEchowersModal(true); }}>
+              <h4>{followerUids.length}</h4>
               <p>Echowers</p>
             </div>
-            <div className="stat" onClick={() => setShowEchowersModal(true)}>
-              <h4>{echowingUids.length}</h4>
+            <div className="stat" onClick={() => { setActiveEchowersTab('following'); setShowEchowersModal(true); }}>
+              <h4>{followingUids.length}</h4>
               <p>Echowing</p>
             </div>
           </div>
@@ -843,7 +856,7 @@ const Profile = () => {
           />
         )}
 
-        {/* ─── Echowers Modal (Glassmorphism & Improved) ─── */}
+        {/* ─── Echowers Modal (Followers & Following Tabs) ─── */}
         {showEchowersModal && (
           <div className="echowers-modal-overlay" onClick={() => setShowEchowersModal(false)}>
             <div className="echowers-modal" onClick={(e) => e.stopPropagation()}>
@@ -851,23 +864,29 @@ const Profile = () => {
                 <h3>Echowers</h3>
                 <button className="close-btn" onClick={() => setShowEchowersModal(false)}>✕</button>
               </div>
-              
-              <div className="echowers-stats">
-                <div className="stat-box">
-                  <h3>{echowingUids.length}</h3>
-                  <p>Echowing</p>
-                </div>
-                <div className="stat-box">
-                  <h3>{echowerCount}</h3>
-                  <p>Echowers</p>
-                </div>
+
+              <div className="echowers-tabs">
+                <button 
+                  className={activeEchowersTab === 'followers' ? 'active' : ''} 
+                  onClick={() => setActiveEchowersTab('followers')}
+                >
+                  Echowers ({followerUids.length})
+                </button>
+                <button 
+                  className={activeEchowersTab === 'following' ? 'active' : ''} 
+                  onClick={() => setActiveEchowersTab('following')}
+                >
+                  Echowing ({followingUids.length})
+                </button>
               </div>
 
               <div className="echowers-list">
-                {echowingUids.length === 0 ? (
-                  <p className="empty-state">You aren't echowing anyone yet.</p>
+                {(activeEchowersTab === 'followers' ? followerUids : followingUids).length === 0 ? (
+                  <p className="empty-state">
+                    {activeEchowersTab === 'followers' ? 'No one is Echowing you yet.' : 'You are not Echowing anyone yet.'}
+                  </p>
                 ) : (
-                  echowingUids.map((uid) => {
+                  (activeEchowersTab === 'followers' ? followerUids : followingUids).map((uid) => {
                     const profile = profiles[uid];
                     if (!profile) return null;
                     return (
