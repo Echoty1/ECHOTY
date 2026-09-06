@@ -16,7 +16,7 @@ import MoodPicker from '../../common/MoodPicker';
 import Avatar from '../../common/Avatar';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
-import { listenToMyEchowers, listenToMyEchowerCount } from '../../../services/echowerService'; // NEW IMPORT
+import { listenToMyEchowers, listenToMyEchowerCount } from '../../../services/echowerService';
 import './Profile.css';
 
 const STORAGE_PREFIX = 'echo_cache_';
@@ -65,7 +65,7 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 const Profile = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
-  const { refreshProfile, profiles, fetchProfile } = useProfile(); // Added profiles/fetchProfile
+  const { refreshProfile, profiles, fetchProfile } = useProfile();
 
   const [showGifLibrary, setShowGifLibrary] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
@@ -84,7 +84,7 @@ const Profile = () => {
 
   const isDemoUser = user?.uid === DEMO_UID;
 
-  // ─── Echower States ─────────────────────────────────────
+  // ─── Echower States (Fully Decoupled from Profile State) ──────
   const [showEchowersModal, setShowEchowersModal] = useState(false);
   const [echowerCount, setEchowerCount] = useState(0);
   const [echowingUids, setEchowingUids] = useState([]);
@@ -221,7 +221,7 @@ const Profile = () => {
       }
     );
 
-    // ─── Echower Listeners ───────────────────────────────
+    // ─── Echower Listeners (Real-time & separated) ──────────────
     const unsubCount = listenToMyEchowerCount(user.uid, setEchowerCount);
     const unsubEchowing = listenToMyEchowers(user.uid, (uids) => {
       setEchowingUids(uids);
@@ -488,7 +488,7 @@ const Profile = () => {
             {(editing || isDemoUser) && <div className="avatar-overlay">Tap to change</div>}
           </div>
 
-          {/* ─── Echower Stats (Clickable) ─── */}
+          {/* ─── Echower Stats (Clickable & Modern) ─── */}
           <div className="profile-stats">
             <div className="stat" onClick={() => setShowEchowersModal(true)}>
               <h4>{echowerCount}</h4>
@@ -843,7 +843,7 @@ const Profile = () => {
           />
         )}
 
-        {/* ─── Echowers Modal ─── */}
+        {/* ─── Echowers Modal (Glassmorphism & Improved) ─── */}
         {showEchowersModal && (
           <div className="echowers-modal-overlay" onClick={() => setShowEchowersModal(false)}>
             <div className="echowers-modal" onClick={(e) => e.stopPropagation()}>
