@@ -25,10 +25,7 @@ const StatusBar = ({ users, ownStatus, onAddStatus, onViewStatus }) => {
 
   return (
     <div className="echo-status-container">
-      <div
-        ref={scrollRef}
-        className="echo-status-bar"
-      >
+      <div ref={scrollRef} className="echo-status-bar">
         <StatusCircle
           isOwn={true}
           hasStatus={!!ownStatus}
@@ -52,6 +49,7 @@ const StatusBar = ({ users, ownStatus, onAddStatus, onViewStatus }) => {
         ))}
       </div>
       
+      {/* Fade gradient - NEVER blocks clicks */}
       <div className="status-fade-left" />
     </div>
   );
