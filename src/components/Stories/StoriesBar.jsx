@@ -1,3 +1,4 @@
+// src/components/Stories/StoriesBar.jsx
 import React, { useRef, useEffect, useState } from 'react';
 import StoryCircle from './StoryCircle';
 import { listenToUserStatuses, listenToViewedStatuses } from '../../services/statusService';
@@ -11,7 +12,8 @@ const StoriesBar = ({ currentUserId, users, ownStory, onAddStory, onViewStories 
   useEffect(() => {
     if (!currentUserId) return;
     const unsubViewed = listenToViewedStatuses(currentUserId, setViewedKeys);
-    
+
+    // Loop through users and listen to each one's statuses!
     const unsubs = (users || []).map(user => {
       return listenToUserStatuses(user.uid, (statuses) => {
         setStatusesMap(prev => ({ ...prev, [user.uid]: statuses }));
@@ -24,6 +26,7 @@ const StoriesBar = ({ currentUserId, users, ownStory, onAddStory, onViewStories 
     };
   }, [currentUserId, users]);
 
+  // Only show users who have unviewed statuses
   const visibleUsers = (users || []).filter(user => {
     const statuses = statusesMap[user.uid] || [];
     const unseen = statuses.filter(s => !viewedKeys[`${user.uid}_${s.id}`]);
