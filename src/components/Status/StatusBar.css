@@ -1,14 +1,15 @@
+/* Main Wrapper */
 .echo-status-container {
   background: transparent;
   border-bottom: 1px solid #27272a;
   padding: 8px 0;
   position: relative;
-  
-  /* CHANGED: Removed overflow:hidden and made it 100% width */
+  /* CHANGED: Remove overflow hidden so it doesn't cut off things weirdly */
   overflow: visible; 
   width: 100%;
 }
 
+/* The Scroller */
 .echo-status-bar {
   display: flex;
   gap: 16px;
@@ -20,31 +21,34 @@
   scrollbar-width: none;
   -ms-overflow-style: none;
   overscroll-behavior-x: contain;
+  /* Add this to ensure it takes up full width */
+  box-sizing: border-box; 
 }
 
 .echo-status-bar::-webkit-scrollbar {
   display: none;
 }
 
+/* The Left Gradient Fade */
 .status-fade-left {
   position: absolute;
   left: 0;
   top: 0;
   bottom: 0;
-  width: 20px;
-  background: linear-gradient(to right, rgba(10, 10, 10, 0.8), rgba(10, 10, 10, 0));
-  
-  /* CHANGED: This fixes the clicking issue! */
+  width: 30px;
+  background: linear-gradient(to right, rgba(10, 10, 10, 0.9), rgba(10, 10, 10, 0));
+  /* CRITICAL FIX: This stops it from blocking clicks! */
   pointer-events: none; 
-  z-index: 0; 
+  z-index: 0;
 }
 
-/* CHANGED: Added z-index to the actual bar so it sits ABOVE the fade */
+/* CRITICAL FIX: Make the scroll area sit ABOVE the gradient */
 .echo-status-bar {
   position: relative;
   z-index: 1;
 }
 
+/* The Individual Circle Wrapper */
 .status-circle-wrapper {
   display: flex;
   flex-direction: column;
@@ -52,7 +56,9 @@
   gap: 7px;
   cursor: pointer;
   flex-shrink: 0;
-  z-index: 2; /* Make sure circles are clickable */
+  /* CRITICAL FIX: Make sure circles are clickable */
+  position: relative;
+  z-index: 2; 
 }
 
 .status-ring {
