@@ -1,4 +1,3 @@
-// src/components/Stories/StoryRecorder.jsx
 import React, { useRef, useState, useEffect } from 'react';
 import { createImageStatus, getUserMemories, deleteStatus } from '../../services/statusService';
 import './StoriesBar.css';
@@ -16,10 +15,15 @@ const StoryRecorder = ({ userId, onClose }) => {
   const [selectedMemory, setSelectedMemory] = useState(null);
   const [facingMode, setFacingMode] = useState('user');
   const [zoomLevel, setZoomLevel] = useState(1);
+  const [cameraReady, setCameraReady] = useState(false); // NEW STATE
 
   const fetchMemories = async () => {
-    const data = await getUserMemories(userId);
-    setMemories(data);
+    try {
+      const data = await getUserMemories(userId);
+      setMemories(data);
+    } catch (err) {
+      console.error('Failed to fetch memories:', err);
+    }
   };
 
   useEffect(() => {
@@ -36,8 +40,18 @@ const StoryRecorder = ({ userId, onClose }) => {
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
         }
+        // ✅ Wait for video to load before allowing snap
+        await new Promise((resolve) => {
+          if (videoRef.current && videoRef.current.readyState >= 2) {
+            resolve();
+          } else {
+            videoRef.current.onloadeddata = resolve;
+          }
+        });
+        setCameraReady(true); 
       } catch (err) {
         console.error("Camera access denied.", err);
+        setCameraReady(false);
       }
     };
 
@@ -52,13 +66,12 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
   }, [facingMode]);
 
-  // Ensure correct mirroring when camera switches
   useEffect(() => {
     if (videoRef.current) {
       const mirror = facingMode === 'user' ? 'scaleX(-1)' : '';
       videoRef.current.style.transform = `scale(${zoomLevel}) ${mirror}`;
     }
-  }, [zoomLevel, facingMode]);
+  }, [zoomLevel, facingMode, cameraReady]);
 
   const handleWheelZoom = (e) => {
     if (e.ctrlKey || e.metaKey) {
@@ -80,6 +93,8 @@ const StoryRecorder = ({ userId, onClose }) => {
   };
 
   const handlePointerUp = () => {
+    if (!cameraReady || snapping) return; // ✅ Prevent snapping if camera not ready
+
     const now = Date.now();
     const timeSinceLastTap = now - lastTapRef.current;
 
@@ -116,23 +131,23 @@ const StoryRecorder = ({ userId, onClose }) => {
     const imageDataUrl = canvas.toDataURL('image/jpeg', 0.95);
 
     try {
-      // ⚠️ CHECK: Make sure userId is not undefined/null!
+      // ✅ Ensure user ID exists
       if (!userId) {
-        console.error("❌ User ID is missing!");
+        console.error("User ID is missing!");
         alert("User ID is missing. Please log out and log back in.");
         setSnapping(false);
         return;
       }
 
-      // Try to post!
+      // ✅ Post to Firebase
       await createImageStatus(userId, { imageUrl: imageDataUrl, caption: '' });
       
-      // If it worked, update memories and reset!
+      // ✅ Success: Reset snapping and Refresh Memories
       setSnapping(false);
       await fetchMemories();
 
     } catch (err) {
-      console.error("❌ Error saving status:", err);
+      console.error("Error saving status:", err);
       alert(`Failed to post Echus: ${err.message}`);
       setSnapping(false);
     }
@@ -166,7 +181,19 @@ const StoryRecorder = ({ userId, onClose }) => {
           onTouchMove={handleTouchMove}
           style={{ opacity: snapping ? 0.6 : 1, pointerEvents: snapping ? 'none' : 'auto' }}
         >
-          <video ref={videoRef} autoPlay playsInline muted className="small-video-feed" />
+          {/* ✅ Show loading state until camera is ready */}
+          {!cameraReady && (
+            <div className="camera-loading">Loading Camera...</div>
+          )}
+
+          <video 
+            ref={videoRef} 
+            autoPlay 
+            playsInline 
+            muted 
+            className="small-video-feed"
+            style={{ display: cameraReady ? 'block' : 'none' }}
+          />
           <canvas ref={canvasRef} style={{ display: 'none' }} />
           {snapping && <div className="snapping-flash"></div>}
 
