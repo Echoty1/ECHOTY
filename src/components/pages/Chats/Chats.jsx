@@ -200,6 +200,7 @@ const sortNonAIChats = (chats) => {
 // ─── Chat Item ──────────────────────────────────────────────────
 const ChatItem = memo(({ chat, onStartChat }) => {
   const { profiles } = useProfile();
+  const navigate = useNavigate();
   const profile = profiles[chat.id] || {};
   const isOnline = chat.online;
   const hasUnread = chat.unreadCount > 0;
@@ -209,7 +210,10 @@ const ChatItem = memo(({ chat, onStartChat }) => {
 
   return (
     <div className="chat-item regular-chat-item" onClick={() => onStartChat(chat)}>
-      <div className="chat-avatar">
+      <div className="chat-avatar" onClick={(e) => {
+        e.stopPropagation(); // Stop chat from opening
+        navigate(`/user/${chat.id}`); // Open profile
+      }}>
         <Avatar key={chat.avatar} src={chat.avatar} name={chat.name} size={48} />
         <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
         {hasUnread && <span className="unread-badge">{chat.unreadCount}</span>}
@@ -678,7 +682,10 @@ const Chats = () => {
                     className="chat-item regular-chat-item"
                     onClick={() => startChat(person)}
                   >
-                    <div className="chat-avatar">
+                    <div className="chat-avatar" onClick={(e) => {
+                      e.stopPropagation();
+                      navigate(`/user/${person.id}`);
+                    }}>
                       <Avatar src={person.avatar} name={person.name} size={48} />
                       <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
                     </div>
