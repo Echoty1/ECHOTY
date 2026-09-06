@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { markStatusViewed } from '../../services/statusService';
 import './StoriesBar.css';
 
@@ -6,21 +6,28 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
   const [currentIndex, setCurrentIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [isClosing, setIsClosing] = useState(false);
-  const [isSwitching, setIsSwitching] = useState(false);
-  const audioRef = useRef(null);
 
   const currentStory = stories[currentIndex];
+
+  // ✅ FIX: When story ends, close immediately with animation
+  const handleNext = () => {
+    if (currentIndex < stories.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+      setProgress(0);
+    } else {
+      setIsClosing(true);
+      setTimeout(onClose, 300);
+    }
+  };
 
   useEffect(() => {
     setProgress(0);
     if (!currentStory) return;
 
-    // Mark as viewed
     if (currentStory.userId && currentStory.id && viewerId) {
       markStatusViewed(currentStory.userId, currentStory.id, viewerId);
     }
 
-    // Auto-advance timer
     const interval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
@@ -35,39 +42,16 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
     return () => clearInterval(interval);
   }, [currentStory, currentIndex, viewerId]);
 
-  const handleNext = () => {
-    if (currentIndex < stories.length - 1) {
-      // Animate out current image, then switch
-      setIsSwitching(true);
-      setTimeout(() => {
-        setCurrentIndex(prev => prev + 1);
-        setIsSwitching(false);
-      }, 250);
-    } else {
-      // All stories are gone: Beautifully fade out the whole viewer
-      setIsClosing(true);
-      setTimeout(onClose, 400);
-    }
-  };
-
   const handleClose = () => {
     setIsClosing(true);
-    setTimeout(onClose, 400);
+    setTimeout(onClose, 300);
   };
-
-  useEffect(() => {
-    return () => {
-      if (audioRef.current) {
-        audioRef.current.pause();
-      }
-    };
-  }, []);
 
   if (!currentStory) return null;
 
   return (
     <div className={`viewer-overlay ${isClosing ? 'closing' : ''}`}>
-      {/* Progress Bar */}
+      
       <div className="progress-bar-container">
         {stories.map((_, idx) => (
           <div key={idx} className={`progress-segment ${idx < currentIndex ? 'full' : idx === currentIndex ? 'active' : ''}`}>
@@ -76,7 +60,6 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
         ))}
       </div>
 
-      {/* Header */}
       <div className="viewer-header">
         <div className="viewer-header-info">
           <div className="viewer-avatar-ring">
@@ -88,9 +71,8 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
         <button className="close-viewer" onClick={handleClose}>✕</button>
       </div>
 
-      {/* Main Image Area with smooth transition */}
       <div className="viewer-tap-area" onClick={handleNext}>
-        <div className={`viewer-image-container ${isSwitching ? 'switching' : ''}`}>
+        <div className="viewer-image-container">
           <img 
             src={currentStory.imageUrl} 
             alt="Story" 
@@ -99,6 +81,7 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
           />
         </div>
       </div>
+
     </div>
   );
 };
