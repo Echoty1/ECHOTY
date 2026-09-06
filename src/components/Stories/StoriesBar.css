@@ -690,3 +690,24 @@
   font-weight: 500;
   pointer-events: none;
 }
+
+/* 🚨 FLASH EFFECT */
+.snapping-flash {
+  position: absolute;
+  inset: 0;
+  background: #fff;
+  animation: flash 0.2s ease-out forwards;
+  pointer-events: none;
+  z-index: 5;
+}
+
+@keyframes flash {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+/* 🚨 HIDE GREY BY NOT SHOWING IT */
+.camera-loading {
+  background: transparent !important;
+  color: transparent !important;
+}
