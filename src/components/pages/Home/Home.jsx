@@ -13,9 +13,9 @@ import LiveViewModal from '../../VideoChat/LiveViewModal';
 import BroadcastView from '../../VideoChat/BroadcastView';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
-import StoriesBar from '../../Stories/StoriesBar'; // NEW IMPORT
-import StoryRecorder from '../../Stories/StoryRecorder'; // NEW IMPORT
-import StoryViewer from '../../Stories/StoryViewer'; // NEW IMPORT
+import StoriesBar from '../../Stories/StoriesBar';
+import StoryRecorder from '../../Stories/StoryRecorder';
+import StoryViewer from '../../Stories/StoryViewer';
 import './Home.css';
 import { isRealDisplayName, filterVisibleUsers } from '../../../utils/userIntegrity';
 
@@ -73,9 +73,9 @@ const Home = () => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [viewingLive, setViewingLive] = useState(null);
 
-  // ─── New Story States ─────────────────────────────────────
+  // ─── Story States ─────────────────────────────────────
   const [showRecorder, setShowRecorder] = useState(false);
-  const [viewingStory, setViewingStory] = useState(null);
+  const [viewingStories, setViewingStories] = useState(null); // Holds an array of stories
 
   // ─── Live broadcasting states ────────────────────────────────
   const [isLive, setIsLive] = useState(false);
@@ -745,10 +745,11 @@ const Home = () => {
           }}
         >
           <StoriesBar 
+            currentUserId={user?.uid} 
             users={onlineUsers} 
             ownStory={null} 
             onAddStory={() => setShowRecorder(true)} 
-            onViewStory={(story) => setViewingStory(story)} 
+            onViewStories={(stories) => setViewingStories(stories)} 
           />
         </div>
 
@@ -787,13 +788,12 @@ const Home = () => {
         )}
 
         {/* Story Viewer Modal */}
-        {viewingStory && (
+        {viewingStories && (
           <StoryViewer 
-            story={viewingStory} 
-            ownerName={viewingStory.userName || 'User'} 
+            stories={viewingStories} 
+            ownerName={viewingStories[0]?.userName || 'User'} 
             viewerId={user?.uid} 
-            onClose={() => setViewingStory(null)} 
-            onNext={() => setViewingStory(null)} 
+            onClose={() => setViewingStories(null)} 
           />
         )}
       </div>
