@@ -38,13 +38,14 @@ const StatusViewer = ({ userId, onClose }) => {
     return unsub;
   }, [userId, onClose]);
 
-  // Mark as viewed + play
+  // Mark as viewed + auto play
   useEffect(() => {
     if (!currentStatus || !user) return;
 
+    // Mark as viewed (this makes it disappear for the viewer)
     markStatusViewed(userId, currentStatus.id, user.uid);
 
-    // Fetch profiles of people who viewed
+    // Fetch profiles of people who viewed (for owner)
     if (currentStatus.views) {
       Object.keys(currentStatus.views).forEach((uid) => {
         if (!profiles[uid]) fetchProfile?.(uid);
@@ -58,7 +59,7 @@ const StatusViewer = ({ userId, onClose }) => {
     }
   }, [currentStatus?.id]);
 
-  // Progress bar
+  // Progress bar timer
   useEffect(() => {
     if (!isPlaying || !currentStatus) return;
 
@@ -85,7 +86,7 @@ const StatusViewer = ({ userId, onClose }) => {
       setCurrentIndex((i) => i + 1);
       setProgress(0);
     } else {
-      onClose();
+      onClose(); // Finished all → close and disappear
     }
   };
 
@@ -159,11 +160,15 @@ const StatusViewer = ({ userId, onClose }) => {
 
           <div className="viewer-actions">
             {isOwn && (
-              <button className="viewer-delete-btn" onClick={() => setShowDeleteConfirm(true)}>
+              <button
+                className="viewer-delete-btn"
+                onClick={() => setShowDeleteConfirm(true)}
+                title="Delete"
+              >
                 🗑️
               </button>
             )}
-            <button className="viewer-close-btn" onClick={onClose}>
+            <button className="viewer-close-btn" onClick={onClose} title="Close">
               ✕
             </button>
           </div>
@@ -180,7 +185,7 @@ const StatusViewer = ({ userId, onClose }) => {
               <p className="status-caption">{currentStatus.caption}</p>
             )}
 
-            {/* View count - only show to owner */}
+            {/* View count - only for owner */}
             {isOwn && viewCount > 0 && (
               <button className="view-count-btn" onClick={() => setShowSeenBy(true)}>
                 👁️ {viewCount} {viewCount === 1 ? 'view' : 'views'}
