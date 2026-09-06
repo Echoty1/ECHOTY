@@ -1,0 +1,87 @@
+.echo-status-bar {
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  overflow-x: auto;
+  padding: 6px 4px;
+  max-width: 70vw;
+  scrollbar-width: none;
+}
+
+.echo-status-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.status-circle-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.status-ring {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  padding: 3px;
+  background: #555;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.2s;
+}
+
+.status-circle-wrapper:hover .status-ring {
+  transform: scale(1.05);
+}
+
+.status-ring.has-status {
+  background: linear-gradient(135deg, #8b5cf6, #ec4899, #f59e0b);
+}
+
+.status-ring.own.has-status {
+  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
+}
+
+.status-avatar-inner {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  background: var(--bg-primary, #0f0f13);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+}
+
+.add-badge,
+.view-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #8b5cf6;
+  color: white;
+  font-size: 14px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px solid var(--bg-primary, #0f0f13);
+}
+
+.status-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary, #fff);
+  max-width: 64px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: center;
+}
