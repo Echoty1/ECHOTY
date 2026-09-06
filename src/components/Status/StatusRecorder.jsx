@@ -1,9 +1,45 @@
+// src/components/Status/StatusRecorder.jsx
 import React, { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { createVoiceStatus } from '../../services/statusService';
-// ⚠️ Change this import to match your actual Cloudinary helper path
-import { uploadToCloudinary } from '../../utils/mediaCache'; // or wherever your upload function lives
 import './StatusRecorder.css';
+
+// ─── Same Cloudinary config from your ChatView.js ────────────────
+const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
+const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
+
+const uploadToCloudinary = (file, onProgress) => {
+  return new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, true);
+
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable && onProgress) {
+        onProgress(Math.round((e.loaded / e.total) * 100));
+      }
+    };
+
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        try {
+          const data = JSON.parse(xhr.responseText);
+          resolve(data.secure_url);
+        } catch (err) {
+          reject(new Error('Invalid response from Cloudinary'));
+        }
+      } else {
+        reject(new Error(`Upload failed with status ${xhr.status}`));
+      }
+    };
+
+    xhr.onerror = () => reject(new Error('Network error during upload'));
+    xhr.send(formData);
+  });
+};
 
 const MAX_DURATION = 30;
 
@@ -15,6 +51,7 @@ const StatusRecorder = ({ onClose }) => {
   const [caption, setCaption] = useState('');
   const [uploading, setUploading] = useState(false);
   const [previewUrl, setPreviewUrl] = useState(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
 
   const mediaRecorderRef = useRef(null);
   const chunksRef = useRef([]);
@@ -41,6 +78,7 @@ const StatusRecorder = ({ onClose }) => {
           ? 'audio/webm;codecs=opus'
           : 'audio/webm',
       });
+
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
 
@@ -87,13 +125,16 @@ const StatusRecorder = ({ onClose }) => {
   const handlePost = async () => {
     if (!audioBlob || !user) return;
     setUploading(true);
+    setUploadProgress(0);
+
     try {
       const file = new File([audioBlob], `echo_status_${Date.now()}.webm`, {
         type: 'audio/webm',
       });
 
-      // Use your existing Cloudinary upload function
-      const audioUrl = await uploadToCloudinary(file);
+      const audioUrl = await uploadToCloudinary(file, (percent) => {
+        setUploadProgress(percent);
+      });
 
       await createVoiceStatus(user.uid, {
         audioUrl,
@@ -116,6 +157,7 @@ const StatusRecorder = ({ onClose }) => {
     setPreviewUrl(null);
     setDuration(0);
     setCaption('');
+    setUploadProgress(0);
   };
 
   const formatTime = (s) => {
@@ -164,8 +206,14 @@ const StatusRecorder = ({ onClose }) => {
               maxLength={60}
             />
 
+            {uploading && (
+              <div style={{ fontSize: 13, color: '#a78bfa', textAlign: 'center' }}>
+                Uploading... {uploadProgress}%
+              </div>
+            )}
+
             <div className="preview-actions">
-              <button className="btn-secondary" onClick={reset}>
+              <button className="btn-secondary" onClick={reset} disabled={uploading}>
                 Re-record
               </button>
               <button
