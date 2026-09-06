@@ -8,6 +8,7 @@ const StatusCircle = ({
   name,
   onAdd,
   onView,
+  isFirst = false,
 }) => {
   const handleClick = () => {
     if (isOwn) {
@@ -26,29 +27,41 @@ const StatusCircle = ({
         flexDirection: 'column',
         alignItems: 'center',
         cursor: 'pointer',
-        gap: '2px',
+        gap: '4px',
         flexShrink: 0,
-        width: '68px',
-        padding: '2px 0',
+        width: '88px',
+        padding: '6px 0',
+        marginLeft: isFirst ? '-30px' : '0',
+        transition: 'margin-left 0.3s ease',
+      }}
+      onMouseEnter={(e) => {
+        const parent = e.currentTarget.closest('.status-bar-scroll');
+        if (parent && isFirst) {
+          e.currentTarget.style.marginLeft = '0px';
+        }
+        e.currentTarget.querySelector('.status-ring').style.transform = 'scale(1.08)';
+      }}
+      onMouseLeave={(e) => {
+        const parent = e.currentTarget.closest('.status-bar-scroll');
+        if (parent && isFirst) {
+          e.currentTarget.style.marginLeft = '-30px';
+        }
+        e.currentTarget.querySelector('.status-ring').style.transform = 'scale(1)';
       }}
     >
       <div
+        className="status-ring"
         style={{
-          width: '60px',
-          height: '60px',
+          width: '76px',
+          height: '76px',
           borderRadius: '50%',
-          padding: '2px',
+          padding: '3px',
           background: hasStatus 
-            ? 'linear-gradient(135deg, #F77737, #FCAF45, #FFDC80)'
-            : '#E4E6EB',
+            ? 'conic-gradient(from 0deg, #feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5, #feda75)'
+            : '#DBDBDB',
           position: 'relative',
-          transition: 'transform 0.15s ease',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'scale(1.05)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'scale(1)';
+          transition: 'transform 0.3s ease, margin-left 0.3s ease',
+          transform: 'scale(1)',
         }}
       >
         <div
@@ -57,12 +70,13 @@ const StatusCircle = ({
             height: '100%',
             borderRadius: '50%',
             overflow: 'hidden',
-            border: '2.5px solid #FFFFFF',
+            border: '3.5px solid #FFFFFF',
             position: 'relative',
             background: '#FFFFFF',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
           }}
         >
-          <Avatar src={avatar} name={name} size={55} />
+          <Avatar src={avatar} name={name} size={70} />
           
           {isOwn && !hasStatus && (
             <div
@@ -70,18 +84,19 @@ const StatusCircle = ({
                 position: 'absolute',
                 bottom: '-1px',
                 right: '-1px',
-                width: '18px',
-                height: '18px',
+                width: '24px',
+                height: '24px',
                 borderRadius: '50%',
                 background: '#0095F6',
                 color: 'white',
-                fontSize: '13px',
+                fontSize: '18px',
                 fontWeight: '300',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: '2.5px solid #FFFFFF',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                border: '3px solid #FFFFFF',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                transition: 'transform 0.2s ease',
               }}
             >
               +
@@ -94,18 +109,18 @@ const StatusCircle = ({
                 position: 'absolute',
                 bottom: '-1px',
                 right: '-1px',
-                width: '18px',
-                height: '18px',
+                width: '24px',
+                height: '24px',
                 borderRadius: '50%',
                 background: '#0095F6',
                 color: 'white',
-                fontSize: '8px',
+                fontSize: '11px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                border: '2.5px solid #FFFFFF',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
-                paddingLeft: '1.5px',
+                border: '3px solid #FFFFFF',
+                boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+                paddingLeft: '2px',
               }}
             >
               ▶
@@ -116,15 +131,16 @@ const StatusCircle = ({
       
       <span
         style={{
-          fontSize: '11px',
+          fontSize: '12px',
           color: '#262626',
           textAlign: 'center',
-          maxWidth: '68px',
+          maxWidth: '88px',
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
           fontWeight: 400,
-          marginTop: '1px',
+          marginTop: '2px',
+          lineHeight: '1.2',
         }}
       >
         {isOwn ? 'Your Echo' : name?.split(' ')[0] || 'User'}
