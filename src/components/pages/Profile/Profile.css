@@ -623,7 +623,7 @@
   box-sizing: border-box;
 }
 
-/* ─── Echowers Stats & Modal ─── */
+/* ─── Echowers Stats & Modal (Glassmorphism) ─── */
 .profile-stats {
   display: flex;
   justify-content: center;
@@ -633,29 +633,33 @@
 
 .profile-stats .stat {
   text-align: center;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid rgba(255,255,255,0.1);
-  border-radius: 12px;
-  padding: 10px 20px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 12px 20px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s ease;
   min-width: 80px;
 }
 
 .profile-stats .stat:hover {
-  background: rgba(255,255,255,0.1);
+  background: rgba(108, 60, 225, 0.15);
+  border-color: rgba(139, 92, 246, 0.5);
+  transform: translateY(-2px);
 }
 
 .profile-stats h4 {
   margin: 0;
-  font-size: 20px;
+  font-size: 22px;
   color: var(--text-primary);
+  font-weight: 800;
 }
 
 .profile-stats p {
   margin: 0;
   font-size: 12px;
   color: var(--text-muted);
+  font-weight: 500;
 }
 
 /* Echowers Modal */
@@ -665,26 +669,39 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.8);
-  backdrop-filter: blur(5px);
-  -webkit-backdrop-filter: blur(5px);
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 10000;
   cursor: pointer;
+  animation: fadeInModal 0.2s ease;
+}
+
+@keyframes fadeInModal {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .echowers-modal {
   width: 90%;
   max-width: 400px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 20px;
+  background: rgba(30, 30, 30, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 24px;
   padding: 20px;
   cursor: default;
   max-height: 80vh;
   overflow-y: auto;
+  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.5);
+  animation: slideUpModal 0.3s ease;
+}
+
+@keyframes slideUpModal {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 .echowers-modal-header {
@@ -696,16 +713,22 @@
 
 .echowers-modal-header h3 {
   margin: 0;
-  font-size: 18px;
-  color: var(--text-primary);
+  font-size: 20px;
+  color: #fff;
+  font-weight: 700;
 }
 
 .close-btn {
   background: transparent;
   border: none;
-  color: var(--text-muted);
+  color: #aaa;
   font-size: 20px;
   cursor: pointer;
+  transition: color 0.2s;
+}
+
+.close-btn:hover {
+  color: #fff;
 }
 
 .echowers-stats {
@@ -716,23 +739,23 @@
 
 .echowers-stats .stat-box {
   flex: 1;
-  background: var(--bg-input);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
   padding: 15px;
   text-align: center;
 }
 
 .echowers-stats h3 {
   margin: 0 0 5px 0;
-  font-size: 22px;
-  color: var(--text-primary);
+  font-size: 24px;
+  color: #fff;
 }
 
 .echowers-stats p {
   margin: 0;
   font-size: 12px;
-  color: var(--text-muted);
+  color: #aaa;
 }
 
 .echowers-list {
@@ -745,16 +768,18 @@
   display: flex;
   align-items: center;
   gap: 15px;
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 12px;
   padding: 10px;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.2s;
 }
 
 .echower-item:hover {
-  background: var(--bg-input);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(139, 92, 246, 0.5);
+  transform: translateX(5px);
 }
 
 .item-info {
@@ -765,16 +790,17 @@
 
 .item-info strong {
   font-size: 14px;
-  color: var(--text-primary);
+  color: #fff;
 }
 
 .item-info span {
   font-size: 12px;
-  color: var(--text-muted);
+  color: #aaa;
 }
 
 .empty-state {
   text-align: center;
-  color: var(--text-muted);
+  color: #666;
   padding: 20px;
+  font-size: 14px;
 }
