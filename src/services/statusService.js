@@ -4,6 +4,7 @@ import { db } from './firebase';
 
 const EXPIRY_MS = 24 * 60 * 60 * 1000; // 24 hours
 
+// Create a story (Base64 string as imageUrl)
 export const createImageStatus = async (userId, { imageUrl, caption = '' }) => {
   const statusRef = push(ref(db, `statuses/${userId}`));
   const statusId = statusRef.key;
@@ -30,6 +31,7 @@ export const createImageStatus = async (userId, { imageUrl, caption = '' }) => {
   return statusId;
 };
 
+// Mark a specific status as viewed
 export const markStatusViewed = async (ownerId, statusId, viewerId) => {
   if (!ownerId || !statusId || !viewerId) return;
   if (ownerId === viewerId) return;
@@ -43,6 +45,7 @@ export const markStatusViewed = async (ownerId, statusId, viewerId) => {
   });
 };
 
+// Delete a specific status (Used in Memories)
 export const deleteStatus = async (userId, statusId) => {
   await remove(ref(db, `statuses/${userId}/${statusId}`));
 
@@ -55,7 +58,7 @@ export const deleteStatus = async (userId, statusId) => {
   }
 };
 
-// Gets all expired statuses for the "Memories" section
+// Get all expired statuses for "Memories"
 export const getUserMemories = async (userId) => {
   const snap = await get(ref(db, `statuses/${userId}`));
   const data = snap.val() || {};
@@ -63,6 +66,7 @@ export const getUserMemories = async (userId) => {
   return Object.values(data).filter((s) => s.expiresAt <= now).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 };
 
+// Listens to all users who own active statuses
 export const listenToStatusOwners = (callback) => {
   const ownersRef = ref(db, 'statusOwners');
   onValue(ownersRef, (snap) => {
@@ -71,15 +75,19 @@ export const listenToStatusOwners = (callback) => {
   return () => off(ownersRef);
 };
 
+// Listens to statuses for a specific user, automatically deletes expired ones
 export const listenToUserStatuses = (userId, callback) => {
   const statusesRef = ref(db, `statuses/${userId}`);
   onValue(statusesRef, (snap) => {
     const data = snap.val() || {};
     const now = Date.now();
+
+    // Filter valid statuses
     const valid = Object.values(data)
       .filter((s) => s.expiresAt > now)
       .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
+    // Cleanup: Auto-delete expired statuses from DB (Instagram behavior)
     Object.values(data)
       .filter((s) => s.expiresAt <= now)
       .forEach((s) => {
@@ -91,6 +99,7 @@ export const listenToUserStatuses = (userId, callback) => {
   return () => off(statusesRef);
 };
 
+// Listen to what the current user has already viewed
 export const listenToViewedStatuses = (viewerId, callback) => {
   const viewedRef = ref(db, `viewedStatuses/${viewerId}`);
   onValue(viewedRef, (snap) => {
