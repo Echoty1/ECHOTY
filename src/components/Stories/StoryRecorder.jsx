@@ -5,9 +5,10 @@ import './StoriesBar.css';
 const StoryRecorder = ({ userId, onClose }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
-  const streamRef = useRef(null); // 🚨 CRITICAL: We use a ref, not useState, so it NEVER resets
+  const streamRef = useRef(null); // Keep camera alive!
   const tapTimeoutRef = useRef(null);
   const lastTapRef = useRef(0);
+  const isSnappingRef = useRef(false); // Use ref for instant locking
 
   const [snapping, setSnapping] = useState(false);
   const [showFlash, setShowFlash] = useState(false);
@@ -32,7 +33,6 @@ const StoryRecorder = ({ userId, onClose }) => {
 
     const startCamera = async () => {
       try {
-        // If switching cameras, stop the old stream
         if (streamRef.current) {
           streamRef.current.getTracks().forEach(track => track.stop());
         }
@@ -47,12 +47,11 @@ const StoryRecorder = ({ userId, onClose }) => {
           return;
         }
 
-        streamRef.current = mediaStream; // Keep it permanently
+        streamRef.current = mediaStream;
         if (videoRef.current) {
           videoRef.current.srcObject = mediaStream;
         }
 
-        // Wait for video to be ready
         await new Promise((resolve) => {
           if (videoRef.current && videoRef.current.readyState >= 2) {
             resolve();
@@ -74,7 +73,6 @@ const StoryRecorder = ({ userId, onClose }) => {
 
     return () => {
       cancelled = true;
-      // 🚨 CRITICAL: Stop camera ONLY when component actually closes
       if (streamRef.current) {
         streamRef.current.getTracks().forEach(track => track.stop());
       }
@@ -108,13 +106,16 @@ const StoryRecorder = ({ userId, onClose }) => {
     }
   };
 
+  // 🚨 INSTANT SNAP LOGIC
   const handlePointerUp = () => {
-    if (snapping) return;
+    // If we are currently snapping, ignore the tap (prevents overlapping posts)
+    if (isSnappingRef.current) return;
 
     const now = Date.now();
     const timeSinceLastTap = now - lastTapRef.current;
 
-    if (timeSinceLastTap < 250) {
+    // Detect double tap to switch camera (125ms window = very fast!)
+    if (timeSinceLastTap < 125) {
       clearTimeout(tapTimeoutRef.current);
       lastTapRef.current = 0;
       setFacingMode(prev => (prev === 'user' ? 'environment' : 'user'));
@@ -122,20 +123,21 @@ const StoryRecorder = ({ userId, onClose }) => {
     }
 
     lastTapRef.current = now;
-    tapTimeoutRef.current = setTimeout(() => {
-      if (lastTapRef.current !== 0) {
-        handleSnap();
-      }
-    }, 250);
+    
+    // Do not wait: Snap instantly!
+    handleSnap();
   };
 
   const handleSnap = async () => {
-    if (!videoRef.current || snapping) return;
+    if (!videoRef.current || isSnappingRef.current) return;
 
-    // 🚨 CRITICAL: Instantly show the flash and camera stays open!
+    // 🚨 LOCK: Prevents tapping multiple times while sending to DB
+    isSnappingRef.current = true;
     setSnapping(true);
+
+    // Instant Flash!
     setShowFlash(true);
-    setTimeout(() => setShowFlash(false), 200);
+    setTimeout(() => setShowFlash(false), 150);
 
     const canvas = canvasRef.current;
     const context = canvas.getContext('2d');
@@ -154,22 +156,26 @@ const StoryRecorder = ({ userId, onClose }) => {
       if (!userId) {
         console.error("User ID is missing!");
         alert("User ID is missing. Please log out and log back in.");
+        isSnappingRef.current = false;
         setSnapping(false);
         return;
       }
 
-      // Post to database in the background
+      // 🚨 INSTANTLY RESET SO THEY CAN TAP AGAIN!
+      // We don't wait for the database! We let it run in the background.
+      isSnappingRef.current = false;
+      setSnapping(false);
+
+      // Now send to database (does not block the camera)
       await createImageStatus(userId, { imageUrl: imageDataUrl, caption: '' });
       
-      // 🚨 CRITICAL: Instantly stop "snapping" so it doesn't gray out, just do this immediately
-      setSnapping(false);
-      
-      // Then refresh memories in the background
-      await fetchMemories();
+      // Refresh memories in background (optional)
+      fetchMemories();
 
     } catch (err) {
       console.error("Error saving status:", err);
       alert(`Failed to post Echus: ${err.message}`);
+      isSnappingRef.current = false;
       setSnapping(false);
     }
   };
