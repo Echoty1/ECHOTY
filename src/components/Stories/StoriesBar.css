@@ -1,342 +1,83 @@
-/* Main wrapper */
-.stories-bar-container {
-  position: fixed;
-  bottom: 90px;
-  left: 0;
-  z-index: 9999;
-  width: 100%;
-  max-width: 450px;
-  pointer-events: auto;
-}
+import React, { useRef, useEffect, useState } from 'react';
+import StoryCircle from './StoryCircle';
+import { listenToUserStatuses, listenToViewedStatuses } from '../../services/statusService';
+import './StoriesBar.css';
 
-/* Scrolling */
-.stories-bar-scroll {
-  display: flex;
-  gap: 16px;
-  overflow-x: auto;
-  padding: 10px 16px;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
+const StoriesBar = ({ currentUserId, users, ownStory, onAddStory, onViewStories }) => {
+  const scrollRef = useRef(null);
+  const [viewedKeys, setViewedKeys] = useState({});
+  const [statusesMap, setStatusesMap] = useState({});
 
-.stories-bar-scroll::-webkit-scrollbar {
-  display: none;
-}
+  useEffect(() => {
+    if (!currentUserId) return;
+    const unsubViewed = listenToViewedStatuses(currentUserId, setViewedKeys);
+    
+    const unsubs = (users || []).map(user => {
+      return listenToUserStatuses(user.uid, (statuses) => {
+        setStatusesMap(prev => ({ ...prev, [user.uid]: statuses }));
+      });
+    });
 
-/* Circle */
-.story-circle-wrapper {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 7px;
-  cursor: pointer;
-  flex-shrink: 0;
-}
+    return () => {
+      unsubViewed();
+      unsubs.forEach(unsub => unsub && unsub());
+    };
+  }, [currentUserId, users]);
 
-.story-ring {
-  width: 68px;
-  height: 68px;
-  border-radius: 50%;
-  padding: 3px;
-  background: #3f3f46;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: transform 0.2s ease;
-}
+  // ONLY show users with unviewed statuses
+  const visibleUsers = (users || []).filter(user => {
+    const statuses = statusesMap[user.uid] || [];
+    const unseen = statuses.filter(s => !viewedKeys[`${user.uid}_${s.id}`]);
+    return unseen.length > 0;
+  });
 
-.story-circle-wrapper:active .story-ring {
-  transform: scale(0.94);
-}
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
 
-.story-ring.has-story {
-  background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
-}
+    const onWheel = (event) => {
+      if (event.deltaY !== 0) {
+        event.preventDefault();
+        el.scrollLeft += event.deltaY;
+      }
+    };
 
-.story-ring.own {
-  background: #3f3f46;
-}
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+    };
+  }, []);
 
-.story-avatar-inner {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  background: #000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  overflow: hidden;
-  border: 2px solid #000;
-}
+  return (
+    <div className="stories-bar-container">
+      <div ref={scrollRef} className="stories-bar-scroll">
+        <StoryCircle
+          isOwn={true}
+          hasStory={!!ownStory}
+          avatar={ownStory?.avatar || 'https://via.placeholder.com/70'}
+          name="Your Echus"
+          onAdd={onAddStory}
+          onView={() => onViewStories([ownStory].filter(Boolean))}
+        />
+        
+        {visibleUsers.map((user) => {
+          const statuses = statusesMap[user.uid] || [];
+          const unseen = statuses.filter(s => !viewedKeys[`${user.uid}_${s.id}`]);
+          
+          return (
+            <StoryCircle
+              key={user.uid}
+              isOwn={false}
+              hasStory={true}
+              avatar={user.avatar}
+              name={user.name}
+              onView={() => onViewStories(unseen)}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+};
 
-.story-img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  border-radius: 50%;
-}
-
-.own-avatar-content {
-  width: 100%;
-  height: 100%;
-  position: relative;
-}
-
-.add-badge {
-  position: absolute;
-  bottom: 0;
-  right: 0;
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  background: #0095f6;
-  color: white;
-  font-size: 14px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px solid #000;
-  line-height: 1;
-  z-index: 3;
-}
-
-.story-name {
-  font-size: 11px;
-  font-weight: 600;
-  color: #ffffff;
-  max-width: 68px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  text-align: center;
-}
-
-/* Recorder */
-.recorder-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 10000;
-  backdrop-filter: blur(4px);
-}
-
-.recorder-modal-small {
-  background: #1a1a1a;
-  padding: 20px;
-  border-radius: 24px;
-  width: 320px;
-  color: #fff;
-  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-}
-
-.small-camera-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.small-camera-header h3 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.close-btn {
-  background: transparent;
-  border: none;
-  color: #aaa;
-  font-size: 20px;
-  cursor: pointer;
-}
-
-.small-camera-space {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  background: #000;
-  border-radius: 16px;
-  position: relative;
-  overflow: hidden;
-  cursor: pointer;
-  transition: transform 0.1s;
-}
-
-.small-camera-space:active {
-  transform: scale(0.98);
-}
-
-.small-video-feed {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transform: scaleX(-1);
-}
-
-.memories-section {
-  margin-top: 20px;
-}
-
-.memories-section h4 {
-  margin: 0 0 10px 0;
-  font-size: 14px;
-  color: #ccc;
-}
-
-.memories-section p {
-  color: #666;
-  font-size: 13px;
-  text-align: center;
-  padding: 10px;
-}
-
-.memories-scroll {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  padding-bottom: 4px;
-}
-
-.memory-thumb {
-  width: 60px;
-  height: 60px;
-  object-fit: cover;
-  border-radius: 8px;
-  border: 2px solid #333;
-}
-
-/* Viewer */
-.viewer-overlay {
-  position: fixed;
-  inset: 0;
-  background: #000;
-  z-index: 10000;
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  color: #fff;
-}
-
-.progress-bar-container {
-  position: absolute;
-  top: 10px;
-  left: 5%;
-  right: 5%;
-  display: flex;
-  gap: 4px;
-  z-index: 10;
-}
-
-.progress-segment {
-  flex: 1;
-  height: 2px;
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
-  overflow: hidden;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  background: #fff;
-  transition: width 0.1s linear;
-}
-
-.viewer-header {
-  position: absolute;
-  top: 20px;
-  left: 15px;
-  right: 15px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  z-index: 10;
-}
-
-.viewer-header-info {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.owner-name {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.viewer-time {
-  font-size: 12px;
-  color: rgba(255,255,255,0.7);
-}
-
-.close-viewer {
-  background: transparent;
-  border: none;
-  color: #fff;
-  font-size: 20px;
-  cursor: pointer;
-}
-
-.viewer-tap-area {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-}
-
-.viewer-image-container {
-  max-width: 100%;
-  max-height: 80vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
-}
-
-.viewer-image {
-  max-width: 100%;
-  max-height: 80vh;
-  object-fit: contain;
-}
-
-.viewer-caption {
-  margin-top: 10px;
-  text-align: center;
-  font-size: 16px;
-}
-
-.viewer-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 10px 15px 25px 15px;
-  gap: 10px;
-}
-
-.viewer-reply-input {
-  flex: 1;
-  background: rgba(255,255,255,0.1);
-  border: 1px solid rgba(255,255,255,0.2);
-  border-radius: 20px;
-  color: #fff;
-  padding: 10px 15px;
-  cursor: text;
-  text-align: left;
-}
-
-.viewer-reply-input span {
-  color: rgba(255,255,255,0.6);
-}
-
-.viewer-footer-icons {
-  display: flex;
-  gap: 15px;
-}
-
-.icon {
-  font-size: 20px;
-  cursor: pointer;
-}
+export default StoriesBar;
