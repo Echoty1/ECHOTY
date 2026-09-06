@@ -1,4 +1,3 @@
-// src/components/Stories/StoryRecorder.jsx
 import React, { useRef, useState, useEffect } from 'react';
 import { createImageStatus, getUserMemories, deleteStatus } from '../../services/statusService';
 import './StoriesBar.css';
@@ -27,7 +26,6 @@ const StoryRecorder = ({ userId, onClose }) => {
     }
   };
 
-  // Start Camera
   useEffect(() => {
     let cancelled = false;
     setIsLoadingCam(true);
@@ -52,7 +50,6 @@ const StoryRecorder = ({ userId, onClose }) => {
           videoRef.current.srcObject = mediaStream;
         }
 
-        // Wait for video to be fully loaded
         await new Promise((resolve) => {
           if (videoRef.current && videoRef.current.readyState >= 2) {
             resolve();
@@ -77,7 +74,6 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
   }, [facingMode]);
 
-  // Stop camera ONLY on unmount (when closing)
   useEffect(() => {
     return () => {
       if (stream) {
@@ -87,7 +83,6 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
   }, []);
 
-  // Zoom control
   useEffect(() => {
     if (videoRef.current) {
       const mirror = facingMode === 'user' ? 'scaleX(-1)' : '';
@@ -115,7 +110,6 @@ const StoryRecorder = ({ userId, onClose }) => {
   };
 
   const handlePointerUp = () => {
-    // ✅ FIX: Snap immediately even if camera is technically still loading
     if (snapping) return;
 
     const now = Date.now();
@@ -161,11 +155,9 @@ const StoryRecorder = ({ userId, onClose }) => {
         return;
       }
 
-      // ✅ FIX: Post to Firebase
       await createImageStatus(userId, { imageUrl: imageDataUrl, caption: '' });
       setSnapping(false);
       
-      // ✅ FIX: Immediately fetch memories AFTER posting
       await fetchMemories();
 
     } catch (err) {
@@ -203,14 +195,12 @@ const StoryRecorder = ({ userId, onClose }) => {
           onTouchMove={handleTouchMove}
           style={{ opacity: snapping ? 0.6 : 1, pointerEvents: snapping ? 'none' : 'auto' }}
         >
-          {/* ✅ FIX: Fake transparent background instead of GREY */}
           {isLoadingCam && (
             <div className="camera-loading" style={{ background: 'transparent', color: '#fff', fontSize: '12px' }}>
               Loading Camera...
             </div>
           )}
 
-          {/* ✅ FIX: Camera is ALWAYS displayed, no hidden */}
           <video 
             ref={videoRef} 
             autoPlay 
