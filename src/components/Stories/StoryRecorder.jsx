@@ -16,7 +16,7 @@ const StoryRecorder = ({ userId, onClose }) => {
   const [selectedMemory, setSelectedMemory] = useState(null);
   const [facingMode, setFacingMode] = useState('user');
   const [zoomLevel, setZoomLevel] = useState(1);
-  const [cameraReady, setCameraReady] = useState(false);
+  const [isLoadingCam, setIsLoadingCam] = useState(true);
 
   const fetchMemories = async () => {
     try {
@@ -27,17 +27,16 @@ const StoryRecorder = ({ userId, onClose }) => {
     }
   };
 
-  // ✅ FIX: We no longer stop the stream when switching. We just keep the camera alive!
+  // Start Camera
   useEffect(() => {
     let cancelled = false;
+    setIsLoadingCam(true);
 
     const startCamera = async () => {
       try {
-        // If switching facing modes, we need to restart the stream
         if (stream) {
           stream.getTracks().forEach(track => track.stop());
         }
-
         const mediaStream = await navigator.mediaDevices.getUserMedia({ 
           video: { facingMode: facingMode }, 
           audio: false 
@@ -53,7 +52,7 @@ const StoryRecorder = ({ userId, onClose }) => {
           videoRef.current.srcObject = mediaStream;
         }
 
-        // Wait for the video to fully load
+        // Wait for video to be fully loaded
         await new Promise((resolve) => {
           if (videoRef.current && videoRef.current.readyState >= 2) {
             resolve();
@@ -63,11 +62,11 @@ const StoryRecorder = ({ userId, onClose }) => {
         });
 
         if (!cancelled) {
-          setCameraReady(true);
+          setIsLoadingCam(false);
         }
       } catch (err) {
         console.error("Camera access denied.", err);
-        setCameraReady(false);
+        setIsLoadingCam(false);
       }
     };
 
@@ -78,7 +77,7 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
   }, [facingMode]);
 
-  // ✅ FIX: We stop the camera ONLY when we close the recorder
+  // Stop camera ONLY on unmount (when closing)
   useEffect(() => {
     return () => {
       if (stream) {
@@ -88,12 +87,13 @@ const StoryRecorder = ({ userId, onClose }) => {
     };
   }, []);
 
+  // Zoom control
   useEffect(() => {
     if (videoRef.current) {
       const mirror = facingMode === 'user' ? 'scaleX(-1)' : '';
       videoRef.current.style.transform = `scale(${zoomLevel}) ${mirror}`;
     }
-  }, [zoomLevel, facingMode, cameraReady]);
+  }, [zoomLevel, facingMode]);
 
   const handleWheelZoom = (e) => {
     if (e.ctrlKey || e.metaKey) {
@@ -115,7 +115,8 @@ const StoryRecorder = ({ userId, onClose }) => {
   };
 
   const handlePointerUp = () => {
-    if (!cameraReady || snapping) return;
+    // ✅ FIX: Snap immediately even if camera is technically still loading
+    if (snapping) return;
 
     const now = Date.now();
     const timeSinceLastTap = now - lastTapRef.current;
@@ -160,10 +161,11 @@ const StoryRecorder = ({ userId, onClose }) => {
         return;
       }
 
+      // ✅ FIX: Post to Firebase
       await createImageStatus(userId, { imageUrl: imageDataUrl, caption: '' });
-      
-      // ✅ FIX: Do NOT stop or reload the stream. Just set snapping to false.
       setSnapping(false);
+      
+      // ✅ FIX: Immediately fetch memories AFTER posting
       await fetchMemories();
 
     } catch (err) {
@@ -201,21 +203,24 @@ const StoryRecorder = ({ userId, onClose }) => {
           onTouchMove={handleTouchMove}
           style={{ opacity: snapping ? 0.6 : 1, pointerEvents: snapping ? 'none' : 'auto' }}
         >
-          {!cameraReady && (
-            <div className="camera-loading">Loading Camera...</div>
+          {/* ✅ FIX: Fake transparent background instead of GREY */}
+          {isLoadingCam && (
+            <div className="camera-loading" style={{ background: 'transparent', color: '#fff', fontSize: '12px' }}>
+              Loading Camera...
+            </div>
           )}
 
-          {/* Video element stays mounted and ready */}
+          {/* ✅ FIX: Camera is ALWAYS displayed, no hidden */}
           <video 
             ref={videoRef} 
             autoPlay 
             playsInline 
             muted 
             className="small-video-feed"
-            style={{ 
-              display: cameraReady ? 'block' : 'none',
-              opacity: cameraReady ? 1 : 0,
-              transition: 'opacity 0.15s ease'
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
             }}
           />
           
