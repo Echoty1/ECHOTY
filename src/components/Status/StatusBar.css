@@ -1,32 +1,30 @@
-/* StatusBar.css - Improved & Unified */
-
-/* The outer container wrapping the scroll area */
 .echo-status-container {
-  background: transparent; /* Removed the #FFFFFF to blend with dark mode */
-  border-bottom: 1px solid #27272a; /* Subtle dark border */
+  background: transparent;
+  border-bottom: 1px solid #27272a;
   padding: 8px 0;
   position: relative;
   overflow: hidden;
   width: 100%;
+  max-width: 100%;
 }
 
-/* The scrollable horizontal area */
 .echo-status-bar {
   display: flex;
   gap: 16px;
-  align-items: flex-start; /* Aligns items to the top so names sit evenly */
+  align-items: flex-start;
   overflow-x: auto;
+  overflow-y: hidden;
   padding: 4px 16px 4px 10px;
   width: 100%;
   scrollbar-width: none;
   -ms-overflow-style: none;
+  overscroll-behavior-x: contain;
 }
 
 .echo-status-bar::-webkit-scrollbar {
   display: none;
 }
 
-/* The gradient fade on the left to hide cut-off circles */
 .status-fade-left {
   position: absolute;
   left: 0;
@@ -37,8 +35,6 @@
   pointer-events: none;
   z-index: 2;
 }
-
-/* --- Your Original Circle Styling --- */
 
 .status-circle-wrapper {
   display: flex;
@@ -65,12 +61,10 @@
   transform: scale(0.94);
 }
 
-/* Gradient ring when someone has an unviewed status */
 .status-ring.has-status {
   background: linear-gradient(135deg, #f59e0b, #ec4899, #8b5cf6);
 }
 
-/* Own circle */
 .status-ring.own {
   background: #3f3f46;
 }
@@ -108,7 +102,7 @@
 .status-name {
   font-size: 11px;
   font-weight: 600;
-  color: #ffffff; /* Changed to solid white for better dark mode contrast */
+  color: #ffffff;
   max-width: 68px;
   overflow: hidden;
   text-overflow: ellipsis;
