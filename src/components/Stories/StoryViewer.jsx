@@ -1,12 +1,10 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { markStatusViewed } from '../../services/statusService';
 import './StoriesBar.css';
 
-const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNext }) => {
+const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onFinished }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [progress, setProgress] = useState(0);
-  const [isClosing, setIsClosing] = useState(false);
-  const [isSwitching, setIsSwitching] = useState(false);
 
   const currentStory = stories[currentIndex];
 
@@ -35,29 +33,25 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
 
   const handleNext = () => {
     if (currentIndex < stories.length - 1) {
-      setIsSwitching(true);
-      setTimeout(() => {
-        setCurrentIndex(prev => prev + 1);
-        setIsSwitching(false);
-      }, 250);
+      setCurrentIndex(prev => prev + 1);
+      setProgress(0);
     } else {
-      // Last story: Fade out the viewer, then close
-      setIsClosing(true);
-      setTimeout(onClose, 400);
+      // ALL STORIES VIEWED: Tell parent to remove instantly!
+      onFinished();
+      onClose();
     }
   };
 
   const handleClose = () => {
-    setIsClosing(true);
-    setTimeout(onClose, 400);
+    // If user taps X early, they haven't finished. Just close.
+    onClose();
   };
 
   if (!currentStory) return null;
 
   return (
-    <div className={`viewer-overlay ${isClosing ? 'closing' : ''}`}>
+    <div className="viewer-overlay">
       
-      {/* Progress Bar */}
       <div className="progress-bar-container">
         {stories.map((_, idx) => (
           <div key={idx} className={`progress-segment ${idx < currentIndex ? 'full' : idx === currentIndex ? 'active' : ''}`}>
@@ -66,7 +60,6 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
         ))}
       </div>
 
-      {/* Header */}
       <div className="viewer-header">
         <div className="viewer-header-info">
           <div className="viewer-avatar-ring">
@@ -78,9 +71,8 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onNex
         <button className="close-viewer" onClick={handleClose}>✕</button>
       </div>
 
-      {/* Main Image Area (Tap to advance) */}
       <div className="viewer-tap-area" onClick={handleNext}>
-        <div className={`viewer-image-container ${isSwitching ? 'switching' : ''}`}>
+        <div className="viewer-image-container">
           <img 
             src={currentStory.imageUrl} 
             alt="Story" 
