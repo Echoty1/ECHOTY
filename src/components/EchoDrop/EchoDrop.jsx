@@ -1,3 +1,4 @@
+// src/components/EchoDrop/EchoDrop.jsx
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../contexts/ProfileContext';
@@ -19,6 +20,8 @@ const EchoDrop = ({ onClose }) => {
   const [status, setStatus] = useState('');
   const [receivedPhoto, setReceivedPhoto] = useState(null);
   const [isSending, setIsSending] = useState(false);
+  const [isJoining, setIsJoining] = useState(false);
+  const [error, setError] = useState('');
 
   const peerRef = useRef(null);
   const connRef = useRef(null);
@@ -30,19 +33,27 @@ const EchoDrop = ({ onClose }) => {
       port: 443,
       path: '/',
       secure: true,
+      debug: 1,
     });
 
-    peer.on('open', () => {
+    peer.on('open', (id) => {
+      console.log('Peer ready:', id);
       peerRef.current = peer;
     });
 
     peer.on('connection', (conn) => {
+      console.log('Incoming connection');
       handleConnection(conn);
+    });
+
+    peer.on('error', (err) => {
+      console.error('Peer error:', err);
+      setError('Connection error. Please try again.');
     });
 
     return () => {
       if (code) endDropSession(code);
-      peer.destroy();
+      if (peer && !peer.destroyed) peer.destroy();
     };
   }, []);
 
@@ -50,6 +61,8 @@ const EchoDrop = ({ onClose }) => {
     connRef.current = conn;
     setMode('connected');
     setStatus('Connected! Select photos to share');
+    setError('');
+    setIsJoining(false);
 
     conn.on('data', (data) => {
       if (data?.type === 'photo') {
@@ -61,38 +74,74 @@ const EchoDrop = ({ onClose }) => {
       }
     });
 
+    conn.on('open', () => {
+      console.log('Connection opened');
+    });
+
     conn.on('close', () => {
       setStatus('Disconnected');
       setMode('home');
+      setError('Connection closed');
+    });
+
+    conn.on('error', (err) => {
+      console.error('Conn error:', err);
+      setError('Connection failed');
     });
   };
 
   const startHosting = async () => {
-    if (!peerRef.current) return alert('Still connecting... try again');
+    if (!peerRef.current || !peerRef.current.id) {
+      setError('Still connecting to server... please wait a second');
+      return;
+    }
+
     const newCode = generateDropCode();
     setCode(newCode);
     setMode('host');
     setStatus('Waiting for someone to join...');
+    setError('');
 
     try {
       await createDropSession(user.uid, newCode, peerRef.current.id);
     } catch (err) {
       console.error(err);
-      alert('Failed to create session');
+      setError('Failed to create session');
       setMode('home');
     }
   };
 
   const joinSession = async () => {
-    if (inputCode.length !== 6) return alert('Enter a valid 6-digit code');
+    if (isJoining) return;
+    if (!inputCode || inputCode.length !== 6) {
+      setError('Please enter a valid 6-digit code');
+      return;
+    }
+    if (!peerRef.current || !peerRef.current.id) {
+      setError('Still connecting... try again in a moment');
+      return;
+    }
+
+    setIsJoining(true);
+    setError('');
 
     try {
       const session = await joinDropSession(inputCode);
-      const conn = peerRef.current.connect(session.hostPeerId);
+      
+      if (!session?.hostPeerId) {
+        throw new Error('Invalid session');
+      }
+
+      const conn = peerRef.current.connect(session.hostPeerId, {
+        reliable: true,
+      });
+
       handleConnection(conn);
       setCode(inputCode);
     } catch (err) {
-      alert(err.message || 'Invalid code');
+      console.error(err);
+      setError(err.message || 'Invalid or expired code');
+      setIsJoining(false);
     }
   };
 
@@ -109,11 +158,13 @@ const EchoDrop = ({ onClose }) => {
     files.forEach((file) => {
       const reader = new FileReader();
       reader.onload = () => {
-        connRef.current.send({
-          type: 'photo',
-          url: reader.result,
-          fromName: profiles[user.uid]?.name || 'User',
-        });
+        if (connRef.current && connRef.current.open) {
+          connRef.current.send({
+            type: 'photo',
+            url: reader.result,
+            fromName: profiles[user.uid]?.name || 'User',
+          });
+        }
       };
       reader.readAsDataURL(file);
     });
@@ -121,7 +172,7 @@ const EchoDrop = ({ onClose }) => {
     setTimeout(() => {
       setIsSending(false);
       setStatus('Photo sent!');
-    }, 800);
+    }, 600);
   };
 
   const saveToGallery = () => {
@@ -129,7 +180,9 @@ const EchoDrop = ({ onClose }) => {
     const link = document.createElement('a');
     link.href = receivedPhoto.url;
     link.download = `echo-drop-${Date.now()}.jpg`;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
   };
 
   return (
@@ -146,6 +199,8 @@ const EchoDrop = ({ onClose }) => {
             <h1>Echo Drop</h1>
             <p>Share photos instantly with nearby friends</p>
 
+            {error && <div className="drop-error">{error}</div>}
+
             <button className="drop-btn primary" onClick={startHosting}>
               Create Drop
             </button>
@@ -155,13 +210,18 @@ const EchoDrop = ({ onClose }) => {
             <div className="join-section">
               <input
                 type="text"
+                inputMode="numeric"
                 maxLength={6}
                 placeholder="000000"
                 value={inputCode}
-                onChange={(e) => setInputCode(e.target.value.replace(/\D/g, ''))}
+                onChange={(e) => setInputCode(e.target.value.replace(/\D/g, '').slice(0, 6))}
               />
-              <button className="drop-btn secondary" onClick={joinSession}>
-                Join
+              <button
+                className="drop-btn secondary"
+                onClick={joinSession}
+                disabled={isJoining || inputCode.length !== 6}
+              >
+                {isJoining ? '...' : 'Join'}
               </button>
             </div>
           </div>
@@ -177,6 +237,7 @@ const EchoDrop = ({ onClose }) => {
             </div>
             <h2>Waiting for connection</h2>
             <p>Share this code with the other person</p>
+            {error && <div className="drop-error">{error}</div>}
             <button className="drop-btn ghost" onClick={() => setMode('home')}>
               Cancel
             </button>
@@ -189,6 +250,7 @@ const EchoDrop = ({ onClose }) => {
             <div className="connected-icon">✨</div>
             <h2>Connected!</h2>
             <p>{status}</p>
+            {error && <div className="drop-error">{error}</div>}
 
             <button
               className="drop-btn primary big"
