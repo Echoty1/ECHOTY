@@ -13,7 +13,7 @@ import Home from './components/pages/Home/Home';
 import Chats from './components/pages/Chats/Chats';
 import ChatView from './components/pages/Chat/ChatView';
 import Profile from './components/pages/Profile/Profile';
-import UserProfile from './components/pages/UserProfile/UserProfile'; // ✅ NEW IMPORT
+import UserProfile from './components/pages/UserProfile/UserProfile';
 import Other from './components/pages/Other/Other';
 import Bookmarks from './components/pages/Other/Bookmarks';
 import DesktopInstallPrompt from './components/common/DesktopInstallPrompt';
@@ -38,24 +38,22 @@ import AdminPanel from './components/pages/Admin/AdminPanel';
 import BanScreen from './components/BanScreen/BanScreen';
 import { APP_VERSION } from './version';
 import Legal from './components/pages/Other/Legal';
+import EchoDropPage from './components/pages/EchoDrop/EchoDropPage'; // ← ADDED
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 function ScrollToTop() {
   const { pathname } = useLocation();
-
   useEffect(() => {
     const container = document.getElementById('main-content');
     if (container) container.scrollTop = 0;
     window.scrollTo(0, 0);
   }, [pathname]);
-
   return null;
 }
 
 function LoadingScreen() {
   const isMobile = window.innerWidth <= 480;
-
   return (
     <div
       style={{
@@ -73,7 +71,6 @@ function LoadingScreen() {
       <div style={{ position: 'absolute', width: '240px', height: '240px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.3, animation: 'echoRingPulse 2.5s ease-out infinite' }} />
       <div style={{ position: 'absolute', width: '320px', height: '320px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.2, animation: 'echoRingPulse 3s ease-out infinite 0.5s' }} />
       <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.1, animation: 'echoRingPulse 3.5s ease-out infinite 1s' }} />
-
       <div style={{ width: '100px', height: '100px', marginBottom: '20px', animation: 'echoFloat 2.5s ease-in-out infinite', position: 'relative', zIndex: 2 }}>
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" style={{ width: '100%', height: '100%' }}>
           <rect width="512" height="512" rx="96" fill="var(--bg-secondary)" />
@@ -82,7 +79,6 @@ function LoadingScreen() {
           <path d="M 370 200 A 90 90 0 0 1 370 312" stroke="#EC4899" strokeWidth="32" strokeOpacity="0.6" fill="none" strokeLinecap="round" />
         </svg>
       </div>
-
       <div style={{ fontSize: isMobile ? '32px' : '40px', fontWeight: 900, background: 'linear-gradient(135deg, #6C3CE1, #EC4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: isMobile ? '4px' : '8px', zIndex: 2, fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>
         ECHO
       </div>
@@ -114,7 +110,8 @@ function AppContent() {
       pathname === '/chats' ||
       pathname === '/communities' ||
       pathname === '/shop' ||
-      pathname === '/other');
+      pathname === '/other' ||
+      pathname === '/echodrop'); // ← also added here so Support button shows
 
   useEffect(() => {
     const src = 'https://myhappr.com/widget.js';
@@ -152,7 +149,6 @@ function AppContent() {
     const key = 'echo_v';
     const saved = localStorage.getItem(key);
     const current = String(APP_VERSION);
-
     if (saved && saved !== current) {
       localStorage.setItem(key, current);
       window.location.reload();
@@ -282,7 +278,6 @@ function AppContent() {
   if (!showLoading && user && banInfo.isBanned) {
     return <BanScreen />;
   }
-
   if (showLoading) return <LoadingScreen />;
   if (!user) return <Login />;
 
@@ -311,7 +306,7 @@ function AppContent() {
           <Route path="/chats" element={<Chats />} />
           <Route path="/chat/:userId" element={<ChatView />} />
           <Route path="/profile" element={<Profile />} />
-          <Route path="/user/:uid" element={<UserProfile />} /> {/* ✅ NEW ROUTE ADDED */}
+          <Route path="/user/:uid" element={<UserProfile />} />
           <Route path="/other" element={<Other />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/bookmarks" element={<Bookmarks />} />
@@ -321,19 +316,17 @@ function AppContent() {
           <Route path="/shop" element={<Shop />} />
           <Route path="/legal" element={<Legal />} />
           <Route path="/communities" element={<Communities />} />
+          <Route path="/echodrop" element={<EchoDropPage />} /> {/* ← ADDED */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
       <BottomNav />
-
       {showUpdatePopup && (
         <UpdatePopup currentVersion={appVersion} onClose={() => setShowUpdatePopup(false)} />
       )}
-
       {showInstallPopup && (
         <InstallPopup playStoreUrl={playStoreUrl} onClose={handleInstallPopupClose} />
       )}
-
       <InstallBanner playStoreUrl={playStoreUrl} />
     </>
   );
