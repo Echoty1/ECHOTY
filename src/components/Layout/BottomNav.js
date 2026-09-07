@@ -38,7 +38,6 @@ const BottomNav = () => {
   const { startVideoCall } = useCall();
   const location = useLocation();
   const navigate = useNavigate();
-
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
   const [lastChatPreview, setLastChatPreview] = useState('');
   const [communityUnread, setCommunityUnread] = useState(0);
@@ -58,7 +57,6 @@ const BottomNav = () => {
   const [callingUid, setCallingUid] = useState(null);
   const [leavingId, setLeavingId] = useState(null);
   const [onlineError, setOnlineError] = useState('');
-
   const swipeStartX = useRef(null);
   const swipeStartY = useRef(null);
   const swiping = useRef(false);
@@ -70,9 +68,9 @@ const BottomNav = () => {
   const presenceRef = useRef({});
   const contactIdsRef = useRef([]);
   const videoRef = useRef(null);
-
   const isSupport = user?.uid === SUPPORT_UID;
 
+  // ====================== UPDATED TABS ======================
   const baseTabs = useMemo(() => {
     if (isSupport) {
       return [
@@ -80,6 +78,7 @@ const BottomNav = () => {
         { to: '/control', label: 'Control', icon: 'fa-sliders-h', id: 'control' },
         { to: '/chats', label: 'Chats', icon: 'fa-comment-dots', id: 'chats' },
         { to: '/communities', label: 'Communities', icon: 'fa-users', id: 'communities' },
+        { to: '/echodrop', label: 'Drop', icon: 'fa-bolt', id: 'echodrop' }, // ← NEW
         { to: '/shop', label: 'Shop', icon: 'fa-store', id: 'shop' },
         { to: '/other', label: 'Other', icon: 'fa-ellipsis-h', id: 'other' },
       ];
@@ -88,13 +87,14 @@ const BottomNav = () => {
       { to: '/', label: 'Home', icon: 'fa-house', id: 'home' },
       { to: '/chats', label: 'Chats', icon: 'fa-comment-dots', id: 'chats' },
       { to: '/communities', label: 'Communities', icon: 'fa-users', id: 'communities' },
+      { to: '/echodrop', label: 'Drop', icon: 'fa-bolt', id: 'echodrop' }, // ← NEW
       { to: '/shop', label: 'Shop', icon: 'fa-store', id: 'shop' },
       { to: '/other', label: 'Other', icon: 'fa-ellipsis-h', id: 'other' },
     ];
   }, [isSupport]);
+  // ==========================================================
 
   const orderedTabs = baseTabs;
-
   const activeIndex = useMemo(() => {
     const idx = orderedTabs.findIndex((t) => {
       if (t.to === '/') return location.pathname === '/';
@@ -109,7 +109,6 @@ const BottomNav = () => {
   const rightTabs = sideTabs.slice(Math.ceil(sideTabs.length / 2));
   const hasPulse = unreadChatsCount > 0 || onlineCount > 0;
 
-  // Keep the wave video playing
   useEffect(() => {
     const el = videoRef.current;
     if (!el) return;
@@ -156,6 +155,7 @@ const BottomNav = () => {
   const [liveHidden, setLiveHidden] = useState(
     typeof document !== 'undefined' && document.body.classList.contains('echo-hide-bottom-nav')
   );
+
   useEffect(() => {
     const check = () => {
       const bodyHide = document.body.classList.contains('echo-hide-bottom-nav');
@@ -499,7 +499,6 @@ const BottomNav = () => {
   };
 
   const status = getStatus();
-
   const initials = (name) => {
     const p = String(name || 'U').trim().split(/\s+/);
     return ((p[0]?.[0] || 'U') + (p[1]?.[0] || '')).toUpperCase();
@@ -536,7 +535,6 @@ const BottomNav = () => {
       onMouseDown={onNavPointerDown}
       onMouseUp={onNavPointerUp}
     >
-      {/* Moving wave video background */}
       <div className="echo-v-video" aria-hidden="true">
         <video
           ref={videoRef}
@@ -555,9 +553,9 @@ const BottomNav = () => {
           <span>{lastChatPreview}</span>
         </div>
       )}
+
       {defaultToast && <div className="echo-v-toast">{defaultToast}</div>}
 
-      {/* Online callers sheet */}
       {onlineSheetOpen && (
         <div className="echo-online-wrap">
           <div className="echo-online-bg" onClick={() => setOnlineSheetOpen(false)} />
@@ -637,6 +635,7 @@ const BottomNav = () => {
               {[
                 { label: 'Chats', icon: 'fa-comment-dots', to: '/chats' },
                 { label: 'Communities', icon: 'fa-users', to: '/communities' },
+                { label: 'Drop', icon: 'fa-bolt', to: '/echodrop' },
                 { label: 'Shop', icon: 'fa-store', to: '/shop' },
                 { label: 'Online', icon: 'fa-video', action: openOnlineSheet },
               ].map((a) => (
