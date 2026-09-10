@@ -1,34 +1,27 @@
 {
   "expo": {
-    "name": "EchoNative",
-    "slug": "echonative",
+    "name": "ECHO Login Debug",
+    "slug": "echonative-login",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
     "splash": {
-      "image": "./assets/splash.png",
       "resizeMode": "contain",
       "backgroundColor": "#0A0A0F"
     },
-    "assetBundlePatterns": [
-      "**/*"
-    ],
+    "assetBundlePatterns": ["**/*"],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.echoty.app",
-      "googleServicesFile": "./google-services.json"
+      "bundleIdentifier": "com.echoty.app.debug"
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0A0A0F"
       },
-      "package": "com.echoty.app",
-      "googleServicesFile": "./google-services.json"
+      "package": "com.echoty.app.debug"
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "bundler": "metro"
     }
   }
 }
