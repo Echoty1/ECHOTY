@@ -4,7 +4,7 @@ export function friendlyAuthError(err) {
 
   const map = {
     'auth/network-request-failed':
-      'Sign-in could not reach Google. Turn off the phone/responsive toolbar in DevTools, disable ad blockers for localhost, then try again in a normal tab.',
+      'Sign-in could not reach Google. Check your connection, disable ad blockers for this site, then try again.',
     'auth/too-many-requests':
       'Too many tries. Wait a minute, then try again.',
     'auth/user-disabled':
@@ -43,9 +43,21 @@ export function friendlyAuthError(err) {
       'Sign-in hit a temporary problem. Wait a few seconds and try again.',
     'auth/no-redirect-result':
       '',
+    'auth/developer-error':
+      raw ||
+      'Google Sign-In is not configured for this app build. Add SHA-1 in Firebase Console and rebuild.',
+    'auth/no-id-token':
+      raw ||
+      'Google did not return a token. Check SHA-1 fingerprints in Firebase Console.',
   };
 
   if (map[code]) return map[code];
+
+  // Play Services / One Tap developer error (phone)
+  if (/28444|DEVELOPER_ERROR|Developer console is not set up|ApiException:\s*10/i.test(raw)) {
+    return 'Google Sign-In is not set up for this APK (error 10). Add the app SHA-1 in Firebase Console → Project settings → Android, replace google-services.json, rebuild.';
+  }
+
   if (/network|offline|Failed to fetch|ERR_/i.test(raw)) {
     return 'We cannot reach the internet right now. Check your connection and try again.';
   }

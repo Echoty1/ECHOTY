@@ -14,7 +14,7 @@ import { auth, db } from '../../services/firebase';
 import { ref, set, get, push, serverTimestamp } from 'firebase/database';
 import { friendlyAuthError } from '../../utils/authErrors';
 import { armEmailGate } from '../../utils/emailGate';
-import { isNativeApp, signInWithGoogle, finishWebRedirectIfAny } from '../../utils/nativeAuth';
+import { isNativeApp, signInWithGoogle } from '../../utils/nativeAuth';
 
 const DEMO_EMAIL = 'demo@echoty.xyz';
 const DEMO_PASSWORD = 'demodemo';
@@ -64,6 +64,8 @@ const Login = () => {
   const [awaitingVerify, setAwaitingVerify] = useState(false);
   const native = isNativeApp();
 
+  // Unregister SW on login page only. Do NOT call getRedirectResult on load
+  // (that was showing false connection errors on web).
   useEffect(() => {
     if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
       navigator.serviceWorker
@@ -73,18 +75,6 @@ const Login = () => {
         })
         .catch(() => {});
     }
-
-    // Web only: finish popup/redirect if any
-    let cancelled = false;
-    finishWebRedirectIfAny()
-      .then(() => {})
-      .catch((err) => {
-        if (cancelled) return;
-        setError(friendlyAuthError(err));
-      });
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   const handleGoogle = async () => {

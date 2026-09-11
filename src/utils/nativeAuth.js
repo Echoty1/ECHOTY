@@ -1,17 +1,18 @@
 /**
- * Native (Capacitor) vs web auth helpers.
- * On phone/APK: use @capacitor-firebase/authentication for Google.
- * After success, Firebase JS SDK shares the same session → rest of app is unchanged.
+ * Web: same as before → signInWithPopup only (do not touch redirect on load).
+ * Phone (Capacitor): @capacitor-firebase/authentication → idToken → JS SDK.
  */
 import { Capacitor } from '@capacitor/core';
 import {
   GoogleAuthProvider,
   signInWithCredential,
   signInWithPopup,
-  signInWithRedirect,
-  getRedirectResult,
 } from 'firebase/auth';
 import { auth } from '../services/firebase';
+
+/** Web client ID from google-services.json (client_type: 3) */
+export const GOOGLE_WEB_CLIENT_ID =
+  '506340369217-pqibe643qj110b2irc6m7vfp5fmt16he.apps.googleusercontent.com';
 
 export const isNativeApp = () => {
   try {
@@ -22,59 +23,87 @@ export const isNativeApp = () => {
 };
 
 /**
- * Google sign-in that works on phone (native plugin) and on desktop (popup).
- * Returns Firebase UserCredential-like shape via JS SDK after credential exchange.
+ * Google sign-in.
+ * - Browser / PWA: Firebase popup (unchanged behaviour).
+ * - Capacitor APK: native Google UI, then link into the same Firebase JS session.
  */
 export async function signInWithGoogle() {
   const provider = new GoogleAuthProvider();
   provider.setCustomParameters({ prompt: 'select_account' });
 
+  // ── Web / desktop / mobile browser ─────────────────────────────
   if (!isNativeApp()) {
-    // Browser / PWA
     return signInWithPopup(auth, provider);
   }
 
-  // ── Capacitor Android / iOS ─────────────────────────────────────
-  // Native Google UI → idToken → sign into the same Firebase JS auth instance
-  // so AuthContext / onAuthStateChanged keep working as today.
+  // ── Capacitor Android / iOS ────────────────────────────────────
   const { FirebaseAuthentication } = await import(
     '@capacitor-firebase/authentication'
   );
 
-  // Optional: clear any stale native session so account picker shows
   try {
     await FirebaseAuthentication.signOut();
   } catch (_) {}
 
-  const result = await FirebaseAuthentication.signInWithGoogle();
-  const idToken = result?.credential?.idToken;
-  if (!idToken) {
-    throw Object.assign(new Error('No Google idToken from native sign-in'), {
-      code: 'auth/no-id-token',
+  let result;
+  try {
+    result = await FirebaseAuthentication.signInWithGoogle({
+      mode: 'login',
     });
+  } catch (err) {
+    throw normalizeNativeGoogleError(err);
+  }
+
+  const idToken =
+    result?.credential?.idToken ||
+    result?.credential?.id_token ||
+    null;
+
+  if (!idToken) {
+    throw Object.assign(
+      new Error(
+        'Google did not return a token. In Firebase Console → Project settings → Your apps → Android, add the SHA-1 of your debug and release keystores, then download a fresh google-services.json.'
+      ),
+      { code: 'auth/no-id-token' }
+    );
   }
 
   const credential = GoogleAuthProvider.credential(idToken);
   return signInWithCredential(auth, credential);
 }
 
-/** Call once on Login mount (web only) to finish a pending redirect flow. */
-export async function finishWebRedirectIfAny() {
-  if (isNativeApp()) return null;
-  try {
-    return await getRedirectResult(auth);
-  } catch (err) {
-    const code = err?.code || '';
-    if (code === 'auth/no-redirect-result' || code === 'auth/invalid-credential') {
-      return null;
-    }
-    throw err;
-  }
-}
+/** Map Play Services / One Tap codes to readable messages */
+function normalizeNativeGoogleError(err) {
+  const raw = String(err?.message || err || '');
+  const code = String(err?.code || '');
 
-/** Legacy redirect path — prefer signInWithGoogle() instead. */
-export async function signInWithGoogleRedirect() {
-  const provider = new GoogleAuthProvider();
-  provider.setCustomParameters({ prompt: 'select_account' });
-  return signInWithRedirect(auth, provider);
+  if (
+    /28444|DEVELOPER_ERROR|Developer console is not set up|error code: 10|:\s*10\b|ApiException:\s*10/i.test(
+      raw
+    ) ||
+    code === '10' ||
+    code === 'DEVELOPER_ERROR'
+  ) {
+    return Object.assign(
+      new Error(
+        'Google Sign-In is not configured for this app build (error 10). Add this app’s SHA-1 fingerprint in Firebase Console → Project settings → Android app, download a new google-services.json into android/app/, then rebuild the APK.'
+      ),
+      { code: 'auth/developer-error' }
+    );
+  }
+
+  if (/12501|SIGN_IN_CANCELLED|canceled|cancelled/i.test(raw + code)) {
+    return Object.assign(new Error('Google sign-in was cancelled.'), {
+      code: 'auth/popup-closed-by-user',
+    });
+  }
+
+  if (/7\b|NETWORK_ERROR|network/i.test(raw)) {
+    return Object.assign(
+      new Error('Network error during Google sign-in. Check connection and try again.'),
+      { code: 'auth/network-request-failed' }
+    );
+  }
+
+  return err instanceof Error ? err : new Error(raw || 'Google sign-in failed');
 }
