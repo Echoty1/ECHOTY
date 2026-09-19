@@ -529,18 +529,19 @@
   font-size: 16px;
 }
 
-/* ✨ HERO RESULT CARD (New Feature) */
+/* ✨ HERO RESULT CARD (ECHO THEME) */
 .hero-result-card {
   position: relative;
   width: 100%;
-  max-width: 500px; /* Prevents it from stretching too wide */
-  margin: 0 auto 16px auto; /* Centers the card */
-  background: linear-gradient(135deg, #450a0a 0%, #7f1d1d 50%, #450a0a 100%);
-  border-radius: 20px;
-  padding: 24px 20px;
+  max-width: 500px;
+  margin: 0 auto 16px auto;
+  /* Purple gradient matching the ECHO app theme */
+  background: linear-gradient(135deg, #4c1d95 0%, #6C3CE1 50%, #2e1065 100%);
+  border-radius: 24px;
+  padding: 28px 20px;
   overflow: hidden;
-  border: 1px solid rgba(255, 80, 80, 0.3);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(167, 139, 250, 0.4);
+  box-shadow: 0 10px 30px rgba(108, 60, 225, 0.25);
   cursor: pointer;
   animation: heroPop 0.3s ease-out;
 }
@@ -556,7 +557,8 @@
   left: -50%;
   width: 200%;
   height: 200%;
-  background: radial-gradient(circle, rgba(255,200,0,0.15) 0%, transparent 60%);
+  /* Purple glow instead of gold */
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.25) 0%, transparent 60%);
   animation: heroGlow 4s ease-in-out infinite alternate;
   pointer-events: none;
 }
@@ -577,11 +579,12 @@
 
 .hero-avatar-wrapper {
   position: relative;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
   border-radius: 50%;
   padding: 4px;
-  background: linear-gradient(135deg, #fbbf24, #ef4444);
-  box-shadow: 0 0 20px rgba(251, 191, 36, 0.4);
+  /* Purple gradient ring */
+  background: linear-gradient(135deg, #a78bfa, #8b5cf6);
+  box-shadow: 0 0 25px rgba(167, 139, 250, 0.6);
 }
 
 .hero-avatar-wrapper .presence-dot {
@@ -590,6 +593,7 @@
   width: 16px;
   height: 16px;
   border-width: 3px;
+  border-color: #4c1d95; /* Match card background */
 }
 
 .hero-info {
@@ -597,36 +601,36 @@
 }
 
 .hero-name {
-  font-size: 24px;
+  font-size: 26px;
   font-weight: 800;
   color: #ffffff;
-  margin: 0 0 4px 0;
+  margin: 0 0 6px 0;
   letter-spacing: -0.5px;
-  text-shadow: 0 2px 10px rgba(0,0,0,0.5);
+  text-shadow: 0 2px 10px rgba(0,0,0,0.3);
 }
 
 .hero-meta {
   display: flex;
   justify-content: center;
   gap: 8px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   flex-wrap: wrap;
 }
 
 .hero-badge {
   font-size: 12px;
   font-weight: 600;
-  color: #fca5a5;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 4px 10px;
+  color: #e9d5ff; /* Soft purple text */
+  background: rgba(255, 255, 255, 0.15);
+  padding: 4px 12px;
   border-radius: 12px;
   backdrop-filter: blur(4px);
 }
 
 .hero-bio {
   font-size: 14px;
-  color: #fecaca;
-  margin: 0 0 16px 0;
+  color: #d8b4fe; /* Lighter purple text */
+  margin: 0 0 20px 0;
   max-width: 90%;
   margin-left: auto;
   margin-right: auto;
@@ -635,20 +639,20 @@
 
 .hero-action-btn {
   background: #ffffff;
-  color: #7f1d1d;
+  color: #6C3CE1; /* ECHO purple text */
   border: none;
-  border-radius: 30px; /* Makes it fully pill-shaped */
-  padding: 10px 24px; /* Slightly smaller padding */
-  font-size: 14px;
+  border-radius: 30px;
+  padding: 12px 28px;
+  font-size: 15px;
   font-weight: 800;
   cursor: pointer;
-  box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 15px rgba(0,0,0,0.2);
   transition: transform 0.2s, background 0.2s;
 }
 
 .hero-action-btn:hover {
   transform: scale(1.05);
-  background: #fef2f2;
+  background: #f3e8ff;
 }
 
 .hero-action-btn:active {
