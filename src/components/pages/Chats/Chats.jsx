@@ -624,6 +624,36 @@ const Chats = () => {
   const safeResults = Array.isArray(results) ? results : [];
   const isSearchActive = searchQuery.trim().length > 0;
 
+  // ✨ HERO SEARCH LOGIC: Find best match
+  const trimmedSearch = searchQuery.trim().toLowerCase();
+  let topResult = null;
+  let otherResults = safeResults;
+
+  if (safeResults.length > 0 && trimmedSearch.length > 0) {
+    
+    // Helper to clean up names for comparison (handles hidden spaces)
+    const getCleanName = (p) => (p.name || '').trim().toLowerCase();
+    const getCleanUsername = (p) => (p.username || '').trim().toLowerCase();
+
+    // Priority 1: Exact match on Name OR Username
+    let bestMatch = safeResults.find(
+      (p) => getCleanName(p) === trimmedSearch || getCleanUsername(p) === trimmedSearch
+    );
+
+    // Priority 2: Name or Username CONTAINS the search word 
+    if (!bestMatch) {
+      bestMatch = safeResults.find(
+        (p) => getCleanName(p).includes(trimmedSearch) || getCleanUsername(p).includes(trimmedSearch)
+      );
+    }
+
+    // If we found a match, show them in the Hero Card
+    if (bestMatch) {
+      topResult = bestMatch;
+      otherResults = safeResults.filter((p) => p.id !== bestMatch.id);
+    }
+  }
+
   return (
     <>
       <SEO
@@ -651,8 +681,41 @@ const Chats = () => {
 
         {isSearchActive ? (
           <div className="recent-chats search-results-section">
+            {/* ✨ HERO RESULT CARD */}
+            {!isSearching && topResult && (
+              <div 
+                className="hero-result-card" 
+                onClick={() => startChat(topResult)}
+              >
+                <div className="hero-bg-glow" />
+                <div className="hero-content">
+                  <div className="hero-avatar-wrapper">
+                    <Avatar src={topResult.avatar} name={topResult.name} size={90} />
+                    {!!onlineUsers[topResult.id] && <span className="presence-dot online" />}
+                  </div>
+                  <div className="hero-info">
+                    <h2 className="hero-name">{topResult.name}</h2>
+                    <div className="hero-meta">
+                      <span className="hero-badge">
+                        {onlineUsers[topResult.id] ? '🟢 Online' : '⚫ Offline'}
+                      </span>
+                      {topResult.location && (
+                        <span className="hero-badge">📍 {topResult.location}</span>
+                      )}
+                    </div>
+                    <p className="hero-bio">
+                      {topResult.bio || topResult.status || 'Available on ECHO'}
+                    </p>
+                  </div>
+                  <button className="hero-action-btn" onClick={(e) => { e.stopPropagation(); startChat(topResult); }}>
+                    Join the cheer 🎉
+                  </button>
+                </div>
+              </div>
+            )}
+
             <div className="section-header">
-              <span>Search Results {!isSearching && `(${safeResults.length})`}</span>
+              <span>{topResult ? 'Other Results' : 'Search Results'} {!isSearching && `(${topResult ? otherResults.length : safeResults.length})`}</span>
             </div>
             {isSearching ? (
               <div className="search-skeleton-wrapper">
@@ -660,8 +723,8 @@ const Chats = () => {
                 <SkeletonChatItem />
                 <SkeletonChatItem />
               </div>
-            ) : safeResults.length > 0 ? (
-              safeResults.map((person) => {
+            ) : otherResults.length > 0 ? (
+              otherResults.map((person) => {
                 if (!person) return null;
                 const isOnline = !!onlineUsers[person.id];
                 return (
@@ -699,25 +762,27 @@ const Chats = () => {
                   </div>
                 );
               })
-            ) : isDemoUser ? (
-              <div className="demo-search-empty">
-                <div className="demo-search-icon">
-                  <i className="fas fa-user-plus" />
+            ) : !topResult && safeResults.length === 0 ? (
+              isDemoUser ? (
+                <div className="demo-search-empty">
+                  <div className="demo-search-icon">
+                    <i className="fas fa-user-plus" />
+                  </div>
+                  <p className="demo-search-title">Create an account to connect with others</p>
+                  <span className="demo-search-subtitle">
+                    Sign up to chat with people around the world
+                  </span>
                 </div>
-                <p className="demo-search-title">Create an account to connect with others</p>
-                <span className="demo-search-subtitle">
-                  Sign up to chat with people around the world
-                </span>
-              </div>
-            ) : (
-              <div className="no-chats-premium">
-                <div className="no-chats-icon-wrapper"><i className="fas fa-user-slash" /></div>
-                <p className="no-chats-title">No matching users found</p>
-                <span className="no-chats-subtitle">
-                  Try searching for a different name, username, or location
-                </span>
-              </div>
-            )}
+              ) : (
+                <div className="no-chats-premium">
+                  <div className="no-chats-icon-wrapper"><i className="fas fa-user-slash" /></div>
+                  <p className="no-chats-title">No matching users found</p>
+                  <span className="no-chats-subtitle">
+                    Try searching for a different name, username, or location
+                  </span>
+                </div>
+              )
+            ) : null}
           </div>
         ) : (
           <div className="recent-chats">
