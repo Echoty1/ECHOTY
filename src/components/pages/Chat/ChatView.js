@@ -387,7 +387,7 @@ const ChatView = () => {
     setIsNearBottom(isNear);
   }, []);
 
-  // ─── TYPING HANDLERS (updated) ───────────────────────────────
+  // ─── TYPING HANDLERS ───────────────────────────────
   const handleTyping = useCallback(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -1142,12 +1142,62 @@ const ChatView = () => {
         .message-receipt.delivered { color: rgba(255,255,255,0.75); }
         .message-receipt.read { color: #60A5FA; }
 
-        /* Typing indicator dots */
-        .typing-indicator-container { display: flex; align-items: center; gap: 4px; padding: 8px 14px; background: var(--bg-input); border-radius: 14px; align-self: flex-start; max-width: 70px; margin: 4px 0 4px 8px; }
-        .typing-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--text-secondary); animation: typingBounce 1.2s infinite ease-in-out; }
-        .typing-dot:nth-child(2) { animation-delay: 0.15s; }
-        .typing-dot:nth-child(3) { animation-delay: 0.3s; }
-        @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+        /* ── TYPING INDICATOR — highly visible on any wallpaper ── */
+        .typing-indicator-container {
+          display: inline-flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 16px;
+          border-radius: 20px 20px 20px 4px;
+          align-self: flex-start;
+          max-width: 240px;
+          margin: 6px 0 8px 12px;
+          background: rgba(20, 15, 35, 0.85);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          border: 1px solid rgba(255, 255, 255, 0.15);
+          box-shadow:
+            0 8px 24px rgba(0, 0, 0, 0.45),
+            0 0 0 1px rgba(108, 60, 225, 0.35),
+            0 0 24px rgba(108, 60, 225, 0.25);
+          animation: typingContainerIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        html.theme-light .typing-indicator-container {
+          background: rgba(255, 255, 255, 0.94);
+          border: 1px solid rgba(0, 0, 0, 0.08);
+          box-shadow:
+            0 8px 24px rgba(0, 0, 0, 0.15),
+            0 0 0 1px rgba(108, 60, 225, 0.35),
+            0 0 24px rgba(108, 60, 225, 0.15);
+        }
+        .typing-indicator-label {
+          font-size: 12px;
+          font-weight: 600;
+          color: #ffffff;
+          letter-spacing: 0.2px;
+          white-space: nowrap;
+        }
+        html.theme-light .typing-indicator-label { color: #1a1a2e; }
+        .typing-dots-row { display: inline-flex; align-items: center; gap: 4px; }
+        .typing-dot {
+          display: inline-block;
+          width: 8px;
+          height: 8px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #A78BFA, #F472B6);
+          box-shadow: 0 0 8px rgba(167, 139, 250, 0.65);
+          animation: typingBounce 1.4s infinite ease-in-out;
+        }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingBounce {
+          0%, 60%, 100% { transform: translateY(0) scale(1); opacity: 0.55; }
+          30% { transform: translateY(-5px) scale(1.15); opacity: 1; }
+        }
+        @keyframes typingContainerIn {
+          0% { opacity: 0; transform: translateY(6px) scale(0.9); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
       `}</style>
 
       <SEO title={`Chat with ${displayName}`} description={`Chat with ${displayName} on ECHO.`} />
@@ -1158,7 +1208,18 @@ const ChatView = () => {
           <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll} style={wallpaperStyle}>
             {loadingMessages && messages.length === 0 ? (<div className="chat-skeleton-list"><SkeletonMessage /><SkeletonMessage /><SkeletonMessage /></div>) : messages.length === 0 ? (<div className="empty-chat-state"><i className="fas fa-paper-plane empty-icon" /><p>No messages yet. Say hello!</p></div>) : (sortMessages(messages).map((msg) => renderMessage(msg)))}
             {isAILoading && (<div className="message-bubble partner"><div className="typing-indicator"><span></span><span></span><span></span></div></div>)}
-            {partnerIsTyping && (<div className="typing-indicator-container"><span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" /></div>)}
+            {partnerIsTyping && (
+              <div className="typing-indicator-container">
+                <div className="typing-dots-row">
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                  <span className="typing-dot" />
+                </div>
+                <span className="typing-indicator-label">
+                  {displayName.split(' ')[0]} is typing
+                </span>
+              </div>
+            )}
             <div ref={messagesEndRef} />
           </div>
         </VideoAudioProvider>
@@ -1238,5 +1299,3 @@ const ChatView = () => {
     </>
   );
 };
-
-export default ChatView;
