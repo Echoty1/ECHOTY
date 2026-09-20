@@ -1280,7 +1280,7 @@ const ChatView = () => {
         <EditMediaCaptionModal isOpen={!!editingMediaMessage} onClose={() => setEditingMediaMessage(null)} currentCaption={editingMediaMessage?.caption || ''} mediaType={editingMediaMessage?.mediaType} onSave={saveEditedMediaCaption} />
 
         {mediaPreview && (<MediaPreview src={mediaPreview.src} type={mediaPreview.type} alt={mediaPreview.alt} onClose={() => setMediaPreview(null)} />)}
-        {videoPreview && (<CustomVideoPlayer src={videoPreview.src} onClose={() => setVideoPreview(null)} />)}
+        {videoPreview && (<CustomVideoPlayer src={videoPreview.src} onClose={() => setVideoPreview(null)} />)} 
 
         {showWallpaperPicker && (
           <WallpaperPicker
