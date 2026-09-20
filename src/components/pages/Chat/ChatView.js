@@ -1140,16 +1140,16 @@ const ChatView = () => {
         .message-receipt.delivered { color: rgba(255,255,255,0.75); }
         .message-receipt.read { color: #60A5FA; }
 
-        /* ── TYPING INDICATOR — highly visible on any wallpaper ── */
+        /* ── TYPING INDICATOR — ECHOmoji version, readable on any wallpaper ── */
         .typing-indicator-container {
           display: inline-flex;
           align-items: center;
           gap: 10px;
-          padding: 10px 16px;
-          border-radius: 20px 20px 20px 4px;
+          padding: 8px 14px 8px 8px;
+          border-radius: 22px 22px 22px 4px;
           align-self: flex-start;
-          max-width: 240px;
-          margin: 6px 0 8px 12px;
+          max-width: 260px;
+          margin: 6px 0 10px 12px;
           background: rgba(20, 15, 35, 0.85);
           backdrop-filter: blur(14px);
           -webkit-backdrop-filter: blur(14px);
@@ -1168,15 +1168,29 @@ const ChatView = () => {
             0 0 0 1px rgba(108, 60, 225, 0.35),
             0 0 24px rgba(108, 60, 225, 0.15);
         }
-        .typing-indicator-label {
-          font-size: 12px;
-          font-weight: 600;
-          color: #ffffff;
-          letter-spacing: 0.2px;
-          white-space: nowrap;
+
+        /* ECHOmoji avatar inside the typing bubble */
+        .typing-echomoji-wrapper {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 44px;
+          height: 44px;
+          border-radius: 50%;
+          overflow: hidden;
+          background: linear-gradient(135deg, rgba(108, 60, 225, 0.25), rgba(236, 72, 153, 0.2));
+          box-shadow: 0 0 0 2px rgba(108, 60, 225, 0.5), 0 0 12px rgba(108, 60, 225, 0.4);
+          animation: typingEchoBob 1.4s ease-in-out infinite;
+          flex-shrink: 0;
         }
-        html.theme-light .typing-indicator-label { color: #1a1a2e; }
-        .typing-dots-row { display: inline-flex; align-items: center; gap: 4px; }
+
+        @keyframes typingEchoBob {
+          0%, 100% { transform: translateY(0) rotate(0deg); }
+          25%      { transform: translateY(-2px) rotate(-2deg); }
+          75%      { transform: translateY(-2px) rotate(2deg); }
+        }
+
+        .typing-dots-row { display: inline-flex; align-items: center; gap: 5px; }
         .typing-dot {
           display: inline-block;
           width: 8px;
@@ -1208,14 +1222,20 @@ const ChatView = () => {
             {isAILoading && (<div className="message-bubble partner"><div className="typing-indicator"><span></span><span></span><span></span></div></div>)}
             {partnerIsTyping && (
               <div className="typing-indicator-container">
+                <div className="typing-echomoji-wrapper">
+                  <ECHOMOJI
+                    mood={partnerProfile?.mood || 'happy'}
+                    skin={partnerProfile?.activeSkin ? getSkinById(partnerProfile.activeSkin) : null}
+                    size={44}
+                    interactive={false}
+                    animated={false}
+                  />
+                </div>
                 <div className="typing-dots-row">
                   <span className="typing-dot" />
                   <span className="typing-dot" />
                   <span className="typing-dot" />
                 </div>
-                <span className="typing-indicator-label">
-                  {displayName.split(' ')[0]} is typing
-                </span>
               </div>
             )}
             <div ref={messagesEndRef} />
