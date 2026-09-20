@@ -1,168 +1,228 @@
 // src/constants/echomoji.js
+
 export const EXPRESSIONS = {
   neutral: {
-    eyes: ['M12 18 L18 18', 'M30 18 L36 18'],
-    mouth: 'M20 28 L28 28',
+    leftEye: "M 12 20 Q 16 16 20 20 Q 16 24 12 20",
+    rightEye: "M 28 20 Q 32 16 36 20 Q 32 24 28 20",
+    mouth: "M 18 32 Q 24 34 30 32",
+    eyebrowLeft: "M 10 15 Q 14 13 18 14",
+    eyebrowRight: "M 30 14 Q 34 13 38 15"
   },
   happy: {
-    eyes: ['M12 18 L20 18', 'M28 18 L36 18'],
-    mouth: 'M12 28 Q24 36 36 28',
+    leftEye: "M 12 20 Q 16 16 20 20 Q 16 24 12 20",
+    rightEye: "M 28 20 Q 32 16 36 20 Q 32 24 28 20",
+    mouth: "M 16 30 Q 24 38 32 30",
+    eyebrowLeft: "M 10 14 Q 14 12 18 13",
+    eyebrowRight: "M 30 13 Q 34 12 38 14"
   },
   sad: {
-    eyes: ['M14 18 Q18 22 22 18', 'M26 18 Q30 22 34 18'],
-    mouth: 'M12 34 Q24 24 36 34',
+    leftEye: "M 12 22 Q 16 18 20 22 Q 16 26 12 22",
+    rightEye: "M 28 22 Q 32 18 36 22 Q 32 26 28 22",
+    mouth: "M 18 34 Q 24 28 30 34",
+    eyebrowLeft: "M 9 14 Q 14 11 19 15",
+    eyebrowRight: "M 29 15 Q 34 11 39 14"
   },
   angry: {
-    eyes: ['M12 18 L20 24', 'M28 18 L36 24'],
-    mouth: 'M12 32 L18 28 L24 32 L30 28 L36 32',
+    leftEye: "M 12 20 L 20 24 L 12 24 Z",
+    rightEye: "M 28 24 L 36 20 L 36 24 Z",
+    mouth: "M 12 32 L 18 28 L 24 32 L 30 28 L 36 32",
+    eyebrowLeft: "M 8 12 L 18 16",
+    eyebrowRight: "M 30 16 L 40 12"
   },
   shocked: {
-    eyes: ['M14 18 A4 4 0 1 1 14 18', 'M30 18 A4 4 0 1 1 30 18'],
-    mouth: 'M22 28 A4 4 0 1 1 22 28',
+    leftEye: "M 14 20 A 4 4 0 1 1 14 20",
+    rightEye: "M 30 20 A 4 4 0 1 1 30 20",
+    mouth: "M 22 30 A 4 4 0 1 1 22 30",
+    eyebrowLeft: "M 10 10 Q 14 8 18 10",
+    eyebrowRight: "M 30 10 Q 34 8 38 10"
   },
   excited: {
-    eyes: ['M12 18 L20 18', 'M28 18 L36 18'],
-    mouth: 'M18 30 Q24 38 30 30',
+    leftEye: "M 12 20 L 20 20",
+    rightEye: "M 28 20 L 36 20",
+    mouth: "M 16 30 Q 24 40 32 30",
+    eyebrowLeft: "M 10 12 Q 14 10 18 12",
+    eyebrowRight: "M 30 12 Q 34 10 38 12"
   },
   love: {
-    eyes: ['M14 18 A4 4 0 1 1 14 18', 'M30 18 A4 4 0 1 1 30 18'],
-    mouth: 'M18 26 Q24 34 30 26',
+    leftEye: "M 14 20 A 4 4 0 1 1 14 20",
+    rightEye: "M 30 20 A 4 4 0 1 1 30 20",
+    mouth: "M 18 26 Q 24 34 30 26",
+    eyebrowLeft: "M 10 14 Q 14 12 18 13",
+    eyebrowRight: "M 30 13 Q 34 12 38 14"
   },
   sleepy: {
-    eyes: ['M12 20 L18 20', 'M30 20 L36 20'],
-    mouth: 'M20 30 L28 30',
+    leftEye: "M 12 22 L 18 22",
+    rightEye: "M 30 22 L 36 22",
+    mouth: "M 20 32 L 28 32",
+    eyebrowLeft: "M 10 16 Q 14 15 18 16",
+    eyebrowRight: "M 30 16 Q 34 15 38 16"
   },
   cool: {
-    eyes: ['M12 18 L20 18', 'M28 18 L36 18'],
-    mouth: 'M14 28 Q24 34 34 28',
+    leftEye: "M 12 20 L 20 20",
+    rightEye: "M 28 20 L 36 20",
+    mouth: "M 14 28 Q 24 36 34 28",
+    eyebrowLeft: "M 10 14 L 18 14",
+    eyebrowRight: "M 30 14 L 38 14"
   },
   cry: {
-    eyes: ['M14 18 Q18 22 22 18', 'M26 18 Q30 22 34 18'],
-    mouth: 'M12 34 Q24 24 36 34',
+    leftEye: "M 12 22 Q 16 18 20 22 Q 16 26 12 22",
+    rightEye: "M 28 22 Q 32 18 36 22 Q 32 26 28 22",
+    mouth: "M 18 34 Q 24 28 30 34",
+    eyebrowLeft: "M 9 14 Q 14 11 19 15",
+    eyebrowRight: "M 29 15 Q 34 11 39 14"
   },
 };
 
 export const MOOD_THEMES = {
-  neutral: { bgStart: '#0A0A1A', bgEnd: '#6C3CE1', ledColor: '#FFFFFF', glowColor: '#6C3CE1' },
-  happy:   { bgStart: '#1A0A2A', bgEnd: '#06B6D4', ledColor: '#06B6D4', glowColor: '#06B6D4' },
-  sad:     { bgStart: '#0A0A1A', bgEnd: '#14B8A6', ledColor: '#14B8A6', glowColor: '#14B8A6' },
-  angry:   { bgStart: '#2A0A0A', bgEnd: '#EF4444', ledColor: '#EF4444', glowColor: '#EF4444' },
-  shocked: { bgStart: '#0A0A2A', bgEnd: '#8B5CF6', ledColor: '#FFFFFF', glowColor: '#8B5CF6' },
-  excited: { bgStart: '#2A1A0A', bgEnd: '#F59E0B', ledColor: '#F59E0B', glowColor: '#F59E0B' },
-  love:    { bgStart: '#1A0A1A', bgEnd: '#EC4899', ledColor: '#FFFFFF', glowColor: '#EC4899' },
-  sleepy:  { bgStart: '#0A0A1A', bgEnd: '#3B82F6', ledColor: '#93C5FD', glowColor: '#3B82F6' },
-  cool:    { bgStart: '#0A0A1A', bgEnd: '#8B5CF6', ledColor: '#FDE047', glowColor: '#8B5CF6' },
-  cry:     { bgStart: '#1A0A0A', bgEnd: '#6366F1', ledColor: '#93C5FD', glowColor: '#6366F1' },
+  neutral: { 
+    skinLight: '#FDBCB4', skinBase: '#E8A598', skinShadow: '#C98474', 
+    outfit: '#6C3CE1', outfitShadow: '#4A2A9E', hair: '#3A2318',
+    ledColor: '#FFFFFF', glowColor: '#000000' 
+  },
+  happy: { 
+    skinLight: '#FDBCB4', skinBase: '#E8A598', skinShadow: '#C98474', 
+    outfit: '#06B6D4', outfitShadow: '#048BA8', hair: '#3A2318',
+    ledColor: '#FFFFFF', glowColor: '#F5A623' 
+  },
+  sad: { 
+    skinLight: '#FDBCB4', skinBase: '#E8A598', skinShadow: '#C98474', 
+    outfit: '#14B8A6', outfitShadow: '#0E8276', hair: '#3A2318',
+    ledColor: '#FFFFFF', glowColor: '#4A90E2' 
+  },
+  angry: { 
+    skinLight: '#FDBCB4', skinBase: '#E8A598', skinShadow: '#C98474', 
+    outfit: '#EF4444', outfitShadow: '#B91C1C', hair: '#3A2318',
+    ledColor: '#FFFFFF', glowColor: '#EF4444' 
+  },
+  shocked: { 
+    skinLight: '#FDBCB4', skinBase: '#E8A598', skinShadow: '#C98474', 
+    outfit: '#8B5CF6', outfitShadow: '#6D28D9', hair: '#3A2318',
+    ledColor: '#FFFFFF', glowColor: '#8B5CF6' 
+  },
+  excited: { 
+    skinLight: '#FDBCB4', skinBase: '#E8A598', skinShadow: '#C98474', 
+    outfit: '#F59E0B', outfitShadow: '#B45309', hair: '#3A2318',
+    ledColor: '#FFFFFF', glowColor: '#F59E0B' 
+  },
+  love: { 
+    skinLight: '#FDBCB4', skinBase: '#E8A598', skinShadow: '#C98474', 
+    outfit: '#EC4899', outfitShadow: '#BE185D', hair: '#3A2318',
+    ledColor: '#FFFFFF', glowColor: '#EC4899' 
+  },
+  sleepy: { 
+    skinLight: '#FDBCB4', skinBase: '#E8A598', skinShadow: '#C98474', 
+    outfit: '#3B82F6', outfitShadow: '#1D4ED8', hair: '#3A2318',
+    ledColor: '#FFFFFF', glowColor: '#3B82F6' 
+  },
+  cool: { 
+    skinLight: '#FDBCB4', skinBase: '#E8A598', skinShadow: '#C98474', 
+    outfit: '#FDE047', outfitShadow: '#CA8A04', hair: '#3A2318',
+    ledColor: '#FFFFFF', glowColor: '#8B5CF6' 
+  },
+  cry: { 
+    skinLight: '#FDBCB4', skinBase: '#E8A598', skinShadow: '#C98474', 
+    outfit: '#6366F1', outfitShadow: '#4338CA', hair: '#3A2318',
+    ledColor: '#FFFFFF', glowColor: '#6366F1' 
+  },
 };
 
+// NEW: Hair Styles
+export const HAIR_STYLES = [
+  { id: 'short', name: 'Short', path: "M 6 20 Q 6 4 24 4 Q 42 4 42 20 Q 38 12 24 12 Q 10 12 6 20 Z" },
+  { id: 'long', name: 'Long', path: "M 6 20 Q 6 4 24 4 Q 42 4 42 20 L 44 36 Q 40 30 38 20 Q 38 12 24 12 Q 10 12 10 20 Q 8 30 4 36 Z" },
+  { id: 'curly', name: 'Curly', path: "M 6 20 Q 4 4 24 4 Q 44 4 42 20 Q 44 10 36 10 Q 32 6 24 8 Q 16 6 12 10 Q 4 10 6 20 Z" },
+  { id: 'bald', name: 'Bald', path: "" }, // No hair
+  { id: 'mohawk', name: 'Mohawk', path: "M 16 20 Q 16 4 24 4 Q 32 4 32 20 Q 28 12 24 12 Q 20 12 16 20 Z" },
+];
+
 export const SKINS = [
-  // ─── Free Skins ──────────────────────────────────────────────
   {
-    id: 'ocean',
-    name: 'Ocean Deep',
-    bgStart: '#2193B0',
-    bgEnd: '#6DD5ED',
-    ledColor: '#FFFFFF',
-    glowColor: '#2193B0',
-    isLimited: false,
-    price: 0,
+    id: 'light',
+    name: 'Light Skin',
+    skinLight: '#FDE0D0', skinBase: '#F1C27D', skinShadow: '#D19A5C',
+    outfit: '#4A90E2', outfitShadow: '#2C5F8A', hair: '#3A2318',
+    defaultHair: 'short',
+    ledColor: '#FFFFFF', glowColor: '#F1C27D', isLimited: false, price: 0,
   },
   {
-    id: 'forest',
-    name: 'Forest Whisper',
-    bgStart: '#134E5E',
-    bgEnd: '#71B280',
-    ledColor: '#FFFFFF',
-    glowColor: '#71B280',
-    isLimited: false,
-    price: 0,
-  },
-  // ─── Tier 1 ──────────────────────────────────────────────────
-  {
-    id: 'neon',
-    name: 'Neon Dreams',
-    bgStart: '#00FFAA',
-    bgEnd: '#FF00FF',
-    ledColor: '#FFFFFF',
-    glowColor: '#FF00FF',
-    isLimited: false,
-    price: 50,
+    id: 'medium',
+    name: 'Medium Skin',
+    skinLight: '#E8B48C', skinBase: '#C68642', skinShadow: '#A66A32',
+    outfit: '#E74C3C', outfitShadow: '#A93226', hair: '#1A1108',
+    defaultHair: 'short',
+    ledColor: '#FFFFFF', glowColor: '#C68642', isLimited: false, price: 0,
   },
   {
-    id: 'sunset',
-    name: 'Sunset Blaze',
-    bgStart: '#FF512F',
-    bgEnd: '#DD2475',
-    ledColor: '#FFD700',
-    glowColor: '#FF512F',
-    isLimited: false,
-    price: 75,
-  },
-  // ─── Tier 2 ──────────────────────────────────────────────────
-  {
-    id: 'pastel',
-    name: 'Pastel Dream',
-    bgStart: '#FFB6C1',
-    bgEnd: '#FF69B4',
-    ledColor: '#FFFFFF',
-    glowColor: '#FF69B4',
-    isLimited: false,
-    price: 120,
+    id: 'dark',
+    name: 'Dark Skin',
+    skinLight: '#A66A32', skinBase: '#8D5524', skinShadow: '#6B3E1A',
+    outfit: '#2ECC71', outfitShadow: '#1E8A4A', hair: '#0A0502',
+    defaultHair: 'curly',
+    ledColor: '#FFFFFF', glowColor: '#8D5524', isLimited: false, price: 0,
   },
   {
-    id: 'rosegold',
-    name: 'Rose Gold',
-    bgStart: '#EECDA3',
-    bgEnd: '#EF629F',
-    ledColor: '#FFFFFF',
-    glowColor: '#EF629F',
-    isLimited: false,
-    price: 150,
-  },
-  // ─── Premium / Limited ──────────────────────────────────────
-  {
-    id: 'midnight',
-    name: 'Midnight Pulse',
-    bgStart: '#1A1A2E',
-    bgEnd: '#16213E',
-    ledColor: '#00D2FF',
-    glowColor: '#00D2FF',
-    isLimited: true,
-    price: 200,
-    expiresInDays: 3,
+    id: 'pale',
+    name: 'Pale Skin',
+    skinLight: '#FFF0E6', skinBase: '#FFDAB9', skinShadow: '#E6B89C',
+    outfit: '#9B59B6', outfitShadow: '#6C3483', hair: '#D4A373',
+    defaultHair: 'long',
+    ledColor: '#FFFFFF', glowColor: '#FFDAB9', isLimited: false, price: 50,
   },
   {
-    id: 'cyberpunk',
-    name: 'Cyberpunk',
-    bgStart: '#0F0C29',
-    bgEnd: '#302B63',
-    ledColor: '#00FFAA',
-    glowColor: '#00FFAA',
-    isLimited: true,
-    price: 250,
-    expiresInDays: 3,
+    id: 'olive',
+    name: 'Olive Skin',
+    skinLight: '#D4B896', skinBase: '#B08D57', skinShadow: '#8C6B3A',
+    outfit: '#F39C12', outfitShadow: '#B9770E', hair: '#2C1A0E',
+    defaultHair: 'mohawk',
+    ledColor: '#FFFFFF', glowColor: '#B08D57', isLimited: false, price: 75,
   },
   {
-    id: 'halloween',
-    name: 'Halloween Glow',
-    bgStart: '#FF4500',
-    bgEnd: '#8B0000',
-    ledColor: '#FFD700',
-    glowColor: '#FF4500',
-    isLimited: true,
-    price: 300,
-    expiresInDays: 3,
+    id: 'bronze',
+    name: 'Bronze Skin',
+    skinLight: '#D4A373', skinBase: '#B07D4F', skinShadow: '#8C5E32',
+    outfit: '#1ABC9C', outfitShadow: '#117A65', hair: '#1A0F08',
+    defaultHair: 'short',
+    ledColor: '#FFFFFF', glowColor: '#B07D4F', isLimited: false, price: 120,
+  },
+  {
+    id: 'ebony',
+    name: 'Ebony Skin',
+    skinLight: '#5C3A21', skinBase: '#3E2723', skinShadow: '#2A1A17',
+    outfit: '#E67E22', outfitShadow: '#A85A15', hair: '#050201',
+    defaultHair: 'curly',
+    ledColor: '#FFFFFF', glowColor: '#3E2723', isLimited: false, price: 150,
+  },
+  {
+    id: 'gold',
+    name: 'Golden Glow',
+    skinLight: '#FFE082', skinBase: '#FFC107', skinShadow: '#FFA000',
+    outfit: '#FFD700', outfitShadow: '#B8860B', hair: '#B8860B',
+    defaultHair: 'mohawk',
+    ledColor: '#FFFFFF', glowColor: '#FFC107', isLimited: true, price: 200, expiresInDays: 3,
+  },
+  {
+    id: 'alien',
+    name: 'Alien Green',
+    skinLight: '#A5D6A7', skinBase: '#4CAF50', skinShadow: '#2E7D32',
+    outfit: '#8E44AD', outfitShadow: '#5B2C6F', hair: '#1B5E20',
+    defaultHair: 'bald',
+    ledColor: '#FFFFFF', glowColor: '#4CAF50', isLimited: true, price: 250, expiresInDays: 3,
+  },
+  {
+    id: 'vampire',
+    name: 'Vampire Pale',
+    skinLight: '#E0E0E0', skinBase: '#BDBDBD', skinShadow: '#9E9E9E',
+    outfit: '#2C3E50', outfitShadow: '#1A252F', hair: '#000000',
+    defaultHair: 'long',
+    ledColor: '#FFFFFF', glowColor: '#BDBDBD', isLimited: true, price: 300, expiresInDays: 3,
   },
   {
     id: 'galaxy',
     name: 'Galaxy Burst',
-    bgStart: '#1A0A2A',
-    bgEnd: '#6C3CE1',
-    ledColor: '#FFFFFF',
-    glowColor: '#8B5CF6',
-    isLimited: true,
-    price: 350,
-    expiresInDays: 3,
+    skinLight: '#CE93D8', skinBase: '#8E24AA', skinShadow: '#4A148C',
+    outfit: '#E91E63', outfitShadow: '#AD1457', hair: '#4A148C',
+    defaultHair: 'curly',
+    ledColor: '#FFFFFF', glowColor: '#8E24AA', isLimited: true, price: 350, expiresInDays: 3,
   },
 ];
 
