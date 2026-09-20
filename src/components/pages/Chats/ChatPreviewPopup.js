@@ -10,71 +10,27 @@ const ChatPreviewPopup = ({ chat, onClose, onOpenChat, position }) => {
   const popupRef = useRef(null);
 
   // Fetch last 5 messages from this chat
-useEffect(() => {
-  if (!chat?.id || !chat?.myUid) return;
-  setLoading(true);
-
-  const myUid = chat.myUid;
-  const otherUid = chat.id;
-
-  // Try every common path structure in Firebase
-  // Whichever one fires first wins
-  const pathsToTry = [
-    `messages/${otherUid}`,
-    `chats/${otherUid}/messages`,
-    `chats/${myUid}_${otherUid}/messages`,
-    `chats/${otherUid}_${myUid}/messages`,
-    `messages/${myUid}/${otherUid}`,
-    `messages/${otherUid}/${myUid}`,
-    `userChats/${myUid}/${otherUid}/messages`,
-    `userChats/${otherUid}/${myUid}/messages`,
-  ];
-
-  const unsubs = [];
-  let gotData = false;
-
-  pathsToTry.forEach((path, index) => {
+  useEffect(() => {
+    if (!chat?.id) return;
+    setLoading(true);
     const msgsRef = query(
-      ref(db, path),
+      ref(db, `messages/${chat.id}`),
       orderByChild('timestamp'),
       limitToLast(5)
     );
 
     const unsub = onValue(msgsRef, (snap) => {
-      if (gotData) return; // already found the right path
-      const data = snap.val();
-      if (!data || Object.keys(data).length === 0) return;
-
-      console.log('✅ ChatPreviewPopup: Found messages at path:', path);
-      gotData = true;
-
+      const data = snap.val() || {};
       const list = Object.entries(data)
         .map(([id, m]) => ({ id, ...m }))
         .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
-
       setMessages(list);
       setLoading(false);
+    });
 
-      // Stop listening on other paths
-      unsubs.forEach((u) => { try { u(); } catch {} });
-    }, () => {});
+    return () => unsub();
+  }, [chat?.id]);
 
-    unsubs.push(unsub);
-  });
-
-  // Timeout fallback after 3 seconds
-  const fallback = setTimeout(() => {
-    if (!gotData) {
-      console.warn('⚠️ ChatPreviewPopup: No messages found in any known path');
-      setLoading(false);
-    }
-  }, 3000);
-
-  return () => {
-    clearTimeout(fallback);
-    unsubs.forEach((u) => { try { u(); } catch {} });
-  };
-}, [chat?.id, chat?.myUid]);
   // Dismiss on outside click / touch release elsewhere
   useEffect(() => {
     const handleOutside = (e) => {
