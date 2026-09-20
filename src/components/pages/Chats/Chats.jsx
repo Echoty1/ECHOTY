@@ -27,6 +27,7 @@ import { getChatList, storeChatList } from '../../../services/indexedDBService';
 import Avatar from '../../common/Avatar';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
+import ChatPreviewPopup from './ChatPreviewPopup'; // NEW
 
 const CHAT_CHUNK_SIZE = 20;
 
@@ -80,11 +81,11 @@ const loadPartnerData = async (partnerId) => {
     const profile = profileSnap.exists() ? profileSnap.val() : {};
     const activeSkin = skinSnap.exists() ? skinSnap.val() : null;
 
-    const fullProfile = { 
-      ...profile, 
-      activeSkin: activeSkin || profile.activeSkin || null 
+    const fullProfile = {
+      ...profile,
+      activeSkin: activeSkin || profile.activeSkin || null
     };
-    
+
     await setProfile(partnerId, fullProfile);
 
     return fullProfile;
@@ -196,8 +197,8 @@ const sortNonAIChats = (chats) => {
   return [...onlineSorted, ...offlineSorted];
 };
 
-// ─── Chat Item ──────────────────────────────────────────────────
-const ChatItem = memo(({ chat, onStartChat }) => {
+// ─── Chat Item (now with long-press support) ─────────────────
+const ChatItem = memo(({ chat, onStartChat, onLongPressStart, onLongPressEnd, onLongPressCancel }) => {
   const { profiles } = useProfile();
   const navigate = useNavigate();
   const profile = profiles[chat.id] || {};
@@ -208,10 +209,25 @@ const ChatItem = memo(({ chat, onStartChat }) => {
   const mood = profile.mood || chat.mood || 'neutral';
 
   return (
-    <div className="chat-item regular-chat-item" onClick={() => onStartChat(chat)}>
+    <div
+      className="chat-item regular-chat-item"
+      onClick={() => onStartChat(chat)}
+      onMouseDown={(e) => onLongPressStart(e, chat)}
+      onMouseUp={() => onLongPressEnd(chat)}
+      onMouseLeave={onLongPressCancel}
+      onTouchStart={(e) => onLongPressStart(e, chat)}
+      onTouchEnd={() => onLongPressEnd(chat)}
+      onTouchCancel={onLongPressCancel}
+      onContextMenu={(e) => e.preventDefault()}
+      style={{
+        userSelect: 'none',
+        WebkitUserSelect: 'none',
+        WebkitTouchCallout: 'none',
+      }}
+    >
       <div className="chat-avatar" onClick={(e) => {
-        e.stopPropagation(); 
-        navigate(`/user/${chat.id}`); 
+        e.stopPropagation();
+        navigate(`/user/${chat.id}`);
       }}>
         <Avatar key={chat.avatar} src={chat.avatar} name={chat.name} size={48} />
         <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
@@ -264,6 +280,12 @@ const Chats = () => {
   const [onlineUsers, setOnlineUsers] = useState({});
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [loadingChats, setLoadingChats] = useState(true);
+
+  // NEW: Chat preview state
+  const [previewChat, setPreviewChat] = useState(null);
+  const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
+  const longPressTimer = useRef(null);
+  const longPressTriggered = useRef(false);
 
   const inputRef = useRef(null);
   const searchTimeout = useRef(null);
@@ -593,8 +615,51 @@ const Chats = () => {
     };
   }, [searchQuery, onlineUsers, isSupportUser, recentChats]);
 
+  // ─── NEW: Long-press handlers for chat preview ──────────────
+  const handleLongPressStart = useCallback((e, chat) => {
+    // Skip for AI chat
+    if (chat.id === 'echo_ai_assistant') return;
+
+    longPressTriggered.current = false;
+
+    const clientX = e.touches?.[0]?.clientX ?? e.clientX ?? 0;
+    const clientY = e.touches?.[0]?.clientY ?? e.clientY ?? 0;
+
+    if (longPressTimer.current) clearTimeout(longPressTimer.current);
+
+    longPressTimer.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      setPreviewPosition({ x: clientX + 16, y: clientY + 16 });
+      setPreviewChat(chat);
+
+      // Haptic feedback
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, 500);
+  }, []);
+
+  const handleLongPressEnd = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
+  const handleLongPressCancel = useCallback(() => {
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
+  }, []);
+
   const startChat = (selectedUser) => {
     if (!selectedUser) return;
+
+    // If long-press just fired, don't navigate
+    if (longPressTriggered.current) {
+      longPressTriggered.current = false;
+      return;
+    }
+
     if (selectedUser.isAi || selectedUser.id === 'echo_ai_assistant') {
       navigate('/chat/echo_ai_assistant');
       return;
@@ -630,24 +695,19 @@ const Chats = () => {
   let otherResults = safeResults;
 
   if (safeResults.length > 0 && trimmedSearch.length > 0) {
-    
-    // Helper to clean up names for comparison (handles hidden spaces)
     const getCleanName = (p) => (p.name || '').trim().toLowerCase();
     const getCleanUsername = (p) => (p.username || '').trim().toLowerCase();
 
-    // Priority 1: Exact match on Name OR Username
     let bestMatch = safeResults.find(
       (p) => getCleanName(p) === trimmedSearch || getCleanUsername(p) === trimmedSearch
     );
 
-    // Priority 2: Name or Username CONTAINS the search word 
     if (!bestMatch) {
       bestMatch = safeResults.find(
         (p) => getCleanName(p).includes(trimmedSearch) || getCleanUsername(p).includes(trimmedSearch)
       );
     }
 
-    // If we found a match, show them in the Hero Card
     if (bestMatch) {
       topResult = bestMatch;
       otherResults = safeResults.filter((p) => p.id !== bestMatch.id);
@@ -683,8 +743,8 @@ const Chats = () => {
           <div className="recent-chats search-results-section">
             {/* ✨ HERO RESULT CARD */}
             {!isSearching && topResult && (
-              <div 
-                className="hero-result-card" 
+              <div
+                className="hero-result-card"
                 onClick={() => startChat(topResult)}
               >
                 <div className="hero-bg-glow" />
@@ -819,6 +879,9 @@ const Chats = () => {
                   key={chat.id}
                   chat={chat}
                   onStartChat={startChat}
+                  onLongPressStart={handleLongPressStart}
+                  onLongPressEnd={handleLongPressEnd}
+                  onLongPressCancel={handleLongPressCancel}
                 />
               ))
             )}
@@ -837,6 +900,16 @@ const Chats = () => {
               </div>
             )}
           </div>
+        )}
+
+        {/* NEW: Chat Preview Popup */}
+        {previewChat && (
+          <ChatPreviewPopup
+            chat={{ ...previewChat, myUid: user?.uid }}
+            position={previewPosition}
+            onClose={() => setPreviewChat(null)}
+            onOpenChat={(chatId) => navigate(`/chat/${chatId}`)}
+          />
         )}
       </div>
     </>
