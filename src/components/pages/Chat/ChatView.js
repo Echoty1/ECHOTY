@@ -222,7 +222,7 @@ const ChatView = () => {
     return () => clearInterval(id);
   }, []);
 
-  // ─── PARTNER TYPING LISTENER (refresh every 2s to expire stale flags) ───
+  // ─── PARTNER TYPING LISTENER ───
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -242,7 +242,7 @@ const ChatView = () => {
     return () => { unsub(); clearInterval(interval); };
   }, [user?.uid, userId]);
 
-  // ─── WALLPAPER LISTENER (both id and custom url) ───
+  // ─── WALLPAPER LISTENER ───
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const wpRef = ref(db, `userChats/${user.uid}/${userId}/wallpaper`);
@@ -387,7 +387,6 @@ const ChatView = () => {
     setIsNearBottom(isNear);
   }, []);
 
-  // ─── TYPING HANDLERS ───────────────────────────────
   const handleTyping = useCallback(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -418,7 +417,6 @@ const ChatView = () => {
 
     setHaloActive(false);
 
-    // Stop typing indicator immediately
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     clearMyTyping();
 
@@ -1280,7 +1278,7 @@ const ChatView = () => {
         <EditMediaCaptionModal isOpen={!!editingMediaMessage} onClose={() => setEditingMediaMessage(null)} currentCaption={editingMediaMessage?.caption || ''} mediaType={editingMediaMessage?.mediaType} onSave={saveEditedMediaCaption} />
 
         {mediaPreview && (<MediaPreview src={mediaPreview.src} type={mediaPreview.type} alt={mediaPreview.alt} onClose={() => setMediaPreview(null)} />)}
-        {videoPreview && (<CustomVideoPlayer src={videoPreview.src} onClose={() => setVideoPreview(null)} />)} 
+        {videoPreview && (<CustomVideoPlayer src={videoPreview.src} onClose={() => setVideoPreview(null)} />)}
 
         {showWallpaperPicker && (
           <WallpaperPicker
@@ -1299,3 +1297,5 @@ const ChatView = () => {
     </>
   );
 };
+
+export default ChatView;
