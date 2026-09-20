@@ -27,9 +27,10 @@ import { getChatList, storeChatList } from '../../../services/indexedDBService';
 import Avatar from '../../common/Avatar';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
-import ChatPreviewPopup from './ChatPreviewPopup'; // NEW
+import ChatPreviewPopup from './ChatPreviewPopup';
 
 const CHAT_CHUNK_SIZE = 20;
+const TYPING_FRESHNESS_MS = 4000;
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
@@ -197,8 +198,8 @@ const sortNonAIChats = (chats) => {
   return [...onlineSorted, ...offlineSorted];
 };
 
-// ─── Chat Item (now with long-press support) ─────────────────
-const ChatItem = memo(({ chat, onStartChat, onLongPressStart, onLongPressEnd, onLongPressCancel }) => {
+// ─── Chat Item ─────────────────────────────────────────────────
+const ChatItem = memo(({ chat, onStartChat, onLongPressStart, onLongPressEnd, onLongPressCancel, partnerIsTyping }) => {
   const { profiles } = useProfile();
   const navigate = useNavigate();
   const profile = profiles[chat.id] || {};
@@ -233,6 +234,18 @@ const ChatItem = memo(({ chat, onStartChat, onLongPressStart, onLongPressEnd, on
         <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
         {hasUnread && <span className="unread-badge">{chat.unreadCount}</span>}
         {chat.isDeleted && <span className="archived-badge" title="Account deleted – archived">📁</span>}
+
+        {/* ── SNAPCHAT-STYLE TYPING OVERLAY on the avatar ── */}
+        {partnerIsTyping && (
+          <span className="avatar-typing-overlay" aria-hidden="true">
+            <span className="avatar-typing-ring" />
+            <span className="avatar-typing-dots">
+              <span className="avatar-typing-dot" />
+              <span className="avatar-typing-dot" />
+              <span className="avatar-typing-dot" />
+            </span>
+          </span>
+        )}
       </div>
       <div className="chat-info">
         <div className="chat-title-row">
@@ -243,17 +256,24 @@ const ChatItem = memo(({ chat, onStartChat, onLongPressStart, onLongPressEnd, on
           </span>
         </div>
         <div className="chat-last" style={{ fontWeight: hasUnread ? 700 : 400 }}>
-          {chat.lastMessage || 'Start chatting...'}
+          {partnerIsTyping ? (
+            <span className="typing-status-text">typing…</span>
+          ) : (
+            chat.lastMessage || 'Start chatting...'
+          )}
         </div>
       </div>
       <div className="chat-echomoji-middle">
-        <ECHOMOJI
-          mood={mood}
-          skin={skin}
-          size={38}
-          interactive={false}
-          animated={true}
-        />
+        {/* When typing, the mini ECHOmoji fades out to let the avatar overlay shine */}
+        <div className={`echomoji-holder ${partnerIsTyping ? 'is-typing' : ''}`}>
+          <ECHOMOJI
+            mood={mood}
+            skin={skin}
+            size={38}
+            interactive={false}
+            animated={!partnerIsTyping}
+          />
+        </div>
       </div>
       <div className="chat-time">{timeAgo(chat.timestamp)}</div>
     </div>
@@ -287,10 +307,16 @@ const Chats = () => {
   const longPressTimer = useRef(null);
   const longPressTriggered = useRef(false);
 
+  // NEW: Typing map keyed by partner UID → boolean
+  const [typingPartners, setTypingPartners] = useState({});
+
   const inputRef = useRef(null);
   const searchTimeout = useRef(null);
   const presenceUnsubRef = useRef(null);
   const userChatsUnsubRef = useRef(null);
+  const typingUnsubsRef = useRef({});
+  const typingCheckIntervalRef = useRef(null);
+  const typingRawRef = useRef({});
 
   const cacheKey = `chats_${user?.uid}`;
   const [recentChats, setRecentChats] = useState([]);
@@ -446,6 +472,80 @@ const Chats = () => {
       }
     };
   }, [user?.uid, onlineUsers, cacheKey, isDemoUser, isSupportUser]);
+
+  /* ─── TYPING LISTENERS for all visible chats ─── */
+  useEffect(() => {
+    if (!user?.uid || !recentChats.length) return;
+
+    const activeIds = new Set(recentChats.map((c) => c.id));
+
+    // Remove listeners for chats that are no longer visible
+    Object.keys(typingUnsubsRef.current).forEach((uid) => {
+      if (!activeIds.has(uid)) {
+        try { typingUnsubsRef.current[uid](); } catch {}
+        delete typingUnsubsRef.current[uid];
+        delete typingRawRef.current[uid];
+      }
+    });
+
+    // Add listeners for chats we haven't subscribed to yet
+    recentChats.forEach((chat) => {
+      if (chat.id === 'echo_ai_assistant') return;
+      if (typingUnsubsRef.current[chat.id]) return;
+
+      const cId = [user.uid, chat.id].sort().join('_');
+      const typingRef = ref(db, `chats/${cId}/typing/${chat.id}`);
+
+      const unsub = onValue(
+        typingRef,
+        (snap) => {
+          const data = snap.val();
+          typingRawRef.current[chat.id] = data || null;
+          const fresh =
+            data && data.isTyping && Date.now() - (data.timestamp || 0) < TYPING_FRESHNESS_MS;
+          setTypingPartners((prev) =>
+            prev[chat.id] === !!fresh ? prev : { ...prev, [chat.id]: !!fresh }
+          );
+        },
+        () => {}
+      );
+
+      typingUnsubsRef.current[chat.id] = unsub;
+    });
+  }, [user?.uid, recentChats]);
+
+  /* ─── Periodic freshness sweep so stale typing flags auto-clear ─── */
+  useEffect(() => {
+    if (typingCheckIntervalRef.current) clearInterval(typingCheckIntervalRef.current);
+    typingCheckIntervalRef.current = setInterval(() => {
+      const updates = {};
+      let anyChanged = false;
+      Object.entries(typingRawRef.current).forEach(([uid, data]) => {
+        const fresh =
+          data && data.isTyping && Date.now() - (data.timestamp || 0) < TYPING_FRESHNESS_MS;
+        const next = !!fresh;
+        if (typingPartners[uid] !== next) {
+          updates[uid] = next;
+          anyChanged = true;
+        }
+      });
+      if (anyChanged) {
+        setTypingPartners((prev) => ({ ...prev, ...updates }));
+      }
+    }, 2000);
+    return () => {
+      if (typingCheckIntervalRef.current) clearInterval(typingCheckIntervalRef.current);
+    };
+  }, [typingPartners]);
+
+  /* ─── Cleanup all typing listeners on unmount ─── */
+  useEffect(() => {
+    return () => {
+      Object.values(typingUnsubsRef.current).forEach((u) => { try { u(); } catch {} });
+      typingUnsubsRef.current = {};
+      typingRawRef.current = {};
+    };
+  }, []);
 
   const loadChats = useCallback(
     async (loadMore = false) => {
@@ -615,9 +715,8 @@ const Chats = () => {
     };
   }, [searchQuery, onlineUsers, isSupportUser, recentChats]);
 
-  // ─── NEW: Long-press handlers for chat preview ──────────────
+  // ─── Long-press handlers for chat preview ──────────────
   const handleLongPressStart = useCallback((e, chat) => {
-    // Skip for AI chat
     if (chat.id === 'echo_ai_assistant') return;
 
     longPressTriggered.current = false;
@@ -632,7 +731,6 @@ const Chats = () => {
       setPreviewPosition({ x: clientX + 16, y: clientY + 16 });
       setPreviewChat(chat);
 
-      // Haptic feedback
       if (navigator.vibrate) navigator.vibrate(30);
     }, 500);
   }, []);
@@ -654,7 +752,6 @@ const Chats = () => {
   const startChat = (selectedUser) => {
     if (!selectedUser) return;
 
-    // If long-press just fired, don't navigate
     if (longPressTriggered.current) {
       longPressTriggered.current = false;
       return;
@@ -741,7 +838,6 @@ const Chats = () => {
 
         {isSearchActive ? (
           <div className="recent-chats search-results-section">
-            {/* ✨ HERO RESULT CARD */}
             {!isSearching && topResult && (
               <div
                 className="hero-result-card"
@@ -882,6 +978,7 @@ const Chats = () => {
                   onLongPressStart={handleLongPressStart}
                   onLongPressEnd={handleLongPressEnd}
                   onLongPressCancel={handleLongPressCancel}
+                  partnerIsTyping={!!typingPartners[chat.id]}
                 />
               ))
             )}
@@ -902,7 +999,6 @@ const Chats = () => {
           </div>
         )}
 
-        {/* NEW: Chat Preview Popup */}
         {previewChat && (
           <ChatPreviewPopup
             chat={{ ...previewChat, myUid: user?.uid }}
