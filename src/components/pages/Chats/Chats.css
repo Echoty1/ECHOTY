@@ -1163,3 +1163,94 @@
   .skeleton-text,
   .skeleton-avatar { opacity: 0.55; }
 }
+/* ═════════════════════════════════════════════
+   13. SNAPCHAT-STYLE TYPING OVERLAY
+   ═════════════════════════════════════════════ */
+
+/* The overlay sits exactly over the avatar, on top of everything else */
+.avatar-typing-overlay {
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  pointer-events: none;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle, rgba(108, 60, 225, 0.35) 0%, rgba(108, 60, 225, 0.05) 70%);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  animation: snap-typing-pop 0.22s cubic-bezier(0.34, 1.56, 0.64, 1);
+  z-index: 3;
+}
+
+/* Pulsing purple ring around the avatar while typing */
+.avatar-typing-ring {
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 2.5px solid var(--brand-light, #a78bfa);
+  animation: snap-typing-ring 1.4s ease-out infinite;
+}
+
+@keyframes snap-typing-ring {
+  0%   { transform: scale(1);    opacity: 0.9; }
+  70%  { transform: scale(1.25); opacity: 0; }
+  100% { transform: scale(1.25); opacity: 0; }
+}
+
+/* Three mini dots inside the avatar */
+.avatar-typing-dots {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  z-index: 1;
+}
+
+.avatar-typing-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.85);
+  animation: snap-typing-dot 1.3s ease-in-out infinite;
+}
+
+.avatar-typing-dot:nth-child(2) { animation-delay: 0.18s; }
+.avatar-typing-dot:nth-child(3) { animation-delay: 0.36s; }
+
+@keyframes snap-typing-dot {
+  0%, 60%, 100% { transform: translateY(0) scale(0.9); opacity: 0.7; }
+  30%           { transform: translateY(-3px) scale(1.2); opacity: 1; }
+}
+
+@keyframes snap-typing-pop {
+  0%   { opacity: 0; transform: scale(0.7); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* The right-side ECHOmoji fades out while typing to avoid confusion */
+.echomoji-holder {
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.echomoji-holder.is-typing {
+  opacity: 0.15;
+  transform: scale(0.85);
+}
+
+/* "typing…" replaces the last message preview */
+.typing-status-text {
+  color: var(--brand-light, #a78bfa);
+  font-weight: 700;
+  font-style: italic;
+  letter-spacing: 0.2px;
+  animation: typing-text-fade 0.3s ease;
+}
+
+@keyframes typing-text-fade {
+  from { opacity: 0; transform: translateY(2px); }
+  to   { opacity: 1; transform: none; }
+}
