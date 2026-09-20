@@ -17,6 +17,7 @@ import Avatar from '../../common/Avatar';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import { listenToMyEchowers, listenToMyEchowerCount, listenToMyEchowingCount } from '../../../services/echowerService';
+import AvatarCustomizer from './AvatarCustomizer'; // NEW IMPORT
 import './Profile.css';
 
 const STORAGE_PREFIX = 'echo_cache_';
@@ -69,6 +70,7 @@ const Profile = () => {
 
   const [showGifLibrary, setShowGifLibrary] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [showAvatarCustomizer, setShowAvatarCustomizer] = useState(false); // NEW STATE
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
   const [copiedUid, setCopiedUid] = useState(false);
@@ -84,10 +86,10 @@ const Profile = () => {
 
   const isDemoUser = user?.uid === DEMO_UID;
 
-  // ─── Echower States (Separated correctly) ───
+  // ─── Echower States ───
   const [showEchowersModal, setShowEchowersModal] = useState(false);
-  const [followerUids, setFollowerUids] = useState([]); // People FOLLOWING me
-  const [followingUids, setFollowingUids] = useState([]); // People I FOLLOW
+  const [followerUids, setFollowerUids] = useState([]);
+  const [followingUids, setFollowingUids] = useState([]);
   const [activeEchowersTab, setActiveEchowersTab] = useState('followers');
 
   const cachedProfile = useMemo(() => {
@@ -102,6 +104,7 @@ const Profile = () => {
 
   const [profile, setProfile] = useState(() => cachedProfile);
   const [activeSkinId, setActiveSkinId] = useState(() => cachedUserSkins?.active || cachedProfile?.activeSkin || null);
+  const [activeHairStyle, setActiveHairStyle] = useState(() => cachedUserSkins?.hairStyle || 'short'); // NEW STATE
   const [loading, setLoading] = useState(() => !cachedProfile);
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState(() => cachedProfile || {
@@ -174,10 +177,12 @@ const Profile = () => {
       if (!isMounted) return;
       const data = snap.val() || {};
       const newActive = data.activeSkin || data.active || null;
+      const newHair = data.hairStyle || 'short';
       setActiveSkinId(newActive);
+      setActiveHairStyle(newHair);
       setUnlockedGifs(data.unlockedGifs || []);
       const existingSkinCache = getFastLocal(skinCacheKey) || {};
-      setFastLocal(skinCacheKey, { ...existingSkinCache, active: newActive });
+      setFastLocal(skinCacheKey, { ...existingSkinCache, active: newActive, hairStyle: newHair });
     });
 
     const profileRef = ref(db, `profiles/${user.uid}`);
@@ -222,14 +227,11 @@ const Profile = () => {
       }
     );
 
-    // ─── Echower Listeners (Listening to BOTH sides!) ───────────
-    // 1. Who is following me?
     const unsubFollowers = listenToMyEchowerCount(user.uid, (uids) => {
       setFollowerUids(uids);
       uids.forEach(uid => fetchProfile(uid));
     });
 
-    // 2. Who am I following?
     const unsubFollowing = listenToMyEchowers(user.uid, (uids) => {
       setFollowingUids(uids);
       uids.forEach(uid => fetchProfile(uid));
@@ -295,6 +297,29 @@ const Profile = () => {
     } catch (error) {
       console.error('Error saving profile:', error);
       setToast({ message: 'Failed to save profile.', type: 'error' });
+    }
+  };
+
+  // NEW: Handle avatar customization save
+  const handleSaveAvatar = async (avatarData) => {
+    if (!user) return;
+    try {
+      const skinRef = ref(db, `userSkins/${user.uid}`);
+      const existingData = getFastLocal(`echomoji_${user.uid}`) || {};
+      const updates = { 
+        ...existingData,
+        activeSkin: avatarData.activeSkin,
+        hairStyle: avatarData.hairStyle,
+      };
+      await update(skinRef, updates);
+      setFastLocal(`echomoji_${user.uid}`, updates);
+      setActiveSkinId(avatarData.activeSkin);
+      setActiveHairStyle(avatarData.hairStyle);
+      setShowAvatarCustomizer(false);
+      setToast({ message: 'Avatar updated successfully!', type: 'success' });
+    } catch (err) {
+      console.error('Failed to save avatar:', err);
+      setToast({ message: 'Failed to save avatar.', type: 'error' });
     }
   };
 
@@ -679,20 +704,57 @@ const Profile = () => {
                   <MoodPicker currentMood={editData.mood || 'neutral'} onSelect={handleMoodChange} />
                 </>
               ) : (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
-                  <ECHOMOJI mood={profile?.mood || 'happy'} skin={activeSkinObj} size={48} interactive={false} animated={true} />
-                  <span style={{
-                    fontSize: '13px',
-                    color: 'var(--text-secondary)',
-                    fontWeight: 500,
-                  }}>
-                    Mood: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>
-                      {profile?.mood || 'happy'}
-                    </strong>
-                  </span>
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+                    <ECHOMOJI 
+                      mood={profile?.mood || 'happy'} 
+                      skin={activeSkinObj} 
+                      hairStyle={activeHairStyle} // NEW PROP
+                      size={48} 
+                      interactive={false} 
+                      animated={true} 
+                    />
+                    <span style={{
+                      fontSize: '13px',
+                      color: 'var(--text-secondary)',
+                      fontWeight: 500,
+                    }}>
+                      Mood: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>
+                        {profile?.mood || 'happy'}
+                      </strong>
+                    </span>
+                  </div>
+                  
+                  {/* NEW: Customize Avatar Button */}
+                  <button
+                    onClick={() => setShowAvatarCustomizer(true)}
+                    style={{
+                      background: 'transparent',
+                      border: '1px solid #6C3CE1',
+                      color: '#6C3CE1',
+                      padding: '6px 16px',
+                      borderRadius: '20px',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    🎨 Customize Avatar
+                  </button>
                 </div>
               )}
             </div>
+          )}
+
+          {/* NEW: Avatar Customizer Component */}
+          {showAvatarCustomizer && !editing && (
+            <AvatarCustomizer
+              currentSkin={activeSkinObj}
+              currentHair={activeHairStyle}
+              currentMood={profile?.mood}
+              onSave={handleSaveAvatar}
+              onCancel={() => setShowAvatarCustomizer(false)}
+            />
           )}
 
           <div className="moving-interests-container" style={{ width: '100%', overflow: 'hidden', padding: '6px 0', marginTop: '12px' }}>
