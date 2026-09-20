@@ -154,6 +154,7 @@ const ChatView = () => {
 
   // ─── WALLPAPER STATE ───
   const [wallpaperId, setWallpaperId] = useState('default');
+  const [customWallpaper, setCustomWallpaper] = useState(null);
   const [showWallpaperPicker, setShowWallpaperPicker] = useState(false);
 
   // ─── ECHO HALO LONG-PRESS STATE ───
@@ -221,28 +222,34 @@ const ChatView = () => {
     return () => clearInterval(id);
   }, []);
 
-  // ─── PARTNER TYPING LISTENER ───
+  // ─── PARTNER TYPING LISTENER (refresh every 2s to expire stale flags) ───
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
     const typingRef = ref(db, `chats/${cId}/typing/${userId}`);
-    const unsub = onValue(typingRef, (snap) => {
-      const data = snap.val();
-      if (data?.isTyping && data?.timestamp > Date.now() - 3000) setPartnerIsTyping(true);
-      else setPartnerIsTyping(false);
-    });
-    return () => unsub();
+
+    const checkTyping = (data) => {
+      if (!data || !data.isTyping) return setPartnerIsTyping(false);
+      const age = Date.now() - (data.timestamp || 0);
+      setPartnerIsTyping(age < 4000);
+    };
+
+    const unsub = onValue(typingRef, (snap) => checkTyping(snap.val()));
+    const interval = setInterval(() => {
+      get(typingRef).then((snap) => checkTyping(snap.val())).catch(() => {});
+    }, 2000);
+
+    return () => { unsub(); clearInterval(interval); };
   }, [user?.uid, userId]);
 
-  // ─── WALLPAPER LISTENER ───
+  // ─── WALLPAPER LISTENER (both id and custom url) ───
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const wpRef = ref(db, `userChats/${user.uid}/${userId}/wallpaper`);
-    const unsub = onValue(wpRef, (snap) => {
-      const v = snap.val();
-      setWallpaperId(v || 'default');
-    });
-    return () => unsub();
+    const cwRef = ref(db, `userChats/${user.uid}/${userId}/customWallpaper`);
+    const unsubWp = onValue(wpRef, (snap) => setWallpaperId(snap.val() || 'default'));
+    const unsubCw = onValue(cwRef, (snap) => setCustomWallpaper(snap.val() || null));
+    return () => { unsubWp(); unsubCw(); };
   }, [user?.uid, userId]);
 
   const handleWallpaperSelect = async (id) => {
@@ -251,6 +258,19 @@ const ChatView = () => {
       await update(ref(db, `userChats/${user.uid}/${userId}`), { wallpaper: id });
     } catch (err) {
       console.error('Failed to save wallpaper', err);
+    }
+  };
+
+  const handleCustomWallpaperSelect = async (url) => {
+    setCustomWallpaper(url);
+    setWallpaperId('__custom__');
+    try {
+      await update(ref(db, `userChats/${user.uid}/${userId}`), {
+        wallpaper: '__custom__',
+        customWallpaper: url,
+      });
+    } catch (err) {
+      console.error('Failed to save custom wallpaper', err);
     }
   };
 
@@ -367,14 +387,29 @@ const ChatView = () => {
     setIsNearBottom(isNear);
   }, []);
 
+  // ─── TYPING HANDLERS (updated) ───────────────────────────────
   const handleTyping = useCallback(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
     const typingRef = ref(db, `chats/${cId}/typing/${user.uid}`);
-    set(typingRef, { isTyping: true, timestamp: Date.now() });
+    set(typingRef, { isTyping: true, timestamp: Date.now() }).catch(() => {});
+
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    typingTimeoutRef.current = setTimeout(() => set(typingRef, { isTyping: false }), 2000);
+    typingTimeoutRef.current = setTimeout(() => {
+      set(typingRef, { isTyping: false, timestamp: Date.now() }).catch(() => {});
+    }, 2500);
   }, [user?.uid, userId]);
+
+  const clearMyTyping = useCallback(() => {
+    if (!user?.uid || !userId) return;
+    const cId = [user.uid, userId].sort().join('_');
+    const typingRef = ref(db, `chats/${cId}/typing/${user.uid}`);
+    set(typingRef, { isTyping: false, timestamp: Date.now() }).catch(() => {});
+  }, [user?.uid, userId]);
+
+  useEffect(() => {
+    return () => { clearMyTyping(); };
+  }, [clearMyTyping]);
 
   const handleSendText = async (e) => {
     e?.preventDefault?.();
@@ -383,10 +418,9 @@ const ChatView = () => {
 
     setHaloActive(false);
 
-    // Stop typing indicator
+    // Stop typing indicator immediately
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
-    const cIdForTyping = [user.uid, userId].sort().join('_');
-    set(ref(db, `chats/${cIdForTyping}/typing/${user.uid}`), { isTyping: false });
+    clearMyTyping();
 
     let currentReply = replyTo;
     const replyToSave = currentReply;
@@ -1058,18 +1092,28 @@ const ChatView = () => {
   const handleInputPointerUp = () => clearTimeout(longPressTimer.current);
   const handleInputPointerLeave = () => clearTimeout(longPressTimer.current);
 
-  // Wallpaper style for messages container
-  const wallpaper = getWallpaperById(wallpaperId);
-  const wallpaperStyle = {
-    background: (wallpaper.type === 'color' || wallpaper.type === 'gradient')
-      ? (wallpaper.value === 'transparent' ? 'var(--bg-primary)' : wallpaper.value)
-      : 'var(--bg-primary)',
-    backgroundImage: wallpaper.type === 'pattern' ? wallpaper.value : 'none',
-    backgroundSize: wallpaper.type === 'pattern' ? '20px 20px' : 'cover',
-    backgroundRepeat: wallpaper.type === 'pattern' ? 'repeat' : 'no-repeat',
-    backgroundPosition: 'center',
-    transition: 'background 0.3s ease',
-  };
+  // Wallpaper style for messages container (supports custom upload)
+  const isCustom = wallpaperId === '__custom__' && customWallpaper;
+  const wallpaper = isCustom ? null : getWallpaperById(wallpaperId);
+
+  const wallpaperStyle = isCustom
+    ? {
+        backgroundImage: `url(${customWallpaper})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        transition: 'background 0.3s ease',
+      }
+    : {
+        background: (wallpaper.type === 'color' || wallpaper.type === 'gradient')
+          ? (wallpaper.value === 'transparent' ? 'var(--bg-primary)' : wallpaper.value)
+          : 'var(--bg-primary)',
+        backgroundImage: wallpaper.type === 'pattern' ? wallpaper.value : 'none',
+        backgroundSize: wallpaper.type === 'pattern' ? '20px 20px' : 'cover',
+        backgroundRepeat: wallpaper.type === 'pattern' ? 'repeat' : 'no-repeat',
+        backgroundPosition: 'center',
+        transition: 'background 0.3s ease',
+      };
 
   return (
     <>
@@ -1150,6 +1194,7 @@ const ChatView = () => {
               placeholder={`Message ${displayName}...`}
               value={newMessage}
               onChange={(e) => { setNewMessage(e.target.value); handleTyping(); }}
+              onBlur={clearMyTyping}
               onKeyDown={handleKeyDown}
               onPaste={handlePaste}
               onPointerDown={handleInputPointerDown}
@@ -1179,7 +1224,9 @@ const ChatView = () => {
         {showWallpaperPicker && (
           <WallpaperPicker
             current={wallpaperId}
+            currentCustom={customWallpaper}
             onSelect={handleWallpaperSelect}
+            onSelectCustom={handleCustomWallpaperSelect}
             onClose={() => setShowWallpaperPicker(false)}
           />
         )}
