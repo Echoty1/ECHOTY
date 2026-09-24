@@ -38,9 +38,32 @@ import AdminPanel from './components/pages/Admin/AdminPanel';
 import BanScreen from './components/BanScreen/BanScreen';
 import { APP_VERSION } from './version';
 import Legal from './components/pages/Other/Legal';
-import EchoDropPage from './components/pages/EchoDrop/EchoDropPage'; // ← ADDED
+import EchoDropPage from './components/pages/EchoDrop/EchoDropPage';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
+
+// ─── SEO / Structured Data for Google ──────────────────────────
+// Tells Google that "Echo" is also known as "Echoty" and ties
+// Lawal Abdulmalik to the brand as founder & CEO.
+const schemaData = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'Echo',
+  alternateName: 'Echoty',
+  url: 'https://echoty.xyz',
+  logo: 'https://echoty.xyz/logo.png',
+  description: 'Discover, connect, and echo with animated avatars.',
+  founder: {
+    '@type': 'Person',
+    name: 'Lawal Abdulmalik',
+    jobTitle: 'Founder & CEO',
+  },
+  ceo: {
+    '@type': 'Person',
+    name: 'Lawal Abdulmalik',
+  },
+  sameAs: ['https://echoty.xyz'],
+};
 
 function ScrollToTop() {
   const { pathname } = useLocation();
@@ -111,7 +134,7 @@ function AppContent() {
       pathname === '/communities' ||
       pathname === '/shop' ||
       pathname === '/other' ||
-      pathname === '/echodrop'); // ← also added here so Support button shows
+      pathname === '/echodrop');
 
   useEffect(() => {
     const src = 'https://myhappr.com/widget.js';
@@ -316,7 +339,7 @@ function AppContent() {
           <Route path="/shop" element={<Shop />} />
           <Route path="/legal" element={<Legal />} />
           <Route path="/communities" element={<Communities />} />
-          <Route path="/echodrop" element={<EchoDropPage />} /> {/* ← ADDED */}
+          <Route path="/echodrop" element={<EchoDropPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
@@ -335,6 +358,12 @@ function AppContent() {
 function App() {
   return (
     <BrowserRouter>
+      {/* ── SEO: Structured data injected once at the app root ── */}
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaData) }}
+      />
+
       <ThemeProvider>
         <AuthProvider>
           <PresenceProvider>
