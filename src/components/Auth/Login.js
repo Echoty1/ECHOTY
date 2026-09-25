@@ -39,7 +39,6 @@ const withAuthRetry = async (fn, tries = 3) => {
   throw last;
 };
 
-/* ─────────────── Password strength heuristic ─────────────── */
 const getPasswordStrength = (pw) => {
   if (!pw) return { score: 0, label: '', color: 'transparent' };
   let score = 0;
@@ -54,6 +53,78 @@ const getPasswordStrength = (pw) => {
   return { score, label: 'Strong', color: '#10B981' };
 };
 
+/* ─── Fake mini chat preview for the hero ─── */
+const MiniChatPreview = () => (
+  <div className="echo-preview">
+    <div className="echo-preview-header">
+      <div className="echo-preview-avatar">
+        <svg viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="previewAvatarGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stopColor="#FDBCB4" />
+              <stop offset="100%" stopColor="#C98474" />
+            </linearGradient>
+          </defs>
+          <circle cx="24" cy="24" r="22" fill="url(#previewAvatarGrad)" />
+          <path d="M 6 20 Q 6 4 24 4 Q 42 4 42 20 Q 38 12 24 12 Q 10 12 6 20 Z" fill="#3A2318" />
+          <circle cx="16" cy="21" r="2" fill="#2C1A0E" />
+          <circle cx="32" cy="21" r="2" fill="#2C1A0E" />
+          <path d="M 18 31 Q 24 35 30 31" stroke="#2C1A0E" strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        </svg>
+      </div>
+      <div className="echo-preview-name">
+        <strong>Amina</strong>
+        <span className="echo-preview-status">
+          <span className="echo-preview-dot" />
+          typing…
+        </span>
+      </div>
+    </div>
+
+    <div className="echo-preview-body">
+      <div className="echo-preview-bubble them">
+        hey! just finished my new avatar ✨
+      </div>
+      <div className="echo-preview-bubble me">
+        no way — send it!
+      </div>
+      <div className="echo-preview-bubble them">
+        <span className="echo-preview-emoji">🎨</span>
+      </div>
+      <div className="echo-preview-typing">
+        <span /><span /><span />
+      </div>
+    </div>
+
+    <div className="echo-preview-footer">
+      <div className="echo-preview-input">
+        Message Amina…
+      </div>
+      <div className="echo-preview-send">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor">
+          <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
+        </svg>
+      </div>
+    </div>
+  </div>
+);
+
+/* ─── Social proof row ─── */
+const SocialProof = () => (
+  <div className="echo-proof">
+    <div className="echo-proof-avatars">
+      <div className="echo-proof-avatar" style={{ background: 'linear-gradient(135deg, #FDBCB4, #C98474)' }}>A</div>
+      <div className="echo-proof-avatar" style={{ background: 'linear-gradient(135deg, #E8B48C, #A66A32)' }}>L</div>
+      <div className="echo-proof-avatar" style={{ background: 'linear-gradient(135deg, #D4A373, #8C5E32)' }}>K</div>
+      <div className="echo-proof-avatar more">+</div>
+    </div>
+    <div className="echo-proof-text">
+      <strong>12,400+</strong>
+      <span>people already echoing</span>
+    </div>
+  </div>
+);
+
 const Login = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -67,8 +138,6 @@ const Login = () => {
   const [rememberMe, setRememberMe] = useState(true);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [errorShake, setErrorShake] = useState(false);
-
-  // Focus animation control
   const [focusedField, setFocusedField] = useState(null);
 
   const native = isNativeApp();
@@ -87,7 +156,6 @@ const Login = () => {
     }
   }, []);
 
-  // Trigger a small shake when an error appears
   useEffect(() => {
     if (error) {
       setErrorShake(true);
@@ -131,7 +199,6 @@ const Login = () => {
     setError('');
     setInfo('');
 
-    // Signup validation
     if (isSignup) {
       if (password.length < 8) {
         setError('Password must be at least 8 characters.');
@@ -256,8 +323,10 @@ const Login = () => {
     <div className="echo-auth-root">
       <style>{AUTH_STYLES}</style>
 
-      {/* ─── Left branded panel (hidden on mobile) ─── */}
-      <aside className="echo-auth-hero" aria-hidden="true">
+      {/* ─── LEFT: Hero + Product preview ─── */}
+      <aside className="echo-auth-hero">
+        <div className="echo-auth-hero-grid" aria-hidden="true" />
+
         <div className="echo-auth-hero-inner">
           <div className="echo-auth-brand">
             <svg viewBox="0 0 48 48" className="echo-auth-logo" xmlns="http://www.w3.org/2000/svg">
@@ -272,43 +341,31 @@ const Login = () => {
               <path d="M 32 17 A 10 10 0 0 1 32 31" stroke="#fff" strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.85" />
             </svg>
             <span className="echo-auth-brand-name">ECHO</span>
+            <span className="echo-auth-version-badge">v2 · new</span>
           </div>
 
           <h1 className="echo-auth-hero-title">
-            Where every message<br />
-            <span className="echo-auth-hero-accent">echoes back.</span>
+            Conversations<br />
+            that <span className="echo-auth-hero-accent">echo back.</span>
           </h1>
           <p className="echo-auth-hero-sub">
-            Real-time conversations, animated avatars, and a community
-            that actually feels alive.
+            Real-time chat, animated avatars, and a community that actually feels alive.
           </p>
 
-          <div className="echo-auth-hero-features">
-            <div className="echo-auth-feature">
-              <span className="echo-auth-feature-icon">✦</span>
-              <span>Custom animated ECHOmojis</span>
-            </div>
-            <div className="echo-auth-feature">
-              <span className="echo-auth-feature-icon">✦</span>
-              <span>Live typing indicators & reactions</span>
-            </div>
-            <div className="echo-auth-feature">
-              <span className="echo-auth-feature-icon">✦</span>
-              <span>End-to-end privacy by default</span>
-            </div>
-          </div>
+          {/* Live product preview */}
+          <MiniChatPreview />
+
+          <SocialProof />
         </div>
 
-        {/* Floating orbs */}
-        <div className="echo-auth-orb echo-auth-orb-a" />
-        <div className="echo-auth-orb echo-auth-orb-b" />
-        <div className="echo-auth-orb echo-auth-orb-c" />
+        <div className="echo-auth-orb echo-auth-orb-a" aria-hidden="true" />
+        <div className="echo-auth-orb echo-auth-orb-b" aria-hidden="true" />
+        <div className="echo-auth-orb echo-auth-orb-c" aria-hidden="true" />
       </aside>
 
-      {/* ─── Right auth panel ─── */}
+      {/* ─── RIGHT: Auth card ─── */}
       <main className="echo-auth-main">
         <div className="echo-auth-card">
-          {/* Mobile-only brand header */}
           <div className="echo-auth-mobile-brand">
             <svg viewBox="0 0 48 48" className="echo-auth-logo-sm" xmlns="http://www.w3.org/2000/svg">
               <defs>
@@ -325,7 +382,6 @@ const Login = () => {
           </div>
 
           {awaitingVerify ? (
-            /* ─── Verification screen ─── */
             <div className="echo-auth-verify">
               <div className="echo-auth-verify-icon">
                 <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -352,7 +408,6 @@ const Login = () => {
             </div>
           ) : (
             <>
-              {/* Header */}
               <div className="echo-auth-header">
                 <h2 className="echo-auth-title">
                   {isSignup ? 'Create your account' : 'Welcome back'}
@@ -364,7 +419,6 @@ const Login = () => {
                 </p>
               </div>
 
-              {/* Alerts */}
               {error && (
                 <div
                   ref={errorRef}
@@ -381,7 +435,6 @@ const Login = () => {
                 </div>
               )}
 
-              {/* Google */}
               <button
                 type="button"
                 onClick={handleGoogle}
@@ -401,7 +454,6 @@ const Login = () => {
                 <span>or</span>
               </div>
 
-              {/* Form */}
               <form onSubmit={handleSubmit} noValidate>
                 <div className="echo-auth-field">
                   <label className="echo-auth-label">Email</label>
@@ -469,7 +521,6 @@ const Login = () => {
                     </button>
                   </div>
 
-                  {/* Password strength bar on signup */}
                   {isSignup && password && (
                     <div className="echo-auth-strength">
                       <div className="echo-auth-strength-bar">
@@ -491,7 +542,6 @@ const Login = () => {
                   )}
                 </div>
 
-                {/* Remember me / Terms */}
                 {!isSignup ? (
                   <label className="echo-auth-checkbox-row">
                     <input
@@ -541,7 +591,6 @@ const Login = () => {
                 </button>
               </form>
 
-              {/* Mode toggle */}
               <div className="echo-auth-switch">
                 {isSignup ? (
                   <>
@@ -560,7 +609,6 @@ const Login = () => {
                 )}
               </div>
 
-              {/* Demo */}
               <div className="echo-auth-demo">
                 <button
                   type="button"
@@ -576,11 +624,10 @@ const Login = () => {
         </div>
 
         <p className="echo-auth-footer">
-          © {new Date().getFullYear()} ECHO · Made with care
+          © {new Date().getFullYear()} ECHO · Made in Lagos 🌍
         </p>
       </main>
 
-      {/* Redirect overlay */}
       {isRedirecting && (
         <div className="echo-auth-redirect">
           <div className="echo-auth-spinner echo-auth-spinner-lg" />
@@ -596,13 +643,13 @@ const AUTH_STYLES = `
   .echo-auth-root {
     --brand: #6C3CE1;
     --brand-2: #EC4899;
-    --bg: var(--bg-primary, #0A0A0F);
-    --bg-card: var(--bg-secondary, #12121A);
+    --bg: var(--bg-primary, #08080C);
+    --bg-card: var(--bg-secondary, #13131C);
     --border: var(--border-color, rgba(255,255,255,0.08));
     --text: var(--text-primary, #fff);
-    --text-2: var(--text-secondary, #aaa);
-    --text-3: var(--text-muted, #666);
-    --input-bg: var(--bg-input, rgba(255,255,255,0.05));
+    --text-2: var(--text-secondary, #a1a1aa);
+    --text-3: var(--text-muted, #71717a);
+    --input-bg: var(--bg-input, rgba(255,255,255,0.04));
 
     min-height: 100dvh;
     display: grid;
@@ -612,59 +659,68 @@ const AUTH_STYLES = `
     font-family: 'Inter', -apple-system, sans-serif;
     overflow: hidden;
   }
-
   @media (min-width: 900px) {
-    .echo-auth-root {
-      grid-template-columns: 1.05fr 1fr;
-    }
+    .echo-auth-root { grid-template-columns: 1.05fr 1fr; }
   }
 
-  /* ─── Left hero panel ─── */
+  /* ─── HERO ─── */
   .echo-auth-hero {
     display: none;
     position: relative;
     overflow: hidden;
-    background:
-      radial-gradient(circle at 30% 20%, rgba(108,60,225,0.55), transparent 55%),
-      radial-gradient(circle at 70% 80%, rgba(236,72,153,0.45), transparent 55%),
-      linear-gradient(135deg, #1A0B3D 0%, #0A0A1A 100%);
     padding: 60px 64px;
     color: #fff;
+    background:
+      radial-gradient(circle at 25% 15%, rgba(108,60,225,0.55), transparent 55%),
+      radial-gradient(circle at 80% 85%, rgba(236,72,153,0.4), transparent 55%),
+      linear-gradient(135deg, #150A2E 0%, #08080C 100%);
   }
-  @media (min-width: 900px) {
-    .echo-auth-hero { display: flex; }
+  @media (min-width: 900px) { .echo-auth-hero { display: flex; } }
+
+  .echo-auth-hero-grid {
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: radial-gradient(circle at center, #000 40%, transparent 90%);
+    -webkit-mask-image: radial-gradient(circle at center, #000 40%, transparent 90%);
+    pointer-events: none;
   }
 
   .echo-auth-hero-inner {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    flex-direction: column;
+    position: relative; z-index: 2;
+    display: flex; flex-direction: column;
     justify-content: center;
-    max-width: 480px;
+    max-width: 520px;
     margin: auto 0;
+    width: 100%;
   }
 
-  .echo-auth-brand {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 48px;
-  }
+  .echo-auth-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 44px; }
   .echo-auth-logo { width: 40px; height: 40px; }
   .echo-auth-brand-name {
-    font-size: 22px;
-    font-weight: 900;
-    letter-spacing: 4px;
-    color: #fff;
+    font-size: 20px; font-weight: 900; letter-spacing: 4px; color: #fff;
+  }
+  .echo-auth-version-badge {
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    background: linear-gradient(135deg, rgba(108,60,225,0.35), rgba(236,72,153,0.35));
+    border: 1px solid rgba(167,139,250,0.4);
+    color: #E9D5FF;
+    margin-left: 6px;
   }
 
   .echo-auth-hero-title {
-    font-size: 44px;
+    font-size: 48px;
     font-weight: 800;
-    letter-spacing: -1px;
-    line-height: 1.1;
-    margin: 0 0 20px;
+    letter-spacing: -1.5px;
+    line-height: 1.05;
+    margin: 0 0 18px;
     color: #fff;
   }
   .echo-auth-hero-accent {
@@ -673,63 +729,198 @@ const AUTH_STYLES = `
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
-
   .echo-auth-hero-sub {
-    font-size: 16px;
+    font-size: 15.5px;
     line-height: 1.6;
-    color: rgba(255,255,255,0.7);
-    margin: 0 0 40px;
-    max-width: 40ch;
+    color: rgba(255,255,255,0.65);
+    margin: 0 0 36px;
+    max-width: 42ch;
   }
 
-  .echo-auth-hero-features {
-    display: flex;
-    flex-direction: column;
-    gap: 14px;
+  /* ─── Mini chat preview ─── */
+  .echo-preview {
+    width: 100%;
+    max-width: 380px;
+    border-radius: 22px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.09);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 14px;
+    box-shadow:
+      0 30px 60px rgba(0,0,0,0.45),
+      0 0 0 1px rgba(108,60,225,0.15),
+      0 0 40px rgba(108,60,225,0.15);
+    animation: echoPreviewFloat 6s ease-in-out infinite;
+    margin-bottom: 36px;
   }
-  .echo-auth-feature {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 14px;
-    color: rgba(255,255,255,0.85);
+  @keyframes echoPreviewFloat {
+    0%, 100% { transform: translateY(0) rotate(-0.3deg); }
+    50%      { transform: translateY(-6px) rotate(0.3deg); }
   }
-  .echo-auth-feature-icon {
-    display: grid;
-    place-items: center;
-    width: 26px;
-    height: 26px;
+
+  .echo-preview-header {
+    display: flex; align-items: center; gap: 10px;
+    padding-bottom: 12px; margin-bottom: 12px;
+    border-bottom: 1px solid rgba(255,255,255,0.06);
+  }
+  .echo-preview-avatar {
+    width: 38px; height: 38px;
     border-radius: 50%;
-    background: rgba(255,255,255,0.1);
-    border: 1px solid rgba(255,255,255,0.18);
-    color: #F472B6;
-    font-size: 12px;
-    flex-shrink: 0;
+    overflow: hidden;
+    box-shadow: 0 0 0 2px rgba(167,139,250,0.5);
+    position: relative;
+  }
+  .echo-preview-avatar::after {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 50%;
+    box-shadow: 0 0 0 0 rgba(167,139,250,0.6);
+    animation: echoPreviewPulse 2.4s ease-out infinite;
+  }
+  @keyframes echoPreviewPulse {
+    0%   { box-shadow: 0 0 0 0 rgba(167,139,250,0.6); }
+    100% { box-shadow: 0 0 0 10px rgba(167,139,250,0); }
+  }
+  .echo-preview-avatar svg { width: 100%; height: 100%; display: block; }
+
+  .echo-preview-name {
+    display: flex; flex-direction: column; gap: 2px;
+    font-size: 13px; color: #fff;
+  }
+  .echo-preview-name strong { font-weight: 700; }
+  .echo-preview-status {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 11px; color: #A78BFA; font-weight: 600;
+  }
+  .echo-preview-dot {
+    width: 6px; height: 6px; border-radius: 50%; background: #10B981;
+    box-shadow: 0 0 6px #10B981;
   }
 
-  /* Floating orbs */
+  .echo-preview-body {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .echo-preview-bubble {
+    max-width: 78%;
+    padding: 9px 13px;
+    border-radius: 16px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: #fff;
+  }
+  .echo-preview-bubble.them {
+    align-self: flex-start;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-bottom-left-radius: 4px;
+  }
+  .echo-preview-bubble.me {
+    align-self: flex-end;
+    background: linear-gradient(135deg, #6C3CE1, #EC4899);
+    border-bottom-right-radius: 4px;
+    box-shadow: 0 4px 14px rgba(108,60,225,0.35);
+  }
+  .echo-preview-emoji {
+    font-size: 22px;
+    display: inline-block;
+    line-height: 1;
+  }
+
+  .echo-preview-typing {
+    align-self: flex-start;
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 9px 14px;
+    background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 16px 16px 16px 4px;
+  }
+  .echo-preview-typing span {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #A78BFA;
+    animation: echoPreviewDot 1.3s ease-in-out infinite;
+  }
+  .echo-preview-typing span:nth-child(2) { animation-delay: 0.18s; }
+  .echo-preview-typing span:nth-child(3) { animation-delay: 0.36s; }
+  @keyframes echoPreviewDot {
+    0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
+    30%           { transform: translateY(-4px); opacity: 1; }
+  }
+
+  .echo-preview-footer {
+    display: flex; align-items: center; gap: 8px;
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(255,255,255,0.06);
+  }
+  .echo-preview-input {
+    flex: 1;
+    padding: 9px 14px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.08);
+    font-size: 12px;
+    color: rgba(255,255,255,0.4);
+  }
+  .echo-preview-send {
+    display: grid; place-items: center;
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6C3CE1, #EC4899);
+    color: #fff;
+    box-shadow: 0 4px 12px rgba(108,60,225,0.4);
+  }
+
+  /* ─── Social proof ─── */
+  .echo-proof {
+    display: flex; align-items: center; gap: 14px;
+  }
+  .echo-proof-avatars {
+    display: flex;
+  }
+  .echo-proof-avatar {
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    display: grid; place-items: center;
+    font-size: 12px; font-weight: 800;
+    color: #fff;
+    border: 2px solid #0F0824;
+    margin-left: -10px;
+  }
+  .echo-proof-avatar:first-child { margin-left: 0; }
+  .echo-proof-avatar.more {
+    background: rgba(255,255,255,0.1);
+    color: #E9D5FF;
+    font-size: 14px;
+  }
+  .echo-proof-text {
+    display: flex; flex-direction: column;
+    font-size: 13px;
+    color: rgba(255,255,255,0.7);
+  }
+  .echo-proof-text strong { color: #fff; font-weight: 700; }
+
+  /* ─── Orbs ─── */
   .echo-auth-orb {
     position: absolute;
     border-radius: 50%;
-    filter: blur(60px);
+    filter: blur(70px);
     pointer-events: none;
-    opacity: 0.5;
+    opacity: 0.45;
   }
   .echo-auth-orb-a {
-    width: 320px; height: 320px;
-    background: #6C3CE1;
-    top: -60px; right: -60px;
+    width: 340px; height: 340px; background: #6C3CE1;
+    top: -80px; right: -80px;
     animation: echoAuthFloat 12s ease-in-out infinite;
   }
   .echo-auth-orb-b {
-    width: 260px; height: 260px;
-    background: #EC4899;
+    width: 260px; height: 260px; background: #EC4899;
     bottom: -40px; left: -40px;
     animation: echoAuthFloat 14s ease-in-out infinite reverse;
   }
   .echo-auth-orb-c {
-    width: 200px; height: 200px;
-    background: #A78BFA;
+    width: 200px; height: 200px; background: #A78BFA;
     top: 45%; left: 55%;
     animation: echoAuthFloat 16s ease-in-out infinite;
   }
@@ -738,22 +929,18 @@ const AUTH_STYLES = `
     50%      { transform: translate(-20px, 30px) scale(1.08); }
   }
 
-  /* ─── Right auth main ─── */
+  /* ─── MAIN ─── */
   .echo-auth-main {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
     padding: 24px;
     overflow-y: auto;
     min-height: 100dvh;
+    position: relative;
   }
 
   .echo-auth-card {
-    width: 100%;
-    max-width: 420px;
-    background: transparent;
-    padding: 8px;
+    width: 100%; max-width: 420px;
     animation: echoAuthCardIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
   }
   @keyframes echoAuthCardIn {
@@ -762,56 +949,36 @@ const AUTH_STYLES = `
   }
 
   .echo-auth-mobile-brand {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    margin-bottom: 32px;
+    display: flex; align-items: center; justify-content: center;
+    gap: 10px; margin-bottom: 32px;
   }
   .echo-auth-logo-sm { width: 32px; height: 32px; }
   .echo-auth-brand-name-sm {
-    font-size: 18px;
-    font-weight: 900;
-    letter-spacing: 3px;
+    font-size: 18px; font-weight: 900; letter-spacing: 3px;
     background: linear-gradient(135deg, #6C3CE1, #EC4899);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
     background-clip: text;
   }
-  @media (min-width: 900px) {
-    .echo-auth-mobile-brand { display: none; }
-  }
+  @media (min-width: 900px) { .echo-auth-mobile-brand { display: none; } }
 
-  /* Header */
-  .echo-auth-header { margin-bottom: 28px; }
+  .echo-auth-header { margin-bottom: 26px; }
   .echo-auth-title {
-    font-size: 26px;
-    font-weight: 800;
-    letter-spacing: -0.4px;
-    margin: 0 0 6px;
+    font-size: 26px; font-weight: 800;
+    letter-spacing: -0.4px; margin: 0 0 6px;
     color: var(--text);
   }
   .echo-auth-sub {
-    font-size: 14px;
-    color: var(--text-2);
-    margin: 0;
-    line-height: 1.5;
+    font-size: 14px; color: var(--text-2);
+    margin: 0; line-height: 1.5;
   }
-  .echo-auth-hint {
-    font-size: 13px;
-    color: var(--text-3);
-    margin: 12px 0 20px;
-  }
+  .echo-auth-hint { font-size: 13px; color: var(--text-3); margin: 12px 0 20px; }
 
   /* Alerts */
   .echo-auth-alert {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    padding: 12px 14px;
-    border-radius: 12px;
-    font-size: 13px;
-    line-height: 1.45;
+    display: flex; align-items: flex-start; gap: 10px;
+    padding: 12px 14px; border-radius: 12px;
+    font-size: 13px; line-height: 1.45;
     margin-bottom: 18px;
     border: 1px solid transparent;
   }
@@ -826,17 +993,11 @@ const AUTH_STYLES = `
     color: #34D399;
   }
   .echo-auth-alert-icon {
-    display: grid;
-    place-items: center;
-    width: 18px;
-    height: 18px;
-    border-radius: 50%;
-    background: currentColor;
-    color: var(--bg);
-    font-weight: 900;
-    font-size: 11px;
-    flex-shrink: 0;
-    margin-top: 1px;
+    display: grid; place-items: center;
+    width: 18px; height: 18px; border-radius: 50%;
+    background: currentColor; color: var(--bg);
+    font-weight: 900; font-size: 11px;
+    flex-shrink: 0; margin-top: 1px;
   }
   .echo-auth-alert-error.shake { animation: echoAuthShake 0.4s ease; }
   @keyframes echoAuthShake {
@@ -848,15 +1009,10 @@ const AUTH_STYLES = `
   /* Buttons */
   .echo-auth-btn {
     width: 100%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
+    display: flex; align-items: center; justify-content: center; gap: 10px;
     padding: 13px 16px;
     border-radius: 12px;
-    font-size: 14px;
-    font-weight: 600;
-    font-family: inherit;
+    font-size: 14px; font-weight: 600; font-family: inherit;
     cursor: pointer;
     transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
     border: 1px solid transparent;
@@ -869,7 +1025,6 @@ const AUTH_STYLES = `
     background: var(--bg-card);
     border-color: var(--border);
     color: var(--text);
-    margin-bottom: 0;
   }
   .echo-auth-btn-google:not(:disabled):hover {
     border-color: rgba(108,60,225,0.5);
@@ -879,9 +1034,15 @@ const AUTH_STYLES = `
 
   .echo-auth-btn-primary {
     background: linear-gradient(135deg, #6C3CE1, #EC4899);
+    background-size: 200% 200%;
     color: #fff;
     margin-top: 6px;
     box-shadow: 0 8px 24px rgba(108,60,225,0.35);
+    animation: echoBtnGradient 6s ease infinite;
+  }
+  @keyframes echoBtnGradient {
+    0%, 100% { background-position: 0% 50%; }
+    50%      { background-position: 100% 50%; }
   }
   .echo-auth-btn-primary:not(:disabled):hover {
     box-shadow: 0 12px 32px rgba(108,60,225,0.5);
@@ -894,19 +1055,14 @@ const AUTH_STYLES = `
     color: var(--text);
     margin-top: 20px;
   }
-  .echo-auth-btn-secondary:not(:disabled):hover {
-    background: var(--input-bg);
-  }
+  .echo-auth-btn-secondary:not(:disabled):hover { background: var(--input-bg); }
 
   .echo-auth-btn-demo {
     background: transparent;
     border: 1px dashed var(--border);
     color: var(--text-2);
-    font-size: 13px;
-    font-weight: 600;
-    padding: 10px 14px;
-    min-height: 40px;
-    border-radius: 10px;
+    font-size: 13px; font-weight: 600;
+    padding: 10px 14px; min-height: 40px; border-radius: 10px;
   }
   .echo-auth-btn-demo:not(:disabled):hover {
     border-color: rgba(108,60,225,0.6);
@@ -914,131 +1070,87 @@ const AUTH_STYLES = `
     background: rgba(108,60,225,0.05);
   }
 
-  /* Divider */
   .echo-auth-divider {
-    display: flex;
-    align-items: center;
-    gap: 12px;
+    display: flex; align-items: center; gap: 12px;
     margin: 20px 0;
     color: var(--text-3);
     font-size: 12px;
   }
   .echo-auth-divider::before,
   .echo-auth-divider::after {
-    content: '';
-    flex: 1;
-    height: 1px;
-    background: var(--border);
+    content: ''; flex: 1; height: 1px; background: var(--border);
   }
 
   /* Fields */
   .echo-auth-field { margin-bottom: 14px; }
-
   .echo-auth-label-row {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
+    display: flex; align-items: center; justify-content: space-between;
     margin-bottom: 6px;
   }
-
   .echo-auth-label {
-    display: block;
-    font-size: 12.5px;
-    font-weight: 600;
-    color: var(--text-2);
-    margin-bottom: 6px;
-    letter-spacing: 0.2px;
+    display: block; font-size: 12.5px; font-weight: 600;
+    color: var(--text-2); margin-bottom: 6px; letter-spacing: 0.2px;
   }
   .echo-auth-label-row .echo-auth-label { margin-bottom: 0; }
 
   .echo-auth-input-wrap {
-    position: relative;
-    border-radius: 12px;
+    position: relative; border-radius: 12px;
     background: var(--input-bg);
     border: 1px solid var(--border);
     transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-    display: flex;
-    align-items: center;
+    display: flex; align-items: center;
   }
   .echo-auth-input-wrap.focused {
     border-color: rgba(108,60,225,0.6);
     box-shadow: 0 0 0 3px rgba(108,60,225,0.15);
     background: var(--bg-card);
   }
-
   .echo-auth-input {
-    flex: 1;
-    padding: 13px 14px;
-    background: transparent;
-    border: none;
-    outline: none;
-    color: var(--text);
-    font-size: 14px;
-    font-family: inherit;
+    flex: 1; padding: 13px 14px;
+    background: transparent; border: none; outline: none;
+    color: var(--text); font-size: 14px; font-family: inherit;
     border-radius: 12px;
   }
   .echo-auth-input::placeholder { color: var(--text-3); }
   .echo-auth-input:disabled { opacity: 0.6; cursor: not-allowed; }
 
   .echo-auth-eye {
-    display: grid;
-    place-items: center;
-    width: 38px;
-    height: 38px;
-    margin-right: 4px;
-    background: transparent;
-    border: none;
-    color: var(--text-3);
-    cursor: pointer;
+    display: grid; place-items: center;
+    width: 38px; height: 38px; margin-right: 4px;
+    background: transparent; border: none;
+    color: var(--text-3); cursor: pointer;
     border-radius: 8px;
     transition: color 0.15s ease, background 0.15s ease;
   }
   .echo-auth-eye:hover { color: var(--text); background: var(--input-bg); }
 
-  /* Password strength */
   .echo-auth-strength {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    display: flex; align-items: center; gap: 10px;
     margin-top: 8px;
   }
   .echo-auth-strength-bar {
-    flex: 1;
-    height: 4px;
-    background: var(--input-bg);
-    border-radius: 999px;
-    overflow: hidden;
+    flex: 1; height: 4px; background: var(--input-bg);
+    border-radius: 999px; overflow: hidden;
   }
   .echo-auth-strength-fill {
-    height: 100%;
-    border-radius: 999px;
+    height: 100%; border-radius: 999px;
     transition: width 0.3s ease, background 0.3s ease;
   }
   .echo-auth-strength-label {
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: 0.3px;
-    min-width: 44px;
-    text-align: right;
+    font-size: 11px; font-weight: 700; letter-spacing: 0.3px;
+    min-width: 44px; text-align: right;
   }
 
-  /* Checkbox */
   .echo-auth-checkbox-row {
-    display: flex;
-    align-items: flex-start;
-    gap: 10px;
-    font-size: 13px;
-    color: var(--text-2);
-    cursor: pointer;
-    margin: 8px 0 18px;
+    display: flex; align-items: flex-start; gap: 10px;
+    font-size: 13px; color: var(--text-2);
+    cursor: pointer; margin: 8px 0 18px;
     line-height: 1.5;
   }
   .echo-auth-checkbox-row input { display: none; }
   .echo-auth-checkbox-mark {
     position: relative;
-    width: 18px;
-    height: 18px;
-    flex-shrink: 0;
+    width: 18px; height: 18px; flex-shrink: 0;
     border-radius: 5px;
     border: 1.5px solid var(--border);
     background: var(--input-bg);
@@ -1052,76 +1164,51 @@ const AUTH_STYLES = `
   .echo-auth-checkbox-row input:checked + .echo-auth-checkbox-mark::after {
     content: '';
     position: absolute;
-    left: 5px;
-    top: 1px;
-    width: 5px;
-    height: 10px;
+    left: 5px; top: 1px;
+    width: 5px; height: 10px;
     border-right: 2px solid #fff;
     border-bottom: 2px solid #fff;
     transform: rotate(45deg);
   }
 
-  /* Links */
   .echo-auth-link {
-    background: none;
-    border: none;
-    color: #A78BFA;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: 600;
-    padding: 0;
-    font-family: inherit;
+    background: none; border: none;
+    color: #A78BFA; cursor: pointer;
+    font-size: 13px; font-weight: 600;
+    padding: 0; font-family: inherit;
   }
   .echo-auth-link:hover { text-decoration: underline; }
   .echo-auth-link-inline {
-    color: #A78BFA;
-    text-decoration: none;
-    font-weight: 600;
+    color: #A78BFA; text-decoration: none; font-weight: 600;
   }
   .echo-auth-link-inline:hover { text-decoration: underline; }
 
-  /* Mode toggle */
   .echo-auth-switch {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    margin-top: 22px;
-    font-size: 13.5px;
-    color: var(--text-2);
+    display: flex; align-items: center; justify-content: center;
+    gap: 6px; margin-top: 22px;
+    font-size: 13.5px; color: var(--text-2);
   }
 
-  /* Demo */
   .echo-auth-demo {
-    margin-top: 26px;
-    padding-top: 22px;
+    margin-top: 26px; padding-top: 22px;
     border-top: 1px solid var(--border);
   }
 
-  /* Spinner */
   .echo-auth-spinner {
     display: inline-block;
-    width: 16px;
-    height: 16px;
+    width: 16px; height: 16px;
     border: 2px solid rgba(255,255,255,0.35);
     border-top-color: #fff;
     border-radius: 50%;
     animation: echoAuthSpin 0.7s linear infinite;
   }
-  .echo-auth-spinner-lg {
-    width: 42px;
-    height: 42px;
-    border-width: 3px;
-  }
+  .echo-auth-spinner-lg { width: 42px; height: 42px; border-width: 3px; }
   @keyframes echoAuthSpin { to { transform: rotate(360deg); } }
 
-  /* Verify screen */
   .echo-auth-verify { text-align: center; padding: 8px 4px; }
   .echo-auth-verify-icon {
-    display: grid;
-    place-items: center;
-    width: 68px;
-    height: 68px;
+    display: grid; place-items: center;
+    width: 68px; height: 68px;
     margin: 0 auto 20px;
     border-radius: 50%;
     background: rgba(108,60,225,0.12);
@@ -1130,29 +1217,21 @@ const AUTH_STYLES = `
   }
   .echo-auth-verify .echo-auth-title { margin-top: 4px; }
 
-  /* Footer */
   .echo-auth-footer {
-    margin-top: 32px;
-    font-size: 12px;
-    color: var(--text-3);
-    text-align: center;
+    margin-top: 32px; font-size: 12px;
+    color: var(--text-3); text-align: center;
   }
 
-  /* Redirect overlay */
   .echo-auth-redirect {
-    position: fixed;
-    inset: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
+    position: fixed; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
     gap: 16px;
-    background: rgba(10, 10, 15, 0.92);
+    background: rgba(8, 8, 12, 0.92);
     backdrop-filter: blur(8px);
     -webkit-backdrop-filter: blur(8px);
     z-index: 9999;
-    color: #fff;
-    font-size: 14px;
+    color: #fff; font-size: 14px;
   }
   .echo-auth-redirect .echo-auth-spinner {
     border-color: rgba(255,255,255,0.2);
@@ -1162,6 +1241,7 @@ const AUTH_STYLES = `
   @media (max-width: 480px) {
     .echo-auth-main { padding: 20px 18px; }
     .echo-auth-title { font-size: 22px; }
+    .echo-auth-hero-title { font-size: 34px; }
   }
 
   @media (prefers-reduced-motion: reduce) {
