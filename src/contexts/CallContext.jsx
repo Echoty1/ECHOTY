@@ -1,6 +1,6 @@
 // src/contexts/CallContext.jsx
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from './AuthContext';
 import { useProfile } from './ProfileContext';
 import { db } from '../services/firebase';
 import {
