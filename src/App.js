@@ -21,6 +21,7 @@ import Settings from './components/pages/Other/Settings';
 import About from './components/pages/Other/About';
 import CoinPurchase from './components/pages/CoinPurchase/CoinPurchase';
 import Login from './components/Auth/Login';
+import VerifyEmailScreen from './components/Auth/VerifyEmailScreen';
 import Navbar from './components/Layout/Navbar';
 import BottomNav from './components/Layout/BottomNav';
 import NetworkStatus from './components/common/NetworkStatus';
@@ -44,7 +45,6 @@ import { unlockAudio } from './services/notificationService';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
-// ─── SEO / Structured Data for Google ──────────────────────────
 const schemaData = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
@@ -120,7 +120,6 @@ function AppContent() {
   const { user, loading, banInfo } = useAuth();
   const { fetchProfile } = useProfile();
 
-  // Global incoming-message listener (plays sound + fires banner)
   useGlobalMessageListener();
 
   const [minTimePassed, setMinTimePassed] = useState(false);
@@ -140,7 +139,6 @@ function AppContent() {
       pathname === '/other' ||
       pathname === '/echodrop');
 
-  // ─── Prime the audio elements on the very first user gesture ───
   useEffect(() => {
     const prime = () => unlockAudio();
     window.addEventListener('touchstart', prime, { once: true, passive: true });
@@ -324,6 +322,11 @@ function AppContent() {
   }
   if (showLoading) return <LoadingScreen />;
   if (!user) return <Login />;
+
+  // 👇 Verification gate — user is signed in but not verified
+  if (user.emailVerified === false) {
+    return <VerifyEmailScreen />;
+  }
 
   return (
     <>
