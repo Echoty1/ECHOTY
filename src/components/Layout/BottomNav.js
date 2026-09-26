@@ -8,7 +8,7 @@ import { ref, onValue, get } from 'firebase/database';
 import { setFaviconBadge } from '../../utils/faviconBadge';
 import './BottomNav.css';
 
-const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
+const SUPPORT_UID = '5cSplOLz30d8dgM3wvXUcDmL2QK2';
 const DEFAULT_TAB_KEY = 'echo_default_tab';
 const WAVE_VIDEO = '/wave-bg.mp4';
 
