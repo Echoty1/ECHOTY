@@ -1733,3 +1733,56 @@ html.theme-light .note-reply-card::before {
 .message-bubble.own .note-reply-text {
   color: #fff;
 }
+/* Note reply preview banner (shown above chat input) */
+.note-reply-preview-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.15), rgba(236, 72, 153, 0.12));
+  border-left: 3px solid #A78BFA;
+  border-radius: 12px;
+  animation: noteReplyBannerIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes noteReplyBannerIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.note-reply-preview-banner-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.note-reply-preview-banner-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #C4B5FD;
+}
+.note-reply-preview-banner-text {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.note-reply-preview-banner-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 8px;
+  min-height: auto;
+  min-width: auto;
+}
+.note-reply-preview-banner-close:hover {
+  background: var(--bg-input);
+  color: var(--text-primary);
+}
