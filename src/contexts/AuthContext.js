@@ -35,7 +35,7 @@ import { db } from './services/firebase';
 import Shop from './components/pages/Shop/Shop';
 import AdminPanel from './components/pages/Admin/AdminPanel';
 import BanScreen from './components/BanScreen/BanScreen';
-import { APP_VERSION } from './version';
+import { APP_VERSION } from '../version';   // ✅ (up one folder to src/, then version.js)
 import Legal from './components/pages/Other/Legal';
 import EchoDropPage from './components/pages/EchoDrop/EchoDropPage';
 import MessageNotifier from './components/common/MessageNotifier';
