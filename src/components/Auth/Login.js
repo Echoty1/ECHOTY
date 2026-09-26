@@ -119,7 +119,7 @@ const SocialProof = () => (
       <div className="echo-proof-avatar more">+</div>
     </div>
     <div className="echo-proof-text">
-      <strong>12,400+</strong>
+      <strong>100+</strong>
       <span>people already echoing</span>
     </div>
   </div>
@@ -624,7 +624,7 @@ const Login = () => {
         </div>
 
         <p className="echo-auth-footer">
-          © {new Date().getFullYear()} ECHO · Made in Lagos 🌍
+          © {new Date().getFullYear()} ECHO · connect now 🌍
         </p>
       </main>
 
