@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ref, get } from 'firebase/database';
 import { isAndroid, isIOS } from 'react-device-detect';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProfileProvider, useProfile } from './contexts/ProfileContext';
 import { PresenceProvider } from './contexts/PresenceContext';
 import { CacheProvider } from './contexts/CacheContext';
@@ -23,7 +23,6 @@ import CoinPurchase from './components/pages/CoinPurchase/CoinPurchase';
 import Login from './components/Auth/Login';
 import Navbar from './components/Layout/Navbar';
 import BottomNav from './components/Layout/BottomNav';
-import { useAuth } from './hooks/useAuth';
 import NetworkStatus from './components/common/NetworkStatus';
 import ScrollRestoration from './components/common/ScrollRestoration';
 import UpdatePopup from './components/UpdatePopup/UpdatePopup';
@@ -41,13 +40,11 @@ import Legal from './components/pages/Other/Legal';
 import EchoDropPage from './components/pages/EchoDrop/EchoDropPage';
 import MessageNotifier from './components/common/MessageNotifier';
 import { useGlobalMessageListener } from './hooks/useGlobalMessageListener';
-import { unlockAudio } from './services/notificationService'; // ← NEW
+import { unlockAudio } from './services/notificationService';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 // ─── SEO / Structured Data for Google ──────────────────────────
-// Tells Google that "Echo" is also known as "Echoty" and ties
-// Lawal Abdulmalik to the brand as founder & CEO.
 const schemaData = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
@@ -143,9 +140,7 @@ function AppContent() {
       pathname === '/other' ||
       pathname === '/echodrop');
 
-  // ─── NEW: Prime the audio elements on the very first user gesture ───
-  // Mobile browsers require a user-triggered interaction before any audio
-  // can play. This unlocks <audio> playback so message sounds work.
+  // ─── Prime the audio elements on the very first user gesture ───
   useEffect(() => {
     const prime = () => unlockAudio();
     window.addEventListener('touchstart', prime, { once: true, passive: true });
@@ -324,7 +319,7 @@ function AppContent() {
     }
   }, []);
 
-  if (!showLoading && user && banInfo.isBanned) {
+  if (!showLoading && user && banInfo?.isBanned) {
     return <BanScreen />;
   }
   if (showLoading) return <LoadingScreen />;
