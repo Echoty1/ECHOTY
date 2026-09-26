@@ -52,6 +52,7 @@ import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import WallpaperPicker from './WallpaperPicker';
 import { getWallpaperById } from '../../../constants/wallpapers';
+import { playSentSound, unlockAudio, getSoundEnabled } from '../../../services/notificationService'; // ← NEW
 import './ChatView.css';
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
@@ -105,7 +106,6 @@ const formatReactionCount = (n) => {
   return String(count);
 };
 
-// ─── Read receipt component ───────────────────────────────────
 const MessageReceipt = ({ msg, isMe }) => {
   if (!isMe) return null;
   const read = !!msg.readAt || msg.isRead === true;
@@ -152,12 +152,10 @@ const ChatView = () => {
   const [activeMessageMenuId, setActiveMessageMenuId] = useState(null);
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
 
-  // ─── WALLPAPER STATE ───
   const [wallpaperId, setWallpaperId] = useState('default');
   const [customWallpaper, setCustomWallpaper] = useState(null);
   const [showWallpaperPicker, setShowWallpaperPicker] = useState(false);
 
-  // ─── ECHO HALO LONG-PRESS STATE ───
   const [haloActive, setHaloActive] = useState(false);
   const longPressTimer = useRef(null);
 
@@ -211,6 +209,17 @@ const ChatView = () => {
     return () => clearTimeout(t);
   }, []);
 
+  // Unlock Web Audio on first user interaction (browsers require this)
+  useEffect(() => {
+    const unlock = () => unlockAudio();
+    window.addEventListener('pointerdown', unlock, { once: true });
+    window.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      window.removeEventListener('pointerdown', unlock);
+      window.removeEventListener('keydown', unlock);
+    };
+  }, []);
+
   useEffect(() => {
     const hide = Boolean(previewUrl || editingMediaMessage || mediaPreview);
     document.body.classList.toggle('echo-hide-bottom-nav', hide);
@@ -222,7 +231,6 @@ const ChatView = () => {
     return () => clearInterval(id);
   }, []);
 
-  // ─── PREFILL input from Notes tap (NEW) ───
   useEffect(() => {
     const prefilled = location?.state?.prefilledNote;
     if (prefilled && typeof prefilled === 'string') {
@@ -238,7 +246,6 @@ const ChatView = () => {
     }
   }, [location?.state?.prefilledNote]);
 
-  // ─── PARTNER TYPING LISTENER ───
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -258,7 +265,6 @@ const ChatView = () => {
     return () => { unsub(); clearInterval(interval); };
   }, [user?.uid, userId]);
 
-  // ─── WALLPAPER LISTENER ───
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const wpRef = ref(db, `userChats/${user.uid}/${userId}/wallpaper`);
@@ -460,6 +466,9 @@ const ChatView = () => {
 
     try { await set(newMsgRef, msgData); } catch (err) { console.error('Send failed:', err); setMessages((prev) => prev.filter((m) => m.id !== tempId)); return; }
 
+    // Play "sent" sound (Snapchat-style ascending blip)
+    if (getSoundEnabled()) playSentSound();
+
     if (userId === ECHO_AI_ID) {
       setIsAILoading(true);
       try {
@@ -532,6 +541,10 @@ const ChatView = () => {
       await set(newMsgRef, realMsg);
       setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
       URL.revokeObjectURL(blobUrl);
+
+      // Play "sent" sound for media
+      if (getSoundEnabled()) playSentSound();
+
       await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: mediaIcon, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
       const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
       await runTransaction(recipientChatRef, (currentData) => {
@@ -581,6 +594,10 @@ const ChatView = () => {
       await set(newMsgRef, realMsg);
       setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
       URL.revokeObjectURL(blobUrl);
+
+      // Play "sent" sound for voice
+      if (getSoundEnabled()) playSentSound();
+
       await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: '🎤 Voice note', lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
       const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
       await runTransaction(recipientChatRef, (currentData) => {
@@ -1097,7 +1114,6 @@ const ChatView = () => {
 
   const displayName = sanitizeName(location.state?.userName || partnerProfile?.name, userId);
 
-  // ECHO HALO long-press handlers
   const handleInputPointerDown = () => {
     if (userId === ECHO_AI_ID) return;
     longPressTimer.current = setTimeout(() => { setHaloActive(true); if (window.navigator?.vibrate) window.navigator.vibrate(50); }, 500);
@@ -1106,7 +1122,6 @@ const ChatView = () => {
   const handleInputPointerUp = () => clearTimeout(longPressTimer.current);
   const handleInputPointerLeave = () => clearTimeout(longPressTimer.current);
 
-  // Wallpaper style for messages container (supports custom upload)
   const isCustom = wallpaperId === '__custom__' && customWallpaper;
   const wallpaper = isCustom ? null : getWallpaperById(wallpaperId);
 
@@ -1150,13 +1165,11 @@ const ChatView = () => {
         .message-action-btn:hover { background: var(--bg-hover, #eaeaea); color: var(--text-primary, #333); transform: scale(1.1); }
         .message-action-btn.danger:hover { background: #fde8e8; color: #d32f2f; }
 
-        /* Read receipt */
         .message-receipt { display: inline-block; margin-left: 4px; font-size: 11px; font-weight: 700; letter-spacing: -2px; vertical-align: middle; }
         .message-receipt.sent { color: rgba(255,255,255,0.6); }
         .message-receipt.delivered { color: rgba(255,255,255,0.75); }
         .message-receipt.read { color: #60A5FA; }
 
-        /* ── TYPING INDICATOR — ECHOmoji version, readable on any wallpaper ── */
         .typing-indicator-container {
           display: inline-flex;
           align-items: center;
@@ -1185,7 +1198,6 @@ const ChatView = () => {
             0 0 24px rgba(108, 60, 225, 0.15);
         }
 
-        /* ECHOmoji avatar inside the typing bubble */
         .typing-echomoji-wrapper {
           display: flex;
           align-items: center;
