@@ -271,19 +271,23 @@ const ChatView = () => {
     return () => { unsub(); clearInterval(interval); };
   }, [user?.uid, userId]);
 
+  // ✅ SHARED WALLPAPER: reads from chat-level node so both users see the same wallpaper
   useEffect(() => {
     if (!user?.uid || !userId) return;
-    const wpRef = ref(db, `userChats/${user.uid}/${userId}/wallpaper`);
-    const cwRef = ref(db, `userChats/${user.uid}/${userId}/customWallpaper`);
+    const cId = [user.uid, userId].sort().join('_');
+    const wpRef = ref(db, `chats/${cId}/wallpaper`);
+    const cwRef = ref(db, `chats/${cId}/customWallpaper`);
     const unsubWp = onValue(wpRef, (snap) => setWallpaperId(snap.val() || 'default'));
     const unsubCw = onValue(cwRef, (snap) => setCustomWallpaper(snap.val() || null));
     return () => { unsubWp(); unsubCw(); };
   }, [user?.uid, userId]);
 
+  // ✅ SHARED WALLPAPER: writes to chat-level node
   const handleWallpaperSelect = async (id) => {
     setWallpaperId(id);
     try {
-      await update(ref(db, `userChats/${user.uid}/${userId}`), { wallpaper: id });
+      const cId = [user.uid, userId].sort().join('_');
+      await update(ref(db, `chats/${cId}`), { wallpaper: id });
     } catch (err) {
       console.error('Failed to save wallpaper', err);
     }
@@ -293,7 +297,8 @@ const ChatView = () => {
     setCustomWallpaper(url);
     setWallpaperId('__custom__');
     try {
-      await update(ref(db, `userChats/${user.uid}/${userId}`), {
+      const cId = [user.uid, userId].sort().join('_');
+      await update(ref(db, `chats/${cId}`), {
         wallpaper: '__custom__',
         customWallpaper: url,
       });
