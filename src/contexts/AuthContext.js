@@ -1,404 +1,179 @@
-// src/App.js
-import React, { useEffect, useState } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
-import { ref, get } from 'firebase/database';
-import { isAndroid, isIOS } from 'react-device-detect';
-import { AuthProvider, useAuth } from './contexts/AuthContext';
-import { ProfileProvider, useProfile } from './contexts/ProfileContext';
-import { PresenceProvider } from './contexts/PresenceContext';
-import { CacheProvider } from './contexts/CacheContext';
-import { CallProvider } from './contexts/CallContext';
-import { ThemeProvider } from './contexts/ThemeContext';
-import Home from './components/pages/Home/Home';
-import Chats from './components/pages/Chats/Chats';
-import ChatView from './components/pages/Chat/ChatView';
-import Profile from './components/pages/Profile/Profile';
-import UserProfile from './components/pages/UserProfile/UserProfile';
-import Other from './components/pages/Other/Other';
-import Bookmarks from './components/pages/Other/Bookmarks';
-import DesktopInstallPrompt from './components/common/DesktopInstallPrompt';
-import Settings from './components/pages/Other/Settings';
-import About from './components/pages/Other/About';
-import CoinPurchase from './components/pages/CoinPurchase/CoinPurchase';
-import Login from './components/Auth/Login';
-import Navbar from './components/Layout/Navbar';
-import BottomNav from './components/Layout/BottomNav';
-import NetworkStatus from './components/common/NetworkStatus';
-import ScrollRestoration from './components/common/ScrollRestoration';
-import UpdatePopup from './components/UpdatePopup/UpdatePopup';
-import InstallPopup from './components/InstallPopup/InstallPopup';
-import Communities from './components/pages/Communities/Communities';
-import InstallBanner from './components/common/InstallBanner';
-import { cleanAllCachedMessages } from './services/messageCleanup';
-import { getChatList } from './services/indexedDBService';
-import { db } from './services/firebase';
-import Shop from './components/pages/Shop/Shop';
-import AdminPanel from './components/pages/Admin/AdminPanel';
-import BanScreen from './components/BanScreen/BanScreen';
-import { APP_VERSION } from '../version';   // ✅ (up one folder to src/, then version.js)
-import Legal from './components/pages/Other/Legal';
-import EchoDropPage from './components/pages/EchoDrop/EchoDropPage';
-import MessageNotifier from './components/common/MessageNotifier';
-import { useGlobalMessageListener } from './hooks/useGlobalMessageListener';
-import { unlockAudio } from './services/notificationService';
+// src/contexts/AuthContext.js
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useRef,
+  useCallback,
+} from 'react';
+import { auth, db } from '../services/firebase';
+import { onAuthStateChanged, signOut } from 'firebase/auth';
+import {
+  ref,
+  set,
+  update,
+  onDisconnect,
+  onValue,
+  remove,
+  get,
+  runTransaction,
+} from 'firebase/database';
+import { initPresence } from '../services/presenceService';
+import { isUnverifiedPasswordUser } from '../utils/emailGate';
+import { applyWelcomeFollow } from '../services/welcomeFollow';
 
-const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
+export const AuthContext = createContext(null);
 
-const schemaData = {
-  '@context': 'https://schema.org',
-  '@type': 'Organization',
-  name: 'Echo',
-  alternateName: 'Echoty',
-  url: 'https://echoty.xyz',
-  logo: 'https://echoty.xyz/logo.png',
-  description: 'Discover, connect, and echo with animated avatars.',
-  founder: {
-    '@type': 'Person',
-    name: 'Lawal Abdulmalik',
-    jobTitle: 'Founder & CEO',
-  },
-  ceo: {
-    '@type': 'Person',
-    name: 'Lawal Abdulmalik',
-  },
-  sameAs: ['https://echoty.xyz'],
+export const useAuth = () => {
+  const ctx = useContext(AuthContext);
+  if (!ctx) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return ctx;
 };
 
-function ScrollToTop() {
-  const { pathname } = useLocation();
-  useEffect(() => {
-    const container = document.getElementById('main-content');
-    if (container) container.scrollTop = 0;
-    window.scrollTo(0, 0);
-  }, [pathname]);
-  return null;
-}
+export const AuthProvider = ({ children }) => {
+  const [currentUser, setCurrentUser] = useState(null);
+  const [userProfile, setUserProfile] = useState(null);
+  const [banInfo, setBanInfo] = useState({ isBanned: false });
+  const [loading, setLoading] = useState(true);
+  const [initializing, setInitializing] = useState(true);
 
-function LoadingScreen() {
-  const isMobile = window.innerWidth <= 480;
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        background: 'var(--bg-primary)',
-        position: 'relative',
-        overflow: 'hidden',
-        transition: 'background 0.3s ease',
-      }}
-    >
-      <div style={{ position: 'absolute', width: '240px', height: '240px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.3, animation: 'echoRingPulse 2.5s ease-out infinite' }} />
-      <div style={{ position: 'absolute', width: '320px', height: '320px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.2, animation: 'echoRingPulse 3s ease-out infinite 0.5s' }} />
-      <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.1, animation: 'echoRingPulse 3.5s ease-out infinite 1s' }} />
-      <div style={{ width: '100px', height: '100px', marginBottom: '20px', animation: 'echoFloat 2.5s ease-in-out infinite', position: 'relative', zIndex: 2 }}>
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" style={{ width: '100%', height: '100%' }}>
-          <rect width="512" height="512" rx="96" fill="var(--bg-secondary)" />
-          <path d="M 120 120 H 280 V 176 H 180 V 228 H 260 V 284 H 180 V 336 H 280 V 392 H 120 Z" fill="#6C3CE1" />
-          <path d="M 320 160 A 140 140 0 0 1 320 352" stroke="#6C3CE1" strokeWidth="36" fill="none" strokeLinecap="round" />
-          <path d="M 370 200 A 90 90 0 0 1 370 312" stroke="#EC4899" strokeWidth="32" strokeOpacity="0.6" fill="none" strokeLinecap="round" />
-        </svg>
-      </div>
-      <div style={{ fontSize: isMobile ? '32px' : '40px', fontWeight: 900, background: 'linear-gradient(135deg, #6C3CE1, #EC4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: isMobile ? '4px' : '8px', zIndex: 2, fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>
-        ECHO
-      </div>
-      <div style={{ color: 'var(--text-muted)', fontSize: isMobile ? '10px' : '13px', letterSpacing: isMobile ? '4px' : '8px', textTransform: 'uppercase', marginTop: '2px', zIndex: 2, whiteSpace: 'nowrap' }}>
-        Discover. Connect. Echo.
-      </div>
-      <div style={{ width: '200px', height: '3px', background: 'var(--bg-input)', borderRadius: '4px', marginTop: '30px', overflow: 'hidden', zIndex: 2 }}>
-        <div style={{ height: '100%', width: '200%', background: 'linear-gradient(90deg, #6C3CE1, #EC4899, #6C3CE1)', borderRadius: '4px', animation: 'shimmer 1.8s ease-in-out infinite' }} />
-      </div>
-    </div>
-  );
-}
+  const profileUnsubRef = useRef(null);
+  const banUnsubRef = useRef(null);
+  const presenceUnsubRef = useRef(null);
 
-function AppContent() {
-  const { pathname } = useLocation();
-  const { user, loading, banInfo } = useAuth();
-  const { fetchProfile } = useProfile();
-
-  useGlobalMessageListener();
-
-  const [minTimePassed, setMinTimePassed] = useState(false);
-  const [showUpdatePopup, setShowUpdatePopup] = useState(false);
-  const [showInstallPopup, setShowInstallPopup] = useState(false);
-  const [playStoreUrl, setPlayStoreUrl] = useState('');
-  const [appVersion] = useState(process.env.REACT_APP_VERSION || '1.0');
-  const showLoading = loading || !minTimePassed;
-  const showHappr =
-    Boolean(user) &&
-    !showLoading &&
-    !banInfo?.isBanned &&
-    (pathname === '/' ||
-      pathname === '/chats' ||
-      pathname === '/communities' ||
-      pathname === '/shop' ||
-      pathname === '/other' ||
-      pathname === '/echodrop');
-
-  // Prime the audio elements on the very first user gesture
-  useEffect(() => {
-    const prime = () => unlockAudio();
-    window.addEventListener('touchstart', prime, { once: true, passive: true });
-    window.addEventListener('touchend', prime, { once: true, passive: true });
-    window.addEventListener('pointerdown', prime, { once: true });
-    window.addEventListener('click', prime, { once: true });
-    window.addEventListener('keydown', prime, { once: true });
-    return () => {
-      window.removeEventListener('touchstart', prime);
-      window.removeEventListener('touchend', prime);
-      window.removeEventListener('pointerdown', prime);
-      window.removeEventListener('click', prime);
-      window.removeEventListener('keydown', prime);
-    };
-  }, []);
-
-  useEffect(() => {
-    const src = 'https://myhappr.com/widget.js';
-    if (document.querySelector(`script[src="${src}"]`)) return undefined;
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = true;
-    script.setAttribute('data-username', 'echoty');
-    script.setAttribute('data-color', '#9D5EFF');
-    script.setAttribute('data-button-color', '#9D5EFF');
-    script.setAttribute('data-text-color', '#FFFFFF');
-    script.setAttribute('data-radius', '8px');
-    script.setAttribute('data-text', 'Support ECHO');
-    script.setAttribute('data-title', 'Keep the Echo Alive');
-    script.setAttribute('data-theme', 'light');
-    script.setAttribute('data-card-bg', '#FFFFFF');
-    script.setAttribute('data-card-text', '#09090b');
-    document.body.appendChild(script);
-    if (!document.getElementById('echo-happr-style')) {
-      const css = document.createElement('style');
-      css.id = 'echo-happr-style';
-      css.textContent =
-        'body.echo-support-visible [class*="myhappr"],body.echo-support-visible [id*="myhappr"],body.echo-support-visible iframe[src*="myhappr"]{bottom:96px!important;z-index:80!important;}body:not(.echo-support-visible) [class*="myhappr"],body:not(.echo-support-visible) [id*="myhappr"],body:not(.echo-support-visible) iframe[src*="myhappr"]{display:none!important;}';
-      document.head.appendChild(css);
+  // Subscribe to user profile
+  const subscribeToProfile = useCallback((uid) => {
+    if (profileUnsubRef.current) {
+      profileUnsubRef.current();
+      profileUnsubRef.current = null;
     }
-    return undefined;
+    const userRef = ref(db, `users/${uid}`);
+    profileUnsubRef.current = onValue(userRef, (snapshot) => {
+      setUserProfile(snapshot.exists() ? snapshot.val() : null);
+    });
   }, []);
 
-  useEffect(() => {
-    document.body.classList.toggle('echo-support-visible', showHappr);
-    return () => document.body.classList.remove('echo-support-visible');
-  }, [showHappr]);
-
-  useEffect(() => {
-    const key = 'echo_v';
-    const saved = localStorage.getItem(key);
-    const current = String(APP_VERSION);
-    if (saved && saved !== current) {
-      localStorage.setItem(key, current);
-      window.location.reload();
-    } else if (!saved) {
-      localStorage.setItem(key, current);
+  // Subscribe to ban status
+  const subscribeToBan = useCallback((uid) => {
+    if (banUnsubRef.current) {
+      banUnsubRef.current();
+      banUnsubRef.current = null;
     }
-  }, []);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setMinTimePassed(true), 2000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  const cleanLocalStorage = () => {
-    try {
-      const keys = Object.keys(localStorage);
-      const toRemove = keys.filter((key) => (
-        key.startsWith('echo_cache_') ||
-        key.startsWith('echo_small_') ||
-        key.startsWith('echo_cache_v2_') ||
-        key.startsWith('echo_small_v2_') ||
-        key.startsWith('echocache_v2_')
-      )).filter((key) => {
-        const essential = [
-          'echo_has_recovered_',
-          'echo_app_version',
-          'echo_changelog_version',
-          'echo_install_popup_dismissed_until',
-          'echo_update_shown',
-          'firebase:host',
-        ];
-        return !essential.some((e) => key.startsWith(e));
+    const banRef = ref(db, `bans/${uid}`);
+    banUnsubRef.current = onValue(banRef, (snapshot) => {
+      const val = snapshot.val();
+      setBanInfo({
+        isBanned: Boolean(val && val.active !== false),
+        reason: val?.reason || '',
+        until: val?.until || null,
       });
-      toRemove.forEach((key) => localStorage.removeItem(key));
-    } catch (_) {}
-  };
-
-  useEffect(() => {
-    if (user) cleanLocalStorage();
-  }, [user]);
-
-  useEffect(() => {
-    const fetchConfig = async () => {
-      try {
-        const snapshot = await get(ref(db, 'appConfig'));
-        if (snapshot.exists()) {
-          const data = snapshot.val();
-          if (data.version?.playStoreUrl) setPlayStoreUrl(data.version.playStoreUrl);
-        }
-      } catch (_) {}
-    };
-    fetchConfig();
+    });
   }, []);
 
-  useEffect(() => {
-    if (!isAndroid && !isIOS) return;
-    if (!playStoreUrl || !minTimePassed) return;
-    const dismissedUntil = localStorage.getItem('install_popup_dismissed_until');
-    if (dismissedUntil && Date.now() < parseInt(dismissedUntil, 10)) return;
-    if (sessionStorage.getItem('install_popup_shown')) return;
-    setShowInstallPopup(true);
-    sessionStorage.setItem('install_popup_shown', 'true');
-  }, [playStoreUrl, minTimePassed]);
-
-  const handleInstallPopupClose = () => {
-    const until = Date.now() + 5 * 24 * 60 * 60 * 1000;
-    localStorage.setItem('install_popup_dismissed_until', String(until));
-    setShowInstallPopup(false);
-  };
-
-  useEffect(() => {
-    if (!user) return;
-    if (!isAndroid && !isIOS) return;
-    const checkForUpdate = async () => {
-      try {
-        const snapshot = await get(ref(db, 'appConfig/version'));
-        if (!snapshot.exists()) return;
-        const data = snapshot.val();
-        let latestVersion = data?.latest ?? '1.0';
-        if (typeof latestVersion === 'number') latestVersion = String(latestVersion);
-        if (typeof latestVersion !== 'string') return;
-        const currentVersion = typeof appVersion === 'string' ? appVersion : '1.0';
-        const currentParts = currentVersion.split('.').map(Number);
-        const latestParts = latestVersion.split('.').map(Number);
-        let needsUpdate = false;
-        for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i += 1) {
-          const c = currentParts[i] || 0;
-          const l = latestParts[i] || 0;
-          if (l > c) { needsUpdate = true; break; }
-          if (l < c) break;
-        }
-        if (needsUpdate) {
-          const lastShown = localStorage.getItem('echo_update_shown');
-          if (lastShown !== latestVersion) {
-            setShowUpdatePopup(true);
-            localStorage.setItem('echo_update_shown', latestVersion);
-          }
-        }
-      } catch (_) {}
-    };
-    checkForUpdate();
-  }, [user, appVersion]);
-
-  useEffect(() => {
-    if (user?.uid) {
-      fetchProfile(user.uid);
-      const cleanup = async () => {
-        try {
-          const chatList = await getChatList(user.uid);
-          if (chatList && chatList.length > 0) {
-            await cleanAllCachedMessages(user.uid, chatList);
-          }
-        } catch (_) {}
-      };
-      cleanup();
+  // Setup presence
+  const setupPresence = useCallback((uid) => {
+    if (presenceUnsubRef.current) {
+      presenceUnsubRef.current();
+      presenceUnsubRef.current = null;
     }
-  }, [user?.uid, fetchProfile]);
-
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then((registration) => {
-        registration.update();
-      }).catch(() => {});
+    try {
+      const unsub = initPresence(uid);
+      presenceUnsubRef.current = typeof unsub === 'function' ? unsub : null;
+    } catch (e) {
+      console.warn('[Auth] presence init failed:', e?.message || e);
     }
   }, []);
 
-  if (!showLoading && user && banInfo?.isBanned) {
-    return <BanScreen />;
-  }
-  if (showLoading) return <LoadingScreen />;
-  if (!user) return <Login />;
+  const cleanupPresence = useCallback(async (uid) => {
+    if (!uid) return;
+    try {
+      await remove(ref(db, `status/${uid}`));
+    } catch (e) {
+      // ignore
+    }
+  }, []);
 
-  return (
-    <>
-      <Navbar />
-      <MessageNotifier />
-      <NetworkStatus />
-      <DesktopInstallPrompt />
-      <ScrollToTop />
-      <div
-        id="main-content"
-        style={{
-          paddingTop: '60px',
-          paddingBottom: '72px',
-          height: '100vh',
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          background: 'var(--bg-primary)',
-          maxWidth: '1400px',
-          margin: '0 auto',
-          width: '100%',
-        }}
-      >
-        <Routes>
-          <Route path="/" element={<Home />} />
-          <Route path="/chats" element={<Chats />} />
-          <Route path="/chat/:userId" element={<ChatView />} />
-          <Route path="/profile" element={<Profile />} />
-          <Route path="/user/:uid" element={<UserProfile />} />
-          <Route path="/other" element={<Other />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/bookmarks" element={<Bookmarks />} />
-          <Route path="/coins" element={<CoinPurchase />} />
-          <Route path="/about" element={<About />} />
-          <Route path="/control" element={<AdminPanel />} />
-          <Route path="/shop" element={<Shop />} />
-          <Route path="/legal" element={<Legal />} />
-          <Route path="/communities" element={<Communities />} />
-          <Route path="/echodrop" element={<EchoDropPage />} />
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </div>
-      <BottomNav />
-      {showUpdatePopup && (
-        <UpdatePopup currentVersion={appVersion} onClose={() => setShowUpdatePopup(false)} />
-      )}
-      {showInstallPopup && (
-        <InstallPopup playStoreUrl={playStoreUrl} onClose={handleInstallPopupClose} />
-      )}
-      <InstallBanner playStoreUrl={playStoreUrl} />
-    </>
-  );
-}
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      try {
+        if (user) {
+          if (isUnverifiedPasswordUser(user)) {
+            setCurrentUser(user);
+            setLoading(false);
+            setInitializing(false);
+            return;
+          }
 
-function App() {
-  return (
-    <BrowserRouter>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaData) }}
-      />
+          setCurrentUser(user);
+          subscribeToProfile(user.uid);
+          subscribeToBan(user.uid);
+          setupPresence(user.uid);
 
-      <ThemeProvider>
-        <AuthProvider>
-          <PresenceProvider>
-            <ProfileProvider>
-              <CacheProvider>
-                <CallProvider>
-                  <ScrollRestoration />
-                  <AppContent />
-                </CallProvider>
-              </CacheProvider>
-            </ProfileProvider>
-          </PresenceProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </BrowserRouter>
-  );
-}
+          try {
+            await applyWelcomeFollow(user.uid);
+          } catch (e) {
+            console.warn('[Auth] welcome follow failed:', e?.message || e);
+          }
+        } else {
+          if (presenceUnsubRef.current) {
+            presenceUnsubRef.current();
+            presenceUnsubRef.current = null;
+          }
+          if (profileUnsubRef.current) {
+            profileUnsubRef.current();
+            profileUnsubRef.current = null;
+          }
+          if (banUnsubRef.current) {
+            banUnsubRef.current();
+            banUnsubRef.current = null;
+          }
+          setCurrentUser(null);
+          setUserProfile(null);
+          setBanInfo({ isBanned: false });
+        }
+      } catch (err) {
+        console.error('[Auth] state change error:', err);
+      } finally {
+        setLoading(false);
+        setInitializing(false);
+      }
+    });
 
-export default App;
+    return () => {
+      unsubscribe();
+      if (profileUnsubRef.current) profileUnsubRef.current();
+      if (banUnsubRef.current) banUnsubRef.current();
+      if (presenceUnsubRef.current) presenceUnsubRef.current();
+    };
+  }, [subscribeToProfile, subscribeToBan, setupPresence]);
+
+  const logout = useCallback(async () => {
+    try {
+      if (currentUser?.uid) {
+        await cleanupPresence(currentUser.uid);
+      }
+      await signOut(auth);
+    } catch (e) {
+      console.error('[Auth] logout error:', e);
+      throw e;
+    }
+  }, [currentUser, cleanupPresence]);
+
+  const value = {
+    currentUser,
+    user: currentUser,
+    userProfile,
+    profile: userProfile,
+    banInfo,
+    loading,
+    initializing,
+    logout,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+export default AuthContext;
