@@ -222,6 +222,22 @@ const ChatView = () => {
     return () => clearInterval(id);
   }, []);
 
+  // ─── PREFILL input from Notes tap (NEW) ───
+  useEffect(() => {
+    const prefilled = location?.state?.prefilledNote;
+    if (prefilled && typeof prefilled === 'string') {
+      setNewMessage(prefilled);
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          try {
+            inputRef.current.setSelectionRange(prefilled.length, prefilled.length);
+          } catch (_) {}
+        }
+      }, 120);
+    }
+  }, [location?.state?.prefilledNote]);
+
   // ─── PARTNER TYPING LISTENER ───
   useEffect(() => {
     if (!user?.uid || !userId) return;
