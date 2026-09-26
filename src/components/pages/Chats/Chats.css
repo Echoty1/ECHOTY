@@ -1,33 +1,27 @@
-/* src/components/pages/Chats/Chats.css
-   Drop-in replacement. Class names unchanged — no JSX edits required.
-   Structure: 1) tokens  2) primitives  3) components  4) responsive  5) motion/a11y */
+/* ============================================================
+   src/components/pages/Chats/Chats.css
+   Full file — includes all prior styles + Notes strip
+   ============================================================ */
 
 /* ─────────────────────────────────────────────
    1. TOKENS
-   Every brand purple in the old file was a literal (#6C3CE1, #a78bfa,
-   rgba(108,60,225,.15)…) repeated ~20 times. Now there is one source of truth.
-   Fallbacks mean these work even if your global token file doesn't define them.
    ───────────────────────────────────────────── */
 .chats-page {
-  /* brand ramp */
   --brand: var(--brand-600, #6c3ce1);
   --brand-light: var(--brand-300, #a78bfa);
   --brand-lighter: #d8b4fe;
   --brand-deep: #2e1065;
   --brand-mid: #4c1d95;
 
-  /* brand alphas — derived, never re-typed */
   --brand-a06: rgba(108, 60, 225, 0.06);
   --brand-a12: rgba(108, 60, 225, 0.12);
   --brand-a20: rgba(108, 60, 225, 0.2);
   --brand-a40: rgba(108, 60, 225, 0.4);
 
-  /* status */
   --online: #10b981;
   --offline: #6b7280;
   --alert: #ef4444;
 
-  /* type scale (1.25 ratio, rounded to whole px) */
   --text-2xs: 10px;
   --text-xs: 11px;
   --text-sm: 13px;
@@ -35,7 +29,6 @@
   --text-lg: 18px;
   --text-xl: 26px;
 
-  /* spacing — 4px base */
   --space-1: 4px;
   --space-2: 8px;
   --space-3: 12px;
@@ -43,24 +36,19 @@
   --space-5: 20px;
   --space-6: 28px;
 
-  /* radii: three tiers that encode hierarchy, not one radius on everything */
-  --radius-sm: 8px;    /* badges, pills inside rows */
-  --radius-md: 16px;   /* rows, inputs */
-  --radius-lg: 24px;   /* surfaces: empty states, hero */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
 
-  /* avatar — single source so skeletons can't drift out of sync */
   --avatar-size: 48px;
 
-  /* z-index scale, so nothing is ever "10000 and hope" */
   --z-sticky: 20;
   --z-overlay: 1000;
 
-  /* motion */
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
   --dur-fast: 0.15s;
   --dur-base: 0.25s;
 
-  /* chrome offsets */
   --bottom-nav-space: 88px;
 }
 
@@ -69,7 +57,7 @@
    ───────────────────────────────────────────── */
 .chats-page {
   min-height: 100vh;
-  min-height: 100dvh; /* avoids the mobile-browser URL-bar jump */
+  min-height: 100dvh;
   width: 100%;
   box-sizing: border-box;
   overflow-x: hidden;
@@ -80,7 +68,6 @@
     calc(var(--bottom-nav-space) + env(safe-area-inset-bottom, 0px));
 }
 
-/* Every child inherits the border-box the page assumes */
 .chats-page *,
 .chats-page *::before,
 .chats-page *::after {
@@ -108,7 +95,6 @@
   background: var(--bg-input);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-md);
-  /* was `transition: all` — that animates layout properties too */
   transition:
     border-color var(--dur-base) ease,
     box-shadow var(--dur-base) ease;
@@ -139,7 +125,6 @@
   color: var(--text-muted);
 }
 
-/* Was ~24px tall — under the 44px minimum touch target */
 .search-clear {
   display: grid;
   place-items: center;
@@ -208,8 +193,6 @@
 
 /* ─────────────────────────────────────────────
    5. EMPTY STATES
-   .no-chats-premium and .demo-search-empty were byte-identical apart from
-   the icon tint. One rule now; only the accent differs.
    ───────────────────────────────────────────── */
 .no-chats-premium,
 .demo-search-empty {
@@ -260,7 +243,7 @@
 
 .no-chats-subtitle,
 .demo-search-subtitle {
-  max-width: 28ch; /* keeps the line short enough to scan */
+  max-width: 28ch;
   color: var(--text-muted);
   font-size: var(--text-sm);
   line-height: 1.5;
@@ -275,7 +258,6 @@
   gap: var(--space-2);
 }
 
-/* Sentence case instead of tracked-out caps — easier to read, less template-y */
 .section-header {
   margin-bottom: var(--space-1);
   color: var(--text-muted);
@@ -300,7 +282,6 @@
 }
 
 .chat-item:hover {
-  /* was `background: var(--border-color)` — a border token doing a surface job */
   background: color-mix(in srgb, var(--bg-input) 88%, var(--text-primary));
   border-color: var(--brand-a20);
 }
@@ -309,7 +290,6 @@
   transform: scale(0.99);
 }
 
-/* Rows are clickable but weren't reachable or visible by keyboard */
 .chat-item:focus-visible,
 .chat-halo-btn:focus-visible,
 .hero-action-btn:focus-visible,
@@ -354,7 +334,6 @@
   font-weight: 700;
 }
 
-/* Ring matched --bg-primary but the dot sits on --bg-input, so it read as a seam */
 .presence-dot {
   position: absolute;
   right: 1px;
@@ -392,7 +371,6 @@
   right: -2px;
   bottom: -2px;
   padding: 2px;
-  /* was hardcoded rgba(0,0,0,.6) — inverted badly in a light theme */
   background: var(--bg-primary);
   border: 1px solid var(--border-color);
   border-radius: 50%;
@@ -419,7 +397,7 @@
 }
 
 .chat-name {
-  min-width: 0; /* without this the badges push the name past the ellipsis */
+  min-width: 0;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -478,7 +456,6 @@
 
 /* ─────────────────────────────────────────────
    7. SKELETONS
-   Sized off --avatar-size so the list doesn't jump when data lands.
    ───────────────────────────────────────────── */
 .skeleton-text,
 .skeleton-avatar {
@@ -558,7 +535,7 @@
 
 .echo-halo-timer {
   color: #ff0080;
-  font-variant-numeric: tabular-nums; /* stops the countdown twitching */
+  font-variant-numeric: tabular-nums;
 }
 
 .echo-halo-image-wrapper {
@@ -582,10 +559,6 @@
 
 /* ─────────────────────────────────────────────
    9. HERO RESULT CARD
-   This is the one place that gets to be loud. The old card ran four effects at
-   once — entrance, infinite background glow, infinite avatar pulse, button
-   shimmer, plus four staggered child fades. They competed. Now: one entrance,
-   one static halo.
    ───────────────────────────────────────────── */
 .hero-result-card {
   position: relative;
@@ -719,7 +692,6 @@
   }
 }
 
-/* Wider screens: the list shouldn't stretch to 1400px of unreadable line length */
 @media (min-width: 720px) {
   .chats-page {
     max-width: 680px;
@@ -744,7 +716,6 @@
   to { opacity: 1; transform: none; }
 }
 
-/* Nothing here animated for people who ask the OS to stop motion. Now it does. */
 @media (prefers-reduced-motion: reduce) {
   .chats-page *,
   .echo-halo-overlay * {
@@ -767,11 +738,7 @@
 
 /* ═════════════════════════════════════════════
    12. MOTION LAYER
-   Appended after the base rules so it overrides them by cascade order.
-   The reduced-motion block above still wins — its declarations are !important.
    ═════════════════════════════════════════════ */
-
-/* Overlay needs the token set too (it renders outside .chats-page) */
 .echo-halo-overlay {
   --brand: var(--brand-600, #6c3ce1);
   --brand-light: var(--brand-300, #a78bfa);
@@ -785,14 +752,13 @@
 }
 
 .chats-page {
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* slight overshoot for pops */
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --dur-slow: 0.5s;
   --stagger: 45ms;
   --halo-hot: #ff0080;
   --halo-warm: #ff8c00;
 }
 
-/* ── Search ─────────────────────────────── */
 .search-icon {
   transition: color var(--dur-base) ease, transform var(--dur-base) var(--ease-spring);
 }
@@ -810,7 +776,6 @@
 .search-clear:hover { background: var(--brand-a06); }
 .search-clear:active { transform: scale(0.9); }
 
-/* ── Pills and empty states ─────────────── */
 .premium-status-pill,
 .premium-end-pill {
   animation: pill-drop 0.4s var(--ease-spring) both;
@@ -827,8 +792,6 @@
   animation: pop-in 0.5s var(--ease-spring) 0.12s both;
 }
 
-/* Icon pops, then a slow halo breathes behind it — the only idle motion
-   on an otherwise empty screen, so it reads as an invitation. */
 .no-chats-icon-wrapper {
   box-shadow: 0 0 0 0 var(--brand-a20);
   animation:
@@ -848,7 +811,6 @@
 
 .section-header { animation: rise 0.4s var(--ease-out) both; }
 
-/* ── Chat rows: staggered cascade ───────── */
 .chat-item {
   position: relative;
   animation: row-in 0.45s var(--ease-out) both;
@@ -859,8 +821,6 @@
     box-shadow var(--dur-base) ease;
 }
 
-/* Pure CSS so no JSX change is needed; rows past 12 share the last delay
-   rather than cascading forever on a long list. */
 .chat-item:nth-child(1)  { animation-delay: calc(var(--stagger) * 0); }
 .chat-item:nth-child(2)  { animation-delay: calc(var(--stagger) * 1); }
 .chat-item:nth-child(3)  { animation-delay: calc(var(--stagger) * 2); }
@@ -887,13 +847,10 @@
   transition: transform var(--dur-base) var(--ease-spring);
 }
 
-/* Online state now differs by motion, not hue alone */
 .presence-dot.online {
   animation: presence-ripple 2.6s ease-out infinite;
 }
 
-/* Pops in, nudges twice, then stops. An unread count that pulses forever
-   becomes wallpaper and stops meaning anything. */
 .unread-badge {
   animation:
     pop-in 0.35s var(--ease-spring) both,
@@ -906,7 +863,6 @@
   animation: pop-in 0.3s var(--ease-spring) both;
 }
 
-/* Accent bar wipes down, so a location match reads as something that happened */
 .regular-chat-item.location-matched {
   border-left: none;
 }
@@ -924,7 +880,6 @@
   animation: wipe-down 0.4s var(--ease-out) 0.1s both;
 }
 
-/* ── Skeletons: shimmer sweep, not an opacity blink ── */
 .skeleton-text,
 .skeleton-avatar {
   position: relative;
@@ -942,7 +897,6 @@
   animation: shimmer 1.4s ease-in-out infinite;
 }
 
-/* ── Echo Halo ──────────────────────────── */
 .chat-halo-btn {
   position: relative;
   background-size: 160% 160%;
@@ -952,7 +906,6 @@
     box-shadow var(--dur-base) ease;
 }
 
-/* The ring the feature is named for — fires on hover/focus only */
 .chat-halo-btn::after {
   content: '';
   position: absolute;
@@ -978,7 +931,6 @@
   animation: reveal 0.4s var(--ease-spring) 0.06s both;
 }
 
-/* Ticks like a clock so "view once" feels finite */
 .echo-halo-timer {
   animation: tick 1s steps(1, end) infinite;
 }
@@ -987,7 +939,6 @@
   animation: rise 0.4s var(--ease-out) 0.2s both;
 }
 
-/* ── Hero card: the one loud element ────── */
 .hero-result-card {
   transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) ease;
 }
@@ -1027,7 +978,6 @@
     box-shadow var(--dur-base) ease;
 }
 
-/* Sheen sweeps on hover only — motion that answers an action, not idle noise */
 .hero-action-btn::before {
   content: '';
   position: absolute;
@@ -1042,10 +992,9 @@
 .hero-action-btn:hover::before { left: 120%; }
 
 @media (max-width: 480px) {
-  .chats-page { --stagger: 35ms; } /* less list in view — tighten the cascade */
+  .chats-page { --stagger: 35ms; }
 }
 
-/* ── Keyframes ──────────────────────────── */
 @keyframes fade {
   from { opacity: 0; }
   to { opacity: 1; }
@@ -1133,8 +1082,6 @@
   }
 }
 
-/* Reduced motion, restated so it also covers the pseudo-elements and the
-   overlay introduced above. Content still appears — nothing stays at opacity 0. */
 @media (prefers-reduced-motion: reduce) {
   .chats-page *,
   .chats-page *::before,
@@ -1163,11 +1110,10 @@
   .skeleton-text,
   .skeleton-avatar { opacity: 0.55; }
 }
+
 /* ═════════════════════════════════════════════
    13. SNAPCHAT-STYLE TYPING OVERLAY
    ═════════════════════════════════════════════ */
-
-/* The overlay sits exactly over the avatar, on top of everything else */
 .avatar-typing-overlay {
   position: absolute;
   inset: -2px;
@@ -1182,7 +1128,6 @@
   z-index: 3;
 }
 
-/* Pulsing purple ring around the avatar while typing */
 .avatar-typing-ring {
   position: absolute;
   inset: -3px;
@@ -1197,7 +1142,6 @@
   100% { transform: scale(1.25); opacity: 0; }
 }
 
-/* Three mini dots inside the avatar */
 .avatar-typing-dots {
   display: inline-flex;
   align-items: center;
@@ -1228,7 +1172,6 @@
   100% { opacity: 1; transform: scale(1); }
 }
 
-/* The right-side ECHOmoji fades out while typing to avoid confusion */
 .echomoji-holder {
   transition: opacity 0.25s ease, transform 0.25s ease;
   display: flex;
@@ -1241,7 +1184,6 @@
   transform: scale(0.85);
 }
 
-/* "typing…" replaces the last message preview */
 .typing-status-text {
   color: var(--brand-light, #a78bfa);
   font-weight: 700;
@@ -1253,4 +1195,298 @@
 @keyframes typing-text-fade {
   from { opacity: 0; transform: translateY(2px); }
   to   { opacity: 1; transform: none; }
+}
+
+/* ═════════════════════════════════════════════
+   14. NOTES STRIP — Instagram-style notes
+   ═════════════════════════════════════════════ */
+.notes-strip {
+  display: flex;
+  gap: 14px;
+  overflow-x: auto;
+  overflow-y: visible;
+  padding: 14px 4px 18px;
+  margin: 0 -4px 12px;
+  scroll-snap-type: x proximity;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.notes-strip::-webkit-scrollbar { display: none; }
+
+.note-card {
+  position: relative;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 78px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  scroll-snap-align: start;
+  font-family: inherit;
+  transition: transform 0.18s ease;
+}
+.note-card:active { transform: scale(0.96); }
+
+.note-avatar-wrap {
+  position: relative;
+  width: 56px;
+  height: 56px;
+  display: grid;
+  place-items: center;
+}
+
+/* The gradient ring around the avatar when a note exists */
+.note-avatar-wrap.has-note::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  background: conic-gradient(from 140deg, #6C3CE1, #EC4899, #6C3CE1);
+  z-index: 0;
+  opacity: 0.95;
+}
+
+.note-avatar-wrap.has-note::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  background: var(--bg-primary);
+  z-index: 0;
+  opacity: 0.35;
+  mix-blend-mode: overlay;
+}
+
+.note-avatar-wrap > * {
+  position: relative;
+  z-index: 1;
+}
+
+.note-plus {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  display: grid;
+  place-items: center;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(108, 60, 225, 0.5);
+  border: 2px solid var(--bg-primary);
+  z-index: 2;
+}
+
+.note-bubble {
+  position: relative;
+  max-width: 92px;
+  min-height: 26px;
+  padding: 6px 10px;
+  border-radius: 14px;
+  background: var(--bg-card, var(--bg-secondary, #13131C));
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  font-size: 11.5px;
+  line-height: 1.25;
+  color: var(--text-primary);
+  text-align: center;
+  word-break: break-word;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  animation: noteBubbleIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+@keyframes noteBubbleIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.9); }
+  to   { opacity: 1; transform: none; }
+}
+
+.note-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 8px;
+  height: 8px;
+  background: inherit;
+  border-right: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+}
+
+.note-bubble-mine {
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.18), rgba(236, 72, 153, 0.18));
+  border-color: rgba(108, 60, 225, 0.4);
+}
+
+.note-placeholder {
+  color: var(--text-muted);
+  font-style: italic;
+}
+
+.note-text {
+  display: block;
+}
+
+.note-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary, #a1a1aa);
+  margin-top: 2px;
+  max-width: 78px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Composer modal ── */
+.note-composer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+  animation: fadeIn 0.2s ease both;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.note-composer {
+  width: 100%;
+  max-width: 400px;
+  background: var(--bg-card, var(--bg-secondary, #13131C));
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  border-radius: 20px;
+  padding: 22px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+  animation: composerIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes composerIn {
+  from { opacity: 0; transform: translateY(20px) scale(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+
+.note-composer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.note-composer-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.2px;
+}
+
+.note-composer-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 15px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+.note-composer-close:hover {
+  background: var(--bg-input, rgba(255,255,255,0.06));
+  color: var(--text-primary);
+}
+
+.note-composer-hint {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+.note-composer-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: var(--bg-input, rgba(255,255,255,0.04));
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  border-radius: 14px;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  resize: none;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.note-composer-input:focus {
+  border-color: rgba(108, 60, 225, 0.6);
+  box-shadow: 0 0 0 3px rgba(108, 60, 225, 0.15);
+}
+
+.note-composer-meta {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 6px;
+}
+.note-counter {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 0.3px;
+}
+.note-counter.low { color: #F87171; }
+
+.note-composer-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 16px;
+}
+.note-btn {
+  flex: 1;
+  padding: 11px 16px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+.note-btn:active { transform: scale(0.98); }
+.note-btn:disabled { opacity: 0.55; cursor: not-allowed; }
+
+.note-btn-primary {
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  box-shadow: 0 6px 18px rgba(108, 60, 225, 0.35);
+}
+.note-btn-primary:not(:disabled):hover {
+  box-shadow: 0 10px 26px rgba(108, 60, 225, 0.5);
+  transform: translateY(-1px);
+}
+
+.note-btn-danger {
+  background: transparent;
+  border-color: rgba(239, 68, 68, 0.4);
+  color: #F87171;
+}
+.note-btn-danger:not(:disabled):hover {
+  background: rgba(239, 68, 68, 0.08);
 }
