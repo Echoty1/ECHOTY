@@ -24,6 +24,9 @@ const NotesStrip = ({ visibleUids = [] }) => {
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // NEW: preview overlay state
+  const [previewNote, setPreviewNote] = useState(null);
+
   useEffect(() => {
     if (!user?.uid) return;
     const noteRef = ref(db, `notes/${user.uid}`);
@@ -52,6 +55,22 @@ const NotesStrip = ({ visibleUids = [] }) => {
     }, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  // Close preview on Escape
+  useEffect(() => {
+    if (!previewNote) return;
+    const onKey = (e) => {
+      if (e.key === 'Escape') setPreviewNote(null);
+    };
+    document.addEventListener('keydown', onKey);
+    // Lock body scroll while preview is open
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [previewNote]);
 
   const filteredNotes = allNotes.filter((n) => {
     if (n.uid === user?.uid) return false;
@@ -96,8 +115,16 @@ const NotesStrip = ({ visibleUids = [] }) => {
   };
 
   const handleTapOtherNote = (note) => {
-    navigate(`/chat/${note.uid}`, {
-      state: { prefilledNote: note.text },
+    setPreviewNote(note);
+  };
+
+  const handleReplyFromPreview = () => {
+    if (!previewNote) return;
+    const targetUid = previewNote.uid;
+    const text = previewNote.text;
+    setPreviewNote(null);
+    navigate(`/chat/${targetUid}`, {
+      state: { prefilledNote: text },
     });
   };
 
@@ -108,8 +135,21 @@ const NotesStrip = ({ visibleUids = [] }) => {
     return profile.name || profile.displayName || 'User';
   };
 
+  const getAvatar = (uid) => profiles[uid]?.avatar || '';
+
+  const formatTimeLeft = (note) => {
+    if (!note?.expiresAt) return '';
+    const ms = note.expiresAt - Date.now();
+    if (ms <= 0) return 'expired';
+    const hours = Math.floor(ms / (1000 * 60 * 60));
+    const mins = Math.floor((ms % (1000 * 60 * 60)) / (1000 * 60));
+    if (hours >= 1) return `${hours}h left`;
+    return `${mins}m left`;
+  };
+
   return (
     <>
+      {/* ─── THE STRIP ─── */}
       <div className="notes-strip">
         <button
           type="button"
@@ -119,9 +159,9 @@ const NotesStrip = ({ visibleUids = [] }) => {
         >
           <div className={`note-avatar-wrap ${myNote ? 'has-note' : ''}`}>
             <Avatar
-              src={profiles[user?.uid]?.avatar}
+              src={getAvatar(user?.uid)}
               name={getDisplayName(user?.uid)}
-              size={56}
+              size={64}
             />
             {!myNote && <span className="note-plus">+</span>}
           </div>
@@ -141,13 +181,13 @@ const NotesStrip = ({ visibleUids = [] }) => {
             type="button"
             className="note-card"
             onClick={() => handleTapOtherNote(note)}
-            aria-label={`Reply to note from ${getDisplayName(note.uid)}`}
+            aria-label={`View note from ${getDisplayName(note.uid)}`}
           >
             <div className="note-avatar-wrap has-note">
               <Avatar
-                src={profiles[note.uid]?.avatar}
+                src={getAvatar(note.uid)}
                 name={getDisplayName(note.uid)}
-                size={56}
+                size={64}
               />
             </div>
             <div className="note-bubble">
@@ -158,6 +198,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
         ))}
       </div>
 
+      {/* ─── COMPOSER (write/edit your note) ─── */}
       {composerOpen && (
         <div
           className="note-composer-backdrop"
@@ -221,6 +262,60 @@ const NotesStrip = ({ visibleUids = [] }) => {
                 {saving ? 'Saving…' : myNote ? 'Update' : 'Share'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── FULL NOTE PREVIEW (blurred backdrop) ─── */}
+      {previewNote && (
+        <div
+          className="note-preview-backdrop"
+          onClick={() => setPreviewNote(null)}
+          role="dialog"
+          aria-modal="true"
+        >
+          <div
+            className="note-preview"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="note-preview-close"
+              onClick={() => setPreviewNote(null)}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+
+            <div className="note-preview-avatar">
+              <Avatar
+                src={getAvatar(previewNote.uid)}
+                name={getDisplayName(previewNote.uid)}
+                size={96}
+              />
+            </div>
+
+            <h3 className="note-preview-name">
+              {getDisplayName(previewNote.uid)}
+            </h3>
+
+            <p className="note-preview-time">
+              {formatTimeLeft(previewNote)}
+            </p>
+
+            <div className="note-preview-bubble">
+              <p className="note-preview-text">{previewNote.text}</p>
+            </div>
+
+            <button
+              type="button"
+              className="note-preview-reply"
+              onClick={handleReplyFromPreview}
+            >
+              Reply to {getDisplayName(previewNote.uid).split(' ')[0]}
+            </button>
+
+            <p className="note-preview-hint">Tap outside or press Esc to close</p>
           </div>
         </div>
       )}
