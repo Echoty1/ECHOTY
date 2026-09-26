@@ -39,12 +39,15 @@ import BanScreen from './components/BanScreen/BanScreen';
 import { APP_VERSION } from './version';
 import Legal from './components/pages/Other/Legal';
 import EchoDropPage from './components/pages/EchoDrop/EchoDropPage';
-import MessageNotifier from './components/common/MessageNotifier'; // ← NEW
-import { useGlobalMessageListener } from './hooks/useGlobalMessageListener'; // ← NEW
+import MessageNotifier from './components/common/MessageNotifier';
+import { useGlobalMessageListener } from './hooks/useGlobalMessageListener';
+import { unlockAudio } from './services/notificationService'; // ← NEW
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 // ─── SEO / Structured Data for Google ──────────────────────────
+// Tells Google that "Echo" is also known as "Echoty" and ties
+// Lawal Abdulmalik to the brand as founder & CEO.
 const schemaData = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
@@ -120,7 +123,7 @@ function AppContent() {
   const { user, loading, banInfo } = useAuth();
   const { fetchProfile } = useProfile();
 
-  // NEW: global incoming-message listener (plays sound + fires notification banner)
+  // Global incoming-message listener (plays sound + fires banner)
   useGlobalMessageListener();
 
   const [minTimePassed, setMinTimePassed] = useState(false);
@@ -139,6 +142,25 @@ function AppContent() {
       pathname === '/shop' ||
       pathname === '/other' ||
       pathname === '/echodrop');
+
+  // ─── NEW: Prime the audio elements on the very first user gesture ───
+  // Mobile browsers require a user-triggered interaction before any audio
+  // can play. This unlocks <audio> playback so message sounds work.
+  useEffect(() => {
+    const prime = () => unlockAudio();
+    window.addEventListener('touchstart', prime, { once: true, passive: true });
+    window.addEventListener('touchend', prime, { once: true, passive: true });
+    window.addEventListener('pointerdown', prime, { once: true });
+    window.addEventListener('click', prime, { once: true });
+    window.addEventListener('keydown', prime, { once: true });
+    return () => {
+      window.removeEventListener('touchstart', prime);
+      window.removeEventListener('touchend', prime);
+      window.removeEventListener('pointerdown', prime);
+      window.removeEventListener('click', prime);
+      window.removeEventListener('keydown', prime);
+    };
+  }, []);
 
   useEffect(() => {
     const src = 'https://myhappr.com/widget.js';
@@ -311,7 +333,7 @@ function AppContent() {
   return (
     <>
       <Navbar />
-      <MessageNotifier /> {/* ← NEW: message notification banner */}
+      <MessageNotifier />
       <NetworkStatus />
       <DesktopInstallPrompt />
       <ScrollToTop />
