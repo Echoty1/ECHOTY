@@ -24,7 +24,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // NEW: preview overlay state
+  // Preview overlay state
   const [previewNote, setPreviewNote] = useState(null);
 
   useEffect(() => {
@@ -56,14 +56,13 @@ const NotesStrip = ({ visibleUids = [] }) => {
     return () => clearInterval(interval);
   }, []);
 
-  // Close preview on Escape
+  // Close preview on Escape + lock scroll
   useEffect(() => {
     if (!previewNote) return;
     const onKey = (e) => {
       if (e.key === 'Escape') setPreviewNote(null);
     };
     document.addEventListener('keydown', onKey);
-    // Lock body scroll while preview is open
     const prevOverflow = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     return () => {
@@ -118,13 +117,20 @@ const NotesStrip = ({ visibleUids = [] }) => {
     setPreviewNote(note);
   };
 
+  // When "Reply" is tapped, navigate with the note metadata.
+  // ChatView will attach this to the *next message* the user sends.
   const handleReplyFromPreview = () => {
     if (!previewNote) return;
     const targetUid = previewNote.uid;
-    const text = previewNote.text;
+    const replyNote = {
+      text: previewNote.text,
+      authorUid: previewNote.uid,
+      authorName: getDisplayName(previewNote.uid),
+      createdAt: previewNote.createdAt,
+    };
     setPreviewNote(null);
     navigate(`/chat/${targetUid}`, {
-      state: { prefilledNote: text },
+      state: { replyToNote: replyNote },
     });
   };
 
@@ -149,7 +155,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
 
   return (
     <>
-      {/* ─── THE STRIP ─── */}
       <div className="notes-strip">
         <button
           type="button"
@@ -198,7 +203,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
         ))}
       </div>
 
-      {/* ─── COMPOSER (write/edit your note) ─── */}
+      {/* ─── COMPOSER ─── */}
       {composerOpen && (
         <div
           className="note-composer-backdrop"
@@ -206,10 +211,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
           role="dialog"
           aria-modal="true"
         >
-          <div
-            className="note-composer"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="note-composer" onClick={(e) => e.stopPropagation()}>
             <div className="note-composer-header">
               <h3>Your note</h3>
               <button
@@ -266,7 +268,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
         </div>
       )}
 
-      {/* ─── FULL NOTE PREVIEW (blurred backdrop) ─── */}
+      {/* ─── FULL PREVIEW ─── */}
       {previewNote && (
         <div
           className="note-preview-backdrop"
@@ -274,10 +276,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
           role="dialog"
           aria-modal="true"
         >
-          <div
-            className="note-preview"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="note-preview" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               className="note-preview-close"
