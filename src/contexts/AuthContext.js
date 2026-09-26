@@ -3,7 +3,7 @@ import React, { useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ref, get } from 'firebase/database';
 import { isAndroid, isIOS } from 'react-device-detect';
-import { AuthProvider } from './contexts/AuthContext';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { ProfileProvider, useProfile } from './contexts/ProfileContext';
 import { PresenceProvider } from './contexts/PresenceContext';
 import { CacheProvider } from './contexts/CacheContext';
@@ -23,7 +23,6 @@ import CoinPurchase from './components/pages/CoinPurchase/CoinPurchase';
 import Login from './components/Auth/Login';
 import Navbar from './components/Layout/Navbar';
 import BottomNav from './components/Layout/BottomNav';
-import { useAuth } from './hooks/useAuth';
 import NetworkStatus from './components/common/NetworkStatus';
 import ScrollRestoration from './components/common/ScrollRestoration';
 import UpdatePopup from './components/UpdatePopup/UpdatePopup';
@@ -318,7 +317,7 @@ function AppContent() {
     }
   }, []);
 
-  if (!showLoading && user && banInfo.isBanned) {
+  if (!showLoading && user && banInfo?.isBanned) {
     return <BanScreen />;
   }
   if (showLoading) return <LoadingScreen />;
