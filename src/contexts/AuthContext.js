@@ -1,346 +1,405 @@
-// src/contexts/AuthContext.js
-import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
-import { auth, db } from '../services/firebase';
-import { onAuthStateChanged, signOut } from 'firebase/auth';
-import { ref, set, update, onDisconnect, onValue, remove, get, runTransaction } from 'firebase/database';
-import { initPresence } from '../services/presenceService';
-import { isUnverifiedPasswordUser } from '../utils/emailGate';
+// src/App.js
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { ref, get } from 'firebase/database';
+import { isAndroid, isIOS } from 'react-device-detect';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProfileProvider, useProfile } from './contexts/ProfileContext';
+import { PresenceProvider } from './contexts/PresenceContext';
+import { CacheProvider } from './contexts/CacheContext';
+import { CallProvider } from './contexts/CallContext';
+import { ThemeProvider } from './contexts/ThemeContext';
+import Home from './components/pages/Home/Home';
+import Chats from './components/pages/Chats/Chats';
+import ChatView from './components/pages/Chat/ChatView';
+import Profile from './components/pages/Profile/Profile';
+import UserProfile from './components/pages/UserProfile/UserProfile';
+import Other from './components/pages/Other/Other';
+import Bookmarks from './components/pages/Other/Bookmarks';
+import DesktopInstallPrompt from './components/common/DesktopInstallPrompt';
+import Settings from './components/pages/Other/Settings';
+import About from './components/pages/Other/About';
+import CoinPurchase from './components/pages/CoinPurchase/CoinPurchase';
+import Login from './components/Auth/Login';
+import Navbar from './components/Layout/Navbar';
+import BottomNav from './components/Layout/BottomNav';
+import { useAuth } from './hooks/useAuth';
+import NetworkStatus from './components/common/NetworkStatus';
+import ScrollRestoration from './components/common/ScrollRestoration';
+import UpdatePopup from './components/UpdatePopup/UpdatePopup';
+import InstallPopup from './components/InstallPopup/InstallPopup';
+import Communities from './components/pages/Communities/Communities';
+import InstallBanner from './components/common/InstallBanner';
+import { cleanAllCachedMessages } from './services/messageCleanup';
+import { getChatList } from './services/indexedDBService';
+import { db } from './services/firebase';
+import Shop from './components/pages/Shop/Shop';
+import AdminPanel from './components/pages/Admin/AdminPanel';
+import BanScreen from './components/BanScreen/BanScreen';
+import { APP_VERSION } from './version';
+import Legal from './components/pages/Other/Legal';
+import EchoDropPage from './components/pages/EchoDrop/EchoDropPage';
+import MessageNotifier from './components/common/MessageNotifier';
+import { useGlobalMessageListener } from './hooks/useGlobalMessageListener';
+import { unlockAudio } from './services/notificationService';
 
-const getDeviceId = () => {
-  try {
-    let id = localStorage.getItem('echo_device_id');
-    if (!id) {
-      id = (crypto.randomUUID && crypto.randomUUID()) || `dev_${Date.now()}_${Math.random().toString(16).slice(2)}`;
-      localStorage.setItem('echo_device_id', id);
-    }
-    return id;
-  } catch {
-    return `dev_${Date.now()}`;
-  }
+const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
+
+const schemaData = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'Echo',
+  alternateName: 'Echoty',
+  url: 'https://echoty.xyz',
+  logo: 'https://echoty.xyz/logo.png',
+  description: 'Discover, connect, and echo with animated avatars.',
+  founder: {
+    '@type': 'Person',
+    name: 'Lawal Abdulmalik',
+    jobTitle: 'Founder & CEO',
+  },
+  ceo: {
+    '@type': 'Person',
+    name: 'Lawal Abdulmalik',
+  },
+  sameAs: ['https://echoty.xyz'],
 };
 
-const parseOs = (platform, ua) => {
-  const p = String(platform || '');
-  const u = String(ua || '');
-  if (/Win/i.test(p) && !/Windows Phone/i.test(p + u)) return 'Windows';
-  if (/Mac/i.test(p) && !/iPhone|iPad/i.test(p + u)) return 'macOS';
-  if (/CrOS|Chrome OS/i.test(p) || /CrOS/i.test(u)) return 'ChromeOS';
-  if (/Android/i.test(p)) return 'Android';
-  if (/iPhone/i.test(p)) return 'iOS';
-  if (/iPad/i.test(p)) return 'iPadOS';
-  if (/Linux/i.test(p)) return 'Linux';
-  if (/Win/i.test(p)) return 'Windows';
-  if (/Android/i.test(u) && !/Win|MacIntel|Linux x86|CrOS/i.test(p)) return 'Android';
-  if (/iPhone/i.test(u) && !/Win|MacIntel|Linux x86/i.test(p)) return 'iOS';
-  if (/iPad/i.test(u) && !/Win|MacIntel|Linux x86/i.test(p)) return 'iPadOS';
-  if (/Windows Phone|WPDesktop/i.test(u)) return 'Windows';
-  if (/Win/i.test(u)) return 'Windows';
-  if (/Mac OS X|Macintosh/i.test(u) && !/iPhone|iPad/i.test(u)) return 'macOS';
-  if (/Ubuntu/i.test(u)) return 'Linux';
-  if (/Linux/i.test(u) && !/Android/i.test(u)) return 'Linux';
-  return 'Unknown';
-};
-
-const getDeviceInfo = () => {
-  const ua = navigator.userAgent || '';
-  const platform = navigator.userAgentData?.platform || navigator.platform || '';
-  const os = parseOs(platform, ua);
-  let browser = 'Unknown';
-  if (/Edg\//i.test(ua)) browser = 'Edge';
-  else if (/OPR\/|Opera/i.test(ua)) browser = 'Opera';
-  else if (/SamsungBrowser/i.test(ua)) browser = 'Samsung Internet';
-  else if (/Firefox|FxiOS/i.test(ua)) browser = 'Firefox';
-  else if (/CriOS/i.test(ua)) browser = 'Chrome';
-  else if (/Chrome/i.test(ua)) browser = 'Chrome';
-  else if (/Safari/i.test(ua)) browser = 'Safari';
-  return { os, browser, screen: `${window.screen.width}×${window.screen.height}` };
-};
-
-const refineDeviceOs = async (fallback) => {
-  try {
-    if (navigator.userAgentData?.getHighEntropyValues) {
-      const high = await navigator.userAgentData.getHighEntropyValues(['platform']);
-      if (high?.platform) return parseOs(high.platform, navigator.userAgent || '');
-    }
-  } catch (_) {}
-  return fallback;
-};
-
-export const AuthContext = createContext();
-
-export const AuthProvider = ({ children }) => {
-  const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [banInfo, setBanInfo] = useState({ isBanned: false, reason: '', bannedAt: null });
-  const presenceCleanupRef = useRef(null);
-  const accountCleanupRef = useRef(null);
-  const profileUnsubRef = useRef(null);
-  const sessionCleanupRef = useRef(null);
-  const loggingOutRef = useRef(false);
-
-  const updateDailyLogin = async (uid) => {
-    if (!uid) return;
-    const today = new Date().toISOString().split('T')[0];
-    try {
-      const userLoginRef = ref(db, `userDailyLogins/${uid}/${today}`);
-      const snap = await get(userLoginRef);
-      if (snap.exists()) return;
-      await set(userLoginRef, true);
-      await update(ref(db, `profiles/${uid}`), { lastLoginDate: today });
-    } catch (_) {}
-  };
-
-  const cleanupAll = () => {
-    if (presenceCleanupRef.current) {
-      presenceCleanupRef.current();
-      presenceCleanupRef.current = null;
-    }
-    if (accountCleanupRef.current) {
-      accountCleanupRef.current();
-      accountCleanupRef.current = null;
-    }
-    if (profileUnsubRef.current) {
-      profileUnsubRef.current();
-      profileUnsubRef.current = null;
-    }
-    if (sessionCleanupRef.current) {
-      sessionCleanupRef.current();
-      sessionCleanupRef.current = null;
-    }
-  };
-
+function ScrollToTop() {
+  const { pathname } = useLocation();
   useEffect(() => {
-    const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
-      cleanupAll();
+    const container = document.getElementById('main-content');
+    if (container) container.scrollTop = 0;
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
 
-      if (firebaseUser) {
-        try {
-          const uid = firebaseUser.uid;
-          if (isUnverifiedPasswordUser(firebaseUser, 'k9Cs6QPfDRNTputzic7V3xRUof63')) {
-            setUser(null);
-            setLoading(false);
-            return;
-          }
+function LoadingScreen() {
+  const isMobile = window.innerWidth <= 480;
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100vh',
+        background: 'var(--bg-primary)',
+        position: 'relative',
+        overflow: 'hidden',
+        transition: 'background 0.3s ease',
+      }}
+    >
+      <div style={{ position: 'absolute', width: '240px', height: '240px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.3, animation: 'echoRingPulse 2.5s ease-out infinite' }} />
+      <div style={{ position: 'absolute', width: '320px', height: '320px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.2, animation: 'echoRingPulse 3s ease-out infinite 0.5s' }} />
+      <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.1, animation: 'echoRingPulse 3.5s ease-out infinite 1s' }} />
+      <div style={{ width: '100px', height: '100px', marginBottom: '20px', animation: 'echoFloat 2.5s ease-in-out infinite', position: 'relative', zIndex: 2 }}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" style={{ width: '100%', height: '100%' }}>
+          <rect width="512" height="512" rx="96" fill="var(--bg-secondary)" />
+          <path d="M 120 120 H 280 V 176 H 180 V 228 H 260 V 284 H 180 V 336 H 280 V 392 H 120 Z" fill="#6C3CE1" />
+          <path d="M 320 160 A 140 140 0 0 1 320 352" stroke="#6C3CE1" strokeWidth="36" fill="none" strokeLinecap="round" />
+          <path d="M 370 200 A 90 90 0 0 1 370 312" stroke="#EC4899" strokeWidth="32" strokeOpacity="0.6" fill="none" strokeLinecap="round" />
+        </svg>
+      </div>
+      <div style={{ fontSize: isMobile ? '32px' : '40px', fontWeight: 900, background: 'linear-gradient(135deg, #6C3CE1, #EC4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: isMobile ? '4px' : '8px', zIndex: 2, fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>
+        ECHO
+      </div>
+      <div style={{ color: 'var(--text-muted)', fontSize: isMobile ? '10px' : '13px', letterSpacing: isMobile ? '4px' : '8px', textTransform: 'uppercase', marginTop: '2px', zIndex: 2, whiteSpace: 'nowrap' }}>
+        Discover. Connect. Echo.
+      </div>
+      <div style={{ width: '200px', height: '3px', background: 'var(--bg-input)', borderRadius: '4px', marginTop: '30px', overflow: 'hidden', zIndex: 2 }}>
+        <div style={{ height: '100%', width: '200%', background: 'linear-gradient(90deg, #6C3CE1, #EC4899, #6C3CE1)', borderRadius: '4px', animation: 'shimmer 1.8s ease-in-out infinite' }} />
+      </div>
+    </div>
+  );
+}
 
-          const deviceId = getDeviceId();
-          const info = getDeviceInfo();
-          const fingerprint = `${info.os}|${info.browser}|${info.screen}`;
-          const sessionRef = ref(db, `sessions/${uid}/${deviceId}`);
-          let sessionLive = false;
-          get(sessionRef).then((snap) => {
-            const prev = snap.exists() ? snap.val() : {};
-            return set(sessionRef, {
-              deviceId,
-              os: info.os,
-              browser: info.browser,
-              screen: info.screen,
-              fingerprint,
-              lastActive: Date.now(),
-              createdAt: prev.createdAt || Date.now(),
-              isCurrent: true,
-            });
-          }).then(async () => {
-            sessionLive = true;
-            onDisconnect(sessionRef).update({ lastActive: Date.now(), isCurrent: false }).catch(() => {});
-            const realOs = await refineDeviceOs(info.os);
-            if (realOs && realOs !== info.os) {
-              await update(sessionRef, { os: realOs, fingerprint: `${realOs}|${info.browser}|${info.screen}` }).catch(() => {});
-            }
-            return get(ref(db, `sessions/${uid}`));
-          }).then((all) => {
-            const rows = all && all.exists() ? all.val() : {};
-            Object.entries(rows).forEach(([id, row]) => {
-              if (id === deviceId) return;
-              const same =
-                row &&
-                (row.fingerprint === fingerprint ||
-                  (row.os === info.os && row.browser === info.browser && row.screen === info.screen));
-              if (same) remove(ref(db, `sessions/${uid}/${id}`)).catch(() => {});
-            });
-          }).catch(() => {});
-          sessionCleanupRef.current = onValue(sessionRef, (snap) => {
-            if (loggingOutRef.current) return;
-            if (sessionLive && !snap.exists() && auth.currentUser) {
-              signOut(auth).catch(() => {});
-            }
-          });
+function AppContent() {
+  const { pathname } = useLocation();
+  const { user, loading, banInfo } = useAuth();
+  const { fetchProfile } = useProfile();
 
-          presenceCleanupRef.current = initPresence(uid);
+  useGlobalMessageListener();
 
-          const baseUser = {
-            uid: firebaseUser.uid,
-            email: firebaseUser.email,
-            displayName: firebaseUser.displayName,
-            photoURL: firebaseUser.photoURL,
-            emailVerified: firebaseUser.emailVerified,
-            name: firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User',
-            avatar: '',
-            mood: 'neutral',
-            activeSkin: null,
-            bio: '',
-            interests: [],
-            skills: [],
-            country: '',
-            city: '',
-            status: '🟢 Active',
-            lastActive: Date.now(),
-          };
-          setUser(baseUser);
+  const [minTimePassed, setMinTimePassed] = useState(false);
+  const [showUpdatePopup, setShowUpdatePopup] = useState(false);
+  const [showInstallPopup, setShowInstallPopup] = useState(false);
+  const [playStoreUrl, setPlayStoreUrl] = useState('');
+  const [appVersion] = useState(process.env.REACT_APP_VERSION || '1.0');
+  const showLoading = loading || !minTimePassed;
+  const showHappr =
+    Boolean(user) &&
+    !showLoading &&
+    !banInfo?.isBanned &&
+    (pathname === '/' ||
+      pathname === '/chats' ||
+      pathname === '/communities' ||
+      pathname === '/shop' ||
+      pathname === '/other' ||
+      pathname === '/echodrop');
 
-          const profileRef = ref(db, `profiles/${uid}`);
-
-          const unsubscribeProfile = onValue(
-            profileRef,
-            async (snapshot) => {
-              if (snapshot.exists()) {
-                const profileData = snapshot.val();
-
-                const googleName = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
-                const currentName = profileData.name || profileData.displayName || profileData.username || '';
-                const isUid = currentName.length >= 28;
-                const isDefault = !currentName || currentName === 'User' || isUid;
-
-                let needsUpdate = false;
-                const updatedData = {};
-
-                if (isDefault) {
-                  updatedData.name = googleName;
-                  updatedData.searchName = googleName.toLowerCase();
-                  needsUpdate = true;
-                } else {
-                  const expectedSearch = (currentName || 'User').toLowerCase();
-                  if (profileData.searchName !== expectedSearch) {
-                    updatedData.searchName = expectedSearch;
-                    needsUpdate = true;
-                  }
-                }
-
-                if (profileData.avatar && profileData.avatar.startsWith('https://lh3.googleusercontent.com')) {
-                  updatedData.avatar = '';
-                  needsUpdate = true;
-                }
-
-                if (needsUpdate) {
-                  update(profileRef, updatedData).catch(() => {});
-                  Object.assign(profileData, updatedData);
-                }
-
-                setUser((prev) => ({
-                  ...prev,
-                  ...profileData,
-                  displayName: firebaseUser.displayName || profileData.name || prev?.name || 'User',
-                  photoURL: firebaseUser.photoURL || profileData.avatar || '',
-                }));
-
-                await updateDailyLogin(uid);
-                setLoading(false);
-              } else {
-                const name = firebaseUser.displayName || firebaseUser.email?.split('@')[0] || 'User';
-                const newProfile = {
-                  name,
-                  searchName: name.toLowerCase(),
-                  avatar: '',
-                  mood: 'neutral',
-                  activeSkin: null,
-                  bio: 'New to ECHO!',
-                  interests: [],
-                  skills: [],
-                  country: '',
-                  city: '',
-                  status: '🟢 Active',
-                  lastActive: Date.now(),
-                  createdAt: Date.now(),
-                };
-
-                setUser((prev) => ({ ...prev, ...newProfile }));
-
-                try {
-                  await set(profileRef, newProfile);
-                  await Promise.all([
-                    set(ref(db, `accounts/${uid}`), {
-                      email: firebaseUser.email,
-                      joined: Date.now(),
-                      banned: false,
-                    }),
-                    set(ref(db, `userSkins/${uid}`), {
-                      owned: [],
-                      active: null,
-                      coins: 350,
-                      purchases: {},
-                    }),
-                  ]);
-                  await updateDailyLogin(uid);
-                } catch (_) {
-                } finally {
-                  setLoading(false);
-                }
-              }
-            },
-            () => setLoading(false)
-          );
-          profileUnsubRef.current = unsubscribeProfile;
-
-          const accountRef = ref(db, `accounts/${uid}`);
-          const unsubAccount = onValue(accountRef, (snap) => {
-            const data = snap.val();
-            if (data?.forceLogout === true) {
-              signOut(auth).catch(() => {});
-              remove(ref(db, `accounts/${uid}/forceLogout`)).catch(() => {});
-            }
-            if (data?.banned === true) {
-              setBanInfo({
-                isBanned: true,
-                reason: data.banReason || 'Banned by admin',
-                bannedAt: data.bannedAt || Date.now(),
-              });
-            } else {
-              setBanInfo({ isBanned: false, reason: '', bannedAt: null });
-            }
-          });
-          accountCleanupRef.current = unsubAccount;
-        } catch (_) {
-          setLoading(false);
-        }
-      } else {
-        cleanupAll();
-        setUser(null);
-        setBanInfo({ isBanned: false, reason: '', bannedAt: null });
-        setLoading(false);
-      }
-    });
-
+  // Prime the audio elements on the very first user gesture
+  useEffect(() => {
+    const prime = () => unlockAudio();
+    window.addEventListener('touchstart', prime, { once: true, passive: true });
+    window.addEventListener('touchend', prime, { once: true, passive: true });
+    window.addEventListener('pointerdown', prime, { once: true });
+    window.addEventListener('click', prime, { once: true });
+    window.addEventListener('keydown', prime, { once: true });
     return () => {
-      unsub();
-      cleanupAll();
+      window.removeEventListener('touchstart', prime);
+      window.removeEventListener('touchend', prime);
+      window.removeEventListener('pointerdown', prime);
+      window.removeEventListener('click', prime);
+      window.removeEventListener('keydown', prime);
     };
   }, []);
 
-  const handleLogout = async () => {
-    loggingOutRef.current = true;
-    const uid = user?.uid || auth.currentUser?.uid;
-    const deviceId = localStorage.getItem('echo_device_id');
-    cleanupAll();
+  useEffect(() => {
+    const src = 'https://myhappr.com/widget.js';
+    if (document.querySelector(`script[src="${src}"]`)) return undefined;
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.setAttribute('data-username', 'echoty');
+    script.setAttribute('data-color', '#9D5EFF');
+    script.setAttribute('data-button-color', '#9D5EFF');
+    script.setAttribute('data-text-color', '#FFFFFF');
+    script.setAttribute('data-radius', '8px');
+    script.setAttribute('data-text', 'Support ECHO');
+    script.setAttribute('data-title', 'Keep the Echo Alive');
+    script.setAttribute('data-theme', 'light');
+    script.setAttribute('data-card-bg', '#FFFFFF');
+    script.setAttribute('data-card-text', '#09090b');
+    document.body.appendChild(script);
+    if (!document.getElementById('echo-happr-style')) {
+      const css = document.createElement('style');
+      css.id = 'echo-happr-style';
+      css.textContent =
+        'body.echo-support-visible [class*="myhappr"],body.echo-support-visible [id*="myhappr"],body.echo-support-visible iframe[src*="myhappr"]{bottom:96px!important;z-index:80!important;}body:not(.echo-support-visible) [class*="myhappr"],body:not(.echo-support-visible) [id*="myhappr"],body:not(.echo-support-visible) iframe[src*="myhappr"]{display:none!important;}';
+      document.head.appendChild(css);
+    }
+    return undefined;
+  }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle('echo-support-visible', showHappr);
+    return () => document.body.classList.remove('echo-support-visible');
+  }, [showHappr]);
+
+  useEffect(() => {
+    const key = 'echo_v';
+    const saved = localStorage.getItem(key);
+    const current = String(APP_VERSION);
+    if (saved && saved !== current) {
+      localStorage.setItem(key, current);
+      window.location.reload();
+    } else if (!saved) {
+      localStorage.setItem(key, current);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMinTimePassed(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const cleanLocalStorage = () => {
     try {
-      if (uid && deviceId) {
-        onDisconnect(ref(db, `sessions/${uid}/${deviceId}`)).cancel().catch(() => {});
-      }
+      const keys = Object.keys(localStorage);
+      const toRemove = keys.filter((key) => (
+        key.startsWith('echo_cache_') ||
+        key.startsWith('echo_small_') ||
+        key.startsWith('echo_cache_v2_') ||
+        key.startsWith('echo_small_v2_') ||
+        key.startsWith('echocache_v2_')
+      )).filter((key) => {
+        const essential = [
+          'echo_has_recovered_',
+          'echo_app_version',
+          'echo_changelog_version',
+          'echo_install_popup_dismissed_until',
+          'echo_update_shown',
+          'firebase:host',
+        ];
+        return !essential.some((e) => key.startsWith(e));
+      });
+      toRemove.forEach((key) => localStorage.removeItem(key));
     } catch (_) {}
-    try {
-      await signOut(auth);
-    } catch (_) {}
-    if (uid && deviceId) remove(ref(db, `sessions/${uid}/${deviceId}`)).catch(() => {});
-    loggingOutRef.current = false;
   };
 
-  const value = { user, loading, logout: handleLogout, banInfo };
+  useEffect(() => {
+    if (user) cleanLocalStorage();
+  }, [user]);
 
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const snapshot = await get(ref(db, 'appConfig'));
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          if (data.version?.playStoreUrl) setPlayStoreUrl(data.version.playStoreUrl);
+        }
+      } catch (_) {}
+    };
+    fetchConfig();
+  }, []);
 
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+  useEffect(() => {
+    if (!isAndroid && !isIOS) return;
+    if (!playStoreUrl || !minTimePassed) return;
+    const dismissedUntil = localStorage.getItem('install_popup_dismissed_until');
+    if (dismissedUntil && Date.now() < parseInt(dismissedUntil, 10)) return;
+    if (sessionStorage.getItem('install_popup_shown')) return;
+    setShowInstallPopup(true);
+    sessionStorage.setItem('install_popup_shown', 'true');
+  }, [playStoreUrl, minTimePassed]);
+
+  const handleInstallPopupClose = () => {
+    const until = Date.now() + 5 * 24 * 60 * 60 * 1000;
+    localStorage.setItem('install_popup_dismissed_until', String(until));
+    setShowInstallPopup(false);
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    if (!isAndroid && !isIOS) return;
+    const checkForUpdate = async () => {
+      try {
+        const snapshot = await get(ref(db, 'appConfig/version'));
+        if (!snapshot.exists()) return;
+        const data = snapshot.val();
+        let latestVersion = data?.latest ?? '1.0';
+        if (typeof latestVersion === 'number') latestVersion = String(latestVersion);
+        if (typeof latestVersion !== 'string') return;
+        const currentVersion = typeof appVersion === 'string' ? appVersion : '1.0';
+        const currentParts = currentVersion.split('.').map(Number);
+        const latestParts = latestVersion.split('.').map(Number);
+        let needsUpdate = false;
+        for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i += 1) {
+          const c = currentParts[i] || 0;
+          const l = latestParts[i] || 0;
+          if (l > c) { needsUpdate = true; break; }
+          if (l < c) break;
+        }
+        if (needsUpdate) {
+          const lastShown = localStorage.getItem('echo_update_shown');
+          if (lastShown !== latestVersion) {
+            setShowUpdatePopup(true);
+            localStorage.setItem('echo_update_shown', latestVersion);
+          }
+        }
+      } catch (_) {}
+    };
+    checkForUpdate();
+  }, [user, appVersion]);
+
+  useEffect(() => {
+    if (user?.uid) {
+      fetchProfile(user.uid);
+      const cleanup = async () => {
+        try {
+          const chatList = await getChatList(user.uid);
+          if (chatList && chatList.length > 0) {
+            await cleanAllCachedMessages(user.uid, chatList);
+          }
+        } catch (_) {}
+      };
+      cleanup();
+    }
+  }, [user?.uid, fetchProfile]);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.update();
+      }).catch(() => {});
+    }
+  }, []);
+
+  if (!showLoading && user && banInfo.isBanned) {
+    return <BanScreen />;
   }
-  return context;
-};
+  if (showLoading) return <LoadingScreen />;
+  if (!user) return <Login />;
+
+  return (
+    <>
+      <Navbar />
+      <MessageNotifier />
+      <NetworkStatus />
+      <DesktopInstallPrompt />
+      <ScrollToTop />
+      <div
+        id="main-content"
+        style={{
+          paddingTop: '60px',
+          paddingBottom: '72px',
+          height: '100vh',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          background: 'var(--bg-primary)',
+          maxWidth: '1400px',
+          margin: '0 auto',
+          width: '100%',
+        }}
+      >
+        <Routes>
+          <Route path="/" element={<Home />} />
+          <Route path="/chats" element={<Chats />} />
+          <Route path="/chat/:userId" element={<ChatView />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/user/:uid" element={<UserProfile />} />
+          <Route path="/other" element={<Other />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/bookmarks" element={<Bookmarks />} />
+          <Route path="/coins" element={<CoinPurchase />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/control" element={<AdminPanel />} />
+          <Route path="/shop" element={<Shop />} />
+          <Route path="/legal" element={<Legal />} />
+          <Route path="/communities" element={<Communities />} />
+          <Route path="/echodrop" element={<EchoDropPage />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </div>
+      <BottomNav />
+      {showUpdatePopup && (
+        <UpdatePopup currentVersion={appVersion} onClose={() => setShowUpdatePopup(false)} />
+      )}
+      {showInstallPopup && (
+        <InstallPopup playStoreUrl={playStoreUrl} onClose={handleInstallPopupClose} />
+      )}
+      <InstallBanner playStoreUrl={playStoreUrl} />
+    </>
+  );
+}
+
+function App() {
+  return (
+    <BrowserRouter>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaData) }}
+      />
+
+      <ThemeProvider>
+        <AuthProvider>
+          <PresenceProvider>
+            <ProfileProvider>
+              <CacheProvider>
+                <CallProvider>
+                  <ScrollRestoration />
+                  <AppContent />
+                </CallProvider>
+              </CacheProvider>
+            </ProfileProvider>
+          </PresenceProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </BrowserRouter>
+  );
+}
+
+export default App;
