@@ -71,6 +71,7 @@ const BottomNav = () => {
   const isSupport = user?.uid === SUPPORT_UID;
 
   // ====================== UPDATED TABS ======================
+  // Shop and Drop are hidden (commented out) for now.
   const baseTabs = useMemo(() => {
     if (isSupport) {
       return [
@@ -78,8 +79,8 @@ const BottomNav = () => {
         { to: '/control', label: 'Control', icon: 'fa-sliders-h', id: 'control' },
         { to: '/chats', label: 'Chats', icon: 'fa-comment-dots', id: 'chats' },
         { to: '/communities', label: 'Communities', icon: 'fa-users', id: 'communities' },
-        { to: '/echodrop', label: 'Drop', icon: 'fa-bolt', id: 'echodrop' }, // ← NEW
-        { to: '/shop', label: 'Shop', icon: 'fa-store', id: 'shop' },
+        // { to: '/echodrop', label: 'Drop', icon: 'fa-bolt', id: 'echodrop' }, // hidden
+        // { to: '/shop', label: 'Shop', icon: 'fa-store', id: 'shop' },        // hidden
         { to: '/other', label: 'Other', icon: 'fa-ellipsis-h', id: 'other' },
       ];
     }
@@ -87,8 +88,8 @@ const BottomNav = () => {
       { to: '/', label: 'Home', icon: 'fa-house', id: 'home' },
       { to: '/chats', label: 'Chats', icon: 'fa-comment-dots', id: 'chats' },
       { to: '/communities', label: 'Communities', icon: 'fa-users', id: 'communities' },
-      { to: '/echodrop', label: 'Drop', icon: 'fa-bolt', id: 'echodrop' }, // ← NEW
-      { to: '/shop', label: 'Shop', icon: 'fa-store', id: 'shop' },
+      // { to: '/echodrop', label: 'Drop', icon: 'fa-bolt', id: 'echodrop' }, // hidden
+      // { to: '/shop', label: 'Shop', icon: 'fa-store', id: 'shop' },        // hidden
       { to: '/other', label: 'Other', icon: 'fa-ellipsis-h', id: 'other' },
     ];
   }, [isSupport]);
@@ -390,7 +391,6 @@ const BottomNav = () => {
     if (!activeTab) return '';
     if (activeTab.id === 'home' && onlineCount > 0) return `${onlineCount} online`;
     if (activeTab.id === 'chats' && unreadChatsCount > 0) return `${unreadChatsCount} unread`;
-    if (activeTab.id === 'shop' && coinBalance) return `${coinBalance} coins`;
     return '';
   };
 
@@ -635,8 +635,8 @@ const BottomNav = () => {
               {[
                 { label: 'Chats', icon: 'fa-comment-dots', to: '/chats' },
                 { label: 'Communities', icon: 'fa-users', to: '/communities' },
-                { label: 'Drop', icon: 'fa-bolt', to: '/echodrop' },
-                { label: 'Shop', icon: 'fa-store', to: '/shop' },
+                // { label: 'Drop', icon: 'fa-bolt', to: '/echodrop' },   // hidden
+                // { label: 'Shop', icon: 'fa-store', to: '/shop' },       // hidden
                 { label: 'Online', icon: 'fa-video', action: openOnlineSheet },
               ].map((a) => (
                 <button
