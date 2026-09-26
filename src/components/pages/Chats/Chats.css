@@ -1,6 +1,6 @@
 /* ============================================================
    src/components/pages/Chats/Chats.css
-   Full file — includes all prior styles + Notes strip
+   Full file — Chat list, Echo Halo, typing overlay, notes
    ============================================================ */
 
 /* ─────────────────────────────────────────────
@@ -725,15 +725,11 @@
   }
 
   .skeleton-text,
-  .skeleton-avatar {
-    opacity: 0.55;
-  }
+  .skeleton-avatar { opacity: 0.55; }
 
   .chat-item:active,
   .chat-avatar:hover,
-  .hero-action-btn:hover {
-    transform: none;
-  }
+  .hero-action-btn:hover { transform: none; }
 }
 
 /* ═════════════════════════════════════════════
@@ -777,20 +773,14 @@
 .search-clear:active { transform: scale(0.9); }
 
 .premium-status-pill,
-.premium-end-pill {
-  animation: pill-drop 0.4s var(--ease-spring) both;
-}
+.premium-end-pill { animation: pill-drop 0.4s var(--ease-spring) both; }
 
 .end-icon { animation: pop-in 0.4s var(--ease-spring) 0.1s both; }
 
 .no-chats-premium,
-.demo-search-empty {
-  animation: rise 0.45s var(--ease-out) both;
-}
+.demo-search-empty { animation: rise 0.45s var(--ease-out) both; }
 
-.demo-search-icon {
-  animation: pop-in 0.5s var(--ease-spring) 0.12s both;
-}
+.demo-search-icon { animation: pop-in 0.5s var(--ease-spring) 0.12s both; }
 
 .no-chats-icon-wrapper {
   box-shadow: 0 0 0 0 var(--brand-a20);
@@ -800,14 +790,10 @@
 }
 
 .no-chats-title,
-.demo-search-title {
-  animation: rise 0.45s var(--ease-out) 0.18s both;
-}
+.demo-search-title { animation: rise 0.45s var(--ease-out) 0.18s both; }
 
 .no-chats-subtitle,
-.demo-search-subtitle {
-  animation: rise 0.45s var(--ease-out) 0.26s both;
-}
+.demo-search-subtitle { animation: rise 0.45s var(--ease-out) 0.26s both; }
 
 .section-header { animation: rise 0.4s var(--ease-out) both; }
 
@@ -834,22 +820,16 @@
 .chat-item:nth-child(11) { animation-delay: calc(var(--stagger) * 10); }
 .chat-item:nth-child(n + 12) { animation-delay: calc(var(--stagger) * 11); }
 
-.chat-item:hover {
-  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
-}
+.chat-item:hover { box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18); }
 
 .chat-item:active {
   transform: scale(0.985);
   transition-duration: 0.08s;
 }
 
-.chat-avatar {
-  transition: transform var(--dur-base) var(--ease-spring);
-}
+.chat-avatar { transition: transform var(--dur-base) var(--ease-spring); }
 
-.presence-dot.online {
-  animation: presence-ripple 2.6s ease-out infinite;
-}
+.presence-dot.online { animation: presence-ripple 2.6s ease-out infinite; }
 
 .unread-badge {
   animation:
@@ -859,13 +839,9 @@
 
 .ai-badge,
 .ended-badge,
-.chat-location-badge {
-  animation: pop-in 0.3s var(--ease-spring) both;
-}
+.chat-location-badge { animation: pop-in 0.3s var(--ease-spring) both; }
 
-.regular-chat-item.location-matched {
-  border-left: none;
-}
+.regular-chat-item.location-matched { border-left: none; }
 
 .regular-chat-item.location-matched::before {
   content: '';
@@ -917,27 +893,17 @@
 }
 
 .chat-halo-btn:hover::after,
-.chat-halo-btn:focus-visible::after {
-  animation: halo-ring 1.4s var(--ease-out) infinite;
-}
+.chat-halo-btn:focus-visible::after { animation: halo-ring 1.4s var(--ease-out) infinite; }
 
 .chat-halo-btn:active { transform: scale(0.94); }
 
-.echo-halo-overlay {
-  animation: fade 0.22s ease-out both;
-}
+.echo-halo-overlay { animation: fade 0.22s ease-out both; }
 
-.echo-halo-content {
-  animation: reveal 0.4s var(--ease-spring) 0.06s both;
-}
+.echo-halo-content { animation: reveal 0.4s var(--ease-spring) 0.06s both; }
 
-.echo-halo-timer {
-  animation: tick 1s steps(1, end) infinite;
-}
+.echo-halo-timer { animation: tick 1s steps(1, end) infinite; }
 
-.echo-halo-caption {
-  animation: rise 0.4s var(--ease-out) 0.2s both;
-}
+.echo-halo-caption { animation: rise 0.4s var(--ease-out) 0.2s both; }
 
 .hero-result-card {
   transition: transform var(--dur-base) var(--ease-out), box-shadow var(--dur-base) ease;
@@ -952,9 +918,7 @@
   transform: translateY(-1px) scale(0.995);
 }
 
-.hero-bg-glow {
-  animation: glow-drift 7s ease-in-out infinite alternate;
-}
+.hero-bg-glow { animation: glow-drift 7s ease-in-out infinite alternate; }
 
 .hero-avatar-wrapper {
   background: linear-gradient(135deg, var(--brand-light), #8b5cf6, var(--brand-light));
@@ -1100,9 +1064,7 @@
   .hero-result-card,
   .chat-avatar:hover,
   .hero-action-btn:hover,
-  .chat-halo-btn:hover {
-    transform: none !important;
-  }
+  .chat-halo-btn:hover { transform: none !important; }
 
   .skeleton-text::after,
   .skeleton-avatar::after { display: none; }
@@ -1198,18 +1160,20 @@
 }
 
 /* ═════════════════════════════════════════════
-   14. NOTES STRIP — Instagram-style notes
+   14. NOTES STRIP
    ═════════════════════════════════════════════ */
 .notes-strip {
   display: flex;
-  gap: 14px;
+  gap: 18px;
   overflow-x: auto;
   overflow-y: visible;
-  padding: 14px 4px 18px;
-  margin: 0 -4px 12px;
+  padding: 18px 4px 26px;
+  margin: 0 -4px 18px;
   scroll-snap-type: x proximity;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+  width: 100%;
+  box-sizing: border-box;
 }
 .notes-strip::-webkit-scrollbar { display: none; }
 
@@ -1219,35 +1183,39 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
-  width: 78px;
+  gap: 10px;
+  width: 104px;
   padding: 0;
   background: transparent;
   border: none;
   cursor: pointer;
   scroll-snap-align: start;
   font-family: inherit;
-  transition: transform 0.18s ease;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
+.note-card:hover { transform: translateY(-2px); }
 .note-card:active { transform: scale(0.96); }
 
 .note-avatar-wrap {
   position: relative;
-  width: 56px;
-  height: 56px;
+  width: 68px;
+  height: 68px;
   display: grid;
   place-items: center;
 }
 
-/* The gradient ring around the avatar when a note exists */
 .note-avatar-wrap.has-note::before {
   content: '';
   position: absolute;
-  inset: -3px;
+  inset: -4px;
   border-radius: 50%;
-  background: conic-gradient(from 140deg, #6C3CE1, #EC4899, #6C3CE1);
+  background: conic-gradient(from 140deg, #6C3CE1, #EC4899, #F472B6, #6C3CE1);
   z-index: 0;
-  opacity: 0.95;
+  animation: notesRingSpin 5s linear infinite;
+}
+
+@keyframes notesRingSpin {
+  to { transform: rotate(360deg); }
 }
 
 .note-avatar-wrap.has-note::after {
@@ -1255,10 +1223,8 @@
   position: absolute;
   inset: -1px;
   border-radius: 50%;
-  background: var(--bg-primary);
+  background: var(--bg-primary, #0A0A0F);
   z-index: 0;
-  opacity: 0.35;
-  mix-blend-mode: overlay;
 }
 
 .note-avatar-wrap > * {
@@ -1268,33 +1234,36 @@
 
 .note-plus {
   position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 22px;
-  height: 22px;
+  right: -4px;
+  bottom: -4px;
+  width: 28px;
+  height: 28px;
   border-radius: 50%;
   background: linear-gradient(135deg, #6C3CE1, #EC4899);
   color: #fff;
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 700;
   display: grid;
   place-items: center;
   line-height: 1;
-  box-shadow: 0 2px 8px rgba(108, 60, 225, 0.5);
-  border: 2px solid var(--bg-primary);
+  box-shadow: 0 3px 12px rgba(108, 60, 225, 0.6);
+  border: 2.5px solid var(--bg-primary, #0A0A0F);
   z-index: 2;
+  transition: transform 0.2s ease;
 }
+.note-card:hover .note-plus { transform: scale(1.1); }
 
 .note-bubble {
   position: relative;
-  max-width: 92px;
-  min-height: 26px;
-  padding: 6px 10px;
-  border-radius: 14px;
+  max-width: 104px;
+  min-width: 64px;
+  min-height: 32px;
+  padding: 8px 12px;
+  border-radius: 16px;
   background: var(--bg-card, var(--bg-secondary, #13131C));
   border: 1px solid var(--border-color, rgba(255,255,255,0.08));
-  font-size: 11.5px;
-  line-height: 1.25;
+  font-size: 12.5px;
+  line-height: 1.35;
   color: var(--text-primary);
   text-align: center;
   word-break: break-word;
@@ -1302,8 +1271,8 @@
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  animation: noteBubbleIn 0.28s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+  animation: noteBubbleIn 0.32s cubic-bezier(0.34, 1.56, 0.64, 1) both;
 }
 @keyframes noteBubbleIn {
   from { opacity: 0; transform: translateY(6px) scale(0.9); }
@@ -1316,45 +1285,47 @@
   bottom: -5px;
   left: 50%;
   transform: translateX(-50%) rotate(45deg);
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   background: inherit;
   border-right: 1px solid var(--border-color, rgba(255,255,255,0.08));
   border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
 }
 
 .note-bubble-mine {
-  background: linear-gradient(135deg, rgba(108, 60, 225, 0.18), rgba(236, 72, 153, 0.18));
-  border-color: rgba(108, 60, 225, 0.4);
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.22), rgba(236, 72, 153, 0.22));
+  border-color: rgba(108, 60, 225, 0.45);
 }
 
 .note-placeholder {
   color: var(--text-muted);
   font-style: italic;
+  font-size: 12px;
 }
 
-.note-text {
-  display: block;
-}
+.note-text { display: block; }
 
 .note-name {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-secondary, #a1a1aa);
-  margin-top: 2px;
-  max-width: 78px;
+  margin-top: 4px;
+  max-width: 104px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-align: center;
 }
 
-/* ── Composer modal ── */
+/* ═════════════════════════════════════════════
+   15. NOTE COMPOSER MODAL
+   ═════════════════════════════════════════════ */
 .note-composer-backdrop {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.75);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1369,11 +1340,11 @@
 
 .note-composer {
   width: 100%;
-  max-width: 400px;
+  max-width: 420px;
   background: var(--bg-card, var(--bg-secondary, #13131C));
   border: 1px solid var(--border-color, rgba(255,255,255,0.08));
-  border-radius: 20px;
-  padding: 22px;
+  border-radius: 22px;
+  padding: 24px;
   box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
   animation: composerIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
@@ -1386,19 +1357,19 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 .note-composer-header h3 {
   margin: 0;
-  font-size: 16px;
+  font-size: 17px;
   font-weight: 800;
   color: var(--text-primary);
   letter-spacing: -0.2px;
 }
 
 .note-composer-close {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   border: none;
   background: transparent;
@@ -1415,20 +1386,20 @@
 }
 
 .note-composer-hint {
-  margin: 0 0 14px;
-  font-size: 12.5px;
+  margin: 0 0 16px;
+  font-size: 13px;
   color: var(--text-muted);
   line-height: 1.5;
 }
 
 .note-composer-input {
   width: 100%;
-  padding: 12px 14px;
+  padding: 13px 15px;
   background: var(--bg-input, rgba(255,255,255,0.04));
   border: 1px solid var(--border-color, rgba(255,255,255,0.08));
   border-radius: 14px;
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 14.5px;
   font-family: inherit;
   resize: none;
   outline: none;
@@ -1443,10 +1414,10 @@
 .note-composer-meta {
   display: flex;
   justify-content: flex-end;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 .note-counter {
-  font-size: 11px;
+  font-size: 11.5px;
   font-weight: 700;
   color: var(--text-muted);
   letter-spacing: 0.3px;
@@ -1456,14 +1427,14 @@
 .note-composer-actions {
   display: flex;
   gap: 10px;
-  margin-top: 16px;
+  margin-top: 18px;
 }
 .note-btn {
   flex: 1;
-  padding: 11px 16px;
+  padding: 12px 18px;
   border-radius: 12px;
   border: 1px solid transparent;
-  font-size: 14px;
+  font-size: 14.5px;
   font-weight: 600;
   font-family: inherit;
   cursor: pointer;
@@ -1489,4 +1460,276 @@
 }
 .note-btn-danger:not(:disabled):hover {
   background: rgba(239, 68, 68, 0.08);
+}
+
+/* ═════════════════════════════════════════════
+   16. FULL NOTE PREVIEW (blurred backdrop)
+   ═════════════════════════════════════════════ */
+.note-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  padding: 24px;
+  animation: notePreviewFadeIn 0.25s ease both;
+}
+
+@keyframes notePreviewFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.note-preview {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 40px 24px 28px;
+  background: rgba(20, 15, 35, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(108, 60, 225, 0.2),
+    0 0 60px rgba(108, 60, 225, 0.15);
+  animation: notePreviewPop 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes notePreviewPop {
+  from { opacity: 0; transform: scale(0.88) translateY(12px); }
+  to   { opacity: 1; transform: none; }
+}
+
+html.theme-light .note-preview {
+  background: rgba(255, 255, 255, 0.85);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow:
+    0 30px 80px rgba(0, 0, 0, 0.25),
+    0 0 0 1px rgba(108, 60, 225, 0.2),
+    0 0 60px rgba(108, 60, 225, 0.15);
+}
+
+.note-preview-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary, #a1a1aa);
+  font-size: 15px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+}
+.note-preview-close:hover {
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-primary);
+  transform: scale(1.08);
+}
+
+.note-preview-avatar {
+  position: relative;
+  margin-bottom: 16px;
+  padding: 5px;
+  border-radius: 50%;
+  background: conic-gradient(from 140deg, #6C3CE1, #EC4899, #F472B6, #6C3CE1);
+  box-shadow: 0 0 40px rgba(108, 60, 225, 0.5);
+  animation: notesRingSpin 6s linear infinite;
+}
+
+.note-preview-avatar > * {
+  animation: notesRingSpinReverse 6s linear infinite;
+  border-radius: 50%;
+  display: block;
+}
+
+@keyframes notesRingSpinReverse {
+  to { transform: rotate(-360deg); }
+}
+
+.note-preview-name {
+  margin: 0 0 4px;
+  font-size: 20px;
+  font-weight: 800;
+  letter-spacing: -0.4px;
+  color: var(--text-primary);
+}
+
+.note-preview-time {
+  margin: 0 0 22px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.note-preview-bubble {
+  position: relative;
+  width: 100%;
+  max-width: 320px;
+  padding: 22px 20px;
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.15), rgba(236, 72, 153, 0.15));
+  border: 1px solid rgba(108, 60, 225, 0.35);
+  border-radius: 20px;
+  margin-bottom: 24px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 8px 24px rgba(108, 60, 225, 0.15);
+}
+
+.note-preview-bubble::before {
+  content: '';
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  transform: translateX(-50%) rotate(45deg);
+  width: 12px;
+  height: 12px;
+  background: rgba(108, 60, 225, 0.15);
+  border-top: 1px solid rgba(108, 60, 225, 0.35);
+  border-left: 1px solid rgba(108, 60, 225, 0.35);
+}
+
+.note-preview-text {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.45;
+  color: var(--text-primary);
+  font-weight: 500;
+  letter-spacing: -0.1px;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.note-preview-reply {
+  width: 100%;
+  max-width: 320px;
+  padding: 14px 24px;
+  border-radius: 14px;
+  border: none;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: inherit;
+  cursor: pointer;
+  box-shadow: 0 8px 24px rgba(108, 60, 225, 0.4);
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+.note-preview-reply:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(108, 60, 225, 0.55);
+}
+.note-preview-reply:active {
+  transform: translateY(0) scale(0.98);
+}
+
+.note-preview-hint {
+  margin: 16px 0 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  letter-spacing: 0.2px;
+}
+
+@media (max-width: 480px) {
+  .note-preview {
+    max-width: 100%;
+    padding: 32px 20px 24px;
+    border-radius: 24px;
+  }
+  .note-preview-text { font-size: 15.5px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .note-avatar-wrap.has-note::before,
+  .note-preview-avatar,
+  .note-preview-avatar > * {
+    animation: none !important;
+  }
+}
+
+/* ═════════════════════════════════════════════
+   17. NOTE REPLY CARD (inside chat bubbles)
+   Shows the original note the user replied to
+   ═════════════════════════════════════════════ */
+.note-reply-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  max-width: 240px;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.22), rgba(236, 72, 153, 0.18));
+  border-left: 3px solid #A78BFA;
+  border-radius: 10px;
+  text-align: left;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  animation: noteReplyCardIn 0.35s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes noteReplyCardIn {
+  from { opacity: 0; transform: translateX(-8px); }
+  to   { opacity: 1; transform: none; }
+}
+
+.note-reply-card::before {
+  content: '📝 Replying to note';
+  display: block;
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.4px;
+  text-transform: uppercase;
+  color: #C4B5FD;
+  opacity: 0.9;
+}
+
+.note-reply-text {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-primary);
+  font-weight: 500;
+  font-style: italic;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+/* Light theme adjustment for the reply card */
+html.theme-light .note-reply-card {
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.12), rgba(236, 72, 153, 0.1));
+  border-left-color: #6C3CE1;
+}
+
+html.theme-light .note-reply-card::before {
+  color: #6C3CE1;
+}
+
+/* Inside own messages (sent by me), slightly different tint */
+.message-bubble.own .note-reply-card {
+  background: rgba(255, 255, 255, 0.14);
+  border-left-color: #fff;
+}
+
+.message-bubble.own .note-reply-card::before {
+  color: rgba(255, 255, 255, 0.85);
+}
+
+.message-bubble.own .note-reply-text {
+  color: #fff;
 }
