@@ -12,7 +12,7 @@ const UserProfile = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   const { profiles, fetchProfile } = useProfile();
-  
+
   const [isFollowing, setIsFollowing] = useState(false);
   const [echowerCount, setEchowerCount] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -20,13 +20,25 @@ const UserProfile = () => {
   useEffect(() => {
     if (!uid) return;
     fetchProfile(uid);
-    
+
+    let unsubEchowers = null;
+
     if (user) {
       isEchowing(user.uid, uid).then(setIsFollowing);
-      listenToMyEchowerCount(uid, setEchowerCount);
+      // FIX: extract `.length` from the array of UIDs
+      unsubEchowers = listenToMyEchowerCount(uid, (uids) => {
+        setEchowerCount(Array.isArray(uids) ? uids.length : 0);
+      });
     }
-    
-    setTimeout(() => setLoading(false), 500);
+
+    const t = setTimeout(() => setLoading(false), 500);
+
+    return () => {
+      if (t) clearTimeout(t);
+      if (unsubEchowers && typeof unsubEchowers === 'function') {
+        try { unsubEchowers(); } catch {}
+      }
+    };
   }, [uid, user, fetchProfile]);
 
   const profile = profiles[uid];
@@ -65,9 +77,9 @@ const UserProfile = () => {
         <div className="user-profile-avatar">
           <Avatar src={profile.avatar} name={profile.name} size={110} />
         </div>
-        
+
         <h1 className="user-profile-name">{profile.name || 'User'}</h1>
-        
+
         <div className="user-profile-stats">
           <div className="stat">
             <h4>{echowerCount}</h4>
@@ -79,15 +91,15 @@ const UserProfile = () => {
 
         <div className="user-profile-actions">
           {user?.uid !== uid && (
-            <button 
+            <button
               className={isFollowing ? 'echower-btn following' : 'echower-btn'}
               onClick={handleToggleEchower}
             >
               {isFollowing ? '✓ Echowing' : '+ Echower'}
             </button>
           )}
-          
-          <button 
+
+          <button
             className="message-btn"
             onClick={() => navigate(`/chat/${uid}`)}
           >
