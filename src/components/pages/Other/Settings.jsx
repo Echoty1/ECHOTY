@@ -23,6 +23,12 @@ import { clearMessagesCache } from '../../../services/messageStorage';
 import { clearMessageCache } from '../../../services/messageCache';
 import './Settings.css';
 import { listEchoArchive, removeEchoArchive } from '../../../services/echoArchive';
+import {
+  getSoundEnabled,
+  setSoundEnabled,
+  getNotifEnabled,
+  setNotifEnabled,
+} from '../../../services/notificationService'; // ← NEW
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
@@ -30,6 +36,22 @@ const Settings = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { themePreference, setTheme } = useTheme();
+
+  // ─── Message sound/notif preferences ──────────────────────────
+  const [soundOn, setSoundOn] = useState(() => getSoundEnabled());
+  const [notifOn, setNotifOn] = useState(() => getNotifEnabled());
+
+  const toggleSound = () => {
+    const next = !soundOn;
+    setSoundOn(next);
+    setSoundEnabled(next);
+  };
+
+  const toggleNotif = () => {
+    const next = !notifOn;
+    setNotifOn(next);
+    setNotifEnabled(next);
+  };
 
   // ─── Account deletion states ──────────────────────────────────
   const [step, setStep] = useState('idle');
@@ -127,7 +149,6 @@ const Settings = () => {
   const isGoogleUser = user?.providerData?.some(p => p.providerId === 'google.com');
   const isDemoUser = user?.uid === DEMO_UID;
 
-  // ─── Load user's chats ────────────────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
     listEchoArchive(user.uid).then(setBookmarks).catch(() => {});
@@ -158,12 +179,10 @@ const Settings = () => {
     return () => unsubscribe();
   }, [user]);
 
-  // ─── Helper: compute composite chat ID ──────────────────────
   const getChatId = (partnerId) => {
     return [user?.uid, partnerId].sort().join('_');
   };
 
-  // ─── Local‑only wipe for this user's device ──────────────────
   const wipeLocalChatData = async (partnerId) => {
     if (!user?.uid || !partnerId) return;
     const cId = getChatId(partnerId);
@@ -201,18 +220,15 @@ const Settings = () => {
     await wipeLocalChatData(partnerId);
   };
 
-  // ─── Helper: show toast ──────────────────────────────────────
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
   };
 
-  // ─── Close confirm modal ─────────────────────────────────────
   const closeConfirmModal = () => {
     setConfirmModal(prev => ({ ...prev, isOpen: false }));
   };
 
-  // ─── Open confirm modal with verification ────────────────────
   const openConfirmModal = (config) => {
     setConfirmModal({
       isOpen: true,
@@ -226,7 +242,6 @@ const Settings = () => {
     });
   };
 
-  // ─── 1. Clear History (selected chats) – permanently deletes messages ──
   const handleClearSelectedHistory = () => {
     if (selectedChats.size === 0) {
       showToast('No chats selected.', 'error');
@@ -246,15 +261,11 @@ const Settings = () => {
           const now = Date.now();
           for (const partnerId of selectedChats) {
             const chatId = getChatId(partnerId);
-            // Delete the shared messages node
             updates[`chats/${chatId}`] = null;
-            // Set clearedAt for both users (optional, but we also set lastMessage to 'Start chatting...')
             updates[`userChats/${user.uid}/${partnerId}/clearedAt`] = now;
             updates[`userChats/${partnerId}/${user.uid}/clearedAt`] = now;
-            // Reset lastMessage for both
             updates[`userChats/${user.uid}/${partnerId}/lastMessage`] = 'Start chatting...';
             updates[`userChats/${partnerId}/${user.uid}/lastMessage`] = 'Start chatting...';
-            // Wipe local cache for current user
             await wipeLocalChatData(partnerId);
           }
           await update(ref(db), updates);
@@ -270,7 +281,6 @@ const Settings = () => {
     });
   };
 
-  // ─── 1.1 Clear History (single chat) ──────────────────────────
   const handleClearSingleHistory = (chatId, partnerName) => {
     openConfirmModal({
       title: 'Clear History',
@@ -302,7 +312,6 @@ const Settings = () => {
     });
   };
 
-  // ─── 2. Delete Chat (selected chats) – permanently deletes messages & removes chat ──
   const handleDeleteSelectedChats = () => {
     if (selectedChats.size === 0) {
       showToast('No chats selected.', 'error');
@@ -339,7 +348,6 @@ const Settings = () => {
     });
   };
 
-  // ─── 2.1 Delete Chat (single) ──────────────────────────────────
   const handleDeleteSingleChat = (chatId, partnerName) => {
     openConfirmModal({
       title: 'Delete Chat',
@@ -373,7 +381,6 @@ const Settings = () => {
     });
   };
 
-  // ─── 3. Delete All Chats – permanently deletes all ─────────────
   const handleDeleteAllChats = () => {
     if (chats.length === 0) {
       showToast('No chats to delete.', 'error');
@@ -410,7 +417,6 @@ const Settings = () => {
     });
   };
 
-  // ─── Toggle chat selection ────────────────────────────────────
   const toggleSelectChat = (chatId) => {
     setSelectedChats(prev => {
       const newSet = new Set(prev);
@@ -423,7 +429,6 @@ const Settings = () => {
     });
   };
 
-  // ─── Select / Deselect all ────────────────────────────────────
   const toggleSelectAll = () => {
     const filtered = getFilteredChats();
     if (selectedChats.size === filtered.length) {
@@ -433,7 +438,6 @@ const Settings = () => {
     }
   };
 
-  // ─── Get filtered chats based on search term ─────────────────
   const getFilteredChats = () => {
     if (!searchTerm.trim()) return chats;
     return chats.filter(chat =>
@@ -441,7 +445,6 @@ const Settings = () => {
     );
   };
 
-  // ─── Account deletion handlers ────────────────────────────────
   const handleDeleteRequest = () => {
     if (isDemoUser) {
       setError('Demo accounts cannot be deleted.');
@@ -539,7 +542,6 @@ const Settings = () => {
     setError('');
   };
 
-  // ─── Render ────────────────────────────────────────────────────
   const filteredChats = getFilteredChats();
 
   return (
@@ -549,6 +551,42 @@ const Settings = () => {
       <div className="settings-page">
         <div className="settings-content">
           <div className="settings-grid-3">
+          {/* ─── SOUNDS & NOTIFICATIONS (NEW) ──────────────────── */}
+          <div className="settings-card">
+            <h2><i className="fas fa-bell" style={{ color: '#F59E0B' }} /> Sounds &amp; Notifications</h2>
+            <p>Control message sounds and in-app banners.</p>
+
+            <button
+              type="button"
+              className={`echo-toggle-btn ${soundOn ? 'on' : 'off'}`}
+              onClick={toggleSound}
+              aria-pressed={soundOn}
+              style={{ marginTop: '12px' }}
+            >
+              <span className="echo-toggle-track">
+                <span className="echo-toggle-thumb" />
+              </span>
+              <span className="echo-toggle-label">
+                {soundOn ? 'Message sounds on' : 'Message sounds off'}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              className={`echo-toggle-btn ${notifOn ? 'on' : 'off'}`}
+              onClick={toggleNotif}
+              aria-pressed={notifOn}
+              style={{ marginTop: '10px' }}
+            >
+              <span className="echo-toggle-track">
+                <span className="echo-toggle-thumb" />
+              </span>
+              <span className="echo-toggle-label">
+                {notifOn ? 'Notifications on' : 'Notifications off'}
+              </span>
+            </button>
+          </div>
+
           {/* ─── THEME CARD ─────────────────────────────────────── */}
           <div className="settings-card">
             <h2><i className="fas fa-palette" /> Theme</h2>
@@ -618,7 +656,7 @@ const Settings = () => {
             </button>
           </div>
 
-          {/* ─── CHAT MANAGEMENT CARD ───────────────────────────── */}
+          {/* ─── DEVICES CARD ───────────────────────────────────── */}
           <div className="settings-card">
             <h2><i className="fas fa-laptop" style={{ color: '#60A5FA' }} /> Devices</h2>
             <p>Devices signed into this account. You can sign out another device from here.</p>
@@ -676,6 +714,7 @@ const Settings = () => {
             )}
           </div>
           </div>
+
           <div className="settings-card chat-management">
             <h2><i className="fas fa-comment-slash" /> Chat Management</h2>
             <p>Manage your conversations. Actions affect both you and the other person.</p>
@@ -686,7 +725,6 @@ const Settings = () => {
               <div className="no-chats-message">No chats found.</div>
             ) : (
               <>
-                {/* ─── Search bar ─────────────────────────────────── */}
                 <div className="chat-search-wrapper">
                   <i className="fas fa-search search-icon" />
                   <input
@@ -780,7 +818,7 @@ const Settings = () => {
             )}
           </div>
 
-          {/* ─── DANGER ZONE CARD ────────────────────────────────── */}
+          {/* ─── DANGER ZONE ─────────────────────────────────────── */}
           <div className="settings-card danger-zone">
             <h2><i className="fas fa-exclamation-triangle" /> Danger Zone</h2>
             <p>This action is irreversible. Deleting your account will permanently remove all your data, including messages, profile, and Echoes.</p>
@@ -883,12 +921,10 @@ const Settings = () => {
         </div>
       </div>
 
-      {/* ─── Confirm Modal ───────────────────────────────────────── */}
       <ConfirmModal
         isOpen={confirmModal.isOpen}
         onClose={closeConfirmModal}
         onConfirm={() => {
-          // Check verification if needed (fallback)
           if (confirmModal.showInput && confirmModal.verificationText) {
             if (confirmModal.inputValue !== confirmModal.verificationText) {
               showToast(`Please type "${confirmModal.verificationText}" to confirm.`, 'error');
@@ -915,7 +951,6 @@ const Settings = () => {
         loading={false}
       />
 
-      {/* ─── Toast ───────────────────────────────────────────────── */}
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
     </>
   );
