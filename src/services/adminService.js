@@ -2,7 +2,7 @@
 import { db } from './firebase';
 import { ref, get, set, remove, update } from 'firebase/database';
 
-const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
+const SUPPORT_UID = '5cSp1OLz30d8dghM3wvXUCdMl2QK2';
 
 export const checkIsSupport = (uid) => uid === SUPPORT_UID;
 
