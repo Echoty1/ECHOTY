@@ -39,12 +39,12 @@ import BanScreen from './components/BanScreen/BanScreen';
 import { APP_VERSION } from './version';
 import Legal from './components/pages/Other/Legal';
 import EchoDropPage from './components/pages/EchoDrop/EchoDropPage';
+import MessageNotifier from './components/common/MessageNotifier'; // ← NEW
+import { useGlobalMessageListener } from './hooks/useGlobalMessageListener'; // ← NEW
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 // ─── SEO / Structured Data for Google ──────────────────────────
-// Tells Google that "Echo" is also known as "Echoty" and ties
-// Lawal Abdulmalik to the brand as founder & CEO.
 const schemaData = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
@@ -119,6 +119,10 @@ function AppContent() {
   const { pathname } = useLocation();
   const { user, loading, banInfo } = useAuth();
   const { fetchProfile } = useProfile();
+
+  // NEW: global incoming-message listener (plays sound + fires notification banner)
+  useGlobalMessageListener();
+
   const [minTimePassed, setMinTimePassed] = useState(false);
   const [showUpdatePopup, setShowUpdatePopup] = useState(false);
   const [showInstallPopup, setShowInstallPopup] = useState(false);
@@ -307,6 +311,7 @@ function AppContent() {
   return (
     <>
       <Navbar />
+      <MessageNotifier /> {/* ← NEW: message notification banner */}
       <NetworkStatus />
       <DesktopInstallPrompt />
       <ScrollToTop />
@@ -358,7 +363,6 @@ function AppContent() {
 function App() {
   return (
     <BrowserRouter>
-      {/* ── SEO: Structured data injected once at the app root ── */}
       <script
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaData) }}
