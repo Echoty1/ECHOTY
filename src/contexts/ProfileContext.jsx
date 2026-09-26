@@ -2,7 +2,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import { db } from '../services/firebase';
 import { ref, onValue, get, update } from 'firebase/database';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from './AuthContext';
 import { loadCache, getProfile, setProfile, clearCache } from '../services/cacheService';
 import { cacheMedia } from '../utils/mediaCache';
 
