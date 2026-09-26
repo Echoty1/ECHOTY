@@ -19,7 +19,7 @@ import { isNativeApp, signInWithGoogle } from '../../utils/nativeAuth';
 const DEMO_EMAIL = 'demo@echoty.xyz';
 const DEMO_PASSWORD = 'demodemo';
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
-const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
+const SUPPORT_UID = '5cSp1OLz30d8dghM3wvXUCdMl2QK2';
 const DEMO_AVATAR = 'https://echoty.xyz/videos/library/Animation Smile GIF.gif';
 
 const withAuthRetry = async (fn, tries = 3) => {
@@ -134,7 +134,6 @@ const Login = () => {
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [isRedirecting, setIsRedirecting] = useState(false);
-  const [awaitingVerify, setAwaitingVerify] = useState(false);
   const [rememberMe, setRememberMe] = useState(true);
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [errorShake, setErrorShake] = useState(false);
@@ -214,32 +213,41 @@ const Login = () => {
     try {
       if (isSignup) {
         armEmailGate();
+
+        // 1. Create the account — this signs the user in automatically.
         const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        await sendEmailVerification(cred.user, {
-          url: window.location.origin + '/',
-          handleCodeInApp: false,
-        });
-        await signOut(auth);
-        setAwaitingVerify(true);
-        setBusy(false);
+
+        // 2. Send the verification email. If sending fails, don't block signup.
+        try {
+          await sendEmailVerification(cred.user, {
+            url: window.location.origin + '/',
+            handleCodeInApp: false,
+          });
+        } catch (verr) {
+          console.warn('[Signup] verification email failed:', verr?.message || verr);
+        }
+
+        // 3. NO signOut — user stays signed in.
+        //    App.js detects `emailVerified === false` and renders <VerifyEmailScreen />.
         return;
       }
+
       const cred = await withAuthRetry(() =>
         signInWithEmailAndPassword(auth, email.trim(), password)
       );
+
       const isDemo =
         cred.user.uid === DEMO_UID || email.trim().toLowerCase() === DEMO_EMAIL;
+
       if (!isDemo && !cred.user.emailVerified) {
+        // Re-send verification email but keep them signed in.
         try {
           await sendEmailVerification(cred.user, {
             url: window.location.origin + '/',
             handleCodeInApp: false,
           });
         } catch (_) {}
-        await signOut(auth);
-        setError(
-          'This email is not verified yet. We sent another link. Open it, then log in.'
-        );
+        // App.js will route to <VerifyEmailScreen /> automatically.
       }
     } catch (err) {
       setError(friendlyAuthError(err));
@@ -381,246 +389,217 @@ const Login = () => {
             <span className="echo-auth-brand-name-sm">ECHO</span>
           </div>
 
-          {awaitingVerify ? (
-            <div className="echo-auth-verify">
-              <div className="echo-auth-verify-icon">
-                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                  <polyline points="22,6 12,13 2,6" />
-                </svg>
-              </div>
-              <h2 className="echo-auth-title">Check your email</h2>
-              <p className="echo-auth-sub">
-                We sent a verification link to <strong>{email || 'your inbox'}</strong>.
-                Open it, then come back and log in.
-              </p>
-              <p className="echo-auth-hint">Didn't get it? Check Spam or Promotions.</p>
-              <button
-                type="button"
-                onClick={() => {
-                  setAwaitingVerify(false);
-                  setIsSignup(false);
-                }}
-                className="echo-auth-btn echo-auth-btn-secondary"
-              >
-                Back to login
-              </button>
+          <div className="echo-auth-header">
+            <h2 className="echo-auth-title">
+              {isSignup ? 'Create your account' : 'Welcome back'}
+            </h2>
+            <p className="echo-auth-sub">
+              {isSignup
+                ? 'Join ECHO in less than a minute.'
+                : 'Sign in to continue your conversations.'}
+            </p>
+          </div>
+
+          {error && (
+            <div
+              ref={errorRef}
+              className={`echo-auth-alert echo-auth-alert-error ${errorShake ? 'shake' : ''}`}
+            >
+              <span className="echo-auth-alert-icon">!</span>
+              <span>{error}</span>
             </div>
-          ) : (
-            <>
-              <div className="echo-auth-header">
-                <h2 className="echo-auth-title">
-                  {isSignup ? 'Create your account' : 'Welcome back'}
-                </h2>
-                <p className="echo-auth-sub">
-                  {isSignup
-                    ? 'Join ECHO in less than a minute.'
-                    : 'Sign in to continue your conversations.'}
-                </p>
-              </div>
+          )}
+          {info && (
+            <div className="echo-auth-alert echo-auth-alert-info">
+              <span className="echo-auth-alert-icon">✓</span>
+              <span>{info}</span>
+            </div>
+          )}
 
-              {error && (
-                <div
-                  ref={errorRef}
-                  className={`echo-auth-alert echo-auth-alert-error ${errorShake ? 'shake' : ''}`}
-                >
-                  <span className="echo-auth-alert-icon">!</span>
-                  <span>{error}</span>
-                </div>
-              )}
-              {info && (
-                <div className="echo-auth-alert echo-auth-alert-info">
-                  <span className="echo-auth-alert-icon">✓</span>
-                  <span>{info}</span>
-                </div>
-              )}
+          <button
+            type="button"
+            onClick={handleGoogle}
+            disabled={locked}
+            className="echo-auth-btn echo-auth-btn-google"
+          >
+            <svg viewBox="0 0 48 48" width="18" height="18">
+              <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
+              <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
+              <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
+              <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
+            </svg>
+            <span>Continue with Google</span>
+          </button>
 
-              <button
-                type="button"
-                onClick={handleGoogle}
-                disabled={locked}
-                className="echo-auth-btn echo-auth-btn-google"
-              >
-                <svg viewBox="0 0 48 48" width="18" height="18">
-                  <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
-                  <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
-                  <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
-                  <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
-                </svg>
-                <span>Continue with Google</span>
-              </button>
+          <div className="echo-auth-divider">
+            <span>or</span>
+          </div>
 
-              <div className="echo-auth-divider">
-                <span>or</span>
-              </div>
-
-              <form onSubmit={handleSubmit} noValidate>
-                <div className="echo-auth-field">
-                  <label className="echo-auth-label">Email</label>
-                  <div className={`echo-auth-input-wrap ${focusedField === 'email' ? 'focused' : ''}`}>
-                    <input
-                      type="email"
-                      placeholder="you@example.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      onFocus={() => setFocusedField('email')}
-                      onBlur={() => setFocusedField(null)}
-                      disabled={locked}
-                      autoComplete="email"
-                      required
-                      className="echo-auth-input"
-                    />
-                  </div>
-                </div>
-
-                <div className="echo-auth-field">
-                  <div className="echo-auth-label-row">
-                    <label className="echo-auth-label">Password</label>
-                    {!isSignup && (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={handleForgotPassword}
-                        className="echo-auth-link"
-                      >
-                        Forgot?
-                      </button>
-                    )}
-                  </div>
-                  <div className={`echo-auth-input-wrap ${focusedField === 'password' ? 'focused' : ''}`}>
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder={isSignup ? 'At least 8 characters' : '••••••••'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      onFocus={() => setFocusedField('password')}
-                      onBlur={() => setFocusedField(null)}
-                      disabled={locked}
-                      autoComplete={isSignup ? 'new-password' : 'current-password'}
-                      required
-                      className="echo-auth-input"
-                    />
-                    <button
-                      type="button"
-                      tabIndex={-1}
-                      onClick={() => setShowPassword((v) => !v)}
-                      className="echo-auth-eye"
-                      aria-label={showPassword ? 'Hide password' : 'Show password'}
-                    >
-                      {showPassword ? (
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                          <line x1="1" y1="1" x2="23" y2="23" />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                          <circle cx="12" cy="12" r="3" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-
-                  {isSignup && password && (
-                    <div className="echo-auth-strength">
-                      <div className="echo-auth-strength-bar">
-                        <div
-                          className="echo-auth-strength-fill"
-                          style={{
-                            width: `${(passwordStrength.score / 5) * 100}%`,
-                            background: passwordStrength.color,
-                          }}
-                        />
-                      </div>
-                      <span
-                        className="echo-auth-strength-label"
-                        style={{ color: passwordStrength.color }}
-                      >
-                        {passwordStrength.label}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {!isSignup ? (
-                  <label className="echo-auth-checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={rememberMe}
-                      onChange={(e) => setRememberMe(e.target.checked)}
-                      disabled={locked}
-                    />
-                    <span className="echo-auth-checkbox-mark" />
-                    <span>Keep me signed in</span>
-                  </label>
-                ) : (
-                  <label className="echo-auth-checkbox-row">
-                    <input
-                      type="checkbox"
-                      checked={termsAccepted}
-                      onChange={(e) => setTermsAccepted(e.target.checked)}
-                      disabled={locked}
-                    />
-                    <span className="echo-auth-checkbox-mark" />
-                    <span>
-                      I agree to the{' '}
-                      <a href="/legal" target="_blank" rel="noopener noreferrer" className="echo-auth-link-inline">
-                        Terms
-                      </a>{' '}
-                      &amp;{' '}
-                      <a href="/legal" target="_blank" rel="noopener noreferrer" className="echo-auth-link-inline">
-                        Privacy Policy
-                      </a>
-                    </span>
-                  </label>
-                )}
-
-                <button
-                  type="submit"
+          <form onSubmit={handleSubmit} noValidate>
+            <div className="echo-auth-field">
+              <label className="echo-auth-label">Email</label>
+              <div className={`echo-auth-input-wrap ${focusedField === 'email' ? 'focused' : ''}`}>
+                <input
+                  type="email"
+                  placeholder="you@example.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  onFocus={() => setFocusedField('email')}
+                  onBlur={() => setFocusedField(null)}
                   disabled={locked}
-                  className="echo-auth-btn echo-auth-btn-primary"
-                >
-                  {busy ? (
-                    <>
-                      <span className="echo-auth-spinner" />
-                      <span>Please wait…</span>
-                    </>
-                  ) : (
-                    <span>{isSignup ? 'Create account' : 'Sign in'}</span>
-                  )}
-                </button>
-              </form>
+                  autoComplete="email"
+                  required
+                  className="echo-auth-input"
+                />
+              </div>
+            </div>
 
-              <div className="echo-auth-switch">
-                {isSignup ? (
-                  <>
-                    <span>Already have an account?</span>
-                    <button type="button" onClick={() => switchMode(false)} className="echo-auth-link">
-                      Sign in
-                    </button>
-                  </>
-                ) : (
-                  <>
-                    <span>New to ECHO?</span>
-                    <button type="button" onClick={() => switchMode(true)} className="echo-auth-link">
-                      Create account
-                    </button>
-                  </>
+            <div className="echo-auth-field">
+              <div className="echo-auth-label-row">
+                <label className="echo-auth-label">Password</label>
+                {!isSignup && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={handleForgotPassword}
+                    className="echo-auth-link"
+                  >
+                    Forgot?
+                  </button>
                 )}
               </div>
-
-              <div className="echo-auth-demo">
+              <div className={`echo-auth-input-wrap ${focusedField === 'password' ? 'focused' : ''}`}>
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  placeholder={isSignup ? 'At least 8 characters' : '••••••••'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  onFocus={() => setFocusedField('password')}
+                  onBlur={() => setFocusedField(null)}
+                  disabled={locked}
+                  autoComplete={isSignup ? 'new-password' : 'current-password'}
+                  required
+                  className="echo-auth-input"
+                />
                 <button
                   type="button"
-                  onClick={handleDemoLogin}
-                  disabled={locked}
-                  className="echo-auth-btn echo-auth-btn-demo"
+                  tabIndex={-1}
+                  onClick={() => setShowPassword((v) => !v)}
+                  className="echo-auth-eye"
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
-                  {busy ? 'Loading…' : 'Try the demo →'}
+                  {showPassword ? (
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
+                      <line x1="1" y1="1" x2="23" y2="23" />
+                    </svg>
+                  ) : (
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                      <circle cx="12" cy="12" r="3" />
+                    </svg>
+                  )}
                 </button>
               </div>
-            </>
-          )}
+
+              {isSignup && password && (
+                <div className="echo-auth-strength">
+                  <div className="echo-auth-strength-bar">
+                    <div
+                      className="echo-auth-strength-fill"
+                      style={{
+                        width: `${(passwordStrength.score / 5) * 100}%`,
+                        background: passwordStrength.color,
+                      }}
+                    />
+                  </div>
+                  <span
+                    className="echo-auth-strength-label"
+                    style={{ color: passwordStrength.color }}
+                  >
+                    {passwordStrength.label}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {!isSignup ? (
+              <label className="echo-auth-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  disabled={locked}
+                />
+                <span className="echo-auth-checkbox-mark" />
+                <span>Keep me signed in</span>
+              </label>
+            ) : (
+              <label className="echo-auth-checkbox-row">
+                <input
+                  type="checkbox"
+                  checked={termsAccepted}
+                  onChange={(e) => setTermsAccepted(e.target.checked)}
+                  disabled={locked}
+                />
+                <span className="echo-auth-checkbox-mark" />
+                <span>
+                  I agree to the{' '}
+                  <a href="/legal" target="_blank" rel="noopener noreferrer" className="echo-auth-link-inline">
+                    Terms
+                  </a>{' '}
+                  &amp;{' '}
+                  <a href="/legal" target="_blank" rel="noopener noreferrer" className="echo-auth-link-inline">
+                    Privacy Policy
+                  </a>
+                </span>
+              </label>
+            )}
+
+            <button
+              type="submit"
+              disabled={locked}
+              className="echo-auth-btn echo-auth-btn-primary"
+            >
+              {busy ? (
+                <>
+                  <span className="echo-auth-spinner" />
+                  <span>Please wait…</span>
+                </>
+              ) : (
+                <span>{isSignup ? 'Create account' : 'Sign in'}</span>
+              )}
+            </button>
+          </form>
+
+          <div className="echo-auth-switch">
+            {isSignup ? (
+              <>
+                <span>Already have an account?</span>
+                <button type="button" onClick={() => switchMode(false)} className="echo-auth-link">
+                  Sign in
+                </button>
+              </>
+            ) : (
+              <>
+                <span>New to ECHO?</span>
+                <button type="button" onClick={() => switchMode(true)} className="echo-auth-link">
+                  Create account
+                </button>
+              </>
+            )}
+          </div>
+
+          <div className="echo-auth-demo">
+            <button
+              type="button"
+              onClick={handleDemoLogin}
+              disabled={locked}
+              className="echo-auth-btn echo-auth-btn-demo"
+            >
+              {busy ? 'Loading…' : 'Try the demo →'}
+            </button>
+          </div>
         </div>
 
         <p className="echo-auth-footer">
