@@ -52,7 +52,8 @@ import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import WallpaperPicker from './WallpaperPicker';
 import { getWallpaperById } from '../../../constants/wallpapers';
-import { playSentSound, unlockAudio, getSoundEnabled } from '../../../services/notificationService'; // ← NEW
+import { playSentSound, unlockAudio, getSoundEnabled } from '../../../services/notificationService';
+import { REACTION_EMOJIS, REACTION_LABELS } from './ReactionEmoji';
 import './ChatView.css';
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
@@ -178,6 +179,9 @@ const ChatView = () => {
   const stampedLegacyTides = useRef(false);
   const [tideTick, setTideTick] = useState(Date.now());
 
+  const [pressedMsgId, setPressedMsgId] = useState(null);
+  const [tappedEmoji, setTappedEmoji] = useState(null);
+
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false,
     title: '',
@@ -203,13 +207,15 @@ const ChatView = () => {
   const moreOptionsRef = useRef(null);
   const messageRefs = useRef({});
   const clearedAtRef = useRef(0);
+  const justSentIdsRef = useRef(new Set());
+  const justArrivedIdsRef = useRef(new Set());
+  const sendButtonRef = useRef(null);
 
   useEffect(() => {
     const t = setTimeout(() => setLoadingMessages(false), 1200);
     return () => clearTimeout(t);
   }, []);
 
-  // Unlock Web Audio on first user interaction (browsers require this)
   useEffect(() => {
     const unlock = () => unlockAudio();
     window.addEventListener('pointerdown', unlock, { once: true });
@@ -432,6 +438,33 @@ const ChatView = () => {
     return () => { clearMyTyping(); };
   }, [clearMyTyping]);
 
+  const flashSent = (id) => {
+    if (!id) return;
+    justSentIdsRef.current.add(id);
+    setTimeout(() => {
+      justSentIdsRef.current.delete(id);
+      setMessages((prev) => [...prev]);
+    }, 800);
+  };
+
+  const flashArrived = (id) => {
+    if (!id) return;
+    justArrivedIdsRef.current.add(id);
+    setTimeout(() => {
+      justArrivedIdsRef.current.delete(id);
+      setMessages((prev) => [...prev]);
+    }, 700);
+  };
+
+  const triggerSendRipple = () => {
+    const btn = sendButtonRef.current;
+    if (!btn) return;
+    btn.classList.remove('rippling');
+    void btn.offsetWidth;
+    btn.classList.add('rippling');
+    setTimeout(() => btn.classList.remove('rippling'), 650);
+  };
+
   const handleSendText = async (e) => {
     e?.preventDefault?.();
     const textToSend = (typeof e === 'string' ? e : newMessage).trim();
@@ -466,7 +499,9 @@ const ChatView = () => {
 
     try { await set(newMsgRef, msgData); } catch (err) { console.error('Send failed:', err); setMessages((prev) => prev.filter((m) => m.id !== tempId)); return; }
 
-    // Play "sent" sound (Snapchat-style ascending blip)
+    triggerSendRipple();
+    flashSent(newMsgRef.key);
+
     if (getSoundEnabled()) playSentSound();
 
     if (userId === ECHO_AI_ID) {
@@ -542,7 +577,9 @@ const ChatView = () => {
       setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
       URL.revokeObjectURL(blobUrl);
 
-      // Play "sent" sound for media
+      triggerSendRipple();
+      flashSent(newMsgRef.key);
+
       if (getSoundEnabled()) playSentSound();
 
       await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: mediaIcon, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
@@ -595,7 +632,9 @@ const ChatView = () => {
       setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
       URL.revokeObjectURL(blobUrl);
 
-      // Play "sent" sound for voice
+      triggerSendRipple();
+      flashSent(newMsgRef.key);
+
       if (getSoundEnabled()) playSentSound();
 
       await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: '🎤 Voice note', lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
@@ -649,25 +688,36 @@ const ChatView = () => {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [user, partnerProfile, currentUserProfile, location.state?.userName]);
 
+  // ✅ FIXED: no toggle-off branch. Always reopens when clicked.
   const handleReact = useCallback((messageId) => {
-    if (showReactionPicker && reactingMessageId === messageId) { setShowReactionPicker(false); setReactingMessageId(null); setReactionPickerAnchor(null); return; }
-    const msgElement = messageRefs.current[messageId];
-    if (msgElement) {
-      const rect = msgElement.getBoundingClientRect();
-      const windowWidth = window.innerWidth;
-      let top = rect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP - REACTION_ARROW_SIZE;
-      let flipped = false;
-      if (top < 60) { top = rect.bottom + REACTION_BAR_GAP + REACTION_ARROW_SIZE; flipped = true; }
-      let left = rect.left + rect.width / 2 - REACTION_BAR_HALF_WIDTH;
-      left = Math.max(10, Math.min(left, windowWidth - 20));
-      setReactionPickerAnchor({ top, left, flipped });
-    }
-    setShowReactionPicker(true);
-    setReactingMessageId(messageId);
     setActiveMessageMenuId(null);
-  }, [showReactionPicker, reactingMessageId]);
 
-  const handleReactionSelect = async (emoji, msgIdOverride = null) => {
+    const msgElement = messageRefs.current[messageId];
+    if (!msgElement) {
+      // Fallback: show centered if the row ref isn't attached for any reason
+      setReactionPickerAnchor({ top: window.innerHeight / 2, left: window.innerWidth / 2, flipped: false });
+      setShowReactionPicker(true);
+      setReactingMessageId(messageId);
+      return;
+    }
+
+    const rect = msgElement.getBoundingClientRect();
+    const windowWidth = window.innerWidth;
+    let top = rect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP - REACTION_ARROW_SIZE;
+    let flipped = false;
+    if (top < 60) { top = rect.bottom + REACTION_BAR_GAP + REACTION_ARROW_SIZE; flipped = true; }
+    let left = rect.left + rect.width / 2 - REACTION_BAR_HALF_WIDTH;
+    left = Math.max(10, Math.min(left, windowWidth - 20));
+
+    setReactionPickerAnchor({ top, left, flipped });
+    setReactingMessageId(messageId);
+    setShowReactionPicker(true);
+  }, []);
+
+  const handleReactionSelect = async (emojiKey, msgIdOverride = null) => {
+    setTappedEmoji(emojiKey);
+    setTimeout(() => setTappedEmoji(null), 220);
+
     setShowReactionPicker(false);
     setReactionPickerAnchor(null);
     const targetId = msgIdOverride || reactingMessageId;
@@ -677,8 +727,8 @@ const ChatView = () => {
     try {
       const currentMsg = messages.find((m) => m.id === targetId);
       const currentReaction = currentMsg?.reactions?.[user.uid];
-      if (currentReaction === emoji) await remove(reactionRef);
-      else await set(reactionRef, emoji);
+      if (currentReaction === emojiKey) await remove(reactionRef);
+      else await set(reactionRef, emojiKey);
       setReactingMessageId(null);
     } catch (err) { console.warn('Reaction error:', err); if (!err.message?.includes('PERMISSION_DENIED')) alert('Failed to react. Please try again.'); }
   };
@@ -696,8 +746,10 @@ const ChatView = () => {
 
   const handleTouchStart = (msg, e) => {
     if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
+    setPressedMsgId(msg.id);
     touchTimerRef.current = setTimeout(() => {
       if (window.navigator?.vibrate) window.navigator.vibrate(50);
+      setPressedMsgId(null);
       const msgElement = messageRefs.current[msg.id];
       if (msgElement) {
         const msgRect = msgElement.getBoundingClientRect();
@@ -717,13 +769,17 @@ const ChatView = () => {
 
   const handleTouchEnd = (msg) => {
     if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
+    setPressedMsgId(null);
     const now = Date.now();
     const lastTap = lastTapRef.current;
-    if (lastTap.msgId === msg.id && now - lastTap.time < 300) { handleReactionSelect('❤️', msg.id); lastTapRef.current = { time: 0, msgId: null }; }
+    if (lastTap.msgId === msg.id && now - lastTap.time < 300) { handleReactionSelect('heart', msg.id); lastTapRef.current = { time: 0, msgId: null }; }
     else lastTapRef.current = { time: now, msgId: msg.id };
   };
 
-  const handleTouchMove = () => { if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; } };
+  const handleTouchMove = () => {
+    if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
+    setPressedMsgId(null);
+  };
 
   const handleEditMessage = (msg) => {
     if (msg.senderId !== user?.uid) return;
@@ -901,7 +957,22 @@ const ChatView = () => {
     const groups = {};
     entries.forEach(([uid, emoji]) => { if (!groups[emoji]) groups[emoji] = []; groups[emoji].push(uid); });
     const openReactionViewer = (emoji, reacs, msgId) => { const userIds = Object.keys(reacs).filter((uid) => reacs[uid] === emoji); if (userIds.length === 0) return; setReactionViewer({ emoji, userIds, messageId: msgId }); };
-    return <div className="message-reactions" style={{ position: 'absolute', bottom: '-12px', [isOwn ? 'left' : 'right']: '8px', display: 'flex', gap: '4px', zIndex: 3 }}>{Object.entries(groups).map(([emoji, uids]) => <span key={emoji} className="reaction-badge clickable" onClick={(e) => { e.stopPropagation(); openReactionViewer(emoji, reactions, messageId); }} title={`${uids.length} reaction${uids.length !== 1 ? 's' : ''}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', background: 'var(--bg-primary, #ffffff)', border: '1px solid var(--border-color, #e2e8f0)', borderRadius: '999px', padding: '2px 6px', fontSize: '13px', lineHeight: 1, boxShadow: '0 2px 6px rgba(0,0,0,0.15)', cursor: 'pointer', userSelect: 'none' }}>{emoji}{uids.length > 1 && <span className="reaction-count" style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted, #64748b)' }}>{formatReactionCount(uids.length)}</span>}</span>)}</div>;
+    return (
+      <div className="message-reactions" style={{ position: 'absolute', bottom: '-12px', [isOwn ? 'left' : 'right']: '8px', display: 'flex', gap: '4px', zIndex: 3 }}>
+        {Object.entries(groups).map(([emojiKey, uids]) => (
+          <span
+            key={emojiKey}
+            className="reaction-badge clickable"
+            onClick={(e) => { e.stopPropagation(); openReactionViewer(emojiKey, reactions, messageId); }}
+            title={`${uids.length} reaction${uids.length !== 1 ? 's' : ''}`}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', background: 'var(--bg-primary, #ffffff)', border: '1px solid var(--border-color, #e2e8f0)', borderRadius: '999px', padding: '2px 6px', fontSize: '13px', lineHeight: 1, boxShadow: '0 2px 6px rgba(0,0,0,0.15)', cursor: 'pointer', userSelect: 'none' }}
+          >
+            {REACTION_LABELS[emojiKey] || emojiKey}
+            {uids.length > 1 && <span className="reaction-count" style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted, #64748b)' }}>{formatReactionCount(uids.length)}</span>}
+          </span>
+        ))}
+      </div>
+    );
   };
 
   const renderInlineActions = (msg) => {
@@ -929,10 +1000,14 @@ const ChatView = () => {
     const handleRetry = () => { sendMediaMessage(msg.id); };
     const sentClock = formatMsgClock(msg);
 
+    const justSent = justSentIdsRef.current.has(msg.id);
+    const justArrived = justArrivedIdsRef.current.has(msg.id);
+    const isPressed = pressedMsgId === msg.id;
+
     const shell = (inner) => {
       const row = (
         <div
-          className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
+          className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${justSent ? 'just-sent' : ''} ${justArrived ? 'just-arrived' : ''} ${isPressed ? 'pressed' : ''}`}
           ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
           onClick={() => setActiveMessageMenuId(activeMessageMenuId === msg.id ? null : msg.id)}
           onMouseEnter={() => setActiveMessageMenuId(msg.id)}
@@ -942,7 +1017,7 @@ const ChatView = () => {
           onTouchMove={handleTouchMove}
         >
           <div className={`message-stack ${isOwn ? 'own' : 'partner'}`} style={{ position: 'relative', marginBottom: msg.reactions && Object.keys(msg.reactions).length > 0 ? '14px' : 0 }}>
-            <div className={`message-bubble ${isOwn ? 'own' : 'partner'}`}>
+            <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${msg.pending ? 'pending' : ''}`}>
               {inner}
               <div className="message-meta-time">
                 {sentClock}
@@ -1030,6 +1105,11 @@ const ChatView = () => {
       const newest = visible[visible.length - 1];
       const isIncoming = newest && newest.senderId && newest.senderId !== user.uid;
       prevMsgCountRef.current = visible.length;
+
+      if (grew && isIncoming && newest?.id) {
+        flashArrived(newest.id);
+      }
+
       if (!initialScrollRef.current) { initialScrollRef.current = true; requestAnimationFrame(() => scrollToBottom(false)); }
       else if (grew && isNearBottomRef.current) requestAnimationFrame(() => scrollToBottom(true));
       else if (grew && isIncoming && isNearBottomRef.current) requestAnimationFrame(() => scrollToBottom(true));
@@ -1147,28 +1227,314 @@ const ChatView = () => {
   return (
     <>
       <style>{`
+        /* ═══════════ Animated Telegram-style Reaction Bar ═══════════ */
         .echo-reaction-backdrop { position: fixed; inset: 0; z-index: 998; background: transparent; }
-        .echo-reaction-bar { position: fixed; z-index: 1000; display: flex; align-items: center; gap: 4px; background: var(--bg-primary, #ffffff); border: 1px solid var(--border-color, rgba(0,0,0,0.06)); border-radius: 999px; padding: 6px 10px; box-shadow: 0 10px 28px rgba(0,0,0,0.20), 0 2px 8px rgba(0,0,0,0.10); transform: translateX(-50%); animation: echoReactionPop 0.15s cubic-bezier(0.2, 0.8, 0.4, 1) both; }
-        @keyframes echoReactionPop { from { opacity: 0; transform: translateX(-50%) translateY(4px) scale(0.85); } to { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
-        .echo-reaction-bar .echo-reaction-emoji { background: none; border: none; font-size: 24px; line-height: 1; cursor: pointer; padding: 4px 6px; border-radius: 50%; transition: transform 0.12s ease, background 0.12s ease; }
-        .echo-reaction-bar .echo-reaction-emoji:hover, .echo-reaction-bar .echo-reaction-emoji:active { transform: scale(1.3); background: rgba(0,0,0,0.06); }
-        .echo-reaction-bar-arrow { position: fixed; width: ${REACTION_ARROW_SIZE}px; height: ${REACTION_ARROW_SIZE}px; background: var(--bg-primary, #ffffff); border: 1px solid var(--border-color, rgba(0,0,0,0.06)); border-top: none; border-left: none; transform: translateX(-50%) rotate(45deg); z-index: 999; }
+
+        .echo-reaction-bar {
+          position: fixed;
+          z-index: 1000;
+          display: flex;
+          align-items: center;
+          gap: 2px;
+          background: #1a1a1a;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 999px;
+          padding: 6px 8px;
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+          transform: translateX(-50%);
+          transform-origin: bottom center;
+          animation: snapReactionPop 0.22s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+        }
+        html[data-theme="light"] .echo-reaction-bar,
+        html.theme-light .echo-reaction-bar {
+          background: #ffffff;
+          border-color: rgba(0, 0, 0, 0.08);
+          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+        }
+        @keyframes snapReactionPop {
+          0%   { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.85); }
+          100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
+        }
+
+        .echo-reaction-emoji {
+          width: 44px;
+          height: 44px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          padding: 0;
+          background: transparent;
+          border: none;
+          border-radius: 50%;
+          cursor: pointer;
+          transition: transform 0.15s cubic-bezier(0.2, 1.3, 0.4, 1), background 0.15s ease;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .echo-reaction-emoji .rx-svg {
+          width: 32px;
+          height: 32px;
+          display: block;
+          overflow: visible;
+          animation: rxIdleBounce 3.2s ease-in-out infinite;
+        }
+        .echo-reaction-emoji:nth-child(1) .rx-svg { animation-delay: 0s; }
+        .echo-reaction-emoji:nth-child(2) .rx-svg { animation-delay: 0.15s; }
+        .echo-reaction-emoji:nth-child(3) .rx-svg { animation-delay: 0.30s; }
+        .echo-reaction-emoji:nth-child(4) .rx-svg { animation-delay: 0.45s; }
+        .echo-reaction-emoji:nth-child(5) .rx-svg { animation-delay: 0.60s; }
+        .echo-reaction-emoji:nth-child(6) .rx-svg { animation-delay: 0.75s; }
+        @keyframes rxIdleBounce {
+          0%, 75%, 100% { transform: translateY(0) scale(1); }
+          82%           { transform: translateY(-3px) scale(1.08); }
+          90%           { transform: translateY(0) scale(1); }
+        }
+        .echo-reaction-emoji:hover {
+          background: rgba(255, 255, 255, 0.08);
+          transform: scale(1.15);
+        }
+        html[data-theme="light"] .echo-reaction-emoji:hover,
+        html.theme-light .echo-reaction-emoji:hover {
+          background: rgba(0, 0, 0, 0.05);
+        }
+        .echo-reaction-emoji:hover .rx-svg {
+          animation: rxHoverBounce 0.5s cubic-bezier(0.2, 1.5, 0.4, 1);
+        }
+        @keyframes rxHoverBounce {
+          0%   { transform: scale(1) rotate(0deg); }
+          35%  { transform: scale(1.35) rotate(-8deg); }
+          65%  { transform: scale(1.15) rotate(6deg); }
+          100% { transform: scale(1.15) rotate(0deg); }
+        }
+        .echo-reaction-emoji.tapped .rx-svg {
+          animation: rxTapPop 0.42s cubic-bezier(0.2, 1.6, 0.4, 1);
+        }
+        @keyframes rxTapPop {
+          0%   { transform: scale(1); }
+          40%  { transform: scale(1.55) rotate(0deg); }
+          70%  { transform: scale(1.3) rotate(-4deg); }
+          100% { transform: scale(1) rotate(0deg); }
+        }
+
+        .rx-heart-path { transform-origin: 20px 24px; animation: rxHeartBeat 1.6s ease-in-out infinite; }
+        @keyframes rxHeartBeat {
+          0%, 100% { transform: scale(1); }
+          15%      { transform: scale(1.10); }
+          30%      { transform: scale(0.98); }
+          45%      { transform: scale(1.06); }
+          60%      { transform: scale(1); }
+        }
+        .rx-heart-shine { animation: rxHeartShine 1.6s ease-in-out infinite; }
+        @keyframes rxHeartShine {
+          0%, 100% { opacity: 0.55; transform: scale(1); }
+          15%      { opacity: 0.85; transform: scale(1.2); }
+          30%      { opacity: 0.55; transform: scale(1); }
+        }
+
+        .rx-laugh-eye-left, .rx-laugh-eye-right { transform-origin: center; animation: rxLaughSquint 2s ease-in-out infinite; }
+        .rx-laugh-eye-right { animation-delay: 0.05s; }
+        @keyframes rxLaughSquint {
+          0%, 80%, 100% { transform: scaleY(1); }
+          88%           { transform: scaleY(0.4); }
+        }
+        .rx-laugh-tear { animation: rxLaughTear 2s ease-in-out infinite; }
+        @keyframes rxLaughTear {
+          0%, 40%, 100% { opacity: 0; transform: translateY(0) scale(0); }
+          55%           { opacity: 1; transform: translateY(0) scale(1); }
+          90%           { opacity: 0; transform: translateY(4px) scale(0.6); }
+        }
+
+        .rx-wow-eye-left, .rx-wow-eye-right { transform-origin: center; animation: rxWowEyes 1.6s ease-in-out infinite; }
+        @keyframes rxWowEyes {
+          0%, 100% { transform: scale(1); }
+          50%      { transform: scale(1.15); }
+        }
+        .rx-wow-mouth { transform-origin: 20px 26px; animation: rxWowMouth 1.2s ease-in-out infinite; }
+        @keyframes rxWowMouth {
+          0%, 100% { transform: scale(1); }
+          50%      { transform: scale(1.18); }
+        }
+
+        .rx-sad-tear { animation: rxSadTear 2.4s ease-in-out infinite; transform-origin: 17px 20px; }
+        @keyframes rxSadTear {
+          0%, 40%, 100% { opacity: 0; transform: translateY(0) scale(0.4); }
+          55%           { opacity: 1; transform: translateY(0) scale(1); }
+          90%           { opacity: 0; transform: translateY(6px) scale(0.7); }
+        }
+
+        .rx-pray-left  { transform-origin: 20px 34px; animation: rxPrayLeft 2.4s ease-in-out infinite; }
+        .rx-pray-right { transform-origin: 20px 34px; animation: rxPrayRight 2.4s ease-in-out infinite; }
+        @keyframes rxPrayLeft {
+          0%, 100% { transform: rotate(0deg); }
+          50%      { transform: rotate(3deg); }
+        }
+        @keyframes rxPrayRight {
+          0%, 100% { transform: rotate(0deg); }
+          50%      { transform: rotate(-3deg); }
+        }
+        .rx-pray-sparkle { transform-origin: 32px 12px; animation: rxPraySparkle 2.4s ease-in-out infinite; }
+        @keyframes rxPraySparkle {
+          0%, 100% { opacity: 0.4; transform: scale(1) rotate(0deg); }
+          50%      { opacity: 1; transform: scale(1.35) rotate(180deg); }
+        }
+
+        .rx-fire-outer { transform-origin: 20px 34px; animation: rxFireFlicker 0.9s ease-in-out infinite; }
+        @keyframes rxFireFlicker {
+          0%, 100% { transform: scale(1) skewX(0deg); }
+          25%      { transform: scale(1.03) skewX(2deg); }
+          50%      { transform: scale(0.98) skewX(-2deg); }
+          75%      { transform: scale(1.05) skewX(1deg); }
+        }
+        .rx-fire-inner { transform-origin: 20px 30px; animation: rxFireInner 0.7s ease-in-out infinite; }
+        @keyframes rxFireInner {
+          0%, 100% { transform: scale(1); opacity: 0.95; }
+          50%      { transform: scale(0.85); opacity: 1; }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .echo-reaction-emoji .rx-svg,
+          .echo-reaction-emoji:hover .rx-svg,
+          .echo-reaction-emoji.tapped .rx-svg,
+          .rx-heart-path, .rx-heart-shine,
+          .rx-laugh-eye-left, .rx-laugh-eye-right, .rx-laugh-tear,
+          .rx-wow-eye-left, .rx-wow-eye-right, .rx-wow-mouth,
+          .rx-sad-tear,
+          .rx-pray-left, .rx-pray-right, .rx-pray-sparkle,
+          .rx-fire-outer, .rx-fire-inner {
+            animation: none !important;
+          }
+        }
+
+        .echo-reaction-bar-arrow { display: none; }
+
+        /* ═══════════ Rest of ChatView styles (unchanged) ═══════════ */
         .highlight-flash { animation: highlightFlash 1.6s ease; }
         @keyframes highlightFlash { 0%, 100% { background: transparent; } 20% { background: rgba(255, 215, 0, 0.3); } }
         .message-inline-menu-wrapper { display: flex; width: 100%; margin-top: 8px; z-index: 10; }
         .message-inline-actions.own { justify-content: flex-end; }
         .message-inline-actions.partner { justify-content: flex-start; }
-        .message-inline-actions { display: flex; align-items: center; gap: 4px; background: var(--bg-primary, #ffffff); border: 1px solid rgba(0,0,0,0.08); padding: 3px; border-radius: 20px; box-shadow: 0 6px 16px rgba(0,0,0,0.08); animation: menuFadeIn 0.2s ease-out; }
-        @keyframes menuFadeIn { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
+        .message-inline-actions { display: flex; align-items: center; gap: 4px; background: var(--bg-primary, #ffffff); border: 1px solid rgba(0,0,0,0.08); padding: 3px; border-radius: 20px; box-shadow: 0 6px 16px rgba(0,0,0,0.08); animation: menuFadeIn 0.24s cubic-bezier(0.2, 1.2, 0.4, 1); }
+        @keyframes menuFadeIn { 0% { opacity: 0; transform: translateY(-6px) scale(0.92); } 70% { opacity: 1; transform: translateY(1px) scale(1.02); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
         .message-action-btn { background: transparent; border: none; cursor: pointer; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--text-secondary, #555); transition: all 0.15s ease; }
         .message-action-btn svg { width: 18px; height: 18px; fill: currentColor; }
-        .message-action-btn:hover { background: var(--bg-hover, #eaeaea); color: var(--text-primary, #333); transform: scale(1.1); }
+        .message-action-btn:hover { background: var(--bg-hover, #eaeaea); color: var(--text-primary, #333); transform: scale(1.15) translateY(-1px); }
         .message-action-btn.danger:hover { background: #fde8e8; color: #d32f2f; }
 
-        .message-receipt { display: inline-block; margin-left: 4px; font-size: 11px; font-weight: 700; letter-spacing: -2px; vertical-align: middle; }
-        .message-receipt.sent { color: rgba(255,255,255,0.6); }
-        .message-receipt.delivered { color: rgba(255,255,255,0.75); }
-        .message-receipt.read { color: #60A5FA; }
+        .message-row.own .message-bubble,
+        .message-row.partner .message-bubble {
+          animation: echoBubbleIn 0.3s cubic-bezier(0.2, 0.9, 0.25, 1.05) both;
+          transform-origin: bottom;
+          will-change: transform, opacity;
+          transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.25, 1.05), box-shadow 0.25s ease;
+        }
+        .message-row.own .message-bubble { transform-origin: bottom right; }
+        .message-row.partner .message-bubble { transform-origin: bottom left; }
+
+        @keyframes echoBubbleIn {
+          0% { opacity: 0; transform: translateY(10px) scale(0.84); }
+          60% { opacity: 1; transform: translateY(-1px) scale(1.03); }
+          100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+
+        @media (hover: hover) {
+          .message-row:hover .message-bubble {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 22px rgba(0,0,0,0.18);
+          }
+        }
+
+        .message-row.pressed .message-bubble {
+          transform: scale(0.94);
+          transition: transform 0.15s ease;
+        }
+
+        .message-row .message-bubble.pending {
+          animation: echoSendingPulse 1.4s ease-in-out infinite;
+        }
+        @keyframes echoSendingPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(108, 60, 225, 0.0); }
+          50%      { box-shadow: 0 0 0 4px rgba(108, 60, 225, 0.15); }
+        }
+
+        .message-receipt {
+          transition: color 0.25s ease, transform 0.25s ease;
+          display: inline-block;
+        }
+        .message-receipt.sent { color: rgba(255, 255, 255, 0.55); }
+        .message-receipt.delivered {
+          color: rgba(255, 255, 255, 0.8);
+          animation: receiptDeliveredPop 0.32s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+        }
+        .message-receipt.read {
+          color: #60A5FA;
+          animation: receiptReadPop 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+        }
+        @keyframes receiptDeliveredPop {
+          0%   { transform: scale(0.7); opacity: 0.4; }
+          60%  { transform: scale(1.18); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes receiptReadPop {
+          0%   { transform: scale(0.7); opacity: 0.4; color: rgba(255,255,255,0.6); }
+          40%  { transform: scale(1.25); opacity: 1; color: #60A5FA; }
+          100% { transform: scale(1); opacity: 1; color: #60A5FA; }
+        }
+
+        .chat-send-btn {
+          position: relative;
+          overflow: visible;
+          transition: transform 0.12s ease, background 0.2s ease, box-shadow 0.2s ease;
+        }
+        .chat-send-btn:not(:disabled):active { transform: scale(0.88); }
+        .chat-send-btn:not(:disabled):hover {
+          transform: scale(1.06);
+          box-shadow: 0 6px 18px rgba(108, 60, 225, 0.45);
+        }
+        .chat-send-btn.rippling::after {
+          content: '';
+          position: absolute;
+          inset: -4px;
+          border-radius: 50%;
+          border: 2px solid rgba(108, 60, 225, 0.55);
+          animation: sendRipple 0.6s cubic-bezier(0.2, 0.8, 0.4, 1) forwards;
+          pointer-events: none;
+        }
+        @keyframes sendRipple {
+          0%   { transform: scale(0.9); opacity: 0.85; }
+          100% { transform: scale(2.4); opacity: 0; }
+        }
+
+        .message-row.own.just-sent .message-bubble { animation: sentGlow 0.75s ease-out both; }
+        @keyframes sentGlow {
+          0%   { box-shadow: 0 0 0 0 rgba(108, 60, 225, 0.55), 0 4px 14px rgba(108,60,225,0.35); }
+          100% { box-shadow: 0 0 0 14px rgba(108, 60, 225, 0), 0 4px 14px rgba(108,60,225,0.35); }
+        }
+
+        .message-row.partner.just-arrived .message-bubble { animation: arrivedPulse 0.6s ease-out both; }
+        @keyframes arrivedPulse {
+          0%   { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.4); }
+          100% { box-shadow: 0 0 0 12px rgba(236, 72, 153, 0); }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+          .message-row.own .message-bubble,
+          .message-row.partner .message-bubble,
+          .message-row .message-bubble.pending,
+          .message-receipt.delivered,
+          .message-receipt.read,
+          .message-row.own.just-sent .message-bubble,
+          .message-row.partner.just-arrived .message-bubble,
+          .echo-reaction-bar,
+          .echo-reaction-emoji,
+          .message-inline-actions {
+            animation: none !important;
+            opacity: 1 !important;
+            transform: none !important;
+          }
+          .chat-send-btn:not(:disabled):active,
+          .chat-send-btn:not(:disabled):hover { transform: none; }
+          .message-row:hover .message-bubble { transform: none; }
+          .message-row.pressed .message-bubble { transform: none; }
+        }
 
         .typing-indicator-container {
           display: inline-flex;
@@ -1187,7 +1553,7 @@ const ChatView = () => {
             0 8px 24px rgba(0, 0, 0, 0.45),
             0 0 0 1px rgba(108, 60, 225, 0.35),
             0 0 24px rgba(108, 60, 225, 0.25);
-          animation: typingContainerIn 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+          animation: typingContainerIn 0.28s cubic-bezier(0.2, 1.3, 0.4, 1);
         }
         html.theme-light .typing-indicator-container {
           background: rgba(255, 255, 255, 0.94);
@@ -1272,9 +1638,30 @@ const ChatView = () => {
 
         {showEmojiPicker && (<ChatEmojiPicker onClose={() => setShowEmojiPicker(false)} onSelect={handleEmojiSelect} excludeRefs={[inputContainerRef, captionPreviewRef]} />)}
 
-        {showReactionPicker && reactionPickerAnchor && (<><div className="echo-reaction-backdrop" onClick={closeReactionPicker} /><div className="echo-reaction-bar" style={{ top: reactionPickerAnchor.top, left: reactionPickerAnchor.left }} onClick={(e) => e.stopPropagation()}>{['❤️', '😄', '😮', '😢', '🙏', '🔥'].map((emoji) => (<button key={emoji} type="button" className="echo-reaction-emoji" onClick={() => handleReactionSelect(emoji)}>{emoji}</button>))}</div><div className="echo-reaction-bar-arrow" style={{ top: reactionPickerAnchor.flipped ? reactionPickerAnchor.top - REACTION_ARROW_SIZE / 2 : reactionPickerAnchor.top + REACTION_BAR_HEIGHT - REACTION_ARROW_SIZE / 2, left: reactionPickerAnchor.left }} /></>)}
+        {showReactionPicker && reactionPickerAnchor && (
+          <>
+            <div className="echo-reaction-backdrop" onClick={closeReactionPicker} />
+            <div
+              className="echo-reaction-bar"
+              style={{ top: reactionPickerAnchor.top, left: reactionPickerAnchor.left }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {REACTION_EMOJIS.map(({ key, Component }) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`echo-reaction-emoji${tappedEmoji === key ? ' tapped' : ''}`}
+                  onClick={() => handleReactionSelect(key)}
+                  aria-label={key}
+                >
+                  <Component />
+                </button>
+              ))}
+            </div>
+          </>
+        )}
 
-        {reactionViewer && (<div className="reaction-viewer-modal" onClick={() => setReactionViewer(null)}><div className="reaction-viewer-content" onClick={(e) => e.stopPropagation()}><h3>{reactionViewer.emoji} Reactions</h3><div className="reaction-viewer-list">{reactionViewer.userIds.map((uid) => (<div key={uid} className="reaction-viewer-item"><Avatar uid={uid} size="small" /><span>{getProfile(uid)?.name || 'User'}</span></div>))}</div></div></div>)}
+        {reactionViewer && (<div className="reaction-viewer-modal" onClick={() => setReactionViewer(null)}><div className="reaction-viewer-content" onClick={(e) => e.stopPropagation()}><h3>{REACTION_LABELS[reactionViewer.emoji] || reactionViewer.emoji} Reactions</h3><div className="reaction-viewer-list">{reactionViewer.userIds.map((uid) => (<div key={uid} className="reaction-viewer-item"><Avatar uid={uid} size="small" /><span>{getProfile(uid)?.name || 'User'}</span></div>))}</div></div></div>)}
 
         <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
           {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
@@ -1316,7 +1703,7 @@ const ChatView = () => {
               onFocus={() => { focusedField.current = 'main'; }}
             />
 
-            <button type="submit" className="chat-send-btn" disabled={!newMessage.trim()}><i className="fas fa-paper-plane" /></button>
+            <button ref={sendButtonRef} type="submit" className="chat-send-btn" disabled={!newMessage.trim()}><i className="fas fa-paper-plane" /></button>
           </div>
         </form>
 
