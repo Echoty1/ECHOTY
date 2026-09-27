@@ -3,7 +3,8 @@ import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { ref, onValue } from 'firebase/database';
-import { db } from '../../../services/firebase';
+import { db, auth } from '../../../services/firebase';
+import { apiUrl } from '../../../utils/api';
 import {
   saveNote,
   removeNote,
@@ -36,6 +37,7 @@ const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(null);
+  const [seeding, setSeeding] = useState(false);
   const { play, playingId } = useSongPreview();
 
   useEffect(() => {
@@ -82,6 +84,39 @@ const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
     }
   };
 
+  const handleSeed = async () => {
+    setSeeding(true);
+    try {
+      const token = await auth?.currentUser?.getIdToken?.();
+      if (!token) {
+        alert('Not logged in.');
+        return;
+      }
+      const urls = [
+        'https://open.spotify.com/track/4W5qTpkD66vjHkQjpuNkym',
+        'https://open.spotify.com/track/0teaTiPHAcaGMqyv6cwu6t',
+        'https://open.spotify.com/track/188ZcI2wLxV91ppTH0dkNk',
+      ];
+      const res = await fetch(apiUrl('/api/admin/seed-songs'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ urls }),
+      });
+      const data = await res.json();
+      console.log('Seed result:', data);
+      const ok = (data.results || []).filter((r) => r.ok).length;
+      const previews = (data.results || []).filter((r) => r.ok && r.hasPreview).length;
+      alert(`Seeded ${ok}/${urls.length} songs. ${previews} have previews. Check console for details.`);
+    } catch (err) {
+      alert('Seed failed: ' + err.message);
+    } finally {
+      setSeeding(false);
+    }
+  };
+
   const handleConfirm = () => {
     if (!preview) return;
     onSelect(preview);
@@ -95,14 +130,35 @@ const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
         <div className="note-song-sheet-handle" />
         <div className="note-song-sheet-header">
           <h3>Add a song</h3>
-          <button
-            type="button"
-            className="note-song-sheet-close"
-            onClick={onClose}
-            aria-label="Close"
-          >
-            ✕
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <button
+              type="button"
+              onClick={handleSeed}
+              disabled={seeding}
+              style={{
+                padding: '6px 10px',
+                fontSize: 11,
+                fontWeight: 700,
+                background: 'rgba(108,60,225,0.25)',
+                color: '#C4B5FD',
+                border: '1px solid rgba(108,60,225,0.5)',
+                borderRadius: 8,
+                cursor: seeding ? 'wait' : 'pointer',
+                fontFamily: 'inherit',
+              }}
+              title="Admin: refresh catalog with previews"
+            >
+              {seeding ? '…' : '🛠'}
+            </button>
+            <button
+              type="button"
+              className="note-song-sheet-close"
+              onClick={onClose}
+              aria-label="Close"
+            >
+              ✕
+            </button>
+          </div>
         </div>
 
         <div className="note-song-sheet-tabs">
