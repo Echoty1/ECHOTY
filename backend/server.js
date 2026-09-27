@@ -418,6 +418,64 @@ app.post('/api/chat', requireUser, async (req, res) => {
   }
 });
 
+// ==========================================================================
+//  🎵 MUSIC LINK LOOKUP — Spotify / Apple Music oEmbed proxy
+// ==========================================================================
+app.post('/api/oembed', async (req, res) => {
+  try {
+    const { url } = req.body || {};
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'Missing url' });
+    }
+
+    let provider = null;
+    let oembedEndpoint = null;
+
+    if (/open\.spotify\.com\/(track|album|playlist|episode)\//.test(url)) {
+      provider = 'spotify';
+      oembedEndpoint = `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`;
+    } else if (/music\.apple\.com\//.test(url)) {
+      provider = 'apple';
+      const clean = url.split('?')[0];
+      oembedEndpoint = `https://music.apple.com/oembed?url=${encodeURIComponent(clean)}&format=json`;
+    } else {
+      return res.status(400).json({ error: 'Unsupported music link' });
+    }
+
+    const upstream = await fetch(oembedEndpoint, {
+      headers: { 'User-Agent': 'Echo/1.0 (+https://echoty.xyz)' },
+    });
+
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: 'Upstream oEmbed failed' });
+    }
+
+    const data = await upstream.json();
+    const title = data.title || '';
+    const artist = data.author_name || data.provider_name || '';
+
+    let cleanTitle = title;
+    let cleanArtist = artist;
+    if (provider === 'spotify' && title.includes(' · ')) {
+      const parts = title.split(' · ');
+      cleanTitle = parts[0] || title;
+      cleanArtist = parts[1] || artist;
+    }
+
+    return res.json({
+      provider,
+      title: cleanTitle,
+      artist: cleanArtist,
+      artwork: data.thumbnail_url || '',
+      sourceUrl: url,
+      embedHtml: data.html || '',
+    });
+  } catch (err) {
+    console.error('[oembed] failed:', err);
+    return res.status(500).json({ error: 'Lookup failed' });
+  }
+});
+
 // ─── Admin user deletion ──────────────────────────────────────────
 app.post('/api/admin/delete-user', async (req, res) => {
   try {
