@@ -480,6 +480,120 @@ app.post('/api/oembed', async (req, res) => {
   }
 });
 
+// ==========================================================================
+//  🎶 SONG CATALOG — admin seed + public search
+// ==========================================================================
+
+/**
+ * POST /api/admin/seed-songs
+ * Body: { urls: ["https://open.spotify.com/track/...", ...] }
+ * Admin-only. For each URL, fetches oEmbed metadata and writes to songCatalog/{trackId}.
+ */
+app.post('/api/admin/seed-songs', async (req, res) => {
+  try {
+    const token = req.headers.authorization?.split('Bearer ')[1];
+    if (!token) return res.status(401).json({ error: 'Unauthorized' });
+    const decoded = await admin.auth().verifyIdToken(token);
+    if (decoded.uid !== '5cSplOLz30d8dgM3wvXUcDmL2QK2') {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const { urls } = req.body || {};
+    if (!Array.isArray(urls) || urls.length === 0) {
+      return res.status(400).json({ error: 'Provide a non-empty urls array' });
+    }
+
+    const results = [];
+
+    for (const url of urls) {
+      try {
+        let provider = null;
+        let oembedEndpoint = null;
+
+        if (/open\.spotify\.com\/(track|album|playlist|episode)\//.test(url)) {
+          provider = 'spotify';
+          oembedEndpoint = `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`;
+        } else if (/music\.apple\.com\//.test(url)) {
+          provider = 'apple';
+          const clean = url.split('?')[0];
+          oembedEndpoint = `https://music.apple.com/oembed?url=${encodeURIComponent(clean)}&format=json`;
+        } else {
+          results.push({ url, ok: false, reason: 'Unsupported link' });
+          continue;
+        }
+
+        const upstream = await fetch(oembedEndpoint, {
+          headers: { 'User-Agent': 'Echo/1.0', 'Accept': 'application/json' },
+        });
+
+        if (!upstream.ok) {
+          results.push({ url, ok: false, reason: `Upstream ${upstream.status}` });
+          continue;
+        }
+
+        const data = await upstream.json();
+
+        const idMatch = url.match(/\/(track|album|playlist|episode)\/([A-Za-z0-9]{22})/);
+        const trackId = idMatch ? idMatch[2] : null;
+        if (!trackId) {
+          results.push({ url, ok: false, reason: 'No track ID in URL' });
+          continue;
+        }
+
+        let title = data.title || '';
+        let artist = data.author_name || data.provider_name || '';
+        if (provider === 'spotify' && title.includes(' · ')) {
+          const parts = title.split(' · ');
+          title = parts[0] || title;
+          artist = parts[1] || artist;
+        }
+
+        await db.ref(`songCatalog/${trackId}`).set({
+          trackId,
+          provider,
+          title: String(title).slice(0, 100),
+          artist: String(artist || '').slice(0, 100),
+          artwork: data.thumbnail_url || '',
+          sourceUrl: url.split('?')[0],
+          addedAt: Date.now(),
+        });
+
+        results.push({ url, ok: true, trackId, title, artist });
+        console.log(`🎵 Catalog + ${trackId} — ${title} by ${artist}`);
+      } catch (err) {
+        results.push({ url, ok: false, reason: err.message });
+        console.warn('[seed-songs] failed for', url, err.message);
+      }
+    }
+
+    res.json({ success: true, results });
+  } catch (err) {
+    console.error('[seed-songs] error', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * GET /api/song-search?q=rema
+ * Public search across the catalog. Returns { songs: [...] }
+ */
+app.get('/api/song-search', async (req, res) => {
+  try {
+    const q = String(req.query.q || '').toLowerCase().trim();
+    const snap = await db.ref('songCatalog').once('value');
+    const all = snap.val() || {};
+    const list = Object.values(all);
+    if (!q) return res.json({ songs: list });
+    const filtered = list.filter((s) =>
+      (s.title || '').toLowerCase().includes(q) ||
+      (s.artist || '').toLowerCase().includes(q)
+    );
+    res.json({ songs: filtered });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── Admin user deletion ──────────────────────────────────────────
 app.post('/api/admin/delete-user', async (req, res) => {
   try {
@@ -488,7 +602,7 @@ app.post('/api/admin/delete-user', async (req, res) => {
     const token = req.headers.authorization?.split('Bearer ')[1];
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
     const decoded = await admin.auth().verifyIdToken(token);
-    if (decoded.uid !== '5cSplOLz30d8dgM3wvXUcDmL2QK2') {
+    if (decoded.uid !== '5cSp1OLz30d8dghM3wvXUCdMl2QK2') {
       return res.status(403).json({ error: 'Forbidden' });
     }
     try { await admin.auth().deleteUser(targetUid); } catch (e) {
