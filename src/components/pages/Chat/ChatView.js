@@ -241,20 +241,22 @@ const ChatView = () => {
   }, []);
 
   // ─── NOTE REPLY: read navigation state & prefill ─────────────
+  // NEW: also accepts song-only notes (text may be empty)
   useEffect(() => {
     const state = location.state;
     if (!state) return;
 
-    // Handle quoted note reply
-    if (state.replyToNote && state.prefilledNote) {
+    // Handle quoted note reply (text OR song)
+    if (state.replyToNote && (state.prefilledNote || state.noteSong)) {
       setReplyToNote({
-        text: state.prefilledNote,
+        text: state.prefilledNote || '',
         authorUid: state.noteAuthorUid,
         authorName: state.noteAuthorName || 'User',
         createdAt: state.noteCreatedAt || Date.now(),
+        song: state.noteSong || null, // NEW
       });
-      // Also prefill the input so the user can type their reply
-      if (typeof state.prefilledNote === 'string') {
+      // Prefill input with text (may be empty string for song-only notes)
+      if (typeof state.prefilledNote === 'string' && state.prefilledNote) {
         setNewMessage(state.prefilledNote);
       }
       // Clear nav state so a refresh doesn't re-trigger
@@ -264,7 +266,7 @@ const ChatView = () => {
         if (inputRef.current) {
           inputRef.current.focus();
           try {
-            const len = state.prefilledNote.length;
+            const len = (state.prefilledNote || '').length;
             inputRef.current.setSelectionRange(len, len);
           } catch (_) {}
         }
@@ -1041,11 +1043,44 @@ const ChatView = () => {
   };
 
   // ─── Render note reply card (embedded in bubble) ──────────────
+  // NEW: renders the song row when the note has a song attached
   const renderNoteReplyCard = (note) => {
     if (!note) return null;
     return (
       <div className="note-reply-card">
-        <p className="note-reply-text">{note.text}</p>
+        {note.song?.title && (
+          <button
+            type="button"
+            className="note-reply-song"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (note.song?.sourceUrl) {
+                window.open(note.song.sourceUrl, '_blank', 'noopener,noreferrer');
+              }
+            }}
+            aria-label={`Open ${note.song.title}`}
+          >
+            <span className="note-reply-song-art">
+              {note.song.artwork ? (
+                <img src={note.song.artwork} alt="" loading="lazy" />
+              ) : (
+                <span>🎵</span>
+              )}
+            </span>
+            <span className="note-reply-song-meta">
+              <span className="note-reply-song-title">{note.song.title}</span>
+              {note.song.artist && (
+                <span className="note-reply-song-artist">{note.song.artist}</span>
+              )}
+            </span>
+            <span className="note-reply-song-play" aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="12" height="12">
+                <path d="M8 5v14l11-7z" fill="currentColor" />
+              </svg>
+            </span>
+          </button>
+        )}
+        {note.text && <p className="note-reply-text">{note.text}</p>}
       </div>
     );
   };
@@ -1729,13 +1764,21 @@ const ChatView = () => {
           {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
 
           {/* ─── NOTE REPLY BANNER (above input) ─── */}
+          {/* NEW: shows the song when the note has no text (song-only note) */}
           {replyToNote && (
             <div className="note-reply-preview-banner">
               <div className="note-reply-preview-banner-content">
                 <span className="note-reply-preview-banner-label">
                   Replying to {replyToNote.authorName}'s note
                 </span>
-                <span className="note-reply-preview-banner-text">{replyToNote.text}</span>
+                {replyToNote.song?.title ? (
+                  <span className="note-reply-preview-banner-text">
+                    🎵 {replyToNote.song.title}
+                    {replyToNote.song.artist ? ` · ${replyToNote.song.artist}` : ''}
+                  </span>
+                ) : (
+                  <span className="note-reply-preview-banner-text">{replyToNote.text}</span>
+                )}
               </div>
               <button
                 type="button"
