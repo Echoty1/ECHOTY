@@ -12,6 +12,7 @@ import {
   removeNoteReaction,
   markNoteSeen,
   subscribeToNoteViewers,
+  lookupSongLink,
   isEmojiOnly,
   isSingleEmoji,
   NOTE_MAX_LENGTH,
@@ -33,12 +34,19 @@ const NotesStrip = ({ visibleUids = [] }) => {
   const [saving, setSaving] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // Song state
+  const [songUrl, setSongUrl] = useState('');
+  const [songLookup, setSongLookup] = useState(null);
+  const [songLooking, setSongLooking] = useState(false);
+  const [songError, setSongError] = useState('');
+  const [songInputOpen, setSongInputOpen] = useState(false);
+
   // Reaction picker
   const [reactionTarget, setReactionTarget] = useState(null);
   const longPressTimer = useRef(null);
   const longPressFired = useRef(false);
 
-  // Track which notes were rendered on first pass (for pop-in animation)
+  // Track newly arrived notes for pop-in animation
   const seenNoteIds = useRef(new Set());
   const [newNoteIds, setNewNoteIds] = useState(new Set());
 
@@ -50,6 +58,13 @@ const NotesStrip = ({ visibleUids = [] }) => {
   };
   const getAvatar = (uid) => (uid ? profiles?.[uid]?.avatar || '' : '');
 
+  const openSongLink = (e, song) => {
+    if (!song?.sourceUrl) return;
+    e?.stopPropagation?.();
+    e?.preventDefault?.();
+    window.open(song.sourceUrl, '_blank', 'noopener,noreferrer');
+  };
+
   // ─── Subscribe to my own note ────────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
@@ -58,7 +73,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
       const data = snap.val();
       if (
         !data ||
-        !data.text ||
+        (!data.text && !data.song) ||
         (data.expiresAt && data.expiresAt < Date.now())
       ) {
         setMyNote(null);
@@ -69,7 +84,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
     return () => unsub();
   }, [user?.uid]);
 
-  // ─── Subscribe to viewers of my own note ─────────────────────
+  // ─── Viewers of my own note ──────────────────────────────────
   useEffect(() => {
     if (!user?.uid || !myNote) {
       setMyViewers([]);
@@ -84,7 +99,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
   // ─── Subscribe to all notes ──────────────────────────────────
   useEffect(() => {
     const unsub = subscribeToAllNotes((live) => {
-      // Detect newly-arrived note UIDs for pop-in
       const incomingNew = new Set();
       live.forEach((n) => {
         if (!seenNoteIds.current.has(n.uid)) {
@@ -94,7 +108,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
       });
       if (incomingNew.size > 0) {
         setNewNoteIds(incomingNew);
-        // Clear the "new" flag after the animation window
         setTimeout(() => setNewNoteIds(new Set()), 700);
       }
       setAllNotes(live);
@@ -119,21 +132,62 @@ const NotesStrip = ({ visibleUids = [] }) => {
     });
   }, [allNotes, user?.uid, visibleUids]);
 
+  const resetSongState = () => {
+    setSongUrl('');
+    setSongLookup(null);
+    setSongLooking(false);
+    setSongError('');
+    setSongInputOpen(false);
+  };
+
   const openComposer = () => {
     setDraft(myNote?.text || '');
+    setSongLookup(myNote?.song || null);
+    setSongUrl('');
+    setSongError('');
+    setSongInputOpen(false);
     setComposerOpen(true);
   };
 
   const closeComposer = () => {
     setComposerOpen(false);
     setDraft('');
+    resetSongState();
+  };
+
+  const handleLookupSong = async () => {
+    const url = songUrl.trim();
+    if (!url) return;
+    setSongLooking(true);
+    setSongError('');
+    try {
+      const found = await lookupSongLink(url);
+      if (!found) {
+        setSongError('Could not read that link. Try a Spotify or Apple Music track URL.');
+        setSongLookup(null);
+      } else {
+        setSongLookup(found);
+        setSongInputOpen(false);
+      }
+    } catch {
+      setSongError('Lookup failed. Try again.');
+    } finally {
+      setSongLooking(false);
+    }
+  };
+
+  const handleRemoveSong = () => {
+    setSongLookup(null);
+    setSongUrl('');
+    setSongError('');
   };
 
   const handleSave = async () => {
     if (!user?.uid) return;
+    if (!draft.trim() && !songLookup) return;
     setSaving(true);
     try {
-      await saveNote(user.uid, draft);
+      await saveNote(user.uid, draft, songLookup || null);
       closeComposer();
     } catch (err) {
       console.error('Failed to save note', err);
@@ -164,30 +218,29 @@ const NotesStrip = ({ visibleUids = [] }) => {
     setMenuOpen(false);
   };
 
-  // ─── TAP another person's note ───────────────────────────────
+  // ─── Tap another person's note → open chat with quoted reply ──
   const handleTapOtherNote = async (note) => {
-    // If long-press already fired, skip the tap navigation
     if (longPressFired.current) {
       longPressFired.current = false;
       return;
     }
     if (!user?.uid) return;
 
-    // Mark seen first (fire-and-forget)
     markNoteSeen(note.uid, user.uid).catch(() => {});
 
     navigate(`/chat/${note.uid}`, {
       state: {
-        prefilledNote: note.text,
+        prefilledNote: note.text || '',
+        replyToNote: true,
         noteAuthorUid: note.uid,
         noteAuthorName: getDisplayName(note.uid),
         noteCreatedAt: note.createdAt,
-        replyToNote: true,
+        noteSong: note.song || null,
       },
     });
   };
 
-  // ─── Long-press → reactions (or my-note menu) ────────────────
+  // ─── Long-press → reactions ──────────────────────────────────
   const handleNotePressStart = (e, note) => {
     longPressFired.current = false;
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
@@ -232,8 +285,9 @@ const NotesStrip = ({ visibleUids = [] }) => {
 
   const remaining = NOTE_MAX_LENGTH - draft.length;
 
-  // ─── Render helpers ──────────────────────────────────────────
+  // ─── Rendering helpers ───────────────────────────────────────
   const renderNoteBubbleContent = (text) => {
+    if (!text) return null;
     if (isSingleEmoji(text)) {
       return <span className="note-text note-text-emoji-xl">{text}</span>;
     }
@@ -241,6 +295,37 @@ const NotesStrip = ({ visibleUids = [] }) => {
       return <span className="note-text note-text-emoji-lg">{text}</span>;
     }
     return <span className="note-text">{text}</span>;
+  };
+
+  const renderSongPill = (song, { interactive = true } = {}) => {
+    if (!song || !song.title) return null;
+    return (
+      <button
+        type="button"
+        className={`note-song-pill ${interactive ? 'is-interactive' : ''}`}
+        onClick={(e) => interactive && openSongLink(e, song)}
+        aria-label={`Play ${song.title} by ${song.artist}`}
+      >
+        <span className="note-song-art">
+          {song.artwork ? (
+            <img src={song.artwork} alt="" loading="lazy" />
+          ) : (
+            <span className="note-song-art-fallback">🎵</span>
+          )}
+        </span>
+        <span className="note-song-info">
+          <span className="note-song-title">{song.title}</span>
+          {song.artist && (
+            <span className="note-song-artist">{song.artist}</span>
+          )}
+        </span>
+        <span className="note-song-play" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="14" height="14">
+            <path d="M8 5v14l11-7z" fill="currentColor" />
+          </svg>
+        </span>
+      </button>
+    );
   };
 
   const renderViewerAvatars = () => {
@@ -290,7 +375,10 @@ const NotesStrip = ({ visibleUids = [] }) => {
           </div>
           <div className="note-bubble note-bubble-mine">
             {myNote ? (
-              renderNoteBubbleContent(myNote.text)
+              <>
+                {renderNoteBubbleContent(myNote.text)}
+                {myNote.song && renderSongPill(myNote.song, { interactive: false })}
+              </>
             ) : (
               <span className="note-placeholder">Add a note…</span>
             )}
@@ -309,9 +397,8 @@ const NotesStrip = ({ visibleUids = [] }) => {
           });
 
           return (
-            <button
+            <div
               key={note.uid}
-              type="button"
               className={`note-card ${
                 newNoteIds.has(note.uid) ? 'note-card-new' : ''
               }`}
@@ -323,7 +410,10 @@ const NotesStrip = ({ visibleUids = [] }) => {
               onTouchEnd={handleNotePressEnd}
               onTouchCancel={handleNotePressEnd}
               onContextMenu={(e) => e.preventDefault()}
+              role="button"
+              tabIndex={0}
               aria-label={`Open note from ${getDisplayName(note.uid)}`}
+              style={{ cursor: 'pointer' }}
             >
               <div className="note-avatar-wrap has-note">
                 <Avatar
@@ -334,6 +424,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
               </div>
               <div className="note-bubble">
                 {renderNoteBubbleContent(note.text)}
+                {note.song && renderSongPill(note.song, { interactive: true })}
                 {Object.keys(grouped).length > 0 && (
                   <span className="note-reaction-badges">
                     {Object.entries(grouped).map(([emoji, count]) => (
@@ -348,7 +439,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
               <span className="note-name">
                 {getDisplayName(note.uid).split(' ')[0]}
               </span>
-            </button>
+            </div>
           );
         })}
       </div>
@@ -390,11 +481,78 @@ const NotesStrip = ({ visibleUids = [] }) => {
               autoFocus
             />
 
+            {/* ─── Song block ─── */}
+            <div className="note-song-block">
+              {songLookup ? (
+                <div className="note-song-attached">
+                  {renderSongPill(songLookup, { interactive: false })}
+                  <button
+                    type="button"
+                    className="note-song-remove"
+                    onClick={handleRemoveSong}
+                    aria-label="Remove song"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : songInputOpen ? (
+                <div className="note-song-input-row">
+                  <input
+                    type="url"
+                    className="note-song-input"
+                    placeholder="Paste Spotify or Apple Music link…"
+                    value={songUrl}
+                    onChange={(e) => setSongUrl(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        handleLookupSong();
+                      }
+                    }}
+                    autoFocus
+                  />
+                  <button
+                    type="button"
+                    className="note-song-lookup"
+                    onClick={handleLookupSong}
+                    disabled={songLooking || !songUrl.trim()}
+                  >
+                    {songLooking ? '…' : 'Add'}
+                  </button>
+                  <button
+                    type="button"
+                    className="note-song-cancel"
+                    onClick={() => {
+                      setSongInputOpen(false);
+                      setSongUrl('');
+                      setSongError('');
+                    }}
+                    aria-label="Cancel"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="note-song-add-btn"
+                  onClick={() => setSongInputOpen(true)}
+                >
+                  <span className="note-song-add-icon">🎵</span>
+                  Add song
+                </button>
+              )}
+
+              {songError && (
+                <p className="note-song-error">{songError}</p>
+              )}
+            </div>
+
             <div className="note-composer-meta">
               <span className={`note-counter ${remaining <= 10 ? 'low' : ''}`}>
                 {remaining}
               </span>
-              {isEmojiOnly(draft) && (
+              {isEmojiOnly(draft) && !songLookup && (
                 <span className="note-emoji-badge">Emoji mode</span>
               )}
             </div>
@@ -414,7 +572,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
                 type="button"
                 className="note-btn note-btn-primary"
                 onClick={handleSave}
-                disabled={saving || !draft.trim()}
+                disabled={saving || (!draft.trim() && !songLookup)}
               >
                 {saving ? 'Saving…' : myNote ? 'Update' : 'Share'}
               </button>
@@ -453,10 +611,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
           className="note-reaction-backdrop"
           onClick={() => setMenuOpen(false)}
         >
-          <div
-            className="note-menu"
-            onClick={(e) => e.stopPropagation()}
-          >
+          <div className="note-menu" onClick={(e) => e.stopPropagation()}>
             <button
               type="button"
               className="note-menu-item"
