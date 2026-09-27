@@ -1,11 +1,14 @@
 // src/hooks/useSongPreview.js
 import { useEffect, useRef, useState } from 'react';
 
+// Module-level singletons so only one preview plays at a time across the whole app
 let globalAudio = null;
 let globalStop = null;
 
 /**
- * Plays a 30-second preview URL. Only one preview plays at a time across the app.
+ * Plays a 30-second preview URL. Only one preview plays at a time.
+ *   const { play, stop, playingId } = useSongPreview();
+ *   play({ trackId, previewUrl });
  */
 export const useSongPreview = () => {
   const audioRef = useRef(null);
@@ -28,7 +31,7 @@ export const useSongPreview = () => {
   const stop = () => {
     if (audioRef.current) {
       try { audioRef.current.pause(); } catch (_) {}
-      audioRef.current.currentTime = 0;
+      try { audioRef.current.currentTime = 0; } catch (_) {}
       audioRef.current = null;
     }
     if (globalAudio === audioRef.current) {
@@ -39,17 +42,26 @@ export const useSongPreview = () => {
   };
 
   const play = async (song) => {
-    if (!song || !song.previewUrl) return;
+    if (!song) return;
+
+    // Support both { trackId, previewUrl } and full catalog objects
+    const id = song.trackId || song.id || song.sourceUrl;
+    const url = song.previewUrl || song.preview_url;
+
+    if (!url) return;
+
     // Same song → toggle off
-    if (playingId === song.trackId || playingId === song.id) {
+    if (playingId === id) {
       stop();
       return;
     }
+
     // Stop whatever's currently playing globally
     if (globalStop) {
       try { globalStop(); } catch (_) {}
     }
-    const audio = new Audio(song.previewUrl);
+
+    const audio = new Audio(url);
     audio.volume = 0.8;
     audioRef.current = audio;
     globalAudio = audio;
@@ -68,7 +80,7 @@ export const useSongPreview = () => {
 
     try {
       await audio.play();
-      setPlayingId(song.trackId || song.id);
+      setPlayingId(id);
     } catch (err) {
       console.warn('Audio play failed', err);
       setPlayingId(null);
