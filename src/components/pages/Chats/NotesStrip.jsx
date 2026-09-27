@@ -31,7 +31,7 @@ import { useProfile } from '../../../contexts/ProfileContext';
 // ─── Song picker sheet ──────────────────────────────────────────
 const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
   const [query, setQuery] = useState('');
-  const [tab, setTab] = useState('search'); // 'search' | 'paste'
+  const [tab, setTab] = useState('search');
   const [url, setUrl] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
@@ -72,7 +72,7 @@ const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
         setError('Not available at the moment. Try a song from the list.');
         return;
       }
-      // Backend returned metadata but not in catalog — still allow adding it locally
+
       const song = {
         trackId: trackId || result.sourceUrl,
         provider: result.provider,
@@ -153,7 +153,7 @@ const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
                 </div>
               ) : (
                 filtered.map((song) => {
-                  const isPlaying = playingId === song.trackId;
+                  const isPlaying = playingId === (song.trackId || song.sourceUrl);
                   const isSelected =
                     preview?.trackId && preview.trackId === song.trackId;
                   return (
