@@ -28,13 +28,13 @@ import Avatar from '../../common/Avatar';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import ChatPreviewPopup from './ChatPreviewPopup';
-import NotesStrip from './NotesStrip'; // ← CHANGE 1: NEW IMPORT
+import NotesStrip from './NotesStrip';
 
 const CHAT_CHUNK_SIZE = 20;
 const TYPING_FRESHNESS_MS = 4000;
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
-const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
+const SUPPORT_UID = '5cSplOLz30d8dgM3wvXUcDmL2QK2';
 
 const ECHO_AI_USER = {
   id: 'echo_ai_assistant',
@@ -77,7 +77,7 @@ const loadPartnerData = async (partnerId) => {
   try {
     const [profileSnap, skinSnap] = await Promise.all([
       get(ref(db, `profiles/${partnerId}`)),
-      get(ref(db, `userSkins/${partnerId}/activeSkin`))
+      get(ref(db, `userSkins/${partnerId}/activeSkin`)),
     ]);
 
     const profile = profileSnap.exists() ? profileSnap.val() : {};
@@ -85,7 +85,7 @@ const loadPartnerData = async (partnerId) => {
 
     const fullProfile = {
       ...profile,
-      activeSkin: activeSkin || profile.activeSkin || null
+      activeSkin: activeSkin || profile.activeSkin || null,
     };
 
     await setProfile(partnerId, fullProfile);
@@ -97,6 +97,7 @@ const loadPartnerData = async (partnerId) => {
   }
 };
 
+// ─── Process a single chat item ─────────────────────────────────
 const processChatItem = async (chat, user, onlineUsers) => {
   try {
     const profile = await loadPartnerData(chat.id);
@@ -110,10 +111,10 @@ const processChatItem = async (chat, user, onlineUsers) => {
     } else {
       partnerName = sanitizeName(
         profile?.name ||
-        profile?.displayName ||
-        profile?.username ||
-        chat.partnerName ||
-        chat.name,
+          profile?.displayName ||
+          profile?.username ||
+          chat.partnerName ||
+          chat.name,
         chat.id
       );
     }
@@ -158,7 +159,10 @@ const processChatItem = async (chat, user, onlineUsers) => {
       avatar: rawAvatar,
       mood: profile?.mood || chat.mood || 'neutral',
       activeSkin: profile?.activeSkin || chat.activeSkin || null,
-      location: profile?.location || [profile?.city, profile?.country].filter(Boolean).join(', ') || '',
+      location:
+        profile?.location ||
+        [profile?.city, profile?.country].filter(Boolean).join(', ') ||
+        '',
       lastMessage: displayMessage,
       timestamp: chat.lastUpdated || chat.timestamp || Date.now(),
       lastSenderId: lastSenderId,
@@ -189,93 +193,134 @@ const processChatItem = async (chat, user, onlineUsers) => {
   }
 };
 
+// ─── Sorting function ──────────────────────────────────────────
 const sortNonAIChats = (chats) => {
-  const online = chats.filter(c => c.online === true);
-  const offline = chats.filter(c => c.online === false);
+  const online = chats.filter((c) => c.online === true);
+  const offline = chats.filter((c) => c.online === false);
   const onlineSorted = online.sort((a, b) => b.timestamp - a.timestamp);
   const offlineSorted = offline.sort((a, b) => b.timestamp - a.timestamp);
   return [...onlineSorted, ...offlineSorted];
 };
 
-const ChatItem = memo(({ chat, onStartChat, onLongPressStart, onLongPressEnd, onLongPressCancel, partnerIsTyping }) => {
-  const { profiles } = useProfile();
-  const navigate = useNavigate();
-  const profile = profiles[chat.id] || {};
-  const isOnline = chat.online;
-  const hasUnread = chat.unreadCount > 0;
-  const skinId = chat.activeSkin || profile.activeSkin || null;
-  const skin = skinId ? getSkinById(skinId) : null;
-  const mood = profile.mood || chat.mood || 'neutral';
+// ─── Chat Item ─────────────────────────────────────────────────
+const ChatItem = memo(
+  ({
+    chat,
+    onStartChat,
+    onLongPressStart,
+    onLongPressEnd,
+    onLongPressCancel,
+    partnerIsTyping,
+  }) => {
+    const { profiles } = useProfile();
+    const navigate = useNavigate();
+    const profile = profiles[chat.id] || {};
+    const isOnline = chat.online;
+    const hasUnread = chat.unreadCount > 0;
+    const skinId = chat.activeSkin || profile.activeSkin || null;
+    const skin = skinId ? getSkinById(skinId) : null;
+    const mood = profile.mood || chat.mood || 'neutral';
 
-  return (
-    <div
-      className="chat-item regular-chat-item"
-      onClick={() => onStartChat(chat)}
-      onMouseDown={(e) => onLongPressStart(e, chat)}
-      onMouseUp={() => onLongPressEnd(chat)}
-      onMouseLeave={onLongPressCancel}
-      onTouchStart={(e) => onLongPressStart(e, chat)}
-      onTouchEnd={() => onLongPressEnd(chat)}
-      onTouchCancel={onLongPressCancel}
-      onContextMenu={(e) => e.preventDefault()}
-      style={{
-        userSelect: 'none',
-        WebkitUserSelect: 'none',
-        WebkitTouchCallout: 'none',
-      }}
-    >
-      <div className="chat-avatar" onClick={(e) => {
-        e.stopPropagation();
-        navigate(`/user/${chat.id}`);
-      }}>
-        <Avatar key={chat.avatar} src={chat.avatar} name={chat.name} size={48} />
-        <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
-        {hasUnread && <span className="unread-badge">{chat.unreadCount}</span>}
-        {chat.isDeleted && <span className="archived-badge" title="Account deleted – archived">📁</span>}
-
-        {partnerIsTyping && (
-          <span className="avatar-typing-overlay" aria-hidden="true">
-            <span className="avatar-typing-ring" />
-            <span className="avatar-typing-dots">
-              <span className="avatar-typing-dot" />
-              <span className="avatar-typing-dot" />
-              <span className="avatar-typing-dot" />
+    return (
+      <div
+        className="chat-item regular-chat-item"
+        onClick={() => onStartChat(chat)}
+        onMouseDown={(e) => onLongPressStart(e, chat)}
+        onMouseUp={() => onLongPressEnd(chat)}
+        onMouseLeave={onLongPressCancel}
+        onTouchStart={(e) => onLongPressStart(e, chat)}
+        onTouchEnd={() => onLongPressEnd(chat)}
+        onTouchCancel={onLongPressCancel}
+        onContextMenu={(e) => e.preventDefault()}
+        style={{
+          userSelect: 'none',
+          WebkitUserSelect: 'none',
+          WebkitTouchCallout: 'none',
+        }}
+      >
+        <div
+          className="chat-avatar"
+          onClick={(e) => {
+            e.stopPropagation();
+            navigate(`/user/${chat.id}`);
+          }}
+        >
+          <Avatar key={chat.avatar} src={chat.avatar} name={chat.name} size={48} />
+          <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
+          {hasUnread && <span className="unread-badge">{chat.unreadCount}</span>}
+          {chat.isDeleted && (
+            <span className="archived-badge" title="Account deleted – archived">
+              📁
             </span>
-          </span>
-        )}
-      </div>
-      <div className="chat-info">
-        <div className="chat-title-row">
-          <span className="chat-name">
-            {chat.name}
-            {chat.isDeleted && <span className="archived-label"> (archived)</span>}
-            {chat.ended && <span className="ended-badge">Ended</span>}
-          </span>
-        </div>
-        <div className="chat-last" style={{ fontWeight: hasUnread ? 700 : 400 }}>
-          {partnerIsTyping ? (
-            <span className="typing-status-text">typing…</span>
-          ) : (
-            chat.lastMessage || 'Start chatting...'
+          )}
+
+          {/* ── SNAPCHAT-STYLE TYPING OVERLAY on the avatar ── */}
+          {partnerIsTyping && (
+            <span className="avatar-typing-overlay" aria-hidden="true">
+              <span className="avatar-typing-ring" />
+              <span className="avatar-typing-dots">
+                <span className="avatar-typing-dot" />
+                <span className="avatar-typing-dot" />
+                <span className="avatar-typing-dot" />
+              </span>
+            </span>
           )}
         </div>
-      </div>
-      <div className="chat-echomoji-middle">
-        <div className={`echomoji-holder ${partnerIsTyping ? 'is-typing' : ''}`}>
-          <ECHOMOJI
-            mood={mood}
-            skin={skin}
-            size={38}
-            interactive={false}
-            animated={!partnerIsTyping}
-          />
+        <div className="chat-info">
+          <div className="chat-title-row">
+            <span className="chat-name">
+              {chat.name}
+              {chat.isDeleted && (
+                <span className="archived-label"> (archived)</span>
+              )}
+              {chat.ended && <span className="ended-badge">Ended</span>}
+            </span>
+          </div>
+          <div className="chat-last" style={{ fontWeight: hasUnread ? 700 : 400 }}>
+            {partnerIsTyping ? (
+              <span className="typing-status-text">typing…</span>
+            ) : (
+              chat.lastMessage || 'Start chatting...'
+            )}
+          </div>
         </div>
+        <div className="chat-echomoji-middle">
+          {/* When typing, the mini ECHOmoji fades out to let the avatar overlay shine */}
+          <div className={`echomoji-holder ${partnerIsTyping ? 'is-typing' : ''}`}>
+            <ECHOMOJI
+              mood={mood}
+              skin={skin}
+              size={38}
+              interactive={false}
+              animated={!partnerIsTyping}
+            />
+          </div>
+        </div>
+        <div className="chat-time">{timeAgo(chat.timestamp)}</div>
       </div>
-      <div className="chat-time">{timeAgo(chat.timestamp)}</div>
-    </div>
-  );
-});
+    );
+  }
+);
 
+// ─── Error Boundary so NotesStrip can't take down the page ─────
+class NotesBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+  componentDidCatch(error, info) {
+    console.error('[NotesStrip Error]', error, info);
+  }
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
+// ─── Main Chats Component ────────────────────────────────────────
 const Chats = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -291,16 +336,20 @@ const Chats = () => {
 
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [results, setResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(() => initialQuery().trim().length > 0);
+  const [isSearching, setIsSearching] = useState(
+    () => initialQuery().trim().length > 0
+  );
   const [onlineUsers, setOnlineUsers] = useState({});
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [loadingChats, setLoadingChats] = useState(true);
 
+  // Chat preview state
   const [previewChat, setPreviewChat] = useState(null);
   const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
   const longPressTimer = useRef(null);
   const longPressTriggered = useRef(false);
 
+  // Typing map keyed by partner UID → boolean
   const [typingPartners, setTypingPartners] = useState({});
 
   const inputRef = useRef(null);
@@ -331,9 +380,9 @@ const Chats = () => {
         if (cached && Array.isArray(cached) && cached.length > 0) {
           let filtered = cached;
           if (isDemoUser) {
-            filtered = cached.filter(c => c.id === SUPPORT_UID);
+            filtered = cached.filter((c) => c.id === SUPPORT_UID);
           } else {
-            filtered = cached.filter(c => {
+            filtered = cached.filter((c) => {
               if (c.id === DEMO_UID && !isSupportUser) return false;
               return true;
             });
@@ -372,7 +421,8 @@ const Chats = () => {
       );
     };
     window.addEventListener('chat-unread-cleared', handleUnreadCleared);
-    return () => window.removeEventListener('chat-unread-cleared', handleUnreadCleared);
+    return () =>
+      window.removeEventListener('chat-unread-cleared', handleUnreadCleared);
   }, []);
 
   useEffect(() => {
@@ -390,7 +440,8 @@ const Chats = () => {
       });
     };
     window.addEventListener('chat-list-update', handleListUpdate);
-    return () => window.removeEventListener('chat-list-update', handleListUpdate);
+    return () =>
+      window.removeEventListener('chat-list-update', handleListUpdate);
   }, []);
 
   useEffect(() => {
@@ -432,9 +483,9 @@ const Chats = () => {
           .sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
 
         if (isDemoUser) {
-          chatList = chatList.filter(c => c.id === SUPPORT_UID);
+          chatList = chatList.filter((c) => c.id === SUPPORT_UID);
         } else {
-          chatList = chatList.filter(c => {
+          chatList = chatList.filter((c) => {
             if (c.id === DEMO_UID && !isSupportUser) return false;
             return true;
           });
@@ -444,7 +495,9 @@ const Chats = () => {
           chatList.map((chat) => processChatItem(chat, user, onlineUsers))
         );
 
-        const nonAIChats = loadedItems.filter(c => c.id !== 'echo_ai_assistant');
+        const nonAIChats = loadedItems.filter(
+          (c) => c.id !== 'echo_ai_assistant'
+        );
         const sortedNonAI = sortNonAIChats(nonAIChats);
 
         setRecentChats(sortedNonAI);
@@ -466,6 +519,7 @@ const Chats = () => {
     };
   }, [user?.uid, onlineUsers, cacheKey, isDemoUser, isSupportUser]);
 
+  /* ─── TYPING LISTENERS for all visible chats ─── */
   useEffect(() => {
     if (!user?.uid || !recentChats.length) return;
 
@@ -473,7 +527,9 @@ const Chats = () => {
 
     Object.keys(typingUnsubsRef.current).forEach((uid) => {
       if (!activeIds.has(uid)) {
-        try { typingUnsubsRef.current[uid](); } catch {}
+        try {
+          typingUnsubsRef.current[uid]();
+        } catch {}
         delete typingUnsubsRef.current[uid];
         delete typingRawRef.current[uid];
       }
@@ -492,7 +548,9 @@ const Chats = () => {
           const data = snap.val();
           typingRawRef.current[chat.id] = data || null;
           const fresh =
-            data && data.isTyping && Date.now() - (data.timestamp || 0) < TYPING_FRESHNESS_MS;
+            data &&
+            data.isTyping &&
+            Date.now() - (data.timestamp || 0) < TYPING_FRESHNESS_MS;
           setTypingPartners((prev) =>
             prev[chat.id] === !!fresh ? prev : { ...prev, [chat.id]: !!fresh }
           );
@@ -504,14 +562,18 @@ const Chats = () => {
     });
   }, [user?.uid, recentChats]);
 
+  /* ─── Periodic freshness sweep so stale typing flags auto-clear ─── */
   useEffect(() => {
-    if (typingCheckIntervalRef.current) clearInterval(typingCheckIntervalRef.current);
+    if (typingCheckIntervalRef.current)
+      clearInterval(typingCheckIntervalRef.current);
     typingCheckIntervalRef.current = setInterval(() => {
       const updates = {};
       let anyChanged = false;
       Object.entries(typingRawRef.current).forEach(([uid, data]) => {
         const fresh =
-          data && data.isTyping && Date.now() - (data.timestamp || 0) < TYPING_FRESHNESS_MS;
+          data &&
+          data.isTyping &&
+          Date.now() - (data.timestamp || 0) < TYPING_FRESHNESS_MS;
         const next = !!fresh;
         if (typingPartners[uid] !== next) {
           updates[uid] = next;
@@ -523,13 +585,19 @@ const Chats = () => {
       }
     }, 2000);
     return () => {
-      if (typingCheckIntervalRef.current) clearInterval(typingCheckIntervalRef.current);
+      if (typingCheckIntervalRef.current)
+        clearInterval(typingCheckIntervalRef.current);
     };
   }, [typingPartners]);
 
+  /* ─── Cleanup all typing listeners on unmount ─── */
   useEffect(() => {
     return () => {
-      Object.values(typingUnsubsRef.current).forEach((u) => { try { u(); } catch {} });
+      Object.values(typingUnsubsRef.current).forEach((u) => {
+        try {
+          u();
+        } catch {}
+      });
       typingUnsubsRef.current = {};
       typingRawRef.current = {};
     };
@@ -565,28 +633,33 @@ const Chats = () => {
           .sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
 
         if (isDemoUser) {
-          chatList = chatList.filter(c => c.id === SUPPORT_UID);
+          chatList = chatList.filter((c) => c.id === SUPPORT_UID);
         } else {
-          chatList = chatList.filter(c => {
+          chatList = chatList.filter((c) => {
             if (c.id === DEMO_UID && !isSupportUser) return false;
             return true;
           });
         }
 
         if (chatList.length < CHAT_CHUNK_SIZE) setHasMore(false);
-        if (chatList.length > 0) setLastChatKey(chatList[chatList.length - 1].id);
+        if (chatList.length > 0)
+          setLastChatKey(chatList[chatList.length - 1].id);
 
         const loadedItems = await Promise.all(
           chatList.map((chat) => processChatItem(chat, user, onlineUsers))
         );
-        const nonAIChats = loadedItems.filter(c => c.id !== 'echo_ai_assistant');
+        const nonAIChats = loadedItems.filter(
+          (c) => c.id !== 'echo_ai_assistant'
+        );
         const sortedNonAI = sortNonAIChats(nonAIChats);
 
         setRecentChats((prev) => {
           const currentList = Array.isArray(prev) ? prev : [];
           if (loadMore) {
             const existingIds = new Set(currentList.map((c) => c.id));
-            const newItems = sortedNonAI.filter((item) => !existingIds.has(item.id));
+            const newItems = sortedNonAI.filter(
+              (item) => !existingIds.has(item.id)
+            );
             const merged = [...currentList, ...newItems];
             return sortNonAIChats(merged);
           }
@@ -600,7 +673,15 @@ const Chats = () => {
         setIsLoadingMore(false);
       }
     },
-    [user, lastChatKey, isLoadingMore, onlineUsers, cacheKey, isDemoUser, isSupportUser]
+    [
+      user,
+      lastChatKey,
+      isLoadingMore,
+      onlineUsers,
+      cacheKey,
+      isDemoUser,
+      isSupportUser,
+    ]
   );
 
   const handleLoadMore = useCallback(async () => {
@@ -703,6 +784,7 @@ const Chats = () => {
     };
   }, [searchQuery, onlineUsers, isSupportUser, recentChats]);
 
+  // ─── Long-press handlers for chat preview ──────────────
   const handleLongPressStart = useCallback((e, chat) => {
     if (chat.id === 'echo_ai_assistant') return;
 
@@ -773,6 +855,7 @@ const Chats = () => {
   const safeResults = Array.isArray(results) ? results : [];
   const isSearchActive = searchQuery.trim().length > 0;
 
+  // ✨ HERO SEARCH LOGIC: Find best match
   const trimmedSearch = searchQuery.trim().toLowerCase();
   let topResult = null;
   let otherResults = safeResults;
@@ -782,12 +865,16 @@ const Chats = () => {
     const getCleanUsername = (p) => (p.username || '').trim().toLowerCase();
 
     let bestMatch = safeResults.find(
-      (p) => getCleanName(p) === trimmedSearch || getCleanUsername(p) === trimmedSearch
+      (p) =>
+        getCleanName(p) === trimmedSearch ||
+        getCleanUsername(p) === trimmedSearch
     );
 
     if (!bestMatch) {
       bestMatch = safeResults.find(
-        (p) => getCleanName(p).includes(trimmedSearch) || getCleanUsername(p).includes(trimmedSearch)
+        (p) =>
+          getCleanName(p).includes(trimmedSearch) ||
+          getCleanUsername(p).includes(trimmedSearch)
       );
     }
 
@@ -796,6 +883,9 @@ const Chats = () => {
       otherResults = safeResults.filter((p) => p.id !== bestMatch.id);
     }
   }
+
+  // UIDs visible to the user (for filtering notes)
+  const visibleUids = safeRecentChats.map((c) => c.id);
 
   return (
     <>
@@ -817,10 +907,19 @@ const Chats = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             {searchQuery && (
-              <button className="search-clear" onClick={handleClearSearch}>✕</button>
+              <button className="search-clear" onClick={handleClearSearch}>
+                ✕
+              </button>
             )}
           </div>
         </div>
+
+        {/* ─── Notes Strip (only when not searching) ─── */}
+        {!isSearchActive && (
+          <NotesBoundary>
+            <NotesStrip visibleUids={visibleUids} />
+          </NotesBoundary>
+        )}
 
         {isSearchActive ? (
           <div className="recent-chats search-results-section">
@@ -832,8 +931,14 @@ const Chats = () => {
                 <div className="hero-bg-glow" />
                 <div className="hero-content">
                   <div className="hero-avatar-wrapper">
-                    <Avatar src={topResult.avatar} name={topResult.name} size={90} />
-                    {!!onlineUsers[topResult.id] && <span className="presence-dot online" />}
+                    <Avatar
+                      src={topResult.avatar}
+                      name={topResult.name}
+                      size={90}
+                    />
+                    {!!onlineUsers[topResult.id] && (
+                      <span className="presence-dot online" />
+                    )}
                   </div>
                   <div className="hero-info">
                     <h2 className="hero-name">{topResult.name}</h2>
@@ -842,14 +947,24 @@ const Chats = () => {
                         {onlineUsers[topResult.id] ? '🟢 Online' : '⚫ Offline'}
                       </span>
                       {topResult.location && (
-                        <span className="hero-badge">📍 {topResult.location}</span>
+                        <span className="hero-badge">
+                          📍 {topResult.location}
+                        </span>
                       )}
                     </div>
                     <p className="hero-bio">
-                      {topResult.bio || topResult.status || 'Available on ECHO'}
+                      {topResult.bio ||
+                        topResult.status ||
+                        'Available on ECHO'}
                     </p>
                   </div>
-                  <button className="hero-action-btn" onClick={(e) => { e.stopPropagation(); startChat(topResult); }}>
+                  <button
+                    className="hero-action-btn"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      startChat(topResult);
+                    }}
+                  >
                     Join the cheer 🎉
                   </button>
                 </div>
@@ -857,7 +972,11 @@ const Chats = () => {
             )}
 
             <div className="section-header">
-              <span>{topResult ? 'Other Results' : 'Search Results'} {!isSearching && `(${topResult ? otherResults.length : safeResults.length})`}</span>
+              <span>
+                {topResult ? 'Other Results' : 'Search Results'}{' '}
+                {!isSearching &&
+                  `(${topResult ? otherResults.length : safeResults.length})`}
+              </span>
             </div>
             {isSearching ? (
               <div className="search-skeleton-wrapper">
@@ -875,28 +994,47 @@ const Chats = () => {
                     className="chat-item regular-chat-item"
                     onClick={() => startChat(person)}
                   >
-                    <div className="chat-avatar" onClick={(e) => {
-                      e.stopPropagation();
-                      navigate(`/user/${person.id}`);
-                    }}>
-                      <Avatar src={person.avatar} name={person.name} size={48} />
-                      <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
+                    <div
+                      className="chat-avatar"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/user/${person.id}`);
+                      }}
+                    >
+                      <Avatar
+                        src={person.avatar}
+                        name={person.name}
+                        size={48}
+                      />
+                      <span
+                        className={`presence-dot ${
+                          isOnline ? 'online' : 'offline'
+                        }`}
+                      />
                     </div>
                     <div className="chat-info">
                       <div className="chat-title-row">
                         <span className="chat-name">{person.name}</span>
                         {person.location && (
-                          <span className="chat-location-badge">📍 {person.location}</span>
+                          <span className="chat-location-badge">
+                            📍 {person.location}
+                          </span>
                         )}
                       </div>
                       <div className="chat-last">
-                        {person.bio || person.status || 'Available on ECHO'}
+                        {person.bio ||
+                          person.status ||
+                          'Available on ECHO'}
                       </div>
                     </div>
                     <div className="chat-echomoji-middle">
                       <ECHOMOJI
                         mood={person.mood || 'happy'}
-                        skin={person.activeSkin ? getSkinById(person.activeSkin) : null}
+                        skin={
+                          person.activeSkin
+                            ? getSkinById(person.activeSkin)
+                            : null
+                        }
                         size={38}
                         interactive={false}
                       />
@@ -910,14 +1048,18 @@ const Chats = () => {
                   <div className="demo-search-icon">
                     <i className="fas fa-user-plus" />
                   </div>
-                  <p className="demo-search-title">Create an account to connect with others</p>
+                  <p className="demo-search-title">
+                    Create an account to connect with others
+                  </p>
                   <span className="demo-search-subtitle">
                     Sign up to chat with people around the world
                   </span>
                 </div>
               ) : (
                 <div className="no-chats-premium">
-                  <div className="no-chats-icon-wrapper"><i className="fas fa-user-slash" /></div>
+                  <div className="no-chats-icon-wrapper">
+                    <i className="fas fa-user-slash" />
+                  </div>
                   <p className="no-chats-title">No matching users found</p>
                   <span className="no-chats-subtitle">
                     Try searching for a different name, username, or location
@@ -928,16 +1070,21 @@ const Chats = () => {
           </div>
         ) : (
           <div className="recent-chats">
-            {/* ← CHANGE 2: Notes strip renders here */}
-            <NotesStrip visibleUids={safeRecentChats.map((c) => c.id)} />
-
             <div className="section-header">
               <span>Recent Conversations</span>
             </div>
 
-            <div className="chat-item ai-item floating-ai-card" onClick={() => startChat(ECHO_AI_USER)}>
+            <div
+              className="chat-item ai-item floating-ai-card"
+              onClick={() => startChat(ECHO_AI_USER)}
+            >
               <div className="chat-avatar">
-                <img src={ECHO_AI_USER.avatar} alt="ECHO AI" className="user-profile-img" style={{ objectFit: 'cover' }} />
+                <img
+                  src={ECHO_AI_USER.avatar}
+                  alt="ECHO AI"
+                  className="user-profile-img"
+                  style={{ objectFit: 'cover' }}
+                />
                 <span className="presence-dot online" />
               </div>
               <div className="chat-info">
@@ -954,9 +1101,13 @@ const Chats = () => {
               <SkeletonChatItem />
             ) : safeRecentChats.length === 0 ? (
               <div className="no-chats-premium">
-                <div className="no-chats-icon-wrapper"><i className="fas fa-comments" /></div>
+                <div className="no-chats-icon-wrapper">
+                  <i className="fas fa-comments" />
+                </div>
                 <p className="no-chats-title">No conversations yet</p>
-                <span className="no-chats-subtitle">Search for people above to start a new chat</span>
+                <span className="no-chats-subtitle">
+                  Search for people above to start a new chat
+                </span>
               </div>
             ) : (
               safeRecentChats.map((chat) => (
