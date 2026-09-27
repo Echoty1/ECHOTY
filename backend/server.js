@@ -139,7 +139,6 @@ chatsRef.on('child_added', (chatSnapshot) => {
 //  🧠 ECHO AI – CHAT ENDPOINT
 // ==========================================================================
 
-// ─── Helpers ──────────────────────────────────────────────────────
 async function getUserMemories(userId) {
   const snap = await db.ref(`userMemories/${userId}`).once('value');
   return snap.val() || {};
@@ -183,7 +182,6 @@ async function generateTitle(groq, prompt) {
   }
 }
 
-// ─── Search ────────────────────────────────────────────────────────
 async function searchDuckDuckGo(query) {
   try {
     const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(query)}&format=json&no_html=1&skip_disambig=1`;
@@ -214,7 +212,6 @@ async function searchDuckDuckGo(query) {
   }
 }
 
-// ─── System Prompt ──────────────────────────────────────────────
 const ECHO_SYSTEM_PROMPT = `
 You are **ECHO AI**, the friendly and knowledgeable assistant for the ECHO app.  
 Always address the user by their name (if known). Keep responses concise, warm, and conversational.  
@@ -232,7 +229,6 @@ If you don't know something, say so and suggest where to find it.
 You may use Markdown tables to present structured data clearly. Use pipes and dashes for tables (e.g., | Header1 | Header2 |\\n|--------|--------|\\n| Cell1  | Cell2  |). You can also create simple ASCII bar charts if appropriate.
 `;
 
-// ─── Call Groq ────────────────────────────────────────────────────
 async function callGroq(groq, messages) {
   try {
     const response = await groq.chat.completions.create({
@@ -254,7 +250,6 @@ async function callGroq(groq, messages) {
   }
 }
 
-// ─── Call Gemini ──────────────────────────────────────────────────
 async function callGemini(messages) {
   const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
   if (!GEMINI_API_KEY) throw new Error('Gemini API key missing');
@@ -282,7 +277,6 @@ async function callGemini(messages) {
   return { response: { choices: [{ message: { content: text } }] }, model: 'Gemini' };
 }
 
-// ─── Save AI response to regular chats ──────────────────────────
 async function saveAIResponseToChats(userId, reply) {
   const chatId = [userId, ECHO_AI_ID].sort().join('_');
   const msgRef = db.ref(`chats/${chatId}/messages`).push();
@@ -306,7 +300,6 @@ async function saveAIResponseToChats(userId, reply) {
   });
 }
 
-// ─── Main Chat Endpoint ─────────────────────────────────────────
 app.post('/api/chat', requireUser, async (req, res) => {
   const userId = req.user.uid;
   const { message, conversationId } = req.body;
@@ -370,7 +363,6 @@ app.post('/api/chat', requireUser, async (req, res) => {
     const rawReply = result.response.choices[0]?.message?.content || 'I could not generate a reply.';
     let cleanReply = stripThinkTags(rawReply);
 
-    // Process memory & search tokens
     const convMemoryRegex = /\[MEMORY:\s*([^\s=]+)\s*=\s*([^\]]+)\]/g;
     const userMemoryRegex = /\[USER_MEMORY:\s*([^\s=]+)\s*=\s*([^\]]+)\]/g;
     const searchRegex = /\[SEARCH:\s*([^\]]+)\]/g;
@@ -419,7 +411,7 @@ app.post('/api/chat', requireUser, async (req, res) => {
 });
 
 // ==========================================================================
-//  🎵 MUSIC LINK LOOKUP — Spotify / Apple Music oEmbed proxy
+//  🎵 MUSIC LINK LOOKUP
 // ==========================================================================
 app.post('/api/oembed', async (req, res) => {
   try {
@@ -481,13 +473,55 @@ app.post('/api/oembed', async (req, res) => {
 });
 
 // ==========================================================================
-//  🎶 SONG CATALOG — admin seed + public search
+//  🎶 SONG CATALOG — seed + search, with iTunes preview lookup
 // ==========================================================================
 
 /**
+ * Look up a 30-second preview URL + bigger artwork from iTunes Search API.
+ * Returns { previewUrl, artwork } or null. Free, no auth.
+ */
+async function lookupItunesPreview(title, artist) {
+  try {
+    const term = `${title} ${artist}`.trim();
+    if (!term) return null;
+    const url = `https://itunes.apple.com/search?term=${encodeURIComponent(term)}&entity=song&limit=5`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'Echo/1.0 (+https://echoty.xyz)' },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data.results) || data.results.length === 0) return null;
+
+    // Prefer an exact-ish title match to reduce mismatch risk
+    const norm = (s) => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '');
+    const wantTitle = norm(title);
+    const wantArtist = norm(artist);
+
+    let best = data.results.find(
+      (r) => norm(r.trackName) === wantTitle && norm(r.artistName).includes(wantArtist)
+    );
+    if (!best) {
+      best = data.results.find((r) => norm(r.trackName) === wantTitle);
+    }
+    if (!best) best = data.results[0];
+
+    return {
+      previewUrl: best.previewUrl || '',
+      artwork: (best.artworkUrl100 || best.artworkUrl60 || '').replace('100x100', '300x300'),
+      itunesTrackId: best.trackId || null,
+      itunesTitle: best.trackName || '',
+      itunesArtist: best.artistName || '',
+    };
+  } catch (err) {
+    console.warn('[itunes] failed for', title, artist, err.message);
+    return null;
+  }
+}
+
+/**
  * POST /api/admin/seed-songs
- * Body: { urls: ["https://open.spotify.com/track/...", ...] }
- * Admin-only. For each URL, fetches oEmbed metadata and writes to songCatalog/{trackId}.
+ * Body: { urls: [...] }
+ * Fetches Spotify oEmbed + iTunes preview for each URL, writes to songCatalog/{trackId}.
  */
 app.post('/api/admin/seed-songs', async (req, res) => {
   try {
@@ -548,18 +582,38 @@ app.post('/api/admin/seed-songs', async (req, res) => {
           artist = parts[1] || artist;
         }
 
-        await db.ref(`songCatalog/${trackId}`).set({
+        // iTunes lookup for previewUrl + bigger artwork
+        const itunes = await lookupItunesPreview(title, artist);
+
+        const payload = {
           trackId,
           provider,
           title: String(title).slice(0, 100),
           artist: String(artist || '').slice(0, 100),
-          artwork: data.thumbnail_url || '',
+          artwork: String(itunes?.artwork || data.thumbnail_url || '').slice(0, 500),
           sourceUrl: url.split('?')[0],
           addedAt: Date.now(),
-        });
+        };
+        if (itunes?.previewUrl) {
+          payload.previewUrl = String(itunes.previewUrl).slice(0, 500);
+        }
+        if (itunes?.itunesTrackId) {
+          payload.itunesTrackId = itunes.itunesTrackId;
+        }
 
-        results.push({ url, ok: true, trackId, title, artist });
-        console.log(`🎵 Catalog + ${trackId} — ${title} by ${artist}`);
+        await db.ref(`songCatalog/${trackId}`).set(payload);
+
+        results.push({
+          url,
+          ok: true,
+          trackId,
+          title,
+          artist,
+          hasPreview: !!payload.previewUrl,
+        });
+        console.log(
+          `🎵 Catalog + ${trackId} — ${title} by ${artist}${payload.previewUrl ? ' ✅ preview' : ' ⚠️ no preview'}`
+        );
       } catch (err) {
         results.push({ url, ok: false, reason: err.message });
         console.warn('[seed-songs] failed for', url, err.message);
@@ -575,7 +629,7 @@ app.post('/api/admin/seed-songs', async (req, res) => {
 
 /**
  * GET /api/song-search?q=rema
- * Public search across the catalog. Returns { songs: [...] }
+ * Public. Searches over the pre-seeded catalog. Does NOT hit external APIs.
  */
 app.get('/api/song-search', async (req, res) => {
   try {
@@ -594,6 +648,81 @@ app.get('/api/song-search', async (req, res) => {
   }
 });
 
+/**
+ * POST /api/song-lookup
+ * Body: { url }
+ * Public. Given a Spotify/Apple URL, returns the song with preview if available.
+ * Checks the catalog first; falls back to live oEmbed + iTunes lookup.
+ */
+app.post('/api/song-lookup', async (req, res) => {
+  try {
+    const { url } = req.body || {};
+    if (!url || typeof url !== 'string') {
+      return res.status(400).json({ error: 'Missing url' });
+    }
+
+    const idMatch = url.match(/\/(track|album|playlist|episode)\/([A-Za-z0-9]{22})/);
+    const trackId = idMatch ? idMatch[2] : null;
+
+    // 1) Cached in catalog?
+    if (trackId) {
+      const snap = await db.ref(`songCatalog/${trackId}`).once('value');
+      if (snap.exists()) {
+        const cached = snap.val();
+        return res.json({ song: cached, fromCache: true });
+      }
+    }
+
+    // 2) Live lookup: oEmbed + iTunes
+    let provider = null;
+    let oembedEndpoint = null;
+    if (/open\.spotify\.com\//.test(url)) {
+      provider = 'spotify';
+      oembedEndpoint = `https://open.spotify.com/oembed?url=${encodeURIComponent(url)}`;
+    } else if (/music\.apple\.com\//.test(url)) {
+      provider = 'apple';
+      oembedEndpoint = `https://music.apple.com/oembed?url=${encodeURIComponent(url.split('?')[0])}&format=json`;
+    } else {
+      return res.status(400).json({ error: 'Unsupported music link' });
+    }
+
+    const upstream = await fetch(oembedEndpoint, {
+      headers: { 'User-Agent': 'Echo/1.0', 'Accept': 'application/json' },
+    });
+    if (!upstream.ok) {
+      return res.status(upstream.status).json({ error: 'Could not read that link' });
+    }
+    const data = await upstream.json();
+    let title = data.title || '';
+    let artist = data.author_name || data.provider_name || '';
+    if (provider === 'spotify' && title.includes(' · ')) {
+      const parts = title.split(' · ');
+      title = parts[0] || title;
+      artist = parts[1] || artist;
+    }
+
+    const itunes = await lookupItunesPreview(title, artist);
+
+    const song = {
+      trackId: trackId || url,
+      provider,
+      title: String(title).slice(0, 100),
+      artist: String(artist || '').slice(0, 100),
+      artwork: String(itunes?.artwork || data.thumbnail_url || '').slice(0, 500),
+      sourceUrl: url.split('?')[0],
+      addedAt: Date.now(),
+    };
+    if (itunes?.previewUrl) {
+      song.previewUrl = String(itunes.previewUrl).slice(0, 500);
+    }
+
+    return res.json({ song, fromCache: false });
+  } catch (err) {
+    console.error('[song-lookup] failed:', err);
+    return res.status(500).json({ error: 'Lookup failed' });
+  }
+});
+
 // ─── Admin user deletion ──────────────────────────────────────────
 app.post('/api/admin/delete-user', async (req, res) => {
   try {
@@ -602,7 +731,7 @@ app.post('/api/admin/delete-user', async (req, res) => {
     const token = req.headers.authorization?.split('Bearer ')[1];
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
     const decoded = await admin.auth().verifyIdToken(token);
-    if (decoded.uid !== '5cSp1OLz30d8dghM3wvXUCdMl2QK2') {
+    if (decoded.uid !== '5cSplOLz30d8dgM3wvXUcDmL2QK2') {
       return res.status(403).json({ error: 'Forbidden' });
     }
     try { await admin.auth().deleteUser(targetUid); } catch (e) {
@@ -652,11 +781,10 @@ app.post('/api/admin/delete-user', async (req, res) => {
 });
 
 // ==========================================================================
-//  💰 SELAR PAYMENTS (pending orders + webhook + IMAP email poller)
+//  💰 SELAR PAYMENTS
 // ==========================================================================
 
 const PRODUCT_COINS = {
-//  '014871867i': 10,
   '105w82207h': 500,
   '72a169f519': 1000,
   '1xc588p2uc': 1500,
@@ -667,7 +795,6 @@ const PRODUCT_COINS = {
   '3363k13i67': 5000,
 };
 
-// ─── Subscription product IDs ──────────────────────────────────
 const SUBSCRIPTION_PRODUCTS = {
   '12k858853g': 'starter',
   '8271t6z877': 'pro',
@@ -680,7 +807,6 @@ const SUBSCRIPTION_PLANS = {
   enterprise: { name: 'Enterprise', price: 50 },
 };
 
-// ─── Subscription fulfillment ──────────────────────────────────
 async function fulfillBrandSubscription(reference, source = 'webhook') {
   if (!reference || typeof reference !== 'string') {
     return { ok: false, message: 'Invalid reference' };
@@ -930,18 +1056,15 @@ app.post('/api/admin/complete-payment', async (req, res) => {
 });
 
 // ==========================================================================
-//  📬 IMAP EMAIL POLLER – auto-credit from Selar sale emails
+//  📬 IMAP EMAIL POLLER
 // ==========================================================================
 
 function extractSaleDetails(text) {
   if (!text || typeof text !== 'string') return null;
-
   const productMatch = text.match(/[?&]products=([A-Za-z0-9]+)/);
   const productId = productMatch ? productMatch[1] : null;
-
   const emailMatch = text.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
   const buyerEmail = emailMatch ? emailMatch[0] : null;
-
   if (productId && buyerEmail) {
     return { productId, buyerEmail };
   }
@@ -1145,7 +1268,6 @@ app.post('/api/admin/poll-selar-emails', async (req, res) => {
 // ==========================================================================
 //  🚀 START SERVER
 // ==========================================================================
-
 
 const TIDE_PRIVATE_MS = 24 * 60 * 60 * 1000;
 async function sweepExpiredEchoTides() {
