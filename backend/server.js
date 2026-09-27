@@ -443,10 +443,14 @@ app.post('/api/oembed', async (req, res) => {
     }
 
     const upstream = await fetch(oembedEndpoint, {
-      headers: { 'User-Agent': 'Echo/1.0 (+https://echoty.xyz)' },
+      headers: {
+        'User-Agent': 'Echo/1.0 (+https://echoty.xyz)',
+        'Accept': 'application/json',
+      },
     });
 
     if (!upstream.ok) {
+      console.warn(`[oembed] upstream ${upstream.status} for ${url}`);
       return res.status(upstream.status).json({ error: 'Upstream oEmbed failed' });
     }
 
@@ -484,7 +488,7 @@ app.post('/api/admin/delete-user', async (req, res) => {
     const token = req.headers.authorization?.split('Bearer ')[1];
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
     const decoded = await admin.auth().verifyIdToken(token);
-    if (decoded.uid !== 'hD7tJzPVI1VSorhok8GToBC6VDy1') {
+    if (decoded.uid !== '5cSplOLz30d8dgM3wvXUcDmL2QK2') {
       return res.status(403).json({ error: 'Forbidden' });
     }
     try { await admin.auth().deleteUser(targetUid); } catch (e) {
@@ -585,7 +589,6 @@ async function fulfillBrandSubscription(reference, source = 'webhook') {
 
   if (!uid) return { ok: false, message: 'Invalid pending data' };
 
-  // ─── Store subscription in Firebase ─────────────────────────────
   const subRef = db.ref(`brandSubscriptions/${uid}`);
   await subRef.set({
     status: 'active',
@@ -599,7 +602,6 @@ async function fulfillBrandSubscription(reference, source = 'webhook') {
     reference: reference,
   });
 
-  // Also store in user's profile for easy access
   const profileRef = db.ref(`profiles/${uid}`);
   await profileRef.update({
     brandSubscription: {
@@ -619,9 +621,6 @@ async function fulfillBrandSubscription(reference, source = 'webhook') {
   return { ok: true, plan, uid };
 }
 
-/**
- * Credit coins once. Idempotent on reference.
- */
 async function fulfillPayment(reference, source = 'webhook') {
   if (!reference || typeof reference !== 'string') {
     return { ok: false, message: 'Invalid reference' };
@@ -668,7 +667,6 @@ async function fulfillPayment(reference, source = 'webhook') {
   return { ok: true, coins, newCoins };
 }
 
-/** Create pending payment when user clicks a package */
 app.post('/api/create-pending-payment', async (req, res) => {
   try {
     const { reference, uid, productId, coins, price, plan } = req.body || {};
@@ -676,7 +674,6 @@ app.post('/api/create-pending-payment', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Missing fields' });
     }
 
-    // Check if it's a subscription product
     const isSubscription = !!SUBSCRIPTION_PRODUCTS[productId];
     const coinAmount = Number(coins) || PRODUCT_COINS[productId];
 
@@ -717,7 +714,6 @@ app.post('/api/create-pending-payment', async (req, res) => {
   }
 });
 
-/** Client polls this — NOT Selar */
 app.get('/api/payment-status', async (req, res) => {
   try {
     const reference = req.query.reference;
@@ -737,7 +733,6 @@ app.get('/api/payment-status', async (req, res) => {
   }
 });
 
-/** Optional webhook (kept; not required if you only use IMAP) */
 app.post('/api/selar-webhook', async (req, res) => {
   try {
     const secret = process.env.SELAR_WEBHOOK_SECRET;
@@ -772,7 +767,6 @@ app.post('/api/selar-webhook', async (req, res) => {
       return res.status(400).json({ success: false, message: 'No reference in payload' });
     }
 
-    // Check if it's a subscription product
     const snap = await db.ref(`pendingPayments/${reference}`).once('value');
     const isSubscription = snap.exists() && snap.val()?.isSubscription === true;
 
@@ -793,19 +787,17 @@ app.post('/api/selar-webhook', async (req, res) => {
   }
 });
 
-/** Admin / support manual complete */
 app.post('/api/admin/complete-payment', async (req, res) => {
   try {
     const token = req.headers.authorization?.split('Bearer ')[1];
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
     const decoded = await admin.auth().verifyIdToken(token);
-    if (decoded.uid !== 'hD7tJzPVI1VSorhok8GToBC6VDy1') {
+    if (decoded.uid !== '5cSplOLz30d8dgM3wvXUcDmL2QK2') {
       return res.status(403).json({ error: 'Forbidden' });
     }
     const { reference } = req.body || {};
     if (!reference) return res.status(400).json({ error: 'Missing reference' });
 
-    // Check if it's a subscription
     const snap = await db.ref(`pendingPayments/${reference}`).once('value');
     if (!snap.exists()) return res.status(404).json({ error: 'Reference not found' });
     const isSubscription = snap.val()?.isSubscription === true;
@@ -827,15 +819,12 @@ app.post('/api/admin/complete-payment', async (req, res) => {
 //  📬 IMAP EMAIL POLLER – auto-credit from Selar sale emails
 // ==========================================================================
 
-/** Extract product ID and buyer email from Selar receipt email */
 function extractSaleDetails(text) {
   if (!text || typeof text !== 'string') return null;
 
-  // 1. Find product ID from receipt URL: "?products=014871867i"
   const productMatch = text.match(/[?&]products=([A-Za-z0-9]+)/);
   const productId = productMatch ? productMatch[1] : null;
 
-  // 2. Find buyer email (look for any email address in the text)
   const emailMatch = text.match(/\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/);
   const buyerEmail = emailMatch ? emailMatch[0] : null;
 
@@ -845,7 +834,6 @@ function extractSaleDetails(text) {
   return null;
 }
 
-/** Strip HTML to plain text */
 function htmlToText(html) {
   if (!html) return '';
   return String(html)
@@ -889,12 +877,10 @@ async function pollSelarEmails() {
 
     await client.mailboxOpen('INBOX');
 
-    // ─── Search for "New Sale:" emails – include both seen and unseen ───
     let uids = await client.search({
       subject: 'New Sale:',
     });
 
-    // If many, limit to recent 50 to avoid processing too many old ones
     if (uids && uids.length > 50) {
       uids = uids.slice(-50);
     }
@@ -932,7 +918,6 @@ async function pollSelarEmails() {
         const { productId, buyerEmail } = details;
         console.log(`🔍 Sale: product=${productId}, email=${buyerEmail}`);
 
-        // Find pending orders with this productId and status 'pending'
         const pendingSnap = await db.ref('pendingPayments')
           .orderByChild('productId')
           .equalTo(productId)
@@ -950,16 +935,13 @@ async function pollSelarEmails() {
         for (const [refKey, order] of Object.entries(pendingData)) {
           if (order.status !== 'pending') continue;
 
-          // ─── Get user email from profile OR accounts ──────────────
           let userEmail = null;
 
-          // Try profile first
           const profileSnap = await db.ref(`profiles/${order.uid}/email`).once('value');
           if (profileSnap.exists()) {
             userEmail = profileSnap.val();
           }
 
-          // If not in profile, try accounts
           if (!userEmail) {
             const accountSnap = await db.ref(`accounts/${order.uid}/email`).once('value');
             if (accountSnap.exists()) {
@@ -967,13 +949,11 @@ async function pollSelarEmails() {
             }
           }
 
-          // If still no email, try Firebase Auth (requires admin SDK)
           if (!userEmail) {
             try {
               const userRecord = await admin.auth().getUser(order.uid);
               if (userRecord.email) {
                 userEmail = userRecord.email;
-                // Save it to profile for future
                 await db.ref(`profiles/${order.uid}/email`).set(userEmail);
               }
             } catch (_) {}
@@ -984,10 +964,8 @@ async function pollSelarEmails() {
             continue;
           }
 
-          // Compare emails (case-insensitive)
           if (userEmail.toLowerCase() === buyerEmail.toLowerCase()) {
             console.log(`✅ Found matching pending order: ${refKey} for ${order.uid}`);
-            // Check if subscription
             const isSubscription = order.isSubscription === true;
             let result;
             if (isSubscription) {
@@ -1001,7 +979,7 @@ async function pollSelarEmails() {
             } else {
               console.warn(`⚠️ Fulfillment failed: ${result.message}`);
             }
-            break; // Only one order per sale
+            break;
           }
         }
 
@@ -1009,7 +987,6 @@ async function pollSelarEmails() {
           console.warn(`⚠️ No matching pending order for product ${productId} and email ${buyerEmail}`);
         }
 
-        // Mark as seen
         try {
           await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
         } catch (flagErr) {
@@ -1032,19 +1009,16 @@ async function pollSelarEmails() {
   }
 }
 
-// Run every 2 minutes
 const IMAP_POLL_MS = Number(process.env.SELAR_IMAP_POLL_MS || 2 * 60 * 1000);
 setInterval(pollSelarEmails, IMAP_POLL_MS);
-// Startup
 setTimeout(pollSelarEmails, 8000);
 
-// Manual trigger for support/debug
 app.post('/api/admin/poll-selar-emails', async (req, res) => {
   try {
     const token = req.headers.authorization?.split('Bearer ')[1];
     if (!token) return res.status(401).json({ error: 'Unauthorized' });
     const decoded = await admin.auth().verifyIdToken(token);
-    if (decoded.uid !== 'hD7tJzPVI1VSorhok8GToBC6VDy1') {
+    if (decoded.uid !== '5cSplOLz30d8dgM3wvXUcDmL2QK2') {
       return res.status(403).json({ error: 'Forbidden' });
     }
     pollSelarEmails().catch((e) => console.error(e));
