@@ -153,6 +153,9 @@ const ChatView = () => {
   const [activeMessageMenuId, setActiveMessageMenuId] = useState(null);
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
 
+  // ─── NOTE REPLY STATE ─────────────────────────────────────
+  const [replyToNote, setReplyToNote] = useState(null);
+
   const [wallpaperId, setWallpaperId] = useState('default');
   const [customWallpaper, setCustomWallpaper] = useState(null);
   const [showWallpaperPicker, setShowWallpaperPicker] = useState(false);
@@ -237,20 +240,51 @@ const ChatView = () => {
     return () => clearInterval(id);
   }, []);
 
+  // ─── NOTE REPLY: read navigation state & prefill ─────────────
   useEffect(() => {
-    const prefilled = location?.state?.prefilledNote;
-    if (prefilled && typeof prefilled === 'string') {
-      setNewMessage(prefilled);
+    const state = location.state;
+    if (!state) return;
+
+    // Handle quoted note reply
+    if (state.replyToNote && state.prefilledNote) {
+      setReplyToNote({
+        text: state.prefilledNote,
+        authorUid: state.noteAuthorUid,
+        authorName: state.noteAuthorName || 'User',
+        createdAt: state.noteCreatedAt || Date.now(),
+      });
+      // Also prefill the input so the user can type their reply
+      if (typeof state.prefilledNote === 'string') {
+        setNewMessage(state.prefilledNote);
+      }
+      // Clear nav state so a refresh doesn't re-trigger
+      navigate(location.pathname, { replace: true, state: {} });
+      // Focus input
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
           try {
-            inputRef.current.setSelectionRange(prefilled.length, prefilled.length);
+            const len = state.prefilledNote.length;
+            inputRef.current.setSelectionRange(len, len);
+          } catch (_) {}
+        }
+      }, 120);
+      return;
+    }
+
+    // Legacy: just a prefilled note, no quote
+    if (state.prefilledNote && typeof state.prefilledNote === 'string') {
+      setNewMessage(state.prefilledNote);
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
+          try {
+            inputRef.current.setSelectionRange(state.prefilledNote.length, state.prefilledNote.length);
           } catch (_) {}
         }
       }, 120);
     }
-  }, [location?.state?.prefilledNote]);
+  }, [location.state, location.pathname, navigate]);
 
   useEffect(() => {
     if (!user?.uid || !userId) return;
@@ -470,6 +504,7 @@ const ChatView = () => {
     setTimeout(() => btn.classList.remove('rippling'), 650);
   };
 
+  // ─── Send text (now supports note reply) ─────────────────────
   const handleSendText = async (e) => {
     e?.preventDefault?.();
     const textToSend = (typeof e === 'string' ? e : newMessage).trim();
@@ -480,10 +515,14 @@ const ChatView = () => {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     clearMyTyping();
 
+    // Capture current note reply + message reply
+    const currentNoteReply = replyToNote;
     let currentReply = replyTo;
     const replyToSave = currentReply;
+
     setNewMessage('');
     setReplyTo(null);
+    setReplyToNote(null);
 
     if (ended) {
       try { await remove(ref(db, `chats/${[user.uid, userId].sort().join('_')}/ended`)); setEnded(false); } catch (_) {}
@@ -493,6 +532,7 @@ const ChatView = () => {
     const tempId = `temp_${Date.now()}`;
     const optimisticMsg = { id: tempId, senderId: user.uid, receiverId: userId, type: 'text', text: textToSend, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(), pending: true };
     if (replyToSave) optimisticMsg.replyTo = { messageId: replyToSave.messageId, senderName: replyToSave.senderName, messageType: replyToSave.messageType, textSnippet: replyToSave.textSnippet };
+    if (currentNoteReply) optimisticMsg.replyToNote = { ...currentNoteReply };
     setMessages((prev) => sortMessages([...prev, optimisticMsg]));
     prevMsgCountRef.current += 1;
     if (isNearBottomRef.current) requestAnimationFrame(() => scrollToBottom(true));
@@ -501,6 +541,7 @@ const ChatView = () => {
     const newMsgRef = push(messagesRef);
     const msgData = { senderId: user.uid, receiverId: userId, type: 'text', text: textToSend, timestamp: Date.now(), clientTs: Date.now(), isRead: false, expiresAt: privateExpiresAt() };
     if (replyToSave) msgData.replyTo = { messageId: replyToSave.messageId, senderName: replyToSave.senderName, messageType: replyToSave.messageType, textSnippet: replyToSave.textSnippet };
+    if (currentNoteReply) msgData.replyToNote = { ...currentNoteReply };
 
     try { await set(newMsgRef, msgData); } catch (err) { console.error('Send failed:', err); setMessages((prev) => prev.filter((m) => m.id !== tempId)); return; }
 
@@ -544,6 +585,7 @@ const ChatView = () => {
     let file = selectedFile;
     let caption = captionText.trim();
     let reply = replyTo;
+    let noteReply = replyToNote;
 
     if (retryMessageId) {
       const failedMsg = messages.find(m => m.id === retryMessageId);
@@ -566,6 +608,7 @@ const ChatView = () => {
 
     const optimisticMsg = { id: tempId, senderId: user.uid, receiverId: userId, type: 'media', mediaType, mediaUrl: blobUrl, realUrl: null, caption, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(), isUploading: true, uploadProgress: 0, isMediaReady: true, uploadFailed: false, _file: file };
     if (currentReply) { optimisticMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet }; setReplyTo(null); }
+    if (noteReply) { optimisticMsg.replyToNote = { ...noteReply }; setReplyToNote(null); }
 
     setMessages((prev) => sortMessages([...prev, optimisticMsg]));
     setPreviewUrl(null);
@@ -578,6 +621,7 @@ const ChatView = () => {
       const newMsgRef = push(messagesRef);
       const realMsg = { senderId: user.uid, receiverId: userId, type: 'media', mediaType, mediaUrl: downloadURL, caption, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt() };
       if (currentReply) realMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet };
+      if (noteReply) realMsg.replyToNote = { ...noteReply };
       await set(newMsgRef, realMsg);
       setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
       URL.revokeObjectURL(blobUrl);
@@ -615,8 +659,10 @@ const ChatView = () => {
     const tempId = `temp_${Date.now()}`;
     const blobUrl = URL.createObjectURL(audioBlob);
     const currentReply = replyTo;
+    const noteReply = replyToNote;
     const optimisticMsg = { id: tempId, senderId: user.uid, receiverId: userId, type: 'media', mediaType: 'audio', mediaUrl: blobUrl, duration, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(), isUploading: true, uploadProgress: 0, isMediaReady: false, uploadFailed: false, _file: audioBlob };
     if (currentReply) { optimisticMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet }; setReplyTo(null); }
+    if (noteReply) { optimisticMsg.replyToNote = { ...noteReply }; setReplyToNote(null); }
     setMessages((prev) => sortMessages([...prev, optimisticMsg]));
 
     try {
@@ -633,6 +679,7 @@ const ChatView = () => {
       const newMsgRef = push(messagesRef);
       const realMsg = { senderId: user.uid, receiverId: userId, type: 'media', mediaType: 'audio', mediaUrl: downloadURL, duration, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt() };
       if (currentReply) realMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet };
+      if (noteReply) realMsg.replyToNote = { ...noteReply };
       await set(newMsgRef, realMsg);
       setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
       URL.revokeObjectURL(blobUrl);
@@ -699,7 +746,6 @@ const ChatView = () => {
 
     const msgElement = messageRefs.current[messageId];
     if (!msgElement) {
-      // Fallback: show centered if the row ref isn't attached for any reason
       setReactionPickerAnchor({ top: window.innerHeight / 2, left: window.innerWidth / 2, flipped: false });
       setShowReactionPicker(true);
       setReactingMessageId(messageId);
@@ -994,12 +1040,23 @@ const ChatView = () => {
     return <div className={`message-inline-actions ${isOwn ? 'own' : 'partner'}`}><button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleReact(msg.id); }} title="React"><EmojiIcon /></button><button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleReply(msg); }} title="Reply"><ReplyIcon /></button>{allowEdit && <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleEditMessage(msg); }} title="Edit"><EditIcon /></button>}<button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleCopy(msg); }} title="Copy"><CopyIcon /></button><button className="message-action-btn" onClick={(e) => { e.stopPropagation(); saveMessageToArchive(msg); }} title="Save"><SaveIcon /></button>{allowDelete && <button className="message-action-btn danger" onClick={(e) => { e.stopPropagation(); handleDeleteMessage(msg.id); }} title="Delete"><DeleteIcon /></button>}</div>;
   };
 
+  // ─── Render note reply card (embedded in bubble) ──────────────
+  const renderNoteReplyCard = (note) => {
+    if (!note) return null;
+    return (
+      <div className="note-reply-card">
+        <p className="note-reply-text">{note.text}</p>
+      </div>
+    );
+  };
+
   const renderMessage = (msg) => {
     if (msg.type === 'system' || msg.system) return <div className="message-bubble system" key={msg.id}>{msg.text}</div>;
     const isOwn = String(msg.senderId || '') === String(user?.uid || '');
     const isDeleting = msg.id === deletingMessageId;
     const isAi = msg.senderId === ECHO_AI_ID;
     const replyToDisplay = msg.replyTo ? { ...msg.replyTo, senderName: msg.replyTo.senderName || 'User' } : null;
+    const noteReplyDisplay = msg.replyToNote || null;
     const showReply = !isAi;
     const handleMediaClick = () => { if (msg.type === 'media') { if (msg.mediaType === 'video') setVideoPreview({ src: msg.mediaUrl }); else if (msg.mediaType === 'image') setMediaPreview({ src: msg.mediaUrl, type: 'image', alt: msg.caption || 'Image' }); } };
     const handleRetry = () => { sendMediaMessage(msg.id); };
@@ -1039,7 +1096,7 @@ const ChatView = () => {
       return <Fragment key={msg.id}>{row}</Fragment>;
     };
 
-    if (msg.type === 'echomoji') { const skinObj = msg.skinId ? getSkinById(msg.skinId) : null; return shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}<div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}><ECHOMOJI mood={msg.mood || 'neutral'} skin={skinObj} size={56} interactive={false} animated={true} /></div></>); }
+    if (msg.type === 'echomoji') { const skinObj = msg.skinId ? getSkinById(msg.skinId) : null; return shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}<div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}><ECHOMOJI mood={msg.mood || 'neutral'} skin={skinObj} size={56} interactive={false} animated={true} /></div></>); }
 
     if (msg.type === 'media') {
       let content;
@@ -1051,10 +1108,10 @@ const ChatView = () => {
         if (msg.uploadFailed) content = <div className="media-error-placeholder"><i className="fas fa-exclamation-triangle" /><span>Upload failed</span><button onClick={handleRetry}>Retry</button></div>;
         else content = <div onClick={!msg.isUploading ? handleMediaClick : undefined} style={{ cursor: !msg.isUploading ? 'pointer' : 'default' }}><ChatMediaMessage message={msg} isUploading={msg.isUploading} uploadProgress={msg.uploadProgress} disablePreview={true} /></div>;
       }
-      return shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{content}</>);
+      return shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}{content}</>);
     }
 
-    return shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}<div className="message-text" style={{ whiteSpace: userId === ECHO_AI_ID && !isOwn ? 'normal' : 'pre-wrap' }}>{userId === ECHO_AI_ID && !isOwn ? <AiRichText text={msg.text} onFollowup={(q) => handleSendText(q)} /> : msg.text}{msg.isEdited && <span className="message-edited-badge">(edited)</span>}</div></>);
+    return shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}<div className="message-text" style={{ whiteSpace: userId === ECHO_AI_ID && !isOwn ? 'normal' : 'pre-wrap' }}>{userId === ECHO_AI_ID && !isOwn ? <AiRichText text={msg.text} onFollowup={(q) => handleSendText(q)} /> : msg.text}{msg.isEdited && <span className="message-edited-badge">(edited)</span>}</div></>);
   };
 
   useEffect(() => { clearedAtRef.current = clearedAt || 0; }, [clearedAt]);
@@ -1670,6 +1727,27 @@ const ChatView = () => {
 
         <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
           {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
+
+          {/* ─── NOTE REPLY BANNER (above input) ─── */}
+          {replyToNote && (
+            <div className="note-reply-preview-banner">
+              <div className="note-reply-preview-banner-content">
+                <span className="note-reply-preview-banner-label">
+                  Replying to {replyToNote.authorName}'s note
+                </span>
+                <span className="note-reply-preview-banner-text">{replyToNote.text}</span>
+              </div>
+              <button
+                type="button"
+                className="note-reply-preview-banner-close"
+                onClick={() => setReplyToNote(null)}
+                aria-label="Cancel note reply"
+              >
+                ✕
+              </button>
+            </div>
+          )}
+
           <div className="chat-input-row">
             <button type="button" className="chat-emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)} title="Emojis"><i className="fas fa-smile" /></button>
             <button type="button" className="chat-voice-btn" onClick={() => { if (userId === ECHO_AI_ID) { setToast({ message: 'Voice notes are not available in ECHO AI chat right now.', type: 'info' }); setTimeout(() => setToast(null), 2800); return; } setShowVoiceRecorder(true); }} title="Voice note"><i className="fas fa-microphone" /></button>
