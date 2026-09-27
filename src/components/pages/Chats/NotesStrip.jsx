@@ -18,9 +18,259 @@ import {
   NOTE_MAX_LENGTH,
   QUICK_REACTIONS,
 } from '../../../services/notesService';
+import {
+  subscribeToSongCatalog,
+  searchCatalog,
+  findCatalogTrack,
+  extractSpotifyTrackId,
+} from '../../../services/songCatalog';
+import { useSongPreview } from '../../../hooks/useSongPreview';
 import Avatar from '../../common/Avatar';
 import { useProfile } from '../../../contexts/ProfileContext';
 
+// ─── Song picker sheet ──────────────────────────────────────────
+const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
+  const [query, setQuery] = useState('');
+  const [tab, setTab] = useState('search'); // 'search' | 'paste'
+  const [url, setUrl] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [preview, setPreview] = useState(null);
+  const { play, playingId } = useSongPreview();
+
+  useEffect(() => {
+    if (!open) {
+      setQuery('');
+      setTab('search');
+      setUrl('');
+      setError('');
+      setPreview(null);
+    }
+  }, [open]);
+
+  const filtered = useMemo(() => searchCatalog(catalog, query), [catalog, query]);
+
+  const handlePasteLookup = async () => {
+    const trimmed = url.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    setError('');
+    setPreview(null);
+    try {
+      // First: check if this track is already in the catalog
+      const trackId = extractSpotifyTrackId(trimmed);
+      const cached = trackId ? findCatalogTrack(catalog, trackId) : null;
+      if (cached) {
+        setPreview(cached);
+        setError('');
+        return;
+      }
+
+      // Not cached — ask the backend
+      const result = await lookupSongLink(trimmed);
+      if (!result || result.error || !result.title) {
+        setError('Not available at the moment. Try a song from the list.');
+        return;
+      }
+      // Backend returned metadata but not in catalog — still allow adding it locally
+      const song = {
+        trackId: trackId || result.sourceUrl,
+        provider: result.provider,
+        title: result.title,
+        artist: result.artist,
+        artwork: result.artwork,
+        sourceUrl: result.sourceUrl,
+        previewUrl: result.previewUrl || null,
+      };
+      setPreview(song);
+    } catch (err) {
+      setError('Lookup failed. Try again.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleConfirm = () => {
+    if (!preview) return;
+    onSelect(preview);
+  };
+
+  if (!open) return null;
+
+  return (
+    <div className="note-song-sheet-backdrop" onClick={onClose}>
+      <div className="note-song-sheet" onClick={(e) => e.stopPropagation()}>
+        <div className="note-song-sheet-handle" />
+        <div className="note-song-sheet-header">
+          <h3>Add a song</h3>
+          <button
+            type="button"
+            className="note-song-sheet-close"
+            onClick={onClose}
+            aria-label="Close"
+          >
+            ✕
+          </button>
+        </div>
+
+        <div className="note-song-sheet-tabs">
+          <button
+            type="button"
+            className={`note-song-tab ${tab === 'search' ? 'active' : ''}`}
+            onClick={() => setTab('search')}
+          >
+            Search
+          </button>
+          <button
+            type="button"
+            className={`note-song-tab ${tab === 'paste' ? 'active' : ''}`}
+            onClick={() => setTab('paste')}
+          >
+            Paste link
+          </button>
+        </div>
+
+        {tab === 'search' ? (
+          <>
+            <div className="note-song-search-row">
+              <input
+                type="text"
+                className="note-song-search-input"
+                placeholder="Search by title or artist…"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                autoFocus
+              />
+            </div>
+            <div className="note-song-list">
+              {filtered.length === 0 ? (
+                <div className="note-song-empty">
+                  <span className="note-song-empty-icon">🎵</span>
+                  <p>No songs found.</p>
+                  <p className="note-song-empty-hint">
+                    Try the "Paste link" tab or wait for more songs to be added.
+                  </p>
+                </div>
+              ) : (
+                filtered.map((song) => {
+                  const isPlaying = playingId === song.trackId;
+                  const isSelected =
+                    preview?.trackId && preview.trackId === song.trackId;
+                  return (
+                    <div
+                      key={song.trackId}
+                      className={`note-song-list-item ${isSelected ? 'is-selected' : ''}`}
+                      onClick={() => setPreview(song)}
+                    >
+                      <span className="note-song-list-art">
+                        {song.artwork ? (
+                          <img src={song.artwork} alt="" loading="lazy" />
+                        ) : (
+                          <span>🎵</span>
+                        )}
+                      </span>
+                      <span className="note-song-list-meta">
+                        <span className="note-song-list-title">{song.title}</span>
+                        <span className="note-song-list-artist">
+                          {song.artist || 'Unknown artist'}
+                        </span>
+                      </span>
+                      {song.previewUrl && (
+                        <button
+                          type="button"
+                          className={`note-song-list-play ${isPlaying ? 'is-playing' : ''}`}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            play(song);
+                          }}
+                          aria-label={isPlaying ? 'Stop preview' : 'Play preview'}
+                        >
+                          {isPlaying ? (
+                            <svg viewBox="0 0 24 24" width="14" height="14">
+                              <rect x="6" y="5" width="4" height="14" fill="currentColor" />
+                              <rect x="14" y="5" width="4" height="14" fill="currentColor" />
+                            </svg>
+                          ) : (
+                            <svg viewBox="0 0 24 24" width="14" height="14">
+                              <path d="M8 5v14l11-7z" fill="currentColor" />
+                            </svg>
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </>
+        ) : (
+          <div className="note-song-paste">
+            <input
+              type="url"
+              className="note-song-search-input"
+              placeholder="https://open.spotify.com/track/…"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  handlePasteLookup();
+                }
+              }}
+              autoFocus
+            />
+            <button
+              type="button"
+              className="note-song-paste-btn"
+              onClick={handlePasteLookup}
+              disabled={busy || !url.trim()}
+            >
+              {busy ? 'Looking up…' : 'Look up'}
+            </button>
+            {error && <p className="note-song-paste-error">{error}</p>}
+            {preview && (
+              <div className="note-song-paste-preview">
+                <span className="note-song-list-art">
+                  {preview.artwork ? (
+                    <img src={preview.artwork} alt="" loading="lazy" />
+                  ) : (
+                    <span>🎵</span>
+                  )}
+                </span>
+                <span className="note-song-list-meta">
+                  <span className="note-song-list-title">{preview.title}</span>
+                  <span className="note-song-list-artist">
+                    {preview.artist || 'Unknown artist'}
+                  </span>
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className="note-song-sheet-footer">
+          <button
+            type="button"
+            className="note-btn note-btn-danger"
+            onClick={onClose}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="note-btn note-btn-primary"
+            onClick={handleConfirm}
+            disabled={!preview}
+          >
+            {preview ? 'Use this song' : 'Select a song'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ─── Main NotesStrip ────────────────────────────────────────────
 const NotesStrip = ({ visibleUids = [] }) => {
   const { user } = useAuth();
   const { profiles = {} } = useProfile();
@@ -29,28 +279,29 @@ const NotesStrip = ({ visibleUids = [] }) => {
   const [myNote, setMyNote] = useState(null);
   const [myViewers, setMyViewers] = useState([]);
   const [allNotes, setAllNotes] = useState([]);
+  const [catalog, setCatalog] = useState([]);
   const [composerOpen, setComposerOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
   // Song state
-  const [songUrl, setSongUrl] = useState('');
   const [songLookup, setSongLookup] = useState(null);
-  const [songLooking, setSongLooking] = useState(false);
-  const [songError, setSongError] = useState('');
-  const [songInputOpen, setSongInputOpen] = useState(false);
+  const [songSheetOpen, setSongSheetOpen] = useState(false);
 
   // Reaction picker
   const [reactionTarget, setReactionTarget] = useState(null);
   const longPressTimer = useRef(null);
   const longPressFired = useRef(false);
 
+  // Preview player for notes in the strip
+  const { play: playPreview, playingId } = useSongPreview();
+
   // Track newly arrived notes for pop-in animation
   const seenNoteIds = useRef(new Set());
   const [newNoteIds, setNewNoteIds] = useState(new Set());
 
-  // ─── Helpers FIRST ───────────────────────────────────────────
+  // ─── Helpers ────────────────────────────────────────────────
   const getDisplayName = (uid) => {
     if (!uid) return 'User';
     const profile = profiles?.[uid] || {};
@@ -65,7 +316,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
     window.open(song.sourceUrl, '_blank', 'noopener,noreferrer');
   };
 
-  // ─── Subscribe to my own note ────────────────────────────────
+  // ─── Subscriptions ─────────────────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
     const noteRef = ref(db, `notes/${user.uid}`);
@@ -84,7 +335,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
     return () => unsub();
   }, [user?.uid]);
 
-  // ─── Viewers of my own note ──────────────────────────────────
   useEffect(() => {
     if (!user?.uid || !myNote) {
       setMyViewers([]);
@@ -96,7 +346,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
     return () => unsub();
   }, [user?.uid, myNote]);
 
-  // ─── Subscribe to all notes ──────────────────────────────────
   useEffect(() => {
     const unsub = subscribeToAllNotes((live) => {
       const incomingNew = new Set();
@@ -115,7 +364,13 @@ const NotesStrip = ({ visibleUids = [] }) => {
     return () => unsub();
   }, []);
 
-  // ─── Sweep expired notes every minute ────────────────────────
+  useEffect(() => {
+    const unsub = subscribeToSongCatalog((list) => {
+      setCatalog(list);
+    });
+    return () => unsub();
+  }, []);
+
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
@@ -132,54 +387,22 @@ const NotesStrip = ({ visibleUids = [] }) => {
     });
   }, [allNotes, user?.uid, visibleUids]);
 
-  const resetSongState = () => {
-    setSongUrl('');
-    setSongLookup(null);
-    setSongLooking(false);
-    setSongError('');
-    setSongInputOpen(false);
-  };
-
+  // ─── Composer ──────────────────────────────────────────────
   const openComposer = () => {
     setDraft(myNote?.text || '');
     setSongLookup(myNote?.song || null);
-    setSongUrl('');
-    setSongError('');
-    setSongInputOpen(false);
     setComposerOpen(true);
   };
 
   const closeComposer = () => {
     setComposerOpen(false);
     setDraft('');
-    resetSongState();
-  };
-
-  const handleLookupSong = async () => {
-    const url = songUrl.trim();
-    if (!url) return;
-    setSongLooking(true);
-    setSongError('');
-    try {
-      const found = await lookupSongLink(url);
-      if (!found) {
-        setSongError('Could not read that link. Try a Spotify or Apple Music track URL.');
-        setSongLookup(null);
-      } else {
-        setSongLookup(found);
-        setSongInputOpen(false);
-      }
-    } catch {
-      setSongError('Lookup failed. Try again.');
-    } finally {
-      setSongLooking(false);
-    }
-  };
-
-  const handleRemoveSong = () => {
     setSongLookup(null);
-    setSongUrl('');
-    setSongError('');
+  };
+
+  const handleSongSelected = (song) => {
+    setSongLookup(song);
+    setSongSheetOpen(false);
   };
 
   const handleSave = async () => {
@@ -218,7 +441,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
     setMenuOpen(false);
   };
 
-  // ─── Tap another person's note → open chat with quoted reply ──
+  // ─── Tap a note → auto-play + open chat ─────────────────────
   const handleTapOtherNote = async (note) => {
     if (longPressFired.current) {
       longPressFired.current = false;
@@ -226,21 +449,35 @@ const NotesStrip = ({ visibleUids = [] }) => {
     }
     if (!user?.uid) return;
 
+    // Auto-play the preview if the note has a preview URL
+    if (note.song?.previewUrl) {
+      try {
+        playPreview({
+          trackId: note.song.trackId || note.uid,
+          previewUrl: note.song.previewUrl,
+        });
+      } catch (_) {}
+    }
+
+    // Fire and forget
     markNoteSeen(note.uid, user.uid).catch(() => {});
 
-    navigate(`/chat/${note.uid}`, {
-      state: {
-        prefilledNote: note.text || '',
-        replyToNote: true,
-        noteAuthorUid: note.uid,
-        noteAuthorName: getDisplayName(note.uid),
-        noteCreatedAt: note.createdAt,
-        noteSong: note.song || null,
-      },
-    });
+    // Short delay so the user hears a beat of the song before navigating
+    setTimeout(() => {
+      navigate(`/chat/${note.uid}`, {
+        state: {
+          prefilledNote: note.text || '',
+          replyToNote: true,
+          noteAuthorUid: note.uid,
+          noteAuthorName: getDisplayName(note.uid),
+          noteCreatedAt: note.createdAt,
+          noteSong: note.song || null,
+        },
+      });
+    }, 400);
   };
 
-  // ─── Long-press → reactions ──────────────────────────────────
+  // ─── Long-press ────────────────────────────────────────────
   const handleNotePressStart = (e, note) => {
     longPressFired.current = false;
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
@@ -285,7 +522,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
 
   const remaining = NOTE_MAX_LENGTH - draft.length;
 
-  // ─── Rendering helpers ───────────────────────────────────────
+  // ─── Renderers ─────────────────────────────────────────────
   const renderNoteBubbleContent = (text) => {
     if (!text) return null;
     if (isSingleEmoji(text)) {
@@ -299,11 +536,32 @@ const NotesStrip = ({ visibleUids = [] }) => {
 
   const renderSongPill = (song, { interactive = true } = {}) => {
     if (!song || !song.title) return null;
+    const songKey = song.trackId || song.sourceUrl;
+    const isPlaying = playingId === songKey;
     return (
-      <button
-        type="button"
-        className={`note-song-pill ${interactive ? 'is-interactive' : ''}`}
-        onClick={(e) => interactive && openSongLink(e, song)}
+      <div
+        role="button"
+        tabIndex={0}
+        className={`note-song-pill ${interactive ? 'is-interactive' : ''} ${isPlaying ? 'is-playing' : ''}`}
+        onClick={(e) => {
+          if (!interactive) return;
+          e.stopPropagation();
+          if (song.previewUrl) {
+            playPreview({ trackId: songKey, previewUrl: song.previewUrl });
+          } else {
+            openSongLink(e, song);
+          }
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && interactive) {
+            e.stopPropagation();
+            if (song.previewUrl) {
+              playPreview({ trackId: songKey, previewUrl: song.previewUrl });
+            } else {
+              openSongLink(e, song);
+            }
+          }
+        }}
         aria-label={`Play ${song.title} by ${song.artist}`}
       >
         <span className="note-song-art">
@@ -320,11 +578,18 @@ const NotesStrip = ({ visibleUids = [] }) => {
           )}
         </span>
         <span className="note-song-play" aria-hidden="true">
-          <svg viewBox="0 0 24 24" width="14" height="14">
-            <path d="M8 5v14l11-7z" fill="currentColor" />
-          </svg>
+          {isPlaying ? (
+            <svg viewBox="0 0 24 24" width="14" height="14">
+              <rect x="6" y="5" width="4" height="14" fill="currentColor" />
+              <rect x="14" y="5" width="4" height="14" fill="currentColor" />
+            </svg>
+          ) : (
+            <svg viewBox="0 0 24 24" width="14" height="14">
+              <path d="M8 5v14l11-7z" fill="currentColor" />
+            </svg>
+          )}
         </span>
-      </button>
+      </div>
     );
   };
 
@@ -489,45 +754,8 @@ const NotesStrip = ({ visibleUids = [] }) => {
                   <button
                     type="button"
                     className="note-song-remove"
-                    onClick={handleRemoveSong}
+                    onClick={() => setSongLookup(null)}
                     aria-label="Remove song"
-                  >
-                    ✕
-                  </button>
-                </div>
-              ) : songInputOpen ? (
-                <div className="note-song-input-row">
-                  <input
-                    type="url"
-                    className="note-song-input"
-                    placeholder="Paste Spotify or Apple Music link…"
-                    value={songUrl}
-                    onChange={(e) => setSongUrl(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        handleLookupSong();
-                      }
-                    }}
-                    autoFocus
-                  />
-                  <button
-                    type="button"
-                    className="note-song-lookup"
-                    onClick={handleLookupSong}
-                    disabled={songLooking || !songUrl.trim()}
-                  >
-                    {songLooking ? '…' : 'Add'}
-                  </button>
-                  <button
-                    type="button"
-                    className="note-song-cancel"
-                    onClick={() => {
-                      setSongInputOpen(false);
-                      setSongUrl('');
-                      setSongError('');
-                    }}
-                    aria-label="Cancel"
                   >
                     ✕
                   </button>
@@ -536,15 +764,11 @@ const NotesStrip = ({ visibleUids = [] }) => {
                 <button
                   type="button"
                   className="note-song-add-btn"
-                  onClick={() => setSongInputOpen(true)}
+                  onClick={() => setSongSheetOpen(true)}
                 >
                   <span className="note-song-add-icon">🎵</span>
                   Add song
                 </button>
-              )}
-
-              {songError && (
-                <p className="note-song-error">{songError}</p>
               )}
             </div>
 
@@ -580,6 +804,14 @@ const NotesStrip = ({ visibleUids = [] }) => {
           </div>
         </div>
       )}
+
+      {/* ─── Song picker sheet ─── */}
+      <SongPickerSheet
+        open={songSheetOpen}
+        catalog={catalog}
+        onSelect={handleSongSelected}
+        onClose={() => setSongSheetOpen(false)}
+      />
 
       {/* ─── Reaction picker ─── */}
       {reactionTarget && (
