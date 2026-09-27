@@ -12,7 +12,6 @@ import {
   removeNoteReaction,
   markNoteSeen,
   subscribeToNoteViewers,
-  lookupSongLink,
   isEmojiOnly,
   isSingleEmoji,
   NOTE_MAX_LENGTH,
@@ -23,6 +22,7 @@ import {
   searchCatalog,
   findCatalogTrack,
   extractSpotifyTrackId,
+  lookupSongByUrl,
 } from '../../../services/songCatalog';
 import { useSongPreview } from '../../../hooks/useSongPreview';
 import Avatar from '../../common/Avatar';
@@ -57,7 +57,6 @@ const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
     setError('');
     setPreview(null);
     try {
-      // First: check if this track is already in the catalog
       const trackId = extractSpotifyTrackId(trimmed);
       const cached = trackId ? findCatalogTrack(catalog, trackId) : null;
       if (cached) {
@@ -66,23 +65,16 @@ const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
         return;
       }
 
-      // Not cached — ask the backend
-      const result = await lookupSongLink(trimmed);
-      if (!result || result.error || !result.title) {
+      const result = await lookupSongByUrl(trimmed);
+      if (result?.error) {
+        setError(result.error);
+        return;
+      }
+      if (!result?.title) {
         setError('Not available at the moment. Try a song from the list.');
         return;
       }
-
-      const song = {
-        trackId: trackId || result.sourceUrl,
-        provider: result.provider,
-        title: result.title,
-        artist: result.artist,
-        artwork: result.artwork,
-        sourceUrl: result.sourceUrl,
-        previewUrl: result.previewUrl || null,
-      };
-      setPreview(song);
+      setPreview(result);
     } catch (err) {
       setError('Lookup failed. Try again.');
     } finally {
@@ -153,7 +145,8 @@ const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
                 </div>
               ) : (
                 filtered.map((song) => {
-                  const isPlaying = playingId === (song.trackId || song.sourceUrl);
+                  const songKey = song.trackId || song.sourceUrl;
+                  const isPlaying = playingId === songKey;
                   const isSelected =
                     preview?.trackId && preview.trackId === song.trackId;
                   return (
@@ -181,7 +174,7 @@ const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
                           className={`note-song-list-play ${isPlaying ? 'is-playing' : ''}`}
                           onClick={(e) => {
                             e.stopPropagation();
-                            play(song);
+                            play({ trackId: songKey, previewUrl: song.previewUrl });
                           }}
                           aria-label={isPlaying ? 'Stop preview' : 'Play preview'}
                         >
@@ -249,11 +242,7 @@ const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
         )}
 
         <div className="note-song-sheet-footer">
-          <button
-            type="button"
-            className="note-btn note-btn-danger"
-            onClick={onClose}
-          >
+          <button type="button" className="note-btn note-btn-danger" onClick={onClose}>
             Cancel
           </button>
           <button
@@ -285,23 +274,18 @@ const NotesStrip = ({ visibleUids = [] }) => {
   const [saving, setSaving] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // Song state
   const [songLookup, setSongLookup] = useState(null);
   const [songSheetOpen, setSongSheetOpen] = useState(false);
 
-  // Reaction picker
   const [reactionTarget, setReactionTarget] = useState(null);
   const longPressTimer = useRef(null);
   const longPressFired = useRef(false);
 
-  // Preview player for notes in the strip
   const { play: playPreview, playingId } = useSongPreview();
 
-  // Track newly arrived notes for pop-in animation
   const seenNoteIds = useRef(new Set());
   const [newNoteIds, setNewNoteIds] = useState(new Set());
 
-  // ─── Helpers ────────────────────────────────────────────────
   const getDisplayName = (uid) => {
     if (!uid) return 'User';
     const profile = profiles?.[uid] || {};
@@ -316,7 +300,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
     window.open(song.sourceUrl, '_blank', 'noopener,noreferrer');
   };
 
-  // ─── Subscriptions ─────────────────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
     const noteRef = ref(db, `notes/${user.uid}`);
@@ -387,7 +370,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
     });
   }, [allNotes, user?.uid, visibleUids]);
 
-  // ─── Composer ──────────────────────────────────────────────
   const openComposer = () => {
     setDraft(myNote?.text || '');
     setSongLookup(myNote?.song || null);
@@ -441,7 +423,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
     setMenuOpen(false);
   };
 
-  // ─── Tap a note → auto-play + open chat ─────────────────────
   const handleTapOtherNote = async (note) => {
     if (longPressFired.current) {
       longPressFired.current = false;
@@ -449,7 +430,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
     }
     if (!user?.uid) return;
 
-    // Auto-play the preview if the note has a preview URL
     if (note.song?.previewUrl) {
       try {
         playPreview({
@@ -459,10 +439,8 @@ const NotesStrip = ({ visibleUids = [] }) => {
       } catch (_) {}
     }
 
-    // Fire and forget
     markNoteSeen(note.uid, user.uid).catch(() => {});
 
-    // Short delay so the user hears a beat of the song before navigating
     setTimeout(() => {
       navigate(`/chat/${note.uid}`, {
         state: {
@@ -477,7 +455,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
     }, 400);
   };
 
-  // ─── Long-press ────────────────────────────────────────────
   const handleNotePressStart = (e, note) => {
     longPressFired.current = false;
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
@@ -522,7 +499,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
 
   const remaining = NOTE_MAX_LENGTH - draft.length;
 
-  // ─── Renderers ─────────────────────────────────────────────
   const renderNoteBubbleContent = (text) => {
     if (!text) return null;
     if (isSingleEmoji(text)) {
@@ -538,29 +514,26 @@ const NotesStrip = ({ visibleUids = [] }) => {
     if (!song || !song.title) return null;
     const songKey = song.trackId || song.sourceUrl;
     const isPlaying = playingId === songKey;
+    const hasPreview = !!song.previewUrl;
+
+    const handleClick = (e) => {
+      if (!interactive) return;
+      e.stopPropagation();
+      if (hasPreview) {
+        playPreview({ trackId: songKey, previewUrl: song.previewUrl });
+      } else {
+        openSongLink(e, song);
+      }
+    };
+
     return (
       <div
         role="button"
         tabIndex={0}
         className={`note-song-pill ${interactive ? 'is-interactive' : ''} ${isPlaying ? 'is-playing' : ''}`}
-        onClick={(e) => {
-          if (!interactive) return;
-          e.stopPropagation();
-          if (song.previewUrl) {
-            playPreview({ trackId: songKey, previewUrl: song.previewUrl });
-          } else {
-            openSongLink(e, song);
-          }
-        }}
+        onClick={handleClick}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && interactive) {
-            e.stopPropagation();
-            if (song.previewUrl) {
-              playPreview({ trackId: songKey, previewUrl: song.previewUrl });
-            } else {
-              openSongLink(e, song);
-            }
-          }
+          if (e.key === 'Enter') handleClick(e);
         }}
         aria-label={`Play ${song.title} by ${song.artist}`}
       >
@@ -573,9 +546,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
         </span>
         <span className="note-song-info">
           <span className="note-song-title">{song.title}</span>
-          {song.artist && (
-            <span className="note-song-artist">{song.artist}</span>
-          )}
+          {song.artist && <span className="note-song-artist">{song.artist}</span>}
         </span>
         <span className="note-song-play" aria-hidden="true">
           {isPlaying ? (
@@ -601,11 +572,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
       <div className="note-viewers-row" aria-label="Seen by">
         {shown.map((v) => (
           <span key={v.uid} className="note-viewer-avatar">
-            <Avatar
-              src={getAvatar(v.uid)}
-              name={getDisplayName(v.uid)}
-              size={18}
-            />
+            <Avatar src={getAvatar(v.uid)} name={getDisplayName(v.uid)} size={18} />
           </span>
         ))}
         {extra > 0 && <span className="note-viewer-more">+{extra}</span>}
@@ -616,7 +583,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
   return (
     <>
       <div className="notes-strip">
-        {/* ─── Your own note ─── */}
         <button
           type="button"
           className={`note-card note-card-mine ${myNote ? 'has-note' : ''}`}
@@ -652,7 +618,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
           {myNote && renderViewerAvatars()}
         </button>
 
-        {/* ─── Others' notes ─── */}
         {filteredNotes.map((note) => {
           const reactions = note.reactions || {};
           const grouped = {};
@@ -664,9 +629,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
           return (
             <div
               key={note.uid}
-              className={`note-card ${
-                newNoteIds.has(note.uid) ? 'note-card-new' : ''
-              }`}
+              className={`note-card ${newNoteIds.has(note.uid) ? 'note-card-new' : ''}`}
               onClick={() => handleTapOtherNote(note)}
               onMouseDown={(e) => handleNotePressStart(e, note)}
               onMouseUp={handleNotePressEnd}
@@ -709,7 +672,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
         })}
       </div>
 
-      {/* ─── Composer modal ─── */}
       {composerOpen && (
         <div
           className="note-composer-backdrop"
@@ -738,15 +700,12 @@ const NotesStrip = ({ visibleUids = [] }) => {
               className="note-composer-input"
               placeholder="What's on your mind?"
               value={draft}
-              onChange={(e) =>
-                setDraft(e.target.value.slice(0, NOTE_MAX_LENGTH))
-              }
+              onChange={(e) => setDraft(e.target.value.slice(0, NOTE_MAX_LENGTH))}
               maxLength={NOTE_MAX_LENGTH}
               rows={3}
               autoFocus
             />
 
-            {/* ─── Song block ─── */}
             <div className="note-song-block">
               {songLookup ? (
                 <div className="note-song-attached">
@@ -805,7 +764,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
         </div>
       )}
 
-      {/* ─── Song picker sheet ─── */}
       <SongPickerSheet
         open={songSheetOpen}
         catalog={catalog}
@@ -813,7 +771,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
         onClose={() => setSongSheetOpen(false)}
       />
 
-      {/* ─── Reaction picker ─── */}
       {reactionTarget && (
         <div
           className="note-reaction-backdrop"
@@ -837,7 +794,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
         </div>
       )}
 
-      {/* ─── My-note quick menu ─── */}
       {menuOpen && myNote && (
         <div
           className="note-reaction-backdrop"
