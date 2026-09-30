@@ -5,56 +5,238 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="theme-color" content="#6C3CE1" />
-    <meta name="description" content="ECHO – The future of conversations. Discover, connect, and echo with animated avatars and real-time chat." />
-    <title>ECHO – The Future of chat</title>
 
-    <!-- ── Structured Data (JSON-LD) for Google Search ───────────── -->
-    <!-- Tells Google that "Echo" is also known as "Echoty" and ties
-         Lawal Abdulmalik to the brand as founder & CEO.             -->
+    <!-- ══════════════════════════════════════════════════════════════
+         PRIMARY SEO
+         ══════════════════════════════════════════════════════════════ -->
+    <title>ECHO – The Future of Chat | Founded by Lawal Abdulmalik</title>
+    <meta
+      name="description"
+      content="ECHO (Echoty) is the future of conversations. Discover, connect, and echo with animated avatars, real-time chat, and vibrant communities. Founded by Lawal Abdulmalik."
+    />
+    <meta name="author" content="Lawal Abdulmalik" />
+    <meta
+      name="keywords"
+      content="ECHO, Echoty, chat app, real-time chat, messaging, Lawal Abdulmalik, Lawalabdulmalik, CEO of ECHO, founder of ECHO, animated avatars"
+    />
+    <link rel="canonical" href="https://echoty.xyz/" />
+    <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+
+    <!-- ══════════════════════════════════════════════════════════════
+         OPEN GRAPH  (Facebook, WhatsApp, LinkedIn, Messenger)
+         ══════════════════════════════════════════════════════════════ -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="ECHO" />
+    <meta property="og:title" content="ECHO – The Future of Chat | Founded by Lawal Abdulmalik" />
+    <meta
+      property="og:description"
+      content="Discover, connect, and echo with animated avatars, real-time chat, and vibrant communities. Founded by Lawal Abdulmalik."
+    />
+    <meta property="og:url" content="https://echoty.xyz/" />
+    <meta property="og:image" content="https://echoty.xyz/featured-graphic.png" />
+    <meta property="og:image:secure_url" content="https://echoty.xyz/featured-graphic.png" />
+    <meta property="og:image:type" content="image/png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content="ECHO — the future of chat, founded by Lawal Abdulmalik" />
+    <meta property="og:locale" content="en_US" />
+
+    <!-- ══════════════════════════════════════════════════════════════
+         TWITTER / X CARD
+         ══════════════════════════════════════════════════════════════ -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="ECHO – The Future of Chat | Founded by Lawal Abdulmalik" />
+    <meta
+      name="twitter:description"
+      content="Discover, connect, and echo with animated avatars, real-time chat, and vibrant communities. Founded by Lawal Abdulmalik."
+    />
+    <meta name="twitter:image" content="https://echoty.xyz/featured-graphic.png" />
+    <meta name="twitter:image:alt" content="ECHO — the future of chat" />
+    <meta name="twitter:site" content="@echoty" />
+    <meta name="twitter:creator" content="@echoty" />
+
+    <!-- ══════════════════════════════════════════════════════════════
+         STRUCTURED DATA (JSON-LD)
+         A complete Organization + WebSite + Person + FAQ graph so
+         Google and AI Overviews can answer:
+           - "Who is the CEO of ECHO?"
+           - "Who founded Echoty?"
+           - "What is ECHO?"
+         with a confident, single answer.
+         ══════════════════════════════════════════════════════════════ -->
     <script type="application/ld+json">
     {
       "@context": "https://schema.org",
-      "@type": "Organization",
-      "name": "Echo",
-      "alternateName": "Echoty",
-      "url": "https://echoty.xyz",
-      "logo": "https://echoty.xyz/favicon-96x96.png",
-      "description": "Discover, connect, and echo with animated avatars.",
-      "founder": {
-        "@type": "Person",
-        "name": "Lawal Abdulmalik",
-        "jobTitle": "Founder & CEO"
-      },
-      "ceo": {
-        "@type": "Person",
-        "name": "Lawal Abdulmalik"
-      },
-      "sameAs": ["https://echoty.xyz"]
+      "@graph": [
+        {
+          "@type": "Organization",
+          "@id": "https://echoty.xyz/#organization",
+          "name": "ECHO",
+          "legalName": "ECHO",
+          "alternateName": ["Echoty", "ECHO Chat", "ECHO Messenger"],
+          "url": "https://echoty.xyz/",
+          "logo": {
+            "@type": "ImageObject",
+            "@id": "https://echoty.xyz/#logo",
+            "url": "https://echoty.xyz/favicon-96x96.png",
+            "contentUrl": "https://echoty.xyz/favicon-96x96.png",
+            "width": 96,
+            "height": 96,
+            "caption": "ECHO logo"
+          },
+          "image": { "@id": "https://echoty.xyz/#logo" },
+          "description": "ECHO (Echoty) is a modern real-time messaging platform built around animated avatars, expressive chat, and vibrant communities.",
+          "foundingDate": "2024",
+          "founder": {
+            "@type": "Person",
+            "@id": "https://echoty.xyz/#lawal-abdulmalik",
+            "name": "Lawal Abdulmalik"
+          },
+          "ceo": {
+            "@type": "Person",
+            "@id": "https://echoty.xyz/#lawal-abdulmalik",
+            "name": "Lawal Abdulmalik"
+          },
+          "employee": {
+            "@type": "Person",
+            "@id": "https://echoty.xyz/#lawal-abdulmalik",
+            "name": "Lawal Abdulmalik"
+          },
+          "contactPoint": {
+            "@type": "ContactPoint",
+            "contactType": "customer support",
+            "email": "echoinfoteam@gmail.com",
+            "availableLanguage": ["English"]
+          },
+          "sameAs": [
+            "https://echoty.xyz/"
+          ]
+        },
+
+        {
+          "@type": "Person",
+          "@id": "https://echoty.xyz/#lawal-abdulmalik",
+          "name": "Lawal Abdulmalik",
+          "givenName": "Lawal",
+          "familyName": "Abdulmalik",
+          "alternateName": ["Lawalabdulmalik", "Lawal AbdulMalik"],
+          "jobTitle": "Founder & CEO",
+          "description": "Lawal Abdulmalik is the founder and CEO of ECHO (echoty.xyz), a real-time messaging platform with animated avatars and expressive chat.",
+          "worksFor": { "@id": "https://echoty.xyz/#organization" },
+          "founder": { "@id": "https://echoty.xyz/#organization" },
+          "url": "https://echoty.xyz/",
+          "image": "https://echoty.xyz/favicon-96x96.png",
+          "nationality": {
+            "@type": "Country",
+            "name": "Nigeria"
+          },
+          "knowsAbout": [
+            "Messaging apps",
+            "Real-time chat",
+            "Animated avatars",
+            "Community platforms",
+            "Product design"
+          ]
+        },
+
+        {
+          "@type": "WebSite",
+          "@id": "https://echoty.xyz/#website",
+          "url": "https://echoty.xyz/",
+          "name": "ECHO",
+          "alternateName": "Echoty",
+          "description": "The future of chat — real-time messaging with animated avatars.",
+          "publisher": { "@id": "https://echoty.xyz/#organization" },
+          "inLanguage": "en-US",
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": {
+              "@type": "EntryPoint",
+              "urlTemplate": "https://echoty.xyz/?q={search_term_string}"
+            },
+            "query-input": "required name=search_term_string"
+          }
+        },
+
+        {
+          "@type": "WebPage",
+          "@id": "https://echoty.xyz/#webpage",
+          "url": "https://echoty.xyz/",
+          "name": "ECHO – The Future of Chat | Founded by Lawal Abdulmalik",
+          "isPartOf": { "@id": "https://echoty.xyz/#website" },
+          "about": { "@id": "https://echoty.xyz/#organization" },
+          "primaryImageOfPage": { "@id": "https://echoty.xyz/#logo" },
+          "description": "ECHO (Echoty) is the future of conversations. Discover, connect, and echo with animated avatars, real-time chat, and vibrant communities.",
+          "inLanguage": "en-US"
+        },
+
+        {
+          "@type": "BreadcrumbList",
+          "@id": "https://echoty.xyz/#breadcrumb",
+          "itemListElement": [
+            {
+              "@type": "ListItem",
+              "position": 1,
+              "name": "Home",
+              "item": "https://echoty.xyz/"
+            }
+          ]
+        },
+
+        {
+          "@type": "FAQPage",
+          "@id": "https://echoty.xyz/#faq",
+          "mainEntity": [
+            {
+              "@type": "Question",
+              "name": "Who is the CEO of ECHO?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Lawal Abdulmalik is the founder and CEO of ECHO (echoty.xyz), a real-time messaging platform with animated avatars."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Who founded Echoty?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "ECHO, also known as Echoty, was founded by Lawal Abdulmalik."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What is ECHO?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "ECHO is a modern real-time messaging platform built around animated avatars, expressive chat, and vibrant communities. It is available on the web at echoty.xyz."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Is ECHO the same as Echoty?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Yes. ECHO and Echoty refer to the same platform, available at echoty.xyz."
+              }
+            }
+          ]
+        }
+      ]
     }
     </script>
 
-    <!-- Open Graph -->
-    <meta property="og:title" content="ECHO – The Future of Conversations" />
-    <meta property="og:description" content="Discover, connect, and echo with real-time chat, animated avatars, and expressive features." />
-    <meta property="og:image" content="%PUBLIC_URL%/featured-graphic.png" />
-    <meta property="og:url" content="https://echoty.xyz" />
-    <meta property="og:type" content="website" />
-    <meta property="og:site_name" content="ECHO" />
-
-    <!-- Twitter Card -->
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="ECHO – The Future of Conversations" />
-    <meta name="twitter:description" content="Discover, connect, and echo with real-time chat, animated avatars, and expressive features." />
-    <meta name="twitter:image" content="%PUBLIC_URL%/featured-graphic.png" />
-
-    <!-- Robots -->
-    <meta name="robots" content="index, follow" />
-    <link rel="canonical" href="https://echoty.xyz" />
+    <!-- ══════════════════════════════════════════════════════════════
+         PRECONNECTS  (faster loads = better Core Web Vitals)
+         ══════════════════════════════════════════════════════════════ -->
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link rel="preconnect" href="https://cdnjs.cloudflare.com" />
+    <link rel="preconnect" href="https://firebasestorage.googleapis.com" />
+    <link rel="preconnect" href="https://res.cloudinary.com" />
 
-    <!-- Icons & Manifest -->
+    <!-- ══════════════════════════════════════════════════════════════
+         ICONS & MANIFEST
+         ══════════════════════════════════════════════════════════════ -->
     <link rel="icon" type="image/png" href="/favicon-96x96.png" sizes="96x96" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="shortcut icon" href="/favicon.ico" />
@@ -69,5 +251,19 @@
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Fallback for browsers with JavaScript disabled —
+         Google reads this too and it reinforces the founder/CEO link. -->
+    <noscript>
+      <h1>ECHO — The Future of Chat</h1>
+      <p>
+        ECHO (also known as Echoty) is a modern real-time messaging platform with
+        animated avatars and expressive chat, available at
+        <a href="https://echoty.xyz/">echoty.xyz</a>.
+      </p>
+      <p>
+        <strong>Founder &amp; CEO:</strong> Lawal Abdulmalik.
+      </p>
+    </noscript>
   </body>
 </html>
