@@ -1,6 +1,6 @@
 // src/services/notesService.js
 import { db } from './firebase';
-import { ref, set, remove, get, onValue } from 'firebase/database';
+import { ref, set, remove, get, onValue, push, query, orderByChild, limitToLast } from 'firebase/database';
 import { apiUrl } from '../utils/api';
 
 export const NOTE_MAX_LENGTH = 60;
@@ -10,12 +10,14 @@ export const NOTE_TTL_MS = 24 * 60 * 60 * 1000;
 export const SONG_MAX_TITLE = 80;
 export const SONG_MAX_ARTIST = 80;
 
+// ─── Reply limits ──────────────────────────────────────────────
+export const REPLY_MAX_LENGTH = 200;
+
 // ─── Core note operations ──────────────────────────────────────
 export const saveNote = async (uid, text, song = null) => {
   if (!uid) throw new Error('Missing uid');
   const trimmed = String(text || '').trim().slice(0, NOTE_MAX_LENGTH);
 
-  // A note is valid if it has text OR a song
   if (!trimmed && !song) {
     await removeNote(uid);
     return null;
@@ -36,6 +38,8 @@ export const saveNote = async (uid, text, song = null) => {
       artwork: String(song.artwork || '').slice(0, 500),
       sourceUrl: String(song.sourceUrl).slice(0, 500),
     };
+    if (song.trackId) payload.song.trackId = String(song.trackId).slice(0, 64);
+    if (song.previewUrl) payload.song.previewUrl = String(song.previewUrl).slice(0, 500);
   }
 
   await set(ref(db, `notes/${uid}`), payload);
@@ -178,7 +182,7 @@ export const isSingleEmoji = (text) => {
   return isEmojiOnly(trimmed) && [...trimmed].length <= 2;
 };
 
-// ─── NEW: Music link lookup via backend proxy ──────────────────
+// ─── Music link lookup via backend proxy ──────────────────────
 export const lookupSongLink = async (url) => {
   if (!url || typeof url !== 'string') return null;
   try {
@@ -200,5 +204,124 @@ export const lookupSongLink = async (url) => {
   } catch (err) {
     console.warn('lookupSongLink failed', err);
     return null;
+  }
+};
+
+// ═══════════════════════════════════════════════════════════════
+//   NOTE REPLY THREADS
+// ═══════════════════════════════════════════════════════════════
+
+/**
+ * Post a reply to a note thread.
+ * @param {string} noteOwnerUid — UID of the note author
+ * @param {object} reply        — { authorUid, authorName, authorAvatar, text?, song? }
+ * Returns the new reply object, or null if invalid.
+ */
+export const postNoteReply = async (noteOwnerUid, reply) => {
+  if (!noteOwnerUid || !reply?.authorUid) return null;
+  const trimmed = String(reply.text || '').trim().slice(0, REPLY_MAX_LENGTH);
+  if (!trimmed && !reply.song) return null;
+
+  const now = Date.now();
+  const payload = {
+    authorUid: reply.authorUid,
+    authorName: String(reply.authorName || 'User').slice(0, 60),
+    authorAvatar: String(reply.authorAvatar || '').slice(0, 500),
+    createdAt: now,
+  };
+  if (trimmed) payload.text = trimmed;
+  if (reply.song && reply.song.title && reply.song.sourceUrl) {
+    payload.song = {
+      provider: String(reply.song.provider || 'unknown').slice(0, 16),
+      title: String(reply.song.title).slice(0, SONG_MAX_TITLE),
+      artist: String(reply.song.artist || '').slice(0, SONG_MAX_ARTIST),
+      artwork: String(reply.song.artwork || '').slice(0, 500),
+      sourceUrl: String(reply.song.sourceUrl).slice(0, 500),
+    };
+    if (reply.song.trackId) {
+      payload.song.trackId = String(reply.song.trackId).slice(0, 64);
+    }
+    if (reply.song.previewUrl) {
+      payload.song.previewUrl = String(reply.song.previewUrl).slice(0, 500);
+    }
+  }
+
+  const replyRef = push(ref(db, `noteReplies/${noteOwnerUid}`));
+  await set(replyRef, payload);
+  return { id: replyRef.key, ...payload };
+};
+
+/**
+ * Subscribe to replies for a note. Callback receives an array sorted oldest → newest.
+ * Auto-clears when the note owner UID is falsy.
+ */
+export const subscribeToNoteReplies = (noteOwnerUid, callback) => {
+  if (!noteOwnerUid) return () => {};
+  const repliesRef = query(
+    ref(db, `noteReplies/${noteOwnerUid}`),
+    orderByChild('createdAt'),
+    limitToLast(100)
+  );
+  return onValue(
+    repliesRef,
+    (snap) => {
+      const data = snap.val() || {};
+      const list = Object.entries(data)
+        .map(([id, v]) => ({ id, ...v }))
+        .sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      callback(list);
+    },
+    () => callback([])
+  );
+};
+
+/**
+ * Delete a reply. Only allowed by its author or the note owner (enforced by rules).
+ */
+export const deleteNoteReply = async (noteOwnerUid, replyId) => {
+  if (!noteOwnerUid || !replyId) return;
+  try {
+    await remove(ref(db, `noteReplies/${noteOwnerUid}/${replyId}`));
+  } catch (err) {
+    console.warn('deleteNoteReply failed', err);
+  }
+};
+
+/**
+ * Subscribe to the count of replies for each note owner UID.
+ * Callback receives: { [noteOwnerUid]: count }
+ */
+export const subscribeToReplyCounts = (callback) => {
+  const repliesRoot = ref(db, 'noteReplies');
+  return onValue(
+    repliesRoot,
+    (snap) => {
+      const data = snap.val() || {};
+      const counts = {};
+      Object.entries(data).forEach(([ownerUid, replies]) => {
+        if (!replies || typeof replies !== 'object') return;
+        let n = 0;
+        Object.values(replies).forEach((r) => {
+          if (r && r.authorUid) n += 1;
+        });
+        if (n > 0) counts[ownerUid] = n;
+      });
+      callback(counts);
+    },
+    () => callback({})
+  );
+};
+
+/**
+ * Cleanup: delete all replies for a note owner (called when note expires).
+ * Runs from the client when the owner deletes their note or when another client
+ * detects the note has expired.
+ */
+export const purgeNoteReplies = async (noteOwnerUid) => {
+  if (!noteOwnerUid) return;
+  try {
+    await remove(ref(db, `noteReplies/${noteOwnerUid}`));
+  } catch (err) {
+    console.warn('purgeNoteReplies failed', err);
   }
 };
