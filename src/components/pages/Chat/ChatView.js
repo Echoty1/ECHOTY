@@ -17,6 +17,7 @@ import { sortMessages as sortMessagesByTime } from '../../../utils/sortMessages'
 import { useProfile } from '../../../contexts/ProfileContext';
 import { auth, db } from '../../../services/firebase';
 import { apiUrl } from '../../../utils/api';
+import { postNoteReply } from '../../../services/notesService'; // NEW
 import {
   loadMessagesFromCache,
   upsertMessageInCache,
@@ -213,6 +214,7 @@ const ChatView = () => {
   const justSentIdsRef = useRef(new Set());
   const justArrivedIdsRef = useRef(new Set());
   const sendButtonRef = useRef(null);
+  const noteReplyContext = useRef(null); // NEW: remembers the note we're replying to (survives state clear)
 
   useEffect(() => {
     const t = setTimeout(() => setLoadingMessages(false), 1200);
@@ -241,27 +243,26 @@ const ChatView = () => {
   }, []);
 
   // ─── NOTE REPLY: read navigation state & prefill ─────────────
-  // NEW: also accepts song-only notes (text may be empty)
   useEffect(() => {
     const state = location.state;
     if (!state) return;
 
-    // Handle quoted note reply (text OR song)
     if (state.replyToNote && (state.prefilledNote || state.noteSong)) {
-      setReplyToNote({
+      const noteContext = {
         text: state.prefilledNote || '',
         authorUid: state.noteAuthorUid,
         authorName: state.noteAuthorName || 'User',
         createdAt: state.noteCreatedAt || Date.now(),
-        song: state.noteSong || null, // NEW
-      });
-      // Prefill input with text (may be empty string for song-only notes)
+        song: state.noteSong || null,
+      };
+      setReplyToNote(noteContext);
+      // NEW: also stash in ref so it survives after UI state clears on send
+      noteReplyContext.current = noteContext;
+
       if (typeof state.prefilledNote === 'string' && state.prefilledNote) {
         setNewMessage(state.prefilledNote);
       }
-      // Clear nav state so a refresh doesn't re-trigger
       navigate(location.pathname, { replace: true, state: {} });
-      // Focus input
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
@@ -274,7 +275,6 @@ const ChatView = () => {
       return;
     }
 
-    // Legacy: just a prefilled note, no quote
     if (state.prefilledNote && typeof state.prefilledNote === 'string') {
       setNewMessage(state.prefilledNote);
       setTimeout(() => {
@@ -287,6 +287,13 @@ const ChatView = () => {
       }, 120);
     }
   }, [location.state, location.pathname, navigate]);
+
+  // NEW: clear note reply context when switching to a different chat
+  useEffect(() => {
+    return () => {
+      noteReplyContext.current = null;
+    };
+  }, [userId]);
 
   useEffect(() => {
     if (!user?.uid || !userId) return;
@@ -307,7 +314,6 @@ const ChatView = () => {
     return () => { unsub(); clearInterval(interval); };
   }, [user?.uid, userId]);
 
-  // ✅ SHARED WALLPAPER: reads from chat-level node so both users see the same wallpaper
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -318,7 +324,6 @@ const ChatView = () => {
     return () => { unsubWp(); unsubCw(); };
   }, [user?.uid, userId]);
 
-  // ✅ SHARED WALLPAPER: writes to chat-level node
   const handleWallpaperSelect = async (id) => {
     setWallpaperId(id);
     try {
@@ -506,7 +511,24 @@ const ChatView = () => {
     setTimeout(() => btn.classList.remove('rippling'), 650);
   };
 
-  // ─── Send text (now supports note reply) ─────────────────────
+  // ─── Helper to publish a reply to the note thread ─────────
+  // NEW: fires when the DM was opened from a note and we've stashed context.
+  const publishNoteReply = (text, song = null) => {
+    const ctx = noteReplyContext.current;
+    if (!ctx?.authorUid || !user?.uid) return;
+    if (ctx.authorUid === user.uid) return; // can't reply to own note
+    postNoteReply(ctx.authorUid, {
+      authorUid: user.uid,
+      authorName: currentUserProfile?.name || user.displayName || 'User',
+      authorAvatar: currentUserProfile?.avatar || '',
+      text: text || '',
+      song: song || null,
+    }).catch((err) => console.warn('postNoteReply failed', err));
+    // Clear so subsequent messages in this DM aren't tied to the note
+    noteReplyContext.current = null;
+  };
+
+  // ─── Send text ─────────────────────────────────────────────
   const handleSendText = async (e) => {
     e?.preventDefault?.();
     const textToSend = (typeof e === 'string' ? e : newMessage).trim();
@@ -517,7 +539,6 @@ const ChatView = () => {
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     clearMyTyping();
 
-    // Capture current note reply + message reply
     const currentNoteReply = replyToNote;
     let currentReply = replyTo;
     const replyToSave = currentReply;
@@ -546,6 +567,11 @@ const ChatView = () => {
     if (currentNoteReply) msgData.replyToNote = { ...currentNoteReply };
 
     try { await set(newMsgRef, msgData); } catch (err) { console.error('Send failed:', err); setMessages((prev) => prev.filter((m) => m.id !== tempId)); return; }
+
+    // NEW: auto-post to the note reply thread
+    if (currentNoteReply) {
+      publishNoteReply(textToSend);
+    }
 
     triggerSendRipple();
     flashSent(newMsgRef.key);
@@ -628,6 +654,11 @@ const ChatView = () => {
       setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
       URL.revokeObjectURL(blobUrl);
 
+      // NEW: auto-post to the note reply thread (text = caption or icon)
+      if (noteReply) {
+        publishNoteReply(caption || mediaIcon);
+      }
+
       triggerSendRipple();
       flashSent(newMsgRef.key);
 
@@ -686,6 +717,11 @@ const ChatView = () => {
       setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
       URL.revokeObjectURL(blobUrl);
 
+      // NEW: auto-post to the note reply thread
+      if (noteReply) {
+        publishNoteReply('🎤 Voice note');
+      }
+
       triggerSendRipple();
       flashSent(newMsgRef.key);
 
@@ -742,7 +778,6 @@ const ChatView = () => {
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [user, partnerProfile, currentUserProfile, location.state?.userName]);
 
-  // ✅ FIXED: no toggle-off branch. Always reopens when clicked.
   const handleReact = useCallback((messageId) => {
     setActiveMessageMenuId(null);
 
@@ -1042,8 +1077,6 @@ const ChatView = () => {
     return <div className={`message-inline-actions ${isOwn ? 'own' : 'partner'}`}><button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleReact(msg.id); }} title="React"><EmojiIcon /></button><button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleReply(msg); }} title="Reply"><ReplyIcon /></button>{allowEdit && <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleEditMessage(msg); }} title="Edit"><EditIcon /></button>}<button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleCopy(msg); }} title="Copy"><CopyIcon /></button><button className="message-action-btn" onClick={(e) => { e.stopPropagation(); saveMessageToArchive(msg); }} title="Save"><SaveIcon /></button>{allowDelete && <button className="message-action-btn danger" onClick={(e) => { e.stopPropagation(); handleDeleteMessage(msg.id); }} title="Delete"><DeleteIcon /></button>}</div>;
   };
 
-  // ─── Render note reply card (embedded in bubble) ──────────────
-  // NEW: renders the song row when the note has a song attached
   const renderNoteReplyCard = (note) => {
     if (!note) return null;
     return (
@@ -1763,8 +1796,6 @@ const ChatView = () => {
         <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
           {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
 
-          {/* ─── NOTE REPLY BANNER (above input) ─── */}
-          {/* NEW: shows the song when the note has no text (song-only note) */}
           {replyToNote && (
             <div className="note-reply-preview-banner">
               <div className="note-reply-preview-banner-content">
