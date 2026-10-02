@@ -1,11 +1,10 @@
 import React from 'react';
-import './LiquidGlassBar.css'; // or keep it in Chats.css and skip this import
 
 const TABS = [
-  { id: 'chats',    label: 'Chats',    icon: '💬' },
-  { id: 'notes',    label: 'Notes',    icon: '📝' },
-  { id: 'halo',     label: 'Halo',     icon: '✨' },
-  { id: 'profile',  label: 'You',      icon: '👤' },
+  { id: 'chats',   label: 'Chats', icon: '💬' },
+  { id: 'notes',   label: 'Notes', icon: '📝' },
+  { id: 'halo',    label: 'Halo',  icon: '✨' },
+  { id: 'profile', label: 'You',   icon: '👤' },
 ];
 
 export default function LiquidGlassBar({ active = 'chats', onChange }) {
