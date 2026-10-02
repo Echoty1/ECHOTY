@@ -523,14 +523,13 @@ const NotesStrip = ({ visibleUids = [] }) => {
   };
 
   // ─── Reply-count badge: tap → open sheet ────────────────────
-  // UPDATED: pass the FULL note object so the sheet can render the preview card.
   const handleOpenReplies = (e, noteOrUid) => {
     e?.stopPropagation?.();
+    e?.preventDefault?.();
     const uid =
       typeof noteOrUid === 'string' ? noteOrUid : noteOrUid?.uid;
     if (!uid) return;
 
-    // Resolve the full note: prefer the one we already have, else look it up.
     let fullNote =
       typeof noteOrUid === 'object' && noteOrUid !== null
         ? noteOrUid
@@ -706,7 +705,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
     );
   };
 
-  // UPDATED: pass the full note through so the sheet preview works.
   const renderReplyBadge = (noteOwnerUid, { isMine = false } = {}) => {
     const count = replyCounts[noteOwnerUid] || 0;
     if (count === 0) return null;
@@ -720,7 +718,11 @@ const NotesStrip = ({ visibleUids = [] }) => {
       <button
         type="button"
         className={`note-reply-badge ${isMine ? 'is-mine' : ''}`}
-        onClick={(e) =>
+        onMouseDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
+        onClick={(e) => {
+          e.stopPropagation();
+          e.preventDefault();
           handleOpenReplies(
             e,
             ownerNote
@@ -731,8 +733,8 @@ const NotesStrip = ({ visibleUids = [] }) => {
                   createdAt: ownerNote.createdAt || null,
                 }
               : noteOwnerUid
-          )
-        }
+          );
+        }}
         aria-label={`View ${count} replies`}
       >
         <span className="note-reply-badge-icon">💬</span>
@@ -747,10 +749,18 @@ const NotesStrip = ({ visibleUids = [] }) => {
     <>
       <div className="notes-strip">
         {/* ─── Your own note ─── */}
-        <button
-          type="button"
+        {/* NOTE: changed from <button> to <div role="button"> so the nested reply badge works */}
+        <div
+          role="button"
+          tabIndex={0}
           className={`note-card note-card-mine ${myNote ? 'has-note' : ''}`}
           onClick={openComposer}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.preventDefault();
+              openComposer();
+            }
+          }}
           onMouseDown={handleMyNotePressStart}
           onMouseUp={handleNotePressEnd}
           onMouseLeave={handleNotePressEnd}
@@ -781,7 +791,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
           <span className="note-name">You</span>
           {myNote && renderViewerAvatars()}
           {myNote && renderReplyBadge(user.uid, { isMine: true })}
-        </button>
+        </div>
 
         {/* ─── Others' notes ─── */}
         {filteredNotes.map((note) => {
