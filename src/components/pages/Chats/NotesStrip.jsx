@@ -498,7 +498,6 @@ const NotesStrip = ({ visibleUids = [] }) => {
     }
     if (!user?.uid) return;
 
-    // Auto-play the preview
     if (note.song?.previewUrl) {
       try {
         playPreview({
@@ -508,10 +507,8 @@ const NotesStrip = ({ visibleUids = [] }) => {
       } catch (_) {}
     }
 
-    // Mark seen
     markNoteSeen(note.uid, user.uid).catch(() => {});
 
-    // Navigate to DM with the note prefilled
     setTimeout(() => {
       navigate(`/chat/${note.uid}`, {
         state: {
@@ -532,21 +529,16 @@ const NotesStrip = ({ visibleUids = [] }) => {
     setRepliesSheetFor(note);
   };
 
-  // ─── From the sheet: tap a reply author → open DM ───────────
   const handleOpenChatWithReplyAuthor = (reply) => {
     if (!reply?.authorUid || reply.authorUid === user?.uid) return;
     setRepliesSheetFor(null);
     navigate(`/chat/${reply.authorUid}`);
   };
 
-  // ─── From the sheet footer: post a reply to the thread ─────
   const handlePostReplyFromSheet = () => {
     const note = repliesSheetFor;
     if (!note) return;
     setRepliesSheetFor(null);
-    // Same flow as tapping the note — opens DM with note prefilled.
-    // The actual reply to the thread happens when the user sends a message
-    // in the DM (auto-post is handled in ChatView via the navigation state).
     setTimeout(() => {
       navigate(`/chat/${note.uid}`, {
         state: {
@@ -686,14 +678,17 @@ const NotesStrip = ({ visibleUids = [] }) => {
     );
   };
 
-  const renderReplyBadge = (noteOwnerUid, { isMine = false } = {}) => {
-    const count = replyCounts[noteOwnerUid] || 0;
+  const renderReplyBadge = (noteOrUid, { isMine = false } = {}) => {
+    const noteObj = typeof noteOrUid === 'string'
+      ? { uid: noteOrUid }
+      : noteOrUid;
+    const count = replyCounts[noteObj?.uid] || 0;
     if (count === 0) return null;
     return (
       <button
         type="button"
         className={`note-reply-badge ${isMine ? 'is-mine' : ''}`}
-        onClick={(e) => handleOpenReplies(e, { uid: noteOwnerUid })}
+        onClick={(e) => handleOpenReplies(e, noteObj)}
         aria-label={`View ${count} replies`}
       >
         <span className="note-reply-badge-icon">💬</span>
@@ -741,7 +736,15 @@ const NotesStrip = ({ visibleUids = [] }) => {
           </div>
           <span className="note-name">You</span>
           {myNote && renderViewerAvatars()}
-          {myNote && renderReplyBadge(user.uid, { isMine: true })}
+          {myNote && renderReplyBadge(
+            {
+              uid: user.uid,
+              text: myNote.text,
+              song: myNote.song,
+              createdAt: myNote.createdAt,
+            },
+            { isMine: true }
+          )}
         </button>
 
         {/* ─── Others' notes ─── */}
@@ -794,7 +797,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
               <span className="note-name">
                 {getDisplayName(note.uid).split(' ')[0]}
               </span>
-              {renderReplyBadge(note.uid)}
+              {renderReplyBadge(note)}
             </div>
           );
         })}
@@ -904,6 +907,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
       {/* ─── Reply thread sheet ─── */}
       <NoteRepliesSheet
         open={!!repliesSheetFor}
+        note={repliesSheetFor}
         noteOwnerUid={repliesSheetFor?.uid || null}
         noteOwnerName={
           repliesSheetFor?.uid === user?.uid
