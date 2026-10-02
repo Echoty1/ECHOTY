@@ -13,7 +13,6 @@ import {
   removeNoteReaction,
   markNoteSeen,
   subscribeToNoteViewers,
-  postNoteReply,
   subscribeToReplyCounts,
   isEmojiOnly,
   isSingleEmoji,
@@ -524,30 +523,59 @@ const NotesStrip = ({ visibleUids = [] }) => {
   };
 
   // ─── Reply-count badge: tap → open sheet ────────────────────
-  const handleOpenReplies = (e, note) => {
+  // UPDATED: pass the FULL note object so the sheet can render the preview card.
+  const handleOpenReplies = (e, noteOrUid) => {
     e?.stopPropagation?.();
-    setRepliesSheetFor(note);
+    const uid =
+      typeof noteOrUid === 'string' ? noteOrUid : noteOrUid?.uid;
+    if (!uid) return;
+
+    // Resolve the full note: prefer the one we already have, else look it up.
+    let fullNote =
+      typeof noteOrUid === 'object' && noteOrUid !== null
+        ? noteOrUid
+        : null;
+
+    if (!fullNote) {
+      if (uid === user?.uid) fullNote = myNote;
+      else fullNote = allNotes.find((n) => n.uid === uid);
+    }
+
+    setRepliesSheetFor({
+      uid,
+      note: fullNote
+        ? {
+            uid: fullNote.uid,
+            text: fullNote.text || '',
+            song: fullNote.song || null,
+            createdAt: fullNote.createdAt || null,
+          }
+        : { uid, text: '', song: null, createdAt: null },
+    });
   };
 
+  // ─── From the sheet: tap a reply author → open DM ───────────
   const handleOpenChatWithReplyAuthor = (reply) => {
     if (!reply?.authorUid || reply.authorUid === user?.uid) return;
     setRepliesSheetFor(null);
     navigate(`/chat/${reply.authorUid}`);
   };
 
+  // ─── From the sheet footer: post a reply to the thread ─────
   const handlePostReplyFromSheet = () => {
-    const note = repliesSheetFor;
-    if (!note) return;
+    const target = repliesSheetFor;
+    if (!target) return;
+    const note = target.note;
     setRepliesSheetFor(null);
     setTimeout(() => {
-      navigate(`/chat/${note.uid}`, {
+      navigate(`/chat/${target.uid}`, {
         state: {
-          prefilledNote: note.text || '',
+          prefilledNote: note?.text || '',
           replyToNote: true,
-          noteAuthorUid: note.uid,
-          noteAuthorName: getDisplayName(note.uid),
-          noteCreatedAt: note.createdAt,
-          noteSong: note.song || null,
+          noteAuthorUid: target.uid,
+          noteAuthorName: getDisplayName(target.uid),
+          noteCreatedAt: note?.createdAt || null,
+          noteSong: note?.song || null,
         },
       });
     }, 200);
@@ -678,17 +706,33 @@ const NotesStrip = ({ visibleUids = [] }) => {
     );
   };
 
-  const renderReplyBadge = (noteOrUid, { isMine = false } = {}) => {
-    const noteObj = typeof noteOrUid === 'string'
-      ? { uid: noteOrUid }
-      : noteOrUid;
-    const count = replyCounts[noteObj?.uid] || 0;
+  // UPDATED: pass the full note through so the sheet preview works.
+  const renderReplyBadge = (noteOwnerUid, { isMine = false } = {}) => {
+    const count = replyCounts[noteOwnerUid] || 0;
     if (count === 0) return null;
+
+    const ownerNote =
+      noteOwnerUid === user?.uid
+        ? myNote
+        : allNotes.find((n) => n.uid === noteOwnerUid);
+
     return (
       <button
         type="button"
         className={`note-reply-badge ${isMine ? 'is-mine' : ''}`}
-        onClick={(e) => handleOpenReplies(e, noteObj)}
+        onClick={(e) =>
+          handleOpenReplies(
+            e,
+            ownerNote
+              ? {
+                  uid: ownerNote.uid,
+                  text: ownerNote.text || '',
+                  song: ownerNote.song || null,
+                  createdAt: ownerNote.createdAt || null,
+                }
+              : noteOwnerUid
+          )
+        }
         aria-label={`View ${count} replies`}
       >
         <span className="note-reply-badge-icon">💬</span>
@@ -736,15 +780,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
           </div>
           <span className="note-name">You</span>
           {myNote && renderViewerAvatars()}
-          {myNote && renderReplyBadge(
-            {
-              uid: user.uid,
-              text: myNote.text,
-              song: myNote.song,
-              createdAt: myNote.createdAt,
-            },
-            { isMine: true }
-          )}
+          {myNote && renderReplyBadge(user.uid, { isMine: true })}
         </button>
 
         {/* ─── Others' notes ─── */}
@@ -797,7 +833,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
               <span className="note-name">
                 {getDisplayName(note.uid).split(' ')[0]}
               </span>
-              {renderReplyBadge(note)}
+              {renderReplyBadge(note.uid)}
             </div>
           );
         })}
@@ -907,7 +943,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
       {/* ─── Reply thread sheet ─── */}
       <NoteRepliesSheet
         open={!!repliesSheetFor}
-        note={repliesSheetFor}
+        note={repliesSheetFor?.note || null}
         noteOwnerUid={repliesSheetFor?.uid || null}
         noteOwnerName={
           repliesSheetFor?.uid === user?.uid
