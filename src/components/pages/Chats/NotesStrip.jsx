@@ -13,6 +13,8 @@ import {
   removeNoteReaction,
   markNoteSeen,
   subscribeToNoteViewers,
+  postNoteReply,
+  subscribeToReplyCounts,
   isEmojiOnly,
   isSingleEmoji,
   NOTE_MAX_LENGTH,
@@ -28,6 +30,7 @@ import {
 import { useSongPreview } from '../../../hooks/useSongPreview';
 import Avatar from '../../common/Avatar';
 import { useProfile } from '../../../contexts/ProfileContext';
+import NoteRepliesSheet from './NoteRepliesSheet';
 
 // ─── Song picker sheet ──────────────────────────────────────────
 const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
@@ -66,7 +69,6 @@ const SongPickerSheet = ({ open, catalog, onSelect, onClose }) => {
         setError('');
         return;
       }
-
       const result = await lookupSongByUrl(trimmed);
       if (result?.error) {
         setError(result.error);
@@ -325,6 +327,8 @@ const NotesStrip = ({ visibleUids = [] }) => {
   const [myViewers, setMyViewers] = useState([]);
   const [allNotes, setAllNotes] = useState([]);
   const [catalog, setCatalog] = useState([]);
+  const [replyCounts, setReplyCounts] = useState({});
+  const [repliesSheetFor, setRepliesSheetFor] = useState(null);
   const [composerOpen, setComposerOpen] = useState(false);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
@@ -411,6 +415,13 @@ const NotesStrip = ({ visibleUids = [] }) => {
   }, []);
 
   useEffect(() => {
+    const unsub = subscribeToReplyCounts((counts) => {
+      setReplyCounts(counts || {});
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
       setAllNotes((prev) => prev.filter((n) => n.expiresAt > now));
@@ -479,6 +490,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
     setMenuOpen(false);
   };
 
+  // ─── Tap another person's note ─────────────────────────────
   const handleTapOtherNote = async (note) => {
     if (longPressFired.current) {
       longPressFired.current = false;
@@ -486,6 +498,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
     }
     if (!user?.uid) return;
 
+    // Auto-play the preview
     if (note.song?.previewUrl) {
       try {
         playPreview({
@@ -495,8 +508,10 @@ const NotesStrip = ({ visibleUids = [] }) => {
       } catch (_) {}
     }
 
+    // Mark seen
     markNoteSeen(note.uid, user.uid).catch(() => {});
 
+    // Navigate to DM with the note prefilled
     setTimeout(() => {
       navigate(`/chat/${note.uid}`, {
         state: {
@@ -509,6 +524,41 @@ const NotesStrip = ({ visibleUids = [] }) => {
         },
       });
     }, 400);
+  };
+
+  // ─── Reply-count badge: tap → open sheet ────────────────────
+  const handleOpenReplies = (e, note) => {
+    e?.stopPropagation?.();
+    setRepliesSheetFor(note);
+  };
+
+  // ─── From the sheet: tap a reply author → open DM ───────────
+  const handleOpenChatWithReplyAuthor = (reply) => {
+    if (!reply?.authorUid || reply.authorUid === user?.uid) return;
+    setRepliesSheetFor(null);
+    navigate(`/chat/${reply.authorUid}`);
+  };
+
+  // ─── From the sheet footer: post a reply to the thread ─────
+  const handlePostReplyFromSheet = () => {
+    const note = repliesSheetFor;
+    if (!note) return;
+    setRepliesSheetFor(null);
+    // Same flow as tapping the note — opens DM with note prefilled.
+    // The actual reply to the thread happens when the user sends a message
+    // in the DM (auto-post is handled in ChatView via the navigation state).
+    setTimeout(() => {
+      navigate(`/chat/${note.uid}`, {
+        state: {
+          prefilledNote: note.text || '',
+          replyToNote: true,
+          noteAuthorUid: note.uid,
+          noteAuthorName: getDisplayName(note.uid),
+          noteCreatedAt: note.createdAt,
+          noteSong: note.song || null,
+        },
+      });
+    }, 200);
   };
 
   const handleNotePressStart = (e, note) => {
@@ -636,9 +686,28 @@ const NotesStrip = ({ visibleUids = [] }) => {
     );
   };
 
+  const renderReplyBadge = (noteOwnerUid, { isMine = false } = {}) => {
+    const count = replyCounts[noteOwnerUid] || 0;
+    if (count === 0) return null;
+    return (
+      <button
+        type="button"
+        className={`note-reply-badge ${isMine ? 'is-mine' : ''}`}
+        onClick={(e) => handleOpenReplies(e, { uid: noteOwnerUid })}
+        aria-label={`View ${count} replies`}
+      >
+        <span className="note-reply-badge-icon">💬</span>
+        <span className="note-reply-badge-count">
+          {count} {count === 1 ? 'reply' : 'replies'}
+        </span>
+      </button>
+    );
+  };
+
   return (
     <>
       <div className="notes-strip">
+        {/* ─── Your own note ─── */}
         <button
           type="button"
           className={`note-card note-card-mine ${myNote ? 'has-note' : ''}`}
@@ -672,8 +741,10 @@ const NotesStrip = ({ visibleUids = [] }) => {
           </div>
           <span className="note-name">You</span>
           {myNote && renderViewerAvatars()}
+          {myNote && renderReplyBadge(user.uid, { isMine: true })}
         </button>
 
+        {/* ─── Others' notes ─── */}
         {filteredNotes.map((note) => {
           const reactions = note.reactions || {};
           const grouped = {};
@@ -723,11 +794,13 @@ const NotesStrip = ({ visibleUids = [] }) => {
               <span className="note-name">
                 {getDisplayName(note.uid).split(' ')[0]}
               </span>
+              {renderReplyBadge(note.uid)}
             </div>
           );
         })}
       </div>
 
+      {/* ─── Composer modal ─── */}
       {composerOpen && (
         <div
           className="note-composer-backdrop"
@@ -820,6 +893,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
         </div>
       )}
 
+      {/* ─── Song picker sheet ─── */}
       <SongPickerSheet
         open={songSheetOpen}
         catalog={catalog}
@@ -827,6 +901,21 @@ const NotesStrip = ({ visibleUids = [] }) => {
         onClose={() => setSongSheetOpen(false)}
       />
 
+      {/* ─── Reply thread sheet ─── */}
+      <NoteRepliesSheet
+        open={!!repliesSheetFor}
+        noteOwnerUid={repliesSheetFor?.uid || null}
+        noteOwnerName={
+          repliesSheetFor?.uid === user?.uid
+            ? 'You'
+            : getDisplayName(repliesSheetFor?.uid)
+        }
+        onClose={() => setRepliesSheetFor(null)}
+        onOpenChatWith={handleOpenChatWithReplyAuthor}
+        onPostReply={handlePostReplyFromSheet}
+      />
+
+      {/* ─── Reaction picker ─── */}
       {reactionTarget && (
         <div
           className="note-reaction-backdrop"
@@ -850,6 +939,7 @@ const NotesStrip = ({ visibleUids = [] }) => {
         </div>
       )}
 
+      {/* ─── My-note quick menu ─── */}
       {menuOpen && myNote && (
         <div
           className="note-reaction-backdrop"
