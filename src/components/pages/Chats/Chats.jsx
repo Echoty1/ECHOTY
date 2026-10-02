@@ -29,7 +29,6 @@ import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import ChatPreviewPopup from './ChatPreviewPopup';
 import NotesStrip from './NotesStrip';
-import LiquidGlassBar from '../../layout/LiquidGlassBar';
 
 const CHAT_CHUNK_SIZE = 20;
 const TYPING_FRESHNESS_MS = 4000;
@@ -351,9 +350,6 @@ const Chats = () => {
   // Typing map keyed by partner UID → boolean
   const [typingPartners, setTypingPartners] = useState({});
 
-  // Liquid Glass bottom bar active tab
-  const [activeTab, setActiveTab] = useState('chats');
-
   const inputRef = useRef(null);
   const searchTimeout = useRef(null);
   const presenceUnsubRef = useRef(null);
@@ -372,33 +368,6 @@ const Chats = () => {
 
   const isDemoUser = user?.uid === DEMO_UID;
   const isSupportUser = user?.uid === SUPPORT_UID;
-
-  // ─── Sync bottom-bar active tab with the current route ───
-  useEffect(() => {
-    const path = routerLocation.pathname || '';
-    if (path.startsWith('/chats')) setActiveTab('chats');
-    else if (path.startsWith('/notes')) setActiveTab('notes');
-    else if (path.startsWith('/halo')) setActiveTab('halo');
-    else if (path.startsWith('/profile') || path.startsWith('/user'))
-      setActiveTab('profile');
-  }, [routerLocation.pathname]);
-
-  const handleTabChange = useCallback(
-    (tabId) => {
-      setActiveTab(tabId);
-      const map = {
-        chats: '/chats',
-        notes: '/notes',
-        halo: '/halo',
-        profile: '/profile',
-      };
-      const target = map[tabId];
-      if (target && routerLocation.pathname !== target) {
-        navigate(target);
-      }
-    },
-    [navigate, routerLocation.pathname]
-  );
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -1176,9 +1145,6 @@ const Chats = () => {
             onOpenChat={(chatId) => navigate(`/chat/${chatId}`)}
           />
         )}
-
-        {/* ─── Liquid Glass bottom bar ─── */}
-        <LiquidGlassBar active={activeTab} onChange={handleTabChange} />
       </div>
     </>
   );
