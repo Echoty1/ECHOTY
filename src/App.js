@@ -42,6 +42,7 @@ import EchoDropPage from './components/pages/EchoDrop/EchoDropPage';
 import MessageNotifier from './components/common/MessageNotifier';
 import { useGlobalMessageListener } from './hooks/useGlobalMessageListener';
 import { unlockAudio } from './services/notificationService';
+import { usePresence } from './hooks/usePresence';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
@@ -53,15 +54,8 @@ const schemaData = {
   url: 'https://echoty.xyz',
   logo: 'https://echoty.xyz/logo.png',
   description: 'Discover, connect, and echo with animated avatars.',
-  founder: {
-    '@type': 'Person',
-    name: 'Lawal Abdulmalik',
-    jobTitle: 'Founder & CEO',
-  },
-  ceo: {
-    '@type': 'Person',
-    name: 'Lawal Abdulmalik',
-  },
+  founder: { '@type': 'Person', name: 'Lawal Abdulmalik', jobTitle: 'Founder & CEO' },
+  ceo: { '@type': 'Person', name: 'Lawal Abdulmalik' },
   sameAs: ['https://echoty.xyz'],
 };
 
@@ -78,19 +72,7 @@ function ScrollToTop() {
 function LoadingScreen() {
   const isMobile = window.innerWidth <= 480;
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        background: 'var(--bg-primary)',
-        position: 'relative',
-        overflow: 'hidden',
-        transition: 'background 0.3s ease',
-      }}
-    >
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary)', position: 'relative', overflow: 'hidden', transition: 'background 0.3s ease' }}>
       <div style={{ position: 'absolute', width: '240px', height: '240px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.3, animation: 'echoRingPulse 2.5s ease-out infinite' }} />
       <div style={{ position: 'absolute', width: '320px', height: '320px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.2, animation: 'echoRingPulse 3s ease-out infinite 0.5s' }} />
       <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.1, animation: 'echoRingPulse 3.5s ease-out infinite 1s' }} />
@@ -102,12 +84,8 @@ function LoadingScreen() {
           <path d="M 370 200 A 90 90 0 0 1 370 312" stroke="#EC4899" strokeWidth="32" strokeOpacity="0.6" fill="none" strokeLinecap="round" />
         </svg>
       </div>
-      <div style={{ fontSize: isMobile ? '32px' : '40px', fontWeight: 900, background: 'linear-gradient(135deg, #6C3CE1, #EC4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: isMobile ? '4px' : '8px', zIndex: 2, fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>
-        ECHO
-      </div>
-      <div style={{ color: 'var(--text-muted)', fontSize: isMobile ? '10px' : '13px', letterSpacing: isMobile ? '4px' : '8px', textTransform: 'uppercase', marginTop: '2px', zIndex: 2, whiteSpace: 'nowrap' }}>
-        Discover. Connect. Echo.
-      </div>
+      <div style={{ fontSize: isMobile ? '32px' : '40px', fontWeight: 900, background: 'linear-gradient(135deg, #6C3CE1, #EC4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: isMobile ? '4px' : '8px', zIndex: 2, fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>ECHO</div>
+      <div style={{ color: 'var(--text-muted)', fontSize: isMobile ? '10px' : '13px', letterSpacing: isMobile ? '4px' : '8px', textTransform: 'uppercase', marginTop: '2px', zIndex: 2, whiteSpace: 'nowrap' }}>Discover. Connect. Echo.</div>
       <div style={{ width: '200px', height: '3px', background: 'var(--bg-input)', borderRadius: '4px', marginTop: '30px', overflow: 'hidden', zIndex: 2 }}>
         <div style={{ height: '100%', width: '200%', background: 'linear-gradient(90deg, #6C3CE1, #EC4899, #6C3CE1)', borderRadius: '4px', animation: 'shimmer 1.8s ease-in-out infinite' }} />
       </div>
@@ -121,6 +99,7 @@ function AppContent() {
   const { fetchProfile } = useProfile();
 
   useGlobalMessageListener();
+  usePresence(user);              // ← NEW: writes presence/{uid} globally
 
   const [minTimePassed, setMinTimePassed] = useState(false);
   const [showUpdatePopup, setShowUpdatePopup] = useState(false);
@@ -128,16 +107,7 @@ function AppContent() {
   const [playStoreUrl, setPlayStoreUrl] = useState('');
   const [appVersion] = useState(process.env.REACT_APP_VERSION || '1.0');
   const showLoading = loading || !minTimePassed;
-  const showHappr =
-    Boolean(user) &&
-    !showLoading &&
-    !banInfo?.isBanned &&
-    (pathname === '/' ||
-      pathname === '/chats' ||
-      pathname === '/communities' ||
-      pathname === '/shop' ||
-      pathname === '/other' ||
-      pathname === '/echodrop');
+  const showHappr = Boolean(user) && !showLoading && !banInfo?.isBanned && (pathname === '/' || pathname === '/chats' || pathname === '/communities' || pathname === '/shop' || pathname === '/other' || pathname === '/echodrop');
 
   useEffect(() => {
     const prime = () => unlockAudio();
@@ -175,8 +145,7 @@ function AppContent() {
     if (!document.getElementById('echo-happr-style')) {
       const css = document.createElement('style');
       css.id = 'echo-happr-style';
-      css.textContent =
-        'body.echo-support-visible [class*="myhappr"],body.echo-support-visible [id*="myhappr"],body.echo-support-visible iframe[src*="myhappr"]{bottom:96px!important;z-index:80!important;}body:not(.echo-support-visible) [class*="myhappr"],body:not(.echo-support-visible) [id*="myhappr"],body:not(.echo-support-visible) iframe[src*="myhappr"]{display:none!important;}';
+      css.textContent = 'body.echo-support-visible [class*="myhappr"],body.echo-support-visible [id*="myhappr"],body.echo-support-visible iframe[src*="myhappr"]{bottom:96px!important;z-index:80!important;}body:not(.echo-support-visible) [class*="myhappr"],body:not(.echo-support-visible) [id*="myhappr"],body:not(.echo-support-visible) iframe[src*="myhappr"]{display:none!important;}';
       document.head.appendChild(css);
     }
     return undefined;
@@ -207,30 +176,15 @@ function AppContent() {
   const cleanLocalStorage = () => {
     try {
       const keys = Object.keys(localStorage);
-      const toRemove = keys.filter((key) => (
-        key.startsWith('echo_cache_') ||
-        key.startsWith('echo_small_') ||
-        key.startsWith('echo_cache_v2_') ||
-        key.startsWith('echo_small_v2_') ||
-        key.startsWith('echocache_v2_')
-      )).filter((key) => {
-        const essential = [
-          'echo_has_recovered_',
-          'echo_app_version',
-          'echo_changelog_version',
-          'echo_install_popup_dismissed_until',
-          'echo_update_shown',
-          'firebase:host',
-        ];
+      const toRemove = keys.filter((key) => key.startsWith('echo_cache_') || key.startsWith('echo_small_') || key.startsWith('echo_cache_v2_') || key.startsWith('echo_small_v2_') || key.startsWith('echocache_v2_')).filter((key) => {
+        const essential = ['echo_has_recovered_', 'echo_app_version', 'echo_changelog_version', 'echo_install_popup_dismissed_until', 'echo_update_shown', 'firebase:host'];
         return !essential.some((e) => key.startsWith(e));
       });
       toRemove.forEach((key) => localStorage.removeItem(key));
     } catch (_) {}
   };
 
-  useEffect(() => {
-    if (user) cleanLocalStorage();
-  }, [user]);
+  useEffect(() => { if (user) cleanLocalStorage(); }, [user]);
 
   useEffect(() => {
     const fetchConfig = async () => {
@@ -300,9 +254,7 @@ function AppContent() {
       const cleanup = async () => {
         try {
           const chatList = await getChatList(user.uid);
-          if (chatList && chatList.length > 0) {
-            await cleanAllCachedMessages(user.uid, chatList);
-          }
+          if (chatList && chatList.length > 0) await cleanAllCachedMessages(user.uid, chatList);
         } catch (_) {}
       };
       cleanup();
@@ -311,22 +263,14 @@ function AppContent() {
 
   useEffect(() => {
     if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then((registration) => {
-        registration.update();
-      }).catch(() => {});
+      navigator.serviceWorker.ready.then((registration) => { registration.update(); }).catch(() => {});
     }
   }, []);
 
-  if (!showLoading && user && banInfo?.isBanned) {
-    return <BanScreen />;
-  }
+  if (!showLoading && user && banInfo?.isBanned) return <BanScreen />;
   if (showLoading) return <LoadingScreen />;
   if (!user) return <Login />;
-
-  // 👇 Verification gate — user is signed in but not verified
-  if (user.emailVerified === false) {
-    return <VerifyEmailScreen />;
-  }
+  if (user.emailVerified === false) return <VerifyEmailScreen />;
 
   return (
     <>
@@ -335,20 +279,7 @@ function AppContent() {
       <NetworkStatus />
       <DesktopInstallPrompt />
       <ScrollToTop />
-      <div
-        id="main-content"
-        style={{
-          paddingTop: '60px',
-          paddingBottom: '72px',
-          height: '100vh',
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          background: 'var(--bg-primary)',
-          maxWidth: '1400px',
-          margin: '0 auto',
-          width: '100%',
-        }}
-      >
+      <div id="main-content" style={{ paddingTop: '60px', paddingBottom: '72px', height: '100vh', overflowY: 'auto', overflowX: 'hidden', background: 'var(--bg-primary)', maxWidth: '1400px', margin: '0 auto', width: '100%' }}>
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/chats" element={<Chats />} />
@@ -369,12 +300,8 @@ function AppContent() {
         </Routes>
       </div>
       <BottomNav />
-      {showUpdatePopup && (
-        <UpdatePopup currentVersion={appVersion} onClose={() => setShowUpdatePopup(false)} />
-      )}
-      {showInstallPopup && (
-        <InstallPopup playStoreUrl={playStoreUrl} onClose={handleInstallPopupClose} />
-      )}
+      {showUpdatePopup && (<UpdatePopup currentVersion={appVersion} onClose={() => setShowUpdatePopup(false)} />)}
+      {showInstallPopup && (<InstallPopup playStoreUrl={playStoreUrl} onClose={handleInstallPopupClose} />)}
       <InstallBanner playStoreUrl={playStoreUrl} />
     </>
   );
@@ -383,11 +310,7 @@ function AppContent() {
 function App() {
   return (
     <BrowserRouter>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaData) }}
-      />
-
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaData) }} />
       <ThemeProvider>
         <AuthProvider>
           <PresenceProvider>
