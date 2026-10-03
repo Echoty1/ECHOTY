@@ -23,38 +23,68 @@ const DEFAULTS = {
     whoCanAddToGroups: 'everyone',
   },
   echo: {
-    defaultTideTTL: 24 * 60 * 60 * 1000,  // 24h
+    defaultTideTTL: 24 * 60 * 60 * 1000,  // 24h; 0 = never
     haloDefault: false,
     defaultMood: 'happy',
   },
 };
 
+/**
+ * Reads/writes the signed-in user's OWN settings at userSettings/{uid}.
+ * Updates are optimistic — UI flips instantly, then Firebase confirms.
+ */
 export const useUserSettings = (uid) => {
   const [settings, setSettings] = useState(DEFAULTS);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!uid) { setLoading(false); return; }
-    const r = ref(db, `userSettings/${uid}`);
-    const unsub = onValue(r, (snap) => {
-      const val = snap.val() || {};
-      setSettings({
-        chats: { ...DEFAULTS.chats, ...(val.chats || {}) },
-        notifications: { ...DEFAULTS.notifications, ...(val.notifications || {}) },
-        privacy: { ...DEFAULTS.privacy, ...(val.privacy || {}) },
-        echo: { ...DEFAULTS.echo, ...(val.echo || {}) },
-      });
+    if (!uid) {
+      setSettings(DEFAULTS);
       setLoading(false);
-    }, () => setLoading(false));
+      return undefined;
+    }
+
+    const r = ref(db, `userSettings/${uid}`);
+    const unsub = onValue(
+      r,
+      (snap) => {
+        const val = snap.val() || {};
+        setSettings({
+          chats: { ...DEFAULTS.chats, ...(val.chats || {}) },
+          notifications: { ...DEFAULTS.notifications, ...(val.notifications || {}) },
+          privacy: { ...DEFAULTS.privacy, ...(val.privacy || {}) },
+          echo: { ...DEFAULTS.echo, ...(val.echo || {}) },
+        });
+        setLoading(false);
+      },
+      () => setLoading(false)
+    );
+
     return () => unsub();
   }, [uid]);
 
-  const updateSection = useCallback(async (section, patch) => {
-    if (!uid) return;
-    const next = { ...(settings[section] || {}), ...patch };
-    setSettings((prev) => ({ ...prev, [section]: next })); // optimistic
-    await update(ref(db, `userSettings/${uid}/${section}`), patch);
-  }, [uid, settings]);
+  const updateSection = useCallback(
+    async (section, patch) => {
+      if (!uid) return;
+      setSettings((prev) => ({
+        ...prev,
+        [section]: { ...(prev[section] || {}), ...patch },
+      }));
+
+      try {
+        await update(ref(db, `userSettings/${uid}/${section}`), patch);
+
+        // ── Mirror privacy changes to the public node so other users can
+        //    read them without exposing userSettings/{uid}.
+        if (section === 'privacy') {
+          await update(ref(db, `userPrivacy/${uid}`), patch).catch(() => {});
+        }
+      } catch (err) {
+        console.warn('[useUserSettings] update failed:', err?.message || err);
+      }
+    },
+    [uid]
+  );
 
   return { settings, loading, updateSection };
 };
