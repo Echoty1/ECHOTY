@@ -58,12 +58,20 @@ import { REACTION_EMOJIS, REACTION_LABELS } from './ReactionEmoji';
 import './ChatView.css';
 
 /* ─────────────────────────────────────────────────────────────
-   NEW: Visual-viewport hook
+   Visual-viewport hook — mobile/touch devices only.
    Keeps .chat-view locked to the *visible* area so mobile
    keyboards (iOS Safari, Android Chrome) can't push the layout.
+   On desktop, this is a no-op so nothing shifts.
    ───────────────────────────────────────────────────────────── */
 const useVisualViewport = () => {
   useEffect(() => {
+    // Desktop (mouse + fine pointer) — do nothing.
+    const isTouch =
+      typeof window !== 'undefined' &&
+      (window.matchMedia?.('(hover: none)').matches ||
+        window.matchMedia?.('(pointer: coarse)').matches);
+    if (!isTouch) return;
+
     const vv = window.visualViewport;
     if (!vv) return;
 
@@ -165,7 +173,7 @@ const ChatView = () => {
   const location = useLocation();
   const { getProfile, fetchProfile } = useProfile();
 
-  // ── NEW: lock layout to the visible viewport
+  // Mobile-only layout lock (no-op on desktop)
   useVisualViewport();
 
   const [partnerProfile, setPartnerProfile] = useState(null);
@@ -281,8 +289,15 @@ const ChatView = () => {
     return () => clearInterval(id);
   }, []);
 
-  // ── NEW: when keyboard opens, snap the message list to the bottom
+  // When keyboard opens on mobile, snap the message list to the bottom.
+  // No-op on desktop.
   useEffect(() => {
+    const isTouch =
+      typeof window !== 'undefined' &&
+      (window.matchMedia?.('(hover: none)').matches ||
+        window.matchMedia?.('(pointer: coarse)').matches);
+    if (!isTouch) return;
+
     const vv = window.visualViewport;
     if (!vv) return;
     let raf = null;
@@ -1407,7 +1422,6 @@ const ChatView = () => {
 
   return (
     <>
-      {/* ...all your existing <style> block stays exactly the same... */}
       <style>{`
         /* ═══════════ Animated Telegram-style Reaction Bar ═══════════ */
         .echo-reaction-backdrop { position: fixed; inset: 0; z-index: 998; background: transparent; }
