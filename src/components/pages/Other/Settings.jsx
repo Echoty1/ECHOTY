@@ -28,7 +28,9 @@ import {
   setSoundEnabled,
   getNotifEnabled,
   setNotifEnabled,
-} from '../../../services/notificationService'; // ← NEW
+} from '../../../services/notificationService';
+import { useUserSettings } from '../../../hooks/useUserSettings';
+import { listBlocked, unblockUser } from '../../../services/blockService';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
@@ -36,6 +38,7 @@ const Settings = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const { themePreference, setTheme } = useTheme();
+  const { settings, updateSection } = useUserSettings(user?.uid);
 
   // ─── Message sound/notif preferences ──────────────────────────
   const [soundOn, setSoundOn] = useState(() => getSoundEnabled());
@@ -45,12 +48,32 @@ const Settings = () => {
     const next = !soundOn;
     setSoundOn(next);
     setSoundEnabled(next);
+    updateSection('notifications', { sound: next });
   };
 
   const toggleNotif = () => {
     const next = !notifOn;
     setNotifOn(next);
     setNotifEnabled(next);
+  };
+
+  // ─── Blocked users ────────────────────────────────────────────
+  const [blockedList, setBlockedList] = useState([]);
+  useEffect(() => {
+    if (!user?.uid) return;
+    listBlocked(user.uid).then(setBlockedList).catch(() => {});
+  }, [user?.uid]);
+
+  const handleUnblock = async (uid) => {
+    try {
+      await unblockUser(user.uid, uid);
+      setBlockedList((prev) => prev.filter((x) => x !== uid));
+      setToast({ message: 'User unblocked', type: 'success' });
+      setTimeout(() => setToast(null), 2500);
+    } catch (_) {
+      setToast({ message: 'Failed to unblock', type: 'error' });
+      setTimeout(() => setToast(null), 2500);
+    }
   };
 
   // ─── Account deletion states ──────────────────────────────────
@@ -191,33 +214,6 @@ const Settings = () => {
     await clearChatList(user.uid).catch(() => {});
     window.dispatchEvent(new CustomEvent('chat-history-cleared', { detail: { partnerId, chatId: cId } }));
     window.dispatchEvent(new CustomEvent('chats-refresh'));
-  };
-
-  const clearConversationForBoth = async (partnerId) => {
-    const chatId = getChatId(partnerId);
-    const now = Date.now();
-    const updates = {
-      [`chats/${chatId}`]: null,
-      [`userChats/${user.uid}/${partnerId}/clearedAt`]: now,
-      [`userChats/${partnerId}/${user.uid}/clearedAt`]: now,
-      [`userChats/${user.uid}/${partnerId}/lastMessage`]: '',
-      [`userChats/${partnerId}/${user.uid}/lastMessage`]: '',
-      [`userChats/${user.uid}/${partnerId}/unreadCount`]: 0,
-      [`userChats/${partnerId}/${user.uid}/unreadCount`]: 0,
-    };
-    await update(ref(db), updates);
-    await wipeLocalChatData(partnerId);
-  };
-
-  const deleteConversationForBoth = async (partnerId) => {
-    const chatId = getChatId(partnerId);
-    const updates = {
-      [`chats/${chatId}`]: null,
-      [`userChats/${user.uid}/${partnerId}`]: null,
-      [`userChats/${partnerId}/${user.uid}`]: null,
-    };
-    await update(ref(db), updates);
-    await wipeLocalChatData(partnerId);
   };
 
   const showToast = (message, type = 'success') => {
@@ -551,170 +547,283 @@ const Settings = () => {
       <div className="settings-page">
         <div className="settings-content">
           <div className="settings-grid-3">
-          {/* ─── SOUNDS & NOTIFICATIONS (NEW) ──────────────────── */}
-          <div className="settings-card">
-            <h2><i className="fas fa-bell" style={{ color: '#F59E0B' }} /> Sounds &amp; Notifications</h2>
-            <p>Control message sounds and in-app banners.</p>
 
-            <button
-              type="button"
-              className={`echo-toggle-btn ${soundOn ? 'on' : 'off'}`}
-              onClick={toggleSound}
-              aria-pressed={soundOn}
-              style={{ marginTop: '12px' }}
-            >
-              <span className="echo-toggle-track">
-                <span className="echo-toggle-thumb" />
-              </span>
-              <span className="echo-toggle-label">
-                {soundOn ? 'Message sounds on' : 'Message sounds off'}
-              </span>
-            </button>
+            {/* ─── SOUNDS & NOTIFICATIONS ─────────────────────── */}
+            <div className="settings-card">
+              <h2><i className="fas fa-bell" style={{ color: '#F59E0B' }} /> Sounds &amp; Notifications</h2>
+              <p>Control message sounds and in-app banners.</p>
 
-            <button
-              type="button"
-              className={`echo-toggle-btn ${notifOn ? 'on' : 'off'}`}
-              onClick={toggleNotif}
-              aria-pressed={notifOn}
-              style={{ marginTop: '10px' }}
-            >
-              <span className="echo-toggle-track">
-                <span className="echo-toggle-thumb" />
-              </span>
-              <span className="echo-toggle-label">
-                {notifOn ? 'Notifications on' : 'Notifications off'}
-              </span>
-            </button>
-          </div>
+              <button type="button" className={`echo-toggle-btn ${soundOn ? 'on' : 'off'}`} onClick={toggleSound} aria-pressed={soundOn} style={{ marginTop: '12px' }}>
+                <span className="echo-toggle-track"><span className="echo-toggle-thumb" /></span>
+                <span className="echo-toggle-label">{soundOn ? 'Message sounds on' : 'Message sounds off'}</span>
+              </button>
 
-          {/* ─── THEME CARD ─────────────────────────────────────── */}
-          <div className="settings-card">
-            <h2><i className="fas fa-palette" /> Theme</h2>
-            <p>Choose your preferred app appearance.</p>
-            <div style={{
-              display: 'flex',
-              gap: '12px',
-              marginTop: '12px',
-              flexWrap: 'wrap',
-            }}>
-              {['dark', 'light', 'system'].map((mode) => (
-                <button
-                  key={mode}
-                  onClick={() => setTheme(mode)}
-                  style={{
-                    padding: '10px 20px',
-                    borderRadius: '30px',
-                    border: themePreference === mode ? '2px solid #6C3CE1' : '1px solid var(--border-color)',
-                    background: themePreference === mode ? 'rgba(108,60,225,0.15)' : 'var(--bg-input)',
-                    color: 'var(--text-primary)',
-                    cursor: 'pointer',
-                    fontWeight: themePreference === mode ? 600 : 400,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '8px',
-                    transition: 'all 0.2s ease',
-                    fontFamily: 'inherit',
-                    flex: '0 1 auto',
-                  }}
-                >
-                  {mode === 'dark' && '🌙 Dark'}
-                  {mode === 'light' && '☀️ Light'}
-                  {mode === 'system' && '⚙️ System'}
-                </button>
-              ))}
+              <button type="button" className={`echo-toggle-btn ${notifOn ? 'on' : 'off'}`} onClick={toggleNotif} aria-pressed={notifOn} style={{ marginTop: '10px' }}>
+                <span className="echo-toggle-track"><span className="echo-toggle-thumb" /></span>
+                <span className="echo-toggle-label">{notifOn ? 'Notifications on' : 'Notifications off'}</span>
+              </button>
+
+              <button type="button" className={`echo-toggle-btn ${settings.notifications.vibrate ? 'on' : 'off'}`} onClick={() => updateSection('notifications', { vibrate: !settings.notifications.vibrate })} style={{ marginTop: '10px' }}>
+                <span className="echo-toggle-track"><span className="echo-toggle-thumb" /></span>
+                <span className="echo-toggle-label">{settings.notifications.vibrate ? 'Vibration on' : 'Vibration off'}</span>
+              </button>
+
+              <button type="button" className={`echo-toggle-btn ${settings.notifications.previewOnLock ? 'on' : 'off'}`} onClick={() => updateSection('notifications', { previewOnLock: !settings.notifications.previewOnLock })} style={{ marginTop: '10px' }}>
+                <span className="echo-toggle-track"><span className="echo-toggle-thumb" /></span>
+                <span className="echo-toggle-label">{settings.notifications.previewOnLock ? 'Preview on lock screen' : 'Hide preview on lock screen'}</span>
+              </button>
             </div>
-            <p style={{
-              fontSize: '13px',
-              color: 'var(--text-muted)',
-              marginTop: '8px',
-            }}>
-              {themePreference === 'system'
-                ? 'Auto-detects from your device settings.'
-                : `Currently using ${themePreference} mode.`}
-            </p>
-          </div>
 
-          {/* ─── CHAT BACKGROUND TOGGLE ─────────────────────────── */}
-          <div className="settings-card">
-            <h2><i className="fas fa-circle-notch" style={{ color: '#a78bfa' }} /> Chat background</h2>
-            <p>
-              Show the animated ECHO rings behind your conversations.
-              Preference is saved on this device only.
-            </p>
-            <button
-              type="button"
-              className={`echo-toggle-btn ${chatBgEnabled ? 'on' : 'off'}`}
-              onClick={toggleChatBg}
-              aria-pressed={chatBgEnabled}
-            >
-              <span className="echo-toggle-track">
-                <span className="echo-toggle-thumb" />
-              </span>
-              <span className="echo-toggle-label">
-                {chatBgEnabled ? 'Background on' : 'Background off'}
-              </span>
-            </button>
-          </div>
-
-          {/* ─── DEVICES CARD ───────────────────────────────────── */}
-          <div className="settings-card">
-            <h2><i className="fas fa-laptop" style={{ color: '#60A5FA' }} /> Devices</h2>
-            <p>Devices signed into this account. You can sign out another device from here.</p>
-            {loadingSessions ? (
-              <p style={{ color: 'var(--text-muted)' }}>Loading devices…</p>
-            ) : sessions.length === 0 ? (
-              <p style={{ color: 'var(--text-muted)' }}>No saved devices yet. Sign in again to register this one.</p>
-            ) : (
-              <div className="sessions-list">
-                {sessions.map((session) => (
-                  <div key={session.deviceId} className="session-item">
-                    <div className="session-icon"><i className={`${getOsIcon(session.os).prefix} ${getOsIcon(session.os).icon}`} /></div>
-                    <div className="session-info">
-                      <div className="session-name">
-                        {session.os || 'Device'} · {session.browser || 'Browser'}
-                        {session.isCurrent && <span className="session-current-badge">Current</span>}
-                      </div>
-                      <div className="session-details">
-                        {session.screen || ''} · {session.lastActive ? new Date(session.lastActive).toLocaleString() : ''}
-                      </div>
-                    </div>
-                    {session.isCurrent ? (
-                      <button type="button" className="session-logout-btn" title="Log out this device" onClick={() => {
-                        setConfirmModal({
-                          isOpen: true,
-                          title: 'Log out this device?',
-                          message: 'You will be signed out here. You can sign in again anytime.',
-                          confirmText: 'Log Out',
-                          showCancel: true,
-                          showInput: false,
-                          onConfirm: async () => { await logout(); navigate('/login'); },
-                        });
-                      }}><i className="fas fa-sign-out-alt" /></button>
-                    ) : (
-                      <button type="button" className="session-logout-btn" title="Log out this device" onClick={() => {
-                        const label = `${session.os} · ${session.browser}`;
-                        setConfirmModal({
-                          isOpen: true,
-                          title: `Log out ${label}?`,
-                          message: 'That device will be signed out.',
-                          confirmText: 'Log Out',
-                          showCancel: true,
-                          showInput: false,
-                          onConfirm: async () => {
-                            await remove(ref(db, `sessions/${user.uid}/${session.deviceId}`));
-                            setToast({ message: `Signed out ${label}`, type: 'success' });
-                            setTimeout(() => setToast(null), 2500);
-                          },
-                        });
-                      }}><i className="fas fa-sign-out-alt" /></button>
-                    )}
-                  </div>
+            {/* ─── THEME CARD ─────────────────────────────────── */}
+            <div className="settings-card">
+              <h2><i className="fas fa-palette" /> Theme</h2>
+              <p>Choose your preferred app appearance.</p>
+              <div style={{ display: 'flex', gap: '12px', marginTop: '12px', flexWrap: 'wrap' }}>
+                {['dark', 'light', 'system'].map((mode) => (
+                  <button
+                    key={mode}
+                    onClick={() => setTheme(mode)}
+                    style={{
+                      padding: '10px 20px',
+                      borderRadius: '30px',
+                      border: themePreference === mode ? '2px solid #6C3CE1' : '1px solid var(--border-color)',
+                      background: themePreference === mode ? 'rgba(108,60,225,0.15)' : 'var(--bg-input)',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      fontWeight: themePreference === mode ? 600 : 400,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      transition: 'all 0.2s ease',
+                      fontFamily: 'inherit',
+                      flex: '0 1 auto',
+                    }}
+                  >
+                    {mode === 'dark' && '🌙 Dark'}
+                    {mode === 'light' && '☀️ Light'}
+                    {mode === 'system' && '⚙️ System'}
+                  </button>
                 ))}
               </div>
-            )}
-          </div>
+              <p style={{ fontSize: '13px', color: 'var(--text-muted)', marginTop: '8px' }}>
+                {themePreference === 'system'
+                  ? 'Auto-detects from your device settings.'
+                  : `Currently using ${themePreference} mode.`}
+              </p>
+            </div>
+
+            {/* ─── CHAT BACKGROUND ────────────────────────────── */}
+            <div className="settings-card">
+              <h2><i className="fas fa-circle-notch" style={{ color: '#a78bfa' }} /> Chat background</h2>
+              <p>Show the animated ECHO rings behind your conversations. Preference is saved on this device only.</p>
+              <button type="button" className={`echo-toggle-btn ${chatBgEnabled ? 'on' : 'off'}`} onClick={toggleChatBg} aria-pressed={chatBgEnabled}>
+                <span className="echo-toggle-track"><span className="echo-toggle-thumb" /></span>
+                <span className="echo-toggle-label">{chatBgEnabled ? 'Background on' : 'Background off'}</span>
+              </button>
+            </div>
+
+            {/* ─── DEVICES ────────────────────────────────────── */}
+            <div className="settings-card">
+              <h2><i className="fas fa-laptop" style={{ color: '#60A5FA' }} /> Devices</h2>
+              <p>Devices signed into this account. You can sign out another device from here.</p>
+              {loadingSessions ? (
+                <p style={{ color: 'var(--text-muted)' }}>Loading devices…</p>
+              ) : sessions.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)' }}>No saved devices yet. Sign in again to register this one.</p>
+              ) : (
+                <div className="sessions-list">
+                  {sessions.map((session) => (
+                    <div key={session.deviceId} className="session-item">
+                      <div className="session-icon"><i className={`${getOsIcon(session.os).prefix} ${getOsIcon(session.os).icon}`} /></div>
+                      <div className="session-info">
+                        <div className="session-name">
+                          {session.os || 'Device'} · {session.browser || 'Browser'}
+                          {session.isCurrent && <span className="session-current-badge">Current</span>}
+                        </div>
+                        <div className="session-details">
+                          {session.screen || ''} · {session.lastActive ? new Date(session.lastActive).toLocaleString() : ''}
+                        </div>
+                      </div>
+                      {session.isCurrent ? (
+                        <button type="button" className="session-logout-btn" title="Log out this device" onClick={() => {
+                          setConfirmModal({
+                            isOpen: true,
+                            title: 'Log out this device?',
+                            message: 'You will be signed out here. You can sign in again anytime.',
+                            confirmText: 'Log Out',
+                            showCancel: true,
+                            showInput: false,
+                            onConfirm: async () => { await logout(); navigate('/login'); },
+                          });
+                        }}><i className="fas fa-sign-out-alt" /></button>
+                      ) : (
+                        <button type="button" className="session-logout-btn" title="Log out this device" onClick={() => {
+                          const label = `${session.os} · ${session.browser}`;
+                          setConfirmModal({
+                            isOpen: true,
+                            title: `Log out ${label}?`,
+                            message: 'That device will be signed out.',
+                            confirmText: 'Log Out',
+                            showCancel: true,
+                            showInput: false,
+                            onConfirm: async () => {
+                              await remove(ref(db, `sessions/${user.uid}/${session.deviceId}`));
+                              setToast({ message: `Signed out ${label}`, type: 'success' });
+                              setTimeout(() => setToast(null), 2500);
+                            },
+                          });
+                        }}><i className="fas fa-sign-out-alt" /></button>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* ═══ NEW: Chats preferences ═══ */}
+            <div className="settings-card">
+              <h2><i className="fas fa-comment-dots" style={{ color: '#60A5FA' }} /> Chats</h2>
+              <p>How messages behave inside conversations.</p>
+
+              <button type="button" className={`echo-toggle-btn ${settings.chats.enterToSend ? 'on' : 'off'}`} onClick={() => updateSection('chats', { enterToSend: !settings.chats.enterToSend })} style={{ marginTop: '12px' }}>
+                <span className="echo-toggle-track"><span className="echo-toggle-thumb" /></span>
+                <span className="echo-toggle-label">{settings.chats.enterToSend ? 'Enter key sends message' : 'Ctrl+Enter sends message'}</span>
+              </button>
+
+              <button type="button" className={`echo-toggle-btn ${settings.chats.showTyping ? 'on' : 'off'}`} onClick={() => updateSection('chats', { showTyping: !settings.chats.showTyping })} style={{ marginTop: '10px' }}>
+                <span className="echo-toggle-track"><span className="echo-toggle-thumb" /></span>
+                <span className="echo-toggle-label">{settings.chats.showTyping ? 'Show typing indicator' : 'Hide typing indicator'}</span>
+              </button>
+
+              <button type="button" className={`echo-toggle-btn ${settings.chats.sendReadReceipts ? 'on' : 'off'}`} onClick={() => updateSection('chats', { sendReadReceipts: !settings.chats.sendReadReceipts })} style={{ marginTop: '10px' }}>
+                <span className="echo-toggle-track"><span className="echo-toggle-thumb" /></span>
+                <span className="echo-toggle-label">{settings.chats.sendReadReceipts ? 'Send read receipts' : 'Don\u2019t send read receipts'}</span>
+              </button>
+
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--text-secondary)' }}>Message text size</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {['sm', 'md', 'lg'].map((size) => (
+                    <button key={size} onClick={() => updateSection('chats', { fontSize: size })} style={{
+                      flex: 1, padding: '10px', borderRadius: 12,
+                      border: settings.chats.fontSize === size ? '2px solid #6C3CE1' : '1px solid var(--border-color)',
+                      background: settings.chats.fontSize === size ? 'rgba(108,60,225,0.15)' : 'var(--bg-input)',
+                      color: 'var(--text-primary)', cursor: 'pointer', fontFamily: 'inherit',
+                      fontSize: size === 'sm' ? 12 : size === 'md' ? 14 : 16, fontWeight: 600,
+                    }}>{size === 'sm' ? 'Small' : size === 'md' ? 'Medium' : 'Large'}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--text-secondary)' }}>Media auto-download</div>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {[
+                    { v: 'always', l: 'Always' },
+                    { v: 'wifi', l: 'Wi-Fi only' },
+                    { v: 'never', l: 'Never' },
+                  ].map(({ v, l }) => (
+                    <button key={v} onClick={() => updateSection('chats', { mediaAutoDownload: v })} style={{
+                      flex: 1, padding: '10px', borderRadius: 12, fontSize: 13,
+                      border: settings.chats.mediaAutoDownload === v ? '2px solid #6C3CE1' : '1px solid var(--border-color)',
+                      background: settings.chats.mediaAutoDownload === v ? 'rgba(108,60,225,0.15)' : 'var(--bg-input)',
+                      color: 'var(--text-primary)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
+                    }}>{l}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* ═══ NEW: Privacy ═══ */}
+            <div className="settings-card">
+              <h2><i className="fas fa-lock" style={{ color: '#10B981' }} /> Privacy</h2>
+              <p>Control who sees your info.</p>
+
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--text-secondary)' }}>Last seen &amp; online</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {['everyone', 'contacts', 'nobody'].map((v) => (
+                    <button key={v} onClick={() => updateSection('privacy', { lastSeen: v })} style={{
+                      padding: '8px 16px', borderRadius: 20, fontSize: 13,
+                      border: settings.privacy.lastSeen === v ? '2px solid #6C3CE1' : '1px solid var(--border-color)',
+                      background: settings.privacy.lastSeen === v ? 'rgba(108,60,225,0.15)' : 'var(--bg-input)',
+                      color: 'var(--text-primary)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
+                      textTransform: 'capitalize',
+                    }}>{v}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--text-secondary)' }}>Profile photo</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {['everyone', 'contacts', 'nobody'].map((v) => (
+                    <button key={v} onClick={() => updateSection('privacy', { profilePhoto: v })} style={{
+                      padding: '8px 16px', borderRadius: 20, fontSize: 13,
+                      border: settings.privacy.profilePhoto === v ? '2px solid #6C3CE1' : '1px solid var(--border-color)',
+                      background: settings.privacy.profilePhoto === v ? 'rgba(108,60,225,0.15)' : 'var(--bg-input)',
+                      color: 'var(--text-primary)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
+                      textTransform: 'capitalize',
+                    }}>{v}</button>
+                  ))}
+                </div>
+              </div>
+
+              <div style={{ marginTop: 16 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--text-secondary)' }}>Blocked users ({blockedList.length})</div>
+                {blockedList.length === 0 ? (
+                  <p style={{ color: 'var(--text-muted)', fontSize: 13 }}>You haven\u2019t blocked anyone.</p>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {blockedList.map((uid) => (
+                      <div key={uid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 12, background: 'var(--bg-secondary)', border: '1px solid var(--border-color)' }}>
+                        <Avatar uid={uid} size={32} />
+                        <span style={{ flex: 1, fontSize: 13 }}>{uid.slice(0, 8)}…</span>
+                        <button onClick={() => handleUnblock(uid)} style={{
+                          padding: '6px 14px', borderRadius: 16, border: 'none',
+                          background: 'rgba(239,68,68,0.15)', color: '#ef4444',
+                          cursor: 'pointer', fontWeight: 600, fontSize: 12, fontFamily: 'inherit',
+                        }}>Unblock</button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ═══ NEW: ECHO preferences ═══ */}
+            <div className="settings-card">
+              <h2><i className="fas fa-water" style={{ color: '#EC4899' }} /> ECHO</h2>
+              <p>Defaults for ECHO Tide and Halo.</p>
+
+              <div style={{ marginTop: 12 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--text-secondary)' }}>Default ECHO Tide</div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {[
+                    { v: 60 * 60 * 1000, l: '1 hour' },
+                    { v: 24 * 60 * 60 * 1000, l: '24 hours' },
+                    { v: 7 * 24 * 60 * 60 * 1000, l: '7 days' },
+                    { v: 0, l: 'Never' },
+                  ].map(({ v, l }) => (
+                    <button key={v} onClick={() => updateSection('echo', { defaultTideTTL: v })} style={{
+                      padding: '8px 16px', borderRadius: 20, fontSize: 13,
+                      border: settings.echo.defaultTideTTL === v ? '2px solid #6C3CE1' : '1px solid var(--border-color)',
+                      background: settings.echo.defaultTideTTL === v ? 'rgba(108,60,225,0.15)' : 'var(--bg-input)',
+                      color: 'var(--text-primary)', cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
+                    }}>{l}</button>
+                  ))}
+                </div>
+              </div>
+
+              <button type="button" className={`echo-toggle-btn ${settings.echo.haloDefault ? 'on' : 'off'}`} onClick={() => updateSection('echo', { haloDefault: !settings.echo.haloDefault })} style={{ marginTop: 16 }}>
+                <span className="echo-toggle-track"><span className="echo-toggle-thumb" /></span>
+                <span className="echo-toggle-label">{settings.echo.haloDefault ? 'Send in Halo by default' : 'Halo off by default'}</span>
+              </button>
+            </div>
+
           </div>
 
+          {/* ─── CHAT MANAGEMENT ─────────────────────────────── */}
           <div className="settings-card chat-management">
             <h2><i className="fas fa-comment-slash" /> Chat Management</h2>
             <p>Manage your conversations. Actions affect both you and the other person.</p>
@@ -818,7 +927,7 @@ const Settings = () => {
             )}
           </div>
 
-          {/* ─── DANGER ZONE ─────────────────────────────────────── */}
+          {/* ─── DANGER ZONE ─────────────────────────────────── */}
           <div className="settings-card danger-zone">
             <h2><i className="fas fa-exclamation-triangle" /> Danger Zone</h2>
             <p>This action is irreversible. Deleting your account will permanently remove all your data, including messages, profile, and Echoes.</p>
@@ -863,11 +972,9 @@ const Settings = () => {
               <div className="reauth-section">
                 <p>
                   For security, please re-authenticate your account.
-                  {isGoogleUser ? (
-                    ' Click the button below to re-authenticate with Google.'
-                  ) : (
-                    ' Enter your password to continue.'
-                  )}
+                  {isGoogleUser
+                    ? ' Click the button below to re-authenticate with Google.'
+                    : ' Enter your password to continue.'}
                 </p>
                 {!isGoogleUser && (
                   <input
