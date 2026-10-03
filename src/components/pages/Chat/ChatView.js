@@ -1,16 +1,8 @@
 // src/components/pages/Chat/ChatView.js
-import React, { useState, useEffect, useRef, useCallback, Fragment } from 'react';
+import React, { useState, useEffect, useRef, useCallback, Fragment, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import {
-  ref,
-  onValue,
-  push,
-  set,
-  update,
-  get,
-  remove,
-  serverTimestamp,
-  runTransaction,
+  ref, onValue, push, set, update, get, remove, serverTimestamp, runTransaction,
 } from 'firebase/database';
 import { useAuth } from '../../../hooks/useAuth';
 import { sortMessages as sortMessagesByTime } from '../../../utils/sortMessages';
@@ -19,10 +11,7 @@ import { auth, db } from '../../../services/firebase';
 import { apiUrl } from '../../../utils/api';
 import { postNoteReply } from '../../../services/notesService';
 import {
-  loadMessagesFromCache,
-  upsertMessageInCache,
-  deleteMessageFromCache,
-  saveMessagesToCache,
+  loadMessagesFromCache, upsertMessageInCache, deleteMessageFromCache, saveMessagesToCache,
 } from '../../../services/messageStorage';
 import { clearMessageCache } from '../../../services/messageCache';
 import { cleanCachedMessagesForChat } from '../../../services/messageCleanup';
@@ -58,10 +47,7 @@ import { REACTION_EMOJIS, REACTION_LABELS } from './ReactionEmoji';
 import './ChatView.css';
 
 /* ─────────────────────────────────────────────────────────────
-   Visual-viewport hook.
-   · On touch devices: lock .chat-view to visualViewport so the
-     on-screen keyboard can't push the layout around.
-   · On desktop: no-op, plus cleanup of any stale CSS vars.
+   Visual-viewport hook (unchanged)
    ───────────────────────────────────────────────────────────── */
 const useVisualViewport = () => {
   useEffect(() => {
@@ -70,30 +56,24 @@ const useVisualViewport = () => {
       typeof window !== 'undefined' &&
       (window.matchMedia?.('(hover: none)').matches ||
         window.matchMedia?.('(pointer: coarse)').matches);
-
     if (!isTouch) {
-      // Desktop: make sure nothing stale lingers.
       root.style.removeProperty('--vvh');
       root.style.removeProperty('--vvt');
       root.style.removeProperty('--kb');
       root.classList.remove('keyboard-open');
       return;
     }
-
     const vv = window.visualViewport;
     if (!vv) return;
-
     const apply = () => {
       const h = vv.height;
       const top = vv.offsetTop;
       const kb = Math.max(0, window.innerHeight - h - top);
-
       root.style.setProperty('--vvh', `${h}px`);
       root.style.setProperty('--vvt', `${top}px`);
       root.style.setProperty('--kb', `${kb}px`);
       root.classList.toggle('keyboard-open', kb > 120);
     };
-
     apply();
     vv.addEventListener('resize', apply);
     vv.addEventListener('scroll', apply);
@@ -118,6 +98,8 @@ const REACTION_BAR_HEIGHT = 48;
 const REACTION_BAR_GAP = 12;
 const REACTION_ARROW_SIZE = 12;
 const REACTION_BAR_HALF_WIDTH = 150;
+
+const GROUP_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
 
 const sanitizeName = (rawName, userId) => {
   if (!rawName) return 'User';
@@ -159,16 +141,42 @@ const formatReactionCount = (n) => {
   return String(count);
 };
 
+/* Date helpers */
+const startOfDay = (ts) => {
+  const d = new Date(ts);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+};
+
+const formatDayLabel = (ts) => {
+  const today = startOfDay(Date.now());
+  const yesterday = today - 86400000;
+  const day = startOfDay(ts);
+  if (day === today) return 'Today';
+  if (day === yesterday) return 'Yesterday';
+  const d = new Date(ts);
+  const now = new Date();
+  const sameYear = d.getFullYear() === now.getFullYear();
+  return d.toLocaleDateString(undefined, sameYear
+    ? { month: 'long', day: 'numeric' }
+    : { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+/* Deterministic sender color (for reply strips / group avatar rings) */
+const senderColor = (uid) => {
+  const colors = ['#e17076', '#7bc862', '#e5ca77', '#65aadd', '#a695e7', '#ee7aae', '#6ec9cb', '#faa774'];
+  if (!uid) return colors[0];
+  let h = 0;
+  for (let i = 0; i < uid.length; i++) h = (h * 31 + uid.charCodeAt(i)) | 0;
+  return colors[Math.abs(h) % colors.length];
+};
+
 const MessageReceipt = ({ msg, isMe }) => {
   if (!isMe) return null;
   const read = !!msg.readAt || msg.isRead === true;
   const delivered = !!msg.deliveredAt || msg.received === true;
-  if (read) {
-    return <span className="message-receipt read" title="Read">✓✓</span>;
-  }
-  if (delivered) {
-    return <span className="message-receipt delivered" title="Delivered">✓✓</span>;
-  }
+  if (read) return <span className="message-receipt read" title="Read">✓✓</span>;
+  if (delivered) return <span className="message-receipt delivered" title="Delivered">✓✓</span>;
   return <span className="message-receipt sent" title="Sent">✓</span>;
 };
 
@@ -179,7 +187,6 @@ const ChatView = () => {
   const location = useLocation();
   const { getProfile, fetchProfile } = useProfile();
 
-  // Mobile-only layout lock (no-op on desktop)
   useVisualViewport();
 
   const [partnerProfile, setPartnerProfile] = useState(null);
@@ -239,13 +246,18 @@ const ChatView = () => {
   const [pressedMsgId, setPressedMsgId] = useState(null);
   const [tappedEmoji, setTappedEmoji] = useState(null);
 
+  /* ───── NEW: FAB + unread counter ───── */
+  const [unreadWhileScrolled, setUnreadWhileScrolled] = useState(0);
+
+  /* ───── NEW: pinned message ───── */
+  const [pinnedMessageId, setPinnedMessageId] = useState(null);
+
+  /* ───── NEW: select mode ───── */
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+
   const [confirmModal, setConfirmModal] = useState({
-    isOpen: false,
-    title: '',
-    message: '',
-    confirmText: 'Confirm',
-    cancelText: 'Cancel',
-    onConfirm: null,
+    isOpen: false, title: '', message: '', confirmText: 'Confirm', cancelText: 'Cancel', onConfirm: null,
   });
 
   const messagesEndRef = useRef(null);
@@ -284,15 +296,10 @@ const ChatView = () => {
     };
   }, []);
 
-  // ─── Hide the bottom nav while the chat page is mounted ───
-  // Single source of truth. Do NOT add a second effect that toggles
-  // this class based on preview state — it will fight this one and
-  // remove the class right after mount, leaving the nav visible.
+  // Hide bottom nav while chat is mounted
   useEffect(() => {
     document.body.classList.add('echo-hide-bottom-nav');
-    return () => {
-      document.body.classList.remove('echo-hide-bottom-nav');
-    };
+    return () => document.body.classList.remove('echo-hide-bottom-nav');
   }, []);
 
   useEffect(() => {
@@ -300,15 +307,12 @@ const ChatView = () => {
     return () => clearInterval(id);
   }, []);
 
-  // When keyboard opens on mobile, snap the message list to the bottom.
-  // No-op on desktop.
   useEffect(() => {
     const isTouch =
       typeof window !== 'undefined' &&
       (window.matchMedia?.('(hover: none)').matches ||
         window.matchMedia?.('(pointer: coarse)').matches);
     if (!isTouch) return;
-
     const vv = window.visualViewport;
     if (!vv) return;
     let raf = null;
@@ -316,9 +320,7 @@ const ChatView = () => {
       if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(() => {
         const el = messagesContainerRef.current;
-        if (el && isNearBottomRef.current) {
-          el.scrollTop = el.scrollHeight;
-        }
+        if (el && isNearBottomRef.current) el.scrollTop = el.scrollHeight;
       });
     };
     vv.addEventListener('resize', onResize);
@@ -328,11 +330,10 @@ const ChatView = () => {
     };
   }, []);
 
-  // ── NOTE REPLY: read navigation state & prefill ─────────────
+  // Note-reply prefill
   useEffect(() => {
     const state = location.state;
     if (!state) return;
-
     if (state.replyToNote && (state.prefilledNote || state.noteSong)) {
       const noteContext = {
         text: state.prefilledNote || '',
@@ -343,10 +344,7 @@ const ChatView = () => {
       };
       setReplyToNote(noteContext);
       noteReplyContext.current = noteContext;
-
-      if (typeof state.prefilledNote === 'string' && state.prefilledNote) {
-        setNewMessage(state.prefilledNote);
-      }
+      if (typeof state.prefilledNote === 'string' && state.prefilledNote) setNewMessage(state.prefilledNote);
       navigate(location.pathname, { replace: true, state: {} });
       setTimeout(() => {
         if (inputRef.current) {
@@ -359,42 +357,32 @@ const ChatView = () => {
       }, 120);
       return;
     }
-
     if (state.prefilledNote && typeof state.prefilledNote === 'string') {
       setNewMessage(state.prefilledNote);
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
-          try {
-            inputRef.current.setSelectionRange(state.prefilledNote.length, state.prefilledNote.length);
-          } catch (_) {}
+          try { inputRef.current.setSelectionRange(state.prefilledNote.length, state.prefilledNote.length); } catch (_) {}
         }
       }, 120);
     }
   }, [location.state, location.pathname, navigate]);
 
-  useEffect(() => {
-    return () => {
-      noteReplyContext.current = null;
-    };
-  }, [userId]);
+  useEffect(() => () => { noteReplyContext.current = null; }, [userId]);
 
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
     const typingRef = ref(db, `chats/${cId}/typing/${userId}`);
-
     const checkTyping = (data) => {
       if (!data || !data.isTyping) return setPartnerIsTyping(false);
       const age = Date.now() - (data.timestamp || 0);
       setPartnerIsTyping(age < 4000);
     };
-
     const unsub = onValue(typingRef, (snap) => checkTyping(snap.val()));
     const interval = setInterval(() => {
       get(typingRef).then((snap) => checkTyping(snap.val())).catch(() => {});
     }, 2000);
-
     return () => { unsub(); clearInterval(interval); };
   }, [user?.uid, userId]);
 
@@ -408,14 +396,21 @@ const ChatView = () => {
     return () => { unsubWp(); unsubCw(); };
   }, [user?.uid, userId]);
 
+  /* ───── NEW: pinned message subscription ───── */
+  useEffect(() => {
+    if (!user?.uid || !userId) return;
+    const cId = [user.uid, userId].sort().join('_');
+    const pinRef = ref(db, `chats/${cId}/pinnedMessageId`);
+    const unsub = onValue(pinRef, (snap) => setPinnedMessageId(snap.val() || null));
+    return () => unsub();
+  }, [user?.uid, userId]);
+
   const handleWallpaperSelect = async (id) => {
     setWallpaperId(id);
     try {
       const cId = [user.uid, userId].sort().join('_');
       await update(ref(db, `chats/${cId}`), { wallpaper: id });
-    } catch (err) {
-      console.error('Failed to save wallpaper', err);
-    }
+    } catch (err) { console.error('Failed to save wallpaper', err); }
   };
 
   const handleCustomWallpaperSelect = async (url) => {
@@ -423,13 +418,8 @@ const ChatView = () => {
     setWallpaperId('__custom__');
     try {
       const cId = [user.uid, userId].sort().join('_');
-      await update(ref(db, `chats/${cId}`), {
-        wallpaper: '__custom__',
-        customWallpaper: url,
-      });
-    } catch (err) {
-      console.error('Failed to save custom wallpaper', err);
-    }
+      await update(ref(db, `chats/${cId}`), { wallpaper: '__custom__', customWallpaper: url });
+    } catch (err) { console.error('Failed to save custom wallpaper', err); }
   };
 
   const pruneExpired = async (list, cId) => {
@@ -509,7 +499,6 @@ const ChatView = () => {
           hasUnread = true;
         }
       });
-
       if (!hasUnread) return;
       await update(ref(db), updates);
       await patchMyUserChat(userId, { partnerName: partnerProfile?.name || location.state?.userName || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: latestMsg, lastSenderId: latestSender, lastUpdated: latestTimestamp, unreadCount: 0 });
@@ -520,6 +509,7 @@ const ChatView = () => {
 
   const scrollToBottom = (smooth = true) => {
     if (messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
+    setUnreadWhileScrolled(0);
   };
 
   const uploadToCloudinary = (file, onProgress) => {
@@ -543,6 +533,7 @@ const ChatView = () => {
     const isNear = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
     isNearBottomRef.current = isNear;
     setIsNearBottom(isNear);
+    if (isNear) setUnreadWhileScrolled(0);
   }, []);
 
   const handleTyping = useCallback(() => {
@@ -550,7 +541,6 @@ const ChatView = () => {
     const cId = [user.uid, userId].sort().join('_');
     const typingRef = ref(db, `chats/${cId}/typing/${user.uid}`);
     set(typingRef, { isTyping: true, timestamp: Date.now() }).catch(() => {});
-
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       set(typingRef, { isTyping: false, timestamp: Date.now() }).catch(() => {});
@@ -564,28 +554,18 @@ const ChatView = () => {
     set(typingRef, { isTyping: false, timestamp: Date.now() }).catch(() => {});
   }, [user?.uid, userId]);
 
-  useEffect(() => {
-    return () => { clearMyTyping(); };
-  }, [clearMyTyping]);
+  useEffect(() => () => { clearMyTyping(); }, [clearMyTyping]);
 
   const flashSent = (id) => {
     if (!id) return;
     justSentIdsRef.current.add(id);
-    setTimeout(() => {
-      justSentIdsRef.current.delete(id);
-      setMessages((prev) => [...prev]);
-    }, 800);
+    setTimeout(() => { justSentIdsRef.current.delete(id); setMessages((prev) => [...prev]); }, 800);
   };
-
   const flashArrived = (id) => {
     if (!id) return;
     justArrivedIdsRef.current.add(id);
-    setTimeout(() => {
-      justArrivedIdsRef.current.delete(id);
-      setMessages((prev) => [...prev]);
-    }, 700);
+    setTimeout(() => { justArrivedIdsRef.current.delete(id); setMessages((prev) => [...prev]); }, 700);
   };
-
   const triggerSendRipple = () => {
     const btn = sendButtonRef.current;
     if (!btn) return;
@@ -615,14 +595,11 @@ const ChatView = () => {
     if (!textToSend || !user?.uid || !userId) return;
 
     setHaloActive(false);
-
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     clearMyTyping();
 
     const currentNoteReply = replyToNote;
-    let currentReply = replyTo;
-    const replyToSave = currentReply;
-
+    const replyToSave = replyTo;
     setNewMessage('');
     setReplyTo(null);
     setReplyToNote(null);
@@ -648,13 +625,9 @@ const ChatView = () => {
 
     try { await set(newMsgRef, msgData); } catch (err) { console.error('Send failed:', err); setMessages((prev) => prev.filter((m) => m.id !== tempId)); return; }
 
-    if (currentNoteReply) {
-      publishNoteReply(textToSend);
-    }
-
+    if (currentNoteReply) publishNoteReply(textToSend);
     triggerSendRipple();
     flashSent(newMsgRef.key);
-
     if (getSoundEnabled()) playSentSound();
 
     if (userId === ECHO_AI_ID) {
@@ -684,7 +657,6 @@ const ChatView = () => {
       currentData.lastUpdated = Date.now();
       return currentData;
     });
-
     clearMessageCache(cId);
   };
 
@@ -733,13 +705,9 @@ const ChatView = () => {
       setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
       URL.revokeObjectURL(blobUrl);
 
-      if (noteReply) {
-        publishNoteReply(caption || mediaIcon);
-      }
-
+      if (noteReply) publishNoteReply(caption || mediaIcon);
       triggerSendRipple();
       flashSent(newMsgRef.key);
-
       if (getSoundEnabled()) playSentSound();
 
       await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: mediaIcon, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
@@ -794,16 +762,10 @@ const ChatView = () => {
       await set(newMsgRef, realMsg);
       setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
       URL.revokeObjectURL(blobUrl);
-
-      if (noteReply) {
-        publishNoteReply('🎤 Voice note');
-      }
-
+      if (noteReply) publishNoteReply('🎤 Voice note');
       triggerSendRipple();
       flashSent(newMsgRef.key);
-
       if (getSoundEnabled()) playSentSound();
-
       await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: '🎤 Voice note', lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
       const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
       await runTransaction(recipientChatRef, (currentData) => {
@@ -857,7 +819,6 @@ const ChatView = () => {
 
   const handleReact = useCallback((messageId) => {
     setActiveMessageMenuId(null);
-
     const msgElement = messageRefs.current[messageId];
     if (!msgElement) {
       setReactionPickerAnchor({ top: window.innerHeight / 2, left: window.innerWidth / 2, flipped: false });
@@ -865,7 +826,6 @@ const ChatView = () => {
       setReactingMessageId(messageId);
       return;
     }
-
     const rect = msgElement.getBoundingClientRect();
     const windowWidth = window.innerWidth;
     let top = rect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP - REACTION_ARROW_SIZE;
@@ -873,7 +833,6 @@ const ChatView = () => {
     if (top < 60) { top = rect.bottom + REACTION_BAR_GAP + REACTION_ARROW_SIZE; flipped = true; }
     let left = rect.left + rect.width / 2 - REACTION_BAR_HALF_WIDTH;
     left = Math.max(10, Math.min(left, windowWidth - 20));
-
     setReactionPickerAnchor({ top, left, flipped });
     setReactingMessageId(messageId);
     setShowReactionPicker(true);
@@ -882,7 +841,6 @@ const ChatView = () => {
   const handleReactionSelect = async (emojiKey, msgIdOverride = null) => {
     setTappedEmoji(emojiKey);
     setTimeout(() => setTappedEmoji(null), 220);
-
     setShowReactionPicker(false);
     setReactionPickerAnchor(null);
     const targetId = msgIdOverride || reactingMessageId;
@@ -910,6 +868,7 @@ const ChatView = () => {
   }, [showReactionPicker]);
 
   const handleTouchStart = (msg, e) => {
+    if (selectMode) return;
     if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
     setPressedMsgId(msg.id);
     touchTimerRef.current = setTimeout(() => {
@@ -935,6 +894,7 @@ const ChatView = () => {
   const handleTouchEnd = (msg) => {
     if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
     setPressedMsgId(null);
+    if (selectMode) return;
     const now = Date.now();
     const lastTap = lastTapRef.current;
     if (lastTap.msgId === msg.id && now - lastTap.time < 300) { handleReactionSelect('heart', msg.id); lastTapRef.current = { time: 0, msgId: null }; }
@@ -1003,6 +963,23 @@ const ChatView = () => {
     setActiveMessageMenuId(null);
   };
 
+  /* ───── NEW: pin/unpin ───── */
+  const handlePinMessage = async (msg) => {
+    if (!user?.uid || !userId) return;
+    const cId = [user.uid, userId].sort().join('_');
+    setActiveMessageMenuId(null);
+    try {
+      const currentlyPinned = pinnedMessageId === msg.id;
+      await set(ref(db, `chats/${cId}/pinnedMessageId`), currentlyPinned ? null : msg.id);
+      // Also flip the message's own `pinned` flag so archive/tide logic still works
+      await update(ref(db, `chats/${cId}/messages/${msg.id}`), { pinned: !currentlyPinned });
+      setToast({ message: currentlyPinned ? 'Message unpinned' : 'Message pinned', type: 'success' });
+    } catch (err) {
+      console.error('Pin failed:', err);
+      setToast({ message: 'Failed to pin message', type: 'error' });
+    }
+  };
+
   const handleEndEcho = () => {
     setShowMoreOptions(false);
     openConfirmModal({
@@ -1047,8 +1024,7 @@ const ChatView = () => {
     const target = focusedField.current;
     if (target === 'caption' && captionInputRef.current) {
       const input = captionInputRef.current;
-      const start = input.selectionStart;
-      const end = input.selectionEnd;
+      const start = input.selectionStart; const end = input.selectionEnd;
       const current = captionText;
       const newText = current.substring(0, start) + emoji + current.substring(end);
       setCaptionText(newText);
@@ -1058,8 +1034,7 @@ const ChatView = () => {
     }
     if (inputRef.current) {
       const input = inputRef.current;
-      const start = input.selectionStart;
-      const end = input.selectionEnd;
+      const start = input.selectionStart; const end = input.selectionEnd;
       const current = newMessage;
       const newText = current.substring(0, start) + emoji + current.substring(end);
       setNewMessage(newText);
@@ -1125,13 +1100,7 @@ const ChatView = () => {
     return (
       <div className="message-reactions" style={{ position: 'absolute', bottom: '-12px', [isOwn ? 'left' : 'right']: '8px', display: 'flex', gap: '4px', zIndex: 3 }}>
         {Object.entries(groups).map(([emojiKey, uids]) => (
-          <span
-            key={emojiKey}
-            className="reaction-badge clickable"
-            onClick={(e) => { e.stopPropagation(); openReactionViewer(emojiKey, reactions, messageId); }}
-            title={`${uids.length} reaction${uids.length !== 1 ? 's' : ''}`}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', background: 'var(--bg-primary, #ffffff)', border: '1px solid var(--border-color, #e2e8f0)', borderRadius: '999px', padding: '2px 6px', fontSize: '13px', lineHeight: 1, boxShadow: '0 2px 6px rgba(0,0,0,0.15)', cursor: 'pointer', userSelect: 'none' }}
-          >
+          <span key={emojiKey} className="reaction-badge clickable" onClick={(e) => { e.stopPropagation(); openReactionViewer(emojiKey, reactions, messageId); }} title={`${uids.length} reaction${uids.length !== 1 ? 's' : ''}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', background: 'var(--bg-primary, #ffffff)', border: '1px solid var(--border-color, #e2e8f0)', borderRadius: '999px', padding: '2px 6px', fontSize: '13px', lineHeight: 1, boxShadow: '0 2px 6px rgba(0,0,0,0.15)', cursor: 'pointer', userSelect: 'none' }}>
             {REACTION_LABELS[emojiKey] || emojiKey}
             {uids.length > 1 && <span className="reaction-count" style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted, #64748b)' }}>{formatReactionCount(uids.length)}</span>}
           </span>
@@ -1145,13 +1114,28 @@ const ChatView = () => {
     const isAi = msg.senderId === ECHO_AI_ID;
     const allowEdit = isOwn && userId !== ECHO_AI_ID && msg.type !== 'audio';
     const allowDelete = isOwn || (userId === ECHO_AI_ID && isAi);
+    const isPinned = pinnedMessageId === msg.id;
     const EmojiIcon = () => <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>;
     const ReplyIcon = () => <svg viewBox="0 0 24 24"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>;
     const EditIcon = () => <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>;
     const CopyIcon = () => <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>;
     const SaveIcon = () => <svg viewBox="0 0 24 24"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>;
     const DeleteIcon = () => <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>;
-    return <div className={`message-inline-actions ${isOwn ? 'own' : 'partner'}`}><button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleReact(msg.id); }} title="React"><EmojiIcon /></button><button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleReply(msg); }} title="Reply"><ReplyIcon /></button>{allowEdit && <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleEditMessage(msg); }} title="Edit"><EditIcon /></button>}<button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleCopy(msg); }} title="Copy"><CopyIcon /></button><button className="message-action-btn" onClick={(e) => { e.stopPropagation(); saveMessageToArchive(msg); }} title="Save"><SaveIcon /></button>{allowDelete && <button className="message-action-btn danger" onClick={(e) => { e.stopPropagation(); handleDeleteMessage(msg.id); }} title="Delete"><DeleteIcon /></button>}</div>;
+    const PinIcon = ({ filled }) => <svg viewBox="0 0 24 24">{filled ? <path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"/> : <path d="M14 4v5c0 1.12.37 2.16 1 3H9c.65-.86 1-1.9 1-3V4h4m3-2H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3V4h1c.55 0 1-.45 1-1s-.45-1-1-1z"/>}</svg>;
+    const SelectIcon = () => <svg viewBox="0 0 24 24"><path d="M3 5h2V3c-1.1 0-2 .9-2 2zm0 8h2v-2H3v2zm4 8h2v-2H7v2zM3 9h2V7H3v2zm10-6h-2v2h2V3zm6 0v2h2c0-1.1-.9-2-2-2zM5 21v-2H3c0 1.1.9 2 2 2zm-2-4h2v-2H3v2zM9 3H7v2h2V3zm2 18h2v-2h-2v2zm8-8h2v-2h-2v2zm0 8c1.1 0 2-.9 2-2h-2v2zm0-12h2V7h-2v2zm0 8h2v-2h-2v2zm-4 4h2v-2h-2v2zm0-16h2V3h-2v2zM7 17h10V7H7v10zm2-8h6v6H9V9z"/></svg>;
+
+    return (
+      <div className={`message-inline-actions ${isOwn ? 'own' : 'partner'}`}>
+        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleReact(msg.id); }} title="React"><EmojiIcon /></button>
+        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleReply(msg); }} title="Reply"><ReplyIcon /></button>
+        {allowEdit && <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleEditMessage(msg); }} title="Edit"><EditIcon /></button>}
+        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleCopy(msg); }} title="Copy"><CopyIcon /></button>
+        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handlePinMessage(msg); }} title={isPinned ? 'Unpin' : 'Pin'}><PinIcon filled={isPinned} /></button>
+        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); saveMessageToArchive(msg); }} title="Save to archive"><SaveIcon /></button>
+        {allowDelete && <button className="message-action-btn danger" onClick={(e) => { e.stopPropagation(); handleDeleteMessage(msg.id); }} title="Delete"><DeleteIcon /></button>}
+        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); setSelectMode(true); setSelectedIds(new Set([msg.id])); setActiveMessageMenuId(null); }} title="Select"><SelectIcon /></button>
+      </div>
+    );
   };
 
   const renderNoteReplyCard = (note) => {
@@ -1159,35 +1143,13 @@ const ChatView = () => {
     return (
       <div className="note-reply-card">
         {note.song?.title && (
-          <button
-            type="button"
-            className="note-reply-song"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (note.song?.sourceUrl) {
-                window.open(note.song.sourceUrl, '_blank', 'noopener,noreferrer');
-              }
-            }}
-            aria-label={`Open ${note.song.title}`}
-          >
-            <span className="note-reply-song-art">
-              {note.song.artwork ? (
-                <img src={note.song.artwork} alt="" loading="lazy" />
-              ) : (
-                <span>🎵</span>
-              )}
-            </span>
+          <button type="button" className="note-reply-song" onClick={(e) => { e.stopPropagation(); if (note.song?.sourceUrl) window.open(note.song.sourceUrl, '_blank', 'noopener,noreferrer'); }} aria-label={`Open ${note.song.title}`}>
+            <span className="note-reply-song-art">{note.song.artwork ? <img src={note.song.artwork} alt="" loading="lazy" /> : <span>🎵</span>}</span>
             <span className="note-reply-song-meta">
               <span className="note-reply-song-title">{note.song.title}</span>
-              {note.song.artist && (
-                <span className="note-reply-song-artist">{note.song.artist}</span>
-              )}
+              {note.song.artist && <span className="note-reply-song-artist">{note.song.artist}</span>}
             </span>
-            <span className="note-reply-song-play" aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="12" height="12">
-                <path d="M8 5v14l11-7z" fill="currentColor" />
-              </svg>
-            </span>
+            <span className="note-reply-song-play" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M8 5v14l11-7z" fill="currentColor" /></svg></span>
           </button>
         )}
         {note.text && <p className="note-reply-text">{note.text}</p>}
@@ -1195,8 +1157,55 @@ const ChatView = () => {
     );
   };
 
-  const renderMessage = (msg) => {
-    if (msg.type === 'system' || msg.system) return <div className="message-bubble system" key={msg.id}>{msg.text}</div>;
+  /* ───── NEW: grouping helpers (memoized per render list) ───── */
+  const groupedMessages = useMemo(() => {
+    const sorted = sortMessages(messages);
+    return sorted.map((msg, i, arr) => {
+      const prev = arr[i - 1];
+      const next = arr[i + 1];
+      const isSystem = msg.type === 'system' || msg.system;
+
+      const sameSenderAsPrev = !isSystem && prev && !(prev.type === 'system' || prev.system) && prev.senderId === msg.senderId;
+      const sameSenderAsNext = !isSystem && next && !(next.type === 'system' || next.system) && next.senderId === msg.senderId;
+
+      const withinPrev = sameSenderAsPrev && Math.abs(msgTime(msg) - msgTime(prev)) < GROUP_WINDOW_MS;
+      const withinNext = sameSenderAsNext && Math.abs(msgTime(next) - msgTime(msg)) < GROUP_WINDOW_MS;
+
+      // Break groups on reply-to or note-reply (Telegram does the same)
+      const breaksTop = !withinPrev || !!msg.replyTo || !!msg.replyToNote;
+      const breaksBottom = !withinNext || !!next?.replyTo || !!next?.replyToNote;
+
+      const groupTop = breaksTop;
+      const groupBottom = breaksBottom;
+
+      // Date separator between this and prev
+      const dayThis = startOfDay(msgTime(msg) || Date.now());
+      const dayPrev = prev ? startOfDay(msgTime(prev) || Date.now()) : null;
+      const showDateSeparator = dayPrev === null || dayThis !== dayPrev;
+
+      return {
+        msg,
+        groupTop,
+        groupBottom,
+        showDateSeparator,
+        dateLabel: showDateSeparator ? formatDayLabel(msgTime(msg) || Date.now()) : null,
+        isSystem,
+      };
+    });
+  }, [messages]);
+
+  const renderMessage = (entry) => {
+    const { msg, groupTop, groupBottom, isSystem } = entry;
+
+    if (isSystem) {
+      return (
+        <Fragment key={msg.id}>
+          {entry.showDateSeparator && <DateSeparator label={entry.dateLabel} />}
+          <div className="message-bubble system">{msg.text}</div>
+        </Fragment>
+      );
+    }
+
     const isOwn = String(msg.senderId || '') === String(user?.uid || '');
     const isDeleting = msg.id === deletingMessageId;
     const isAi = msg.senderId === ECHO_AI_ID;
@@ -1206,25 +1215,53 @@ const ChatView = () => {
     const handleMediaClick = () => { if (msg.type === 'media') { if (msg.mediaType === 'video') setVideoPreview({ src: msg.mediaUrl }); else if (msg.mediaType === 'image') setMediaPreview({ src: msg.mediaUrl, type: 'image', alt: msg.caption || 'Image' }); } };
     const handleRetry = () => { sendMediaMessage(msg.id); };
     const sentClock = formatMsgClock(msg);
-
     const justSent = justSentIdsRef.current.has(msg.id);
     const justArrived = justArrivedIdsRef.current.has(msg.id);
     const isPressed = pressedMsgId === msg.id;
+    const isSelected = selectedIds.has(msg.id);
+    const isPinned = pinnedMessageId === msg.id;
 
     const shell = (inner) => {
       const row = (
         <div
-          className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${justSent ? 'just-sent' : ''} ${justArrived ? 'just-arrived' : ''} ${isPressed ? 'pressed' : ''}`}
+          className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${justSent ? 'just-sent' : ''} ${justArrived ? 'just-arrived' : ''} ${isPressed ? 'pressed' : ''} ${groupTop ? 'group-top' : 'group-mid'} ${groupBottom ? 'group-bottom' : 'group-mid'} ${isSelected ? 'selected' : ''} ${selectMode ? 'select-mode' : ''}`}
           ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
-          onClick={() => setActiveMessageMenuId(activeMessageMenuId === msg.id ? null : msg.id)}
-          onMouseEnter={() => setActiveMessageMenuId(msg.id)}
+          onClick={() => {
+            if (selectMode) {
+              setSelectedIds((prev) => {
+                const n = new Set(prev);
+                if (n.has(msg.id)) n.delete(msg.id); else n.add(msg.id);
+                return n;
+              });
+              return;
+            }
+            setActiveMessageMenuId(activeMessageMenuId === msg.id ? null : msg.id);
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+            if (selectMode) return;
+            setActiveMessageMenuId(msg.id);
+          }}
+          onMouseEnter={() => { if (!selectMode) setActiveMessageMenuId(msg.id); }}
           onMouseLeave={() => setActiveMessageMenuId(null)}
           onTouchStart={(e) => handleTouchStart(msg, e)}
           onTouchEnd={() => handleTouchEnd(msg)}
           onTouchMove={handleTouchMove}
         >
+          {selectMode && (
+            <div className={`select-checkbox ${isSelected ? 'checked' : ''}`} aria-hidden="true">
+              <svg viewBox="0 0 24 24" width="14" height="14">
+                <path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" fill="currentColor" />
+              </svg>
+            </div>
+          )}
           <div className={`message-stack ${isOwn ? 'own' : 'partner'}`} style={{ position: 'relative', marginBottom: msg.reactions && Object.keys(msg.reactions).length > 0 ? '14px' : 0 }}>
-            <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${msg.pending ? 'pending' : ''}`}>
+            <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${msg.pending ? 'pending' : ''} ${isPinned ? 'pinned' : ''}`}>
+              {isPinned && (
+                <span className="message-pin-badge" title="Pinned">
+                  <svg viewBox="0 0 24 24" width="11" height="11"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" fill="currentColor"/></svg>
+                </span>
+              )}
               {inner}
               <div className="message-meta-time">
                 {sentClock}
@@ -1233,30 +1270,39 @@ const ChatView = () => {
               {renderTide(msg)}
             </div>
             {renderReactions(msg.reactions, msg.id, isOwn)}
-            {activeMessageMenuId === msg.id && <div className="message-inline-menu-wrapper" onClick={(e) => e.stopPropagation()}>{renderInlineActions(msg)}</div>}
+            {!selectMode && activeMessageMenuId === msg.id && <div className="message-inline-menu-wrapper" onClick={(e) => e.stopPropagation()}>{renderInlineActions(msg)}</div>}
           </div>
         </div>
       );
-      if (showReply) return <SwipeToReply key={msg.id} direction={isOwn ? 'left' : 'right'} onReply={() => handleReply(msg)}>{row}</SwipeToReply>;
+      if (showReply && !selectMode) return <SwipeToReply key={msg.id} direction={isOwn ? 'left' : 'right'} onReply={() => handleReply(msg)}>{row}</SwipeToReply>;
       return <Fragment key={msg.id}>{row}</Fragment>;
     };
 
-    if (msg.type === 'echomoji') { const skinObj = msg.skinId ? getSkinById(msg.skinId) : null; return shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}<div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}><ECHOMOJI mood={msg.mood || 'neutral'} skin={skinObj} size={56} interactive={false} animated={true} /></div></>); }
-
-    if (msg.type === 'media') {
-      let content;
+    let content;
+    if (msg.type === 'echomoji') {
+      const skinObj = msg.skinId ? getSkinById(msg.skinId) : null;
+      content = shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}<div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}><ECHOMOJI mood={msg.mood || 'neutral'} skin={skinObj} size={56} interactive={false} animated={true} /></div></>);
+    } else if (msg.type === 'media') {
+      let inner;
       if (msg.mediaType === 'audio') {
-        if (msg.isUploading) content = <div className="media-upload-overlay"><div className="upload-spinner"><svg className="spinner-ring" viewBox="0 0 50 50"><circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" /></svg></div></div>;
-        else if (msg.uploadFailed) content = <div className="media-error-placeholder"><i className="fas fa-exclamation-triangle" /><span>Upload failed</span><button onClick={handleRetry}>Retry</button></div>;
-        else content = <AudioPlayer src={msg.mediaUrl} />;
+        if (msg.isUploading) inner = <div className="media-upload-overlay"><div className="upload-spinner"><svg className="spinner-ring" viewBox="0 0 50 50"><circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" /></svg></div></div>;
+        else if (msg.uploadFailed) inner = <div className="media-error-placeholder"><i className="fas fa-exclamation-triangle" /><span>Upload failed</span><button onClick={handleRetry}>Retry</button></div>;
+        else inner = <AudioPlayer src={msg.mediaUrl} />;
       } else {
-        if (msg.uploadFailed) content = <div className="media-error-placeholder"><i className="fas fa-exclamation-triangle" /><span>Upload failed</span><button onClick={handleRetry}>Retry</button></div>;
-        else content = <div onClick={!msg.isUploading ? handleMediaClick : undefined} style={{ cursor: !msg.isUploading ? 'pointer' : 'default' }}><ChatMediaMessage message={msg} isUploading={msg.isUploading} uploadProgress={msg.uploadProgress} disablePreview={true} /></div>;
+        if (msg.uploadFailed) inner = <div className="media-error-placeholder"><i className="fas fa-exclamation-triangle" /><span>Upload failed</span><button onClick={handleRetry}>Retry</button></div>;
+        else inner = <div onClick={!msg.isUploading && !selectMode ? handleMediaClick : undefined} style={{ cursor: !msg.isUploading && !selectMode ? 'pointer' : 'default' }}><ChatMediaMessage message={msg} isUploading={msg.isUploading} uploadProgress={msg.uploadProgress} disablePreview={true} /></div>;
       }
-      return shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}{content}</>);
+      content = shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}{inner}</>);
+    } else {
+      content = shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}<div className="message-text" style={{ whiteSpace: userId === ECHO_AI_ID && !isOwn ? 'normal' : 'pre-wrap' }}>{userId === ECHO_AI_ID && !isOwn ? <AiRichText text={msg.text} onFollowup={(q) => handleSendText(q)} /> : msg.text}{msg.isEdited && <span className="message-edited-badge">(edited)</span>}</div></>);
     }
 
-    return shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}<div className="message-text" style={{ whiteSpace: userId === ECHO_AI_ID && !isOwn ? 'normal' : 'pre-wrap' }}>{userId === ECHO_AI_ID && !isOwn ? <AiRichText text={msg.text} onFollowup={(q) => handleSendText(q)} /> : msg.text}{msg.isEdited && <span className="message-edited-badge">(edited)</span>}</div></>);
+    return (
+      <Fragment key={msg.id}>
+        {entry.showDateSeparator && <DateSeparator label={entry.dateLabel} />}
+        {content}
+      </Fragment>
+    );
   };
 
   useEffect(() => { clearedAtRef.current = clearedAt || 0; }, [clearedAt]);
@@ -1313,13 +1359,16 @@ const ChatView = () => {
       const isIncoming = newest && newest.senderId && newest.senderId !== user.uid;
       prevMsgCountRef.current = visible.length;
 
-      if (grew && isIncoming && newest?.id) {
-        flashArrived(newest.id);
+      if (grew && isIncoming && newest?.id) flashArrived(newest.id);
+
+      // Unread counter for FAB
+      if (grew && isIncoming && !isNearBottomRef.current) {
+        setUnreadWhileScrolled((n) => n + Math.max(1, visible.length - prevCount));
       }
 
       if (!initialScrollRef.current) { initialScrollRef.current = true; requestAnimationFrame(() => scrollToBottom(false)); }
       else if (grew && isNearBottomRef.current) requestAnimationFrame(() => scrollToBottom(true));
-      else if (grew && isIncoming && isNearBottomRef.current) requestAnimationFrame(() => scrollToBottom(true));
+
       Promise.resolve().then(async () => {
         try { for (const msg of visible) { await upsertMessageInCache(cId, msg); if (msg.type === 'media' && msg.mediaUrl && msg.mediaUrl.startsWith('http')) cacheMedia(msg.mediaUrl); } await saveMessagesToCache(cId, visible); } catch (_) {}
       });
@@ -1373,6 +1422,14 @@ const ChatView = () => {
     if (isNearBottomRef.current) messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
+  // Esc exits select mode
+  useEffect(() => {
+    if (!selectMode) return;
+    const onKey = (e) => { if (e.key === 'Escape') { setSelectMode(false); setSelectedIds(new Set()); } };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectMode]);
+
   const [chatBgEnabled, setChatBgEnabled] = useState(() => { try { const v = localStorage.getItem('echo_chat_bg'); return v === null ? true : v === '1'; } catch { return true; } });
 
   useEffect(() => {
@@ -1405,7 +1462,6 @@ const ChatView = () => {
     if (userId === ECHO_AI_ID) return;
     longPressTimer.current = setTimeout(() => { setHaloActive(true); if (window.navigator?.vibrate) window.navigator.vibrate(50); }, 500);
   };
-
   const handleInputPointerUp = () => clearTimeout(longPressTimer.current);
   const handleInputPointerLeave = () => clearTimeout(longPressTimer.current);
 
@@ -1413,17 +1469,9 @@ const ChatView = () => {
   const wallpaper = isCustom ? null : getWallpaperById(wallpaperId);
 
   const wallpaperStyle = isCustom
-    ? {
-        backgroundImage: `url(${customWallpaper})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        transition: 'background 0.3s ease',
-      }
+    ? { backgroundImage: `url(${customWallpaper})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', transition: 'background 0.3s ease' }
     : {
-        background: (wallpaper.type === 'color' || wallpaper.type === 'gradient')
-          ? (wallpaper.value === 'transparent' ? 'var(--bg-primary)' : wallpaper.value)
-          : 'var(--bg-primary)',
+        background: (wallpaper.type === 'color' || wallpaper.type === 'gradient') ? (wallpaper.value === 'transparent' ? 'var(--bg-primary)' : wallpaper.value) : 'var(--bg-primary)',
         backgroundImage: wallpaper.type === 'pattern' ? wallpaper.value : 'none',
         backgroundSize: wallpaper.type === 'pattern' ? '20px 20px' : 'cover',
         backgroundRepeat: wallpaper.type === 'pattern' ? 'repeat' : 'no-repeat',
@@ -1431,186 +1479,114 @@ const ChatView = () => {
         transition: 'background 0.3s ease',
       };
 
+  /* ───── NEW: pinned message preview lookup ───── */
+  const pinnedMessage = useMemo(() => {
+    if (!pinnedMessageId) return null;
+    return messages.find((m) => m.id === pinnedMessageId) || null;
+  }, [messages, pinnedMessageId]);
+
+  const pinnedPreview = useMemo(() => {
+    if (!pinnedMessage) return '';
+    if (pinnedMessage.type === 'media') {
+      if (pinnedMessage.mediaType === 'video') return '🎬 Video';
+      if (pinnedMessage.mediaType === 'audio') return '🎤 Voice note';
+      return pinnedMessage.caption || '📷 Image';
+    }
+    if (pinnedMessage.type === 'echomoji') return `😤 ECHOMOJI (${pinnedMessage.mood || 'neutral'})`;
+    return pinnedMessage.text || '';
+  }, [pinnedMessage]);
+
+  /* ───── NEW: select mode bulk actions ───── */
+  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
+
+  const bulkCopy = async () => {
+    const arr = [...selectedIds].map((id) => messages.find((m) => m.id === id)).filter(Boolean);
+    const text = arr.map((m) => (m.type === 'media' ? m.mediaUrl || m.caption || '' : m.text || '')).join('\n');
+    try { await navigator.clipboard.writeText(text); setToast({ message: `Copied ${arr.length} message${arr.length !== 1 ? 's' : ''}`, type: 'success' }); }
+    catch (_) { setToast({ message: 'Copy failed', type: 'error' }); }
+    exitSelectMode();
+  };
+
+  const bulkSave = async () => {
+    const arr = [...selectedIds].map((id) => messages.find((m) => m.id === id)).filter(Boolean);
+    let ok = 0;
+    for (const m of arr) { try { await saveMessageToArchive(m); ok++; } catch (_) {} }
+    setToast({ message: `Saved ${ok} message${ok !== 1 ? 's' : ''}`, type: 'success' });
+    exitSelectMode();
+  };
+
+  const bulkDelete = () => {
+    openConfirmModal({
+      title: `Delete ${selectedIds.size} message${selectedIds.size !== 1 ? 's' : ''}?`,
+      message: 'This cannot be undone.',
+      confirmText: 'Delete',
+      cancelText: 'Cancel',
+      onConfirm: async () => {
+        closeConfirmModal();
+        if (!user?.uid || !userId) return;
+        const cId = [user.uid, userId].sort().join('_');
+        const updates = {};
+        selectedIds.forEach((id) => { updates[`chats/${cId}/messages/${id}`] = null; });
+        try {
+          await update(ref(db), updates);
+          selectedIds.forEach((id) => deleteMessageFromCache(cId, id).catch(() => {}));
+          clearMessageCache(cId);
+          setToast({ message: 'Messages deleted', type: 'success' });
+        } catch (err) { console.error('Bulk delete failed:', err); setToast({ message: 'Failed to delete', type: 'error' }); }
+        exitSelectMode();
+      },
+    });
+  };
+
   return (
     <>
       <style>{`
-        /* ═══════════ Animated Telegram-style Reaction Bar ═══════════ */
+        /* ═══════════ Reaction bar (unchanged) ═══════════ */
         .echo-reaction-backdrop { position: fixed; inset: 0; z-index: 998; background: transparent; }
-
-        .echo-reaction-bar {
-          position: fixed;
-          z-index: 1000;
-          display: flex;
-          align-items: center;
-          gap: 2px;
-          background: #1a1a1a;
-          border: 1px solid rgba(255, 255, 255, 0.08);
-          border-radius: 999px;
-          padding: 6px 8px;
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
-          transform: translateX(-50%);
-          transform-origin: bottom center;
-          animation: snapReactionPop 0.22s cubic-bezier(0.2, 1.3, 0.4, 1) both;
-        }
-        html[data-theme="light"] .echo-reaction-bar,
-        html.theme-light .echo-reaction-bar {
-          background: #ffffff;
-          border-color: rgba(0, 0, 0, 0.08);
-          box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
-        }
-        @keyframes snapReactionPop {
-          0%   { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.85); }
-          100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); }
-        }
-
-        .echo-reaction-emoji {
-          width: 44px;
-          height: 44px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          padding: 0;
-          background: transparent;
-          border: none;
-          border-radius: 50%;
-          cursor: pointer;
-          transition: transform 0.15s cubic-bezier(0.2, 1.3, 0.4, 1), background 0.15s ease;
-          -webkit-tap-highlight-color: transparent;
-        }
-        .echo-reaction-emoji .rx-svg {
-          width: 32px;
-          height: 32px;
-          display: block;
-          overflow: visible;
-          animation: rxIdleBounce 3.2s ease-in-out infinite;
-        }
+        .echo-reaction-bar { position: fixed; z-index: 1000; display: flex; align-items: center; gap: 2px; background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 999px; padding: 6px 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); transform: translateX(-50%); transform-origin: bottom center; animation: snapReactionPop 0.22s cubic-bezier(0.2, 1.3, 0.4, 1) both; }
+        html[data-theme="light"] .echo-reaction-bar, html.theme-light .echo-reaction-bar { background: #ffffff; border-color: rgba(0, 0, 0, 0.08); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
+        @keyframes snapReactionPop { 0% { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.85); } 100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
+        .echo-reaction-emoji { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: transparent; border: none; border-radius: 50%; cursor: pointer; transition: transform 0.15s cubic-bezier(0.2, 1.3, 0.4, 1), background 0.15s ease; -webkit-tap-highlight-color: transparent; }
+        .echo-reaction-emoji .rx-svg { width: 32px; height: 32px; display: block; overflow: visible; animation: rxIdleBounce 3.2s ease-in-out infinite; }
         .echo-reaction-emoji:nth-child(1) .rx-svg { animation-delay: 0s; }
         .echo-reaction-emoji:nth-child(2) .rx-svg { animation-delay: 0.15s; }
         .echo-reaction-emoji:nth-child(3) .rx-svg { animation-delay: 0.30s; }
         .echo-reaction-emoji:nth-child(4) .rx-svg { animation-delay: 0.45s; }
         .echo-reaction-emoji:nth-child(5) .rx-svg { animation-delay: 0.60s; }
         .echo-reaction-emoji:nth-child(6) .rx-svg { animation-delay: 0.75s; }
-        @keyframes rxIdleBounce {
-          0%, 75%, 100% { transform: translateY(0) scale(1); }
-          82%           { transform: translateY(-3px) scale(1.08); }
-          90%           { transform: translateY(0) scale(1); }
-        }
-        .echo-reaction-emoji:hover {
-          background: rgba(255, 255, 255, 0.08);
-          transform: scale(1.15);
-        }
-        html[data-theme="light"] .echo-reaction-emoji:hover,
-        html.theme-light .echo-reaction-emoji:hover {
-          background: rgba(0, 0, 0, 0.05);
-        }
-        .echo-reaction-emoji:hover .rx-svg {
-          animation: rxHoverBounce 0.5s cubic-bezier(0.2, 1.5, 0.4, 1);
-        }
-        @keyframes rxHoverBounce {
-          0%   { transform: scale(1) rotate(0deg); }
-          35%  { transform: scale(1.35) rotate(-8deg); }
-          65%  { transform: scale(1.15) rotate(6deg); }
-          100% { transform: scale(1.15) rotate(0deg); }
-        }
-        .echo-reaction-emoji.tapped .rx-svg {
-          animation: rxTapPop 0.42s cubic-bezier(0.2, 1.6, 0.4, 1);
-        }
-        @keyframes rxTapPop {
-          0%   { transform: scale(1); }
-          40%  { transform: scale(1.55) rotate(0deg); }
-          70%  { transform: scale(1.3) rotate(-4deg); }
-          100% { transform: scale(1) rotate(0deg); }
-        }
-
+        @keyframes rxIdleBounce { 0%, 75%, 100% { transform: translateY(0) scale(1); } 82% { transform: translateY(-3px) scale(1.08); } 90% { transform: translateY(0) scale(1); } }
+        .echo-reaction-emoji:hover { background: rgba(255, 255, 255, 0.08); transform: scale(1.15); }
+        html[data-theme="light"] .echo-reaction-emoji:hover, html.theme-light .echo-reaction-emoji:hover { background: rgba(0, 0, 0, 0.05); }
+        .echo-reaction-emoji:hover .rx-svg { animation: rxHoverBounce 0.5s cubic-bezier(0.2, 1.5, 0.4, 1); }
+        @keyframes rxHoverBounce { 0% { transform: scale(1) rotate(0deg); } 35% { transform: scale(1.35) rotate(-8deg); } 65% { transform: scale(1.15) rotate(6deg); } 100% { transform: scale(1.15) rotate(0deg); } }
+        .echo-reaction-emoji.tapped .rx-svg { animation: rxTapPop 0.42s cubic-bezier(0.2, 1.6, 0.4, 1); }
+        @keyframes rxTapPop { 0% { transform: scale(1); } 40% { transform: scale(1.55) rotate(0deg); } 70% { transform: scale(1.3) rotate(-4deg); } 100% { transform: scale(1) rotate(0deg); } }
         .rx-heart-path { transform-origin: 20px 24px; animation: rxHeartBeat 1.6s ease-in-out infinite; }
-        @keyframes rxHeartBeat {
-          0%, 100% { transform: scale(1); }
-          15%      { transform: scale(1.10); }
-          30%      { transform: scale(0.98); }
-          45%      { transform: scale(1.06); }
-          60%      { transform: scale(1); }
-        }
+        @keyframes rxHeartBeat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.10); } 30% { transform: scale(0.98); } 45% { transform: scale(1.06); } 60% { transform: scale(1); } }
         .rx-heart-shine { animation: rxHeartShine 1.6s ease-in-out infinite; }
-        @keyframes rxHeartShine {
-          0%, 100% { opacity: 0.55; transform: scale(1); }
-          15%      { opacity: 0.85; transform: scale(1.2); }
-          30%      { opacity: 0.55; transform: scale(1); }
-        }
-
+        @keyframes rxHeartShine { 0%, 100% { opacity: 0.55; transform: scale(1); } 15% { opacity: 0.85; transform: scale(1.2); } 30% { opacity: 0.55; transform: scale(1); } }
         .rx-laugh-eye-left, .rx-laugh-eye-right { transform-origin: center; animation: rxLaughSquint 2s ease-in-out infinite; }
         .rx-laugh-eye-right { animation-delay: 0.05s; }
-        @keyframes rxLaughSquint {
-          0%, 80%, 100% { transform: scaleY(1); }
-          88%           { transform: scaleY(0.4); }
-        }
+        @keyframes rxLaughSquint { 0%, 80%, 100% { transform: scaleY(1); } 88% { transform: scaleY(0.4); } }
         .rx-laugh-tear { animation: rxLaughTear 2s ease-in-out infinite; }
-        @keyframes rxLaughTear {
-          0%, 40%, 100% { opacity: 0; transform: translateY(0) scale(0); }
-          55%           { opacity: 1; transform: translateY(0) scale(1); }
-          90%           { opacity: 0; transform: translateY(4px) scale(0.6); }
-        }
-
+        @keyframes rxLaughTear { 0%, 40%, 100% { opacity: 0; transform: translateY(0) scale(0); } 55% { opacity: 1; transform: translateY(0) scale(1); } 90% { opacity: 0; transform: translateY(4px) scale(0.6); } }
         .rx-wow-eye-left, .rx-wow-eye-right { transform-origin: center; animation: rxWowEyes 1.6s ease-in-out infinite; }
-        @keyframes rxWowEyes {
-          0%, 100% { transform: scale(1); }
-          50%      { transform: scale(1.15); }
-        }
+        @keyframes rxWowEyes { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
         .rx-wow-mouth { transform-origin: 20px 26px; animation: rxWowMouth 1.2s ease-in-out infinite; }
-        @keyframes rxWowMouth {
-          0%, 100% { transform: scale(1); }
-          50%      { transform: scale(1.18); }
-        }
-
+        @keyframes rxWowMouth { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
         .rx-sad-tear { animation: rxSadTear 2.4s ease-in-out infinite; transform-origin: 17px 20px; }
-        @keyframes rxSadTear {
-          0%, 40%, 100% { opacity: 0; transform: translateY(0) scale(0.4); }
-          55%           { opacity: 1; transform: translateY(0) scale(1); }
-          90%           { opacity: 0; transform: translateY(6px) scale(0.7); }
-        }
-
-        .rx-pray-left  { transform-origin: 20px 34px; animation: rxPrayLeft 2.4s ease-in-out infinite; }
+        @keyframes rxSadTear { 0%, 40%, 100% { opacity: 0; transform: translateY(0) scale(0.4); } 55% { opacity: 1; transform: translateY(0) scale(1); } 90% { opacity: 0; transform: translateY(6px) scale(0.7); } }
+        .rx-pray-left { transform-origin: 20px 34px; animation: rxPrayLeft 2.4s ease-in-out infinite; }
         .rx-pray-right { transform-origin: 20px 34px; animation: rxPrayRight 2.4s ease-in-out infinite; }
-        @keyframes rxPrayLeft {
-          0%, 100% { transform: rotate(0deg); }
-          50%      { transform: rotate(3deg); }
-        }
-        @keyframes rxPrayRight {
-          0%, 100% { transform: rotate(0deg); }
-          50%      { transform: rotate(-3deg); }
-        }
+        @keyframes rxPrayLeft { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(3deg); } }
+        @keyframes rxPrayRight { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-3deg); } }
         .rx-pray-sparkle { transform-origin: 32px 12px; animation: rxPraySparkle 2.4s ease-in-out infinite; }
-        @keyframes rxPraySparkle {
-          0%, 100% { opacity: 0.4; transform: scale(1) rotate(0deg); }
-          50%      { opacity: 1; transform: scale(1.35) rotate(180deg); }
-        }
-
+        @keyframes rxPraySparkle { 0%, 100% { opacity: 0.4; transform: scale(1) rotate(0deg); } 50% { opacity: 1; transform: scale(1.35) rotate(180deg); } }
         .rx-fire-outer { transform-origin: 20px 34px; animation: rxFireFlicker 0.9s ease-in-out infinite; }
-        @keyframes rxFireFlicker {
-          0%, 100% { transform: scale(1) skewX(0deg); }
-          25%      { transform: scale(1.03) skewX(2deg); }
-          50%      { transform: scale(0.98) skewX(-2deg); }
-          75%      { transform: scale(1.05) skewX(1deg); }
-        }
+        @keyframes rxFireFlicker { 0%, 100% { transform: scale(1) skewX(0deg); } 25% { transform: scale(1.03) skewX(2deg); } 50% { transform: scale(0.98) skewX(-2deg); } 75% { transform: scale(1.05) skewX(1deg); } }
         .rx-fire-inner { transform-origin: 20px 30px; animation: rxFireInner 0.7s ease-in-out infinite; }
-        @keyframes rxFireInner {
-          0%, 100% { transform: scale(1); opacity: 0.95; }
-          50%      { transform: scale(0.85); opacity: 1; }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .echo-reaction-emoji .rx-svg,
-          .echo-reaction-emoji:hover .rx-svg,
-          .echo-reaction-emoji.tapped .rx-svg,
-          .rx-heart-path, .rx-heart-shine,
-          .rx-laugh-eye-left, .rx-laugh-eye-right, .rx-laugh-tear,
-          .rx-wow-eye-left, .rx-wow-eye-right, .rx-wow-mouth,
-          .rx-sad-tear,
-          .rx-pray-left, .rx-pray-right, .rx-pray-sparkle,
-          .rx-fire-outer, .rx-fire-inner {
-            animation: none !important;
-          }
-        }
-
+        @keyframes rxFireInner { 0%, 100% { transform: scale(1); opacity: 0.95; } 50% { transform: scale(0.85); opacity: 1; } }
+        @media (prefers-reduced-motion: reduce) { .echo-reaction-emoji .rx-svg, .echo-reaction-emoji:hover .rx-svg, .echo-reaction-emoji.tapped .rx-svg, .rx-heart-path, .rx-heart-shine, .rx-laugh-eye-left, .rx-laugh-eye-right, .rx-laugh-tear, .rx-wow-eye-left, .rx-wow-eye-right, .rx-wow-mouth, .rx-sad-tear, .rx-pray-left, .rx-pray-right, .rx-pray-sparkle, .rx-fire-outer, .rx-fire-inner { animation: none !important; } }
         .echo-reaction-bar-arrow { display: none; }
 
         .highlight-flash { animation: highlightFlash 1.6s ease; }
@@ -1618,15 +1594,14 @@ const ChatView = () => {
         .message-inline-menu-wrapper { display: flex; width: 100%; margin-top: 8px; z-index: 10; }
         .message-inline-actions.own { justify-content: flex-end; }
         .message-inline-actions.partner { justify-content: flex-start; }
-        .message-inline-actions { display: flex; align-items: center; gap: 4px; background: var(--bg-primary, #ffffff); border: 1px solid rgba(0,0,0,0.08); padding: 3px; border-radius: 20px; box-shadow: 0 6px 16px rgba(0,0,0,0.08); animation: menuFadeIn 0.24s cubic-bezier(0.2, 1.2, 0.4, 1); }
+        .message-inline-actions { display: flex; align-items: center; gap: 4px; background: var(--bg-primary, #ffffff); border: 1px solid rgba(0,0,0,0.08); padding: 3px; border-radius: 20px; box-shadow: 0 6px 16px rgba(0,0,0,0.08); animation: menuFadeIn 0.24s cubic-bezier(0.2, 1.2, 0.4, 1); flex-wrap: wrap; }
         @keyframes menuFadeIn { 0% { opacity: 0; transform: translateY(-6px) scale(0.92); } 70% { opacity: 1; transform: translateY(1px) scale(1.02); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
         .message-action-btn { background: transparent; border: none; cursor: pointer; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--text-secondary, #555); transition: all 0.15s ease; }
         .message-action-btn svg { width: 18px; height: 18px; fill: currentColor; }
         .message-action-btn:hover { background: var(--bg-hover, #eaeaea); color: var(--text-primary, #333); transform: scale(1.15) translateY(-1px); }
         .message-action-btn.danger:hover { background: #fde8e8; color: #d32f2f; }
 
-        .message-row.own .message-bubble,
-        .message-row.partner .message-bubble {
+        .message-row.own .message-bubble, .message-row.partner .message-bubble {
           animation: echoBubbleIn 0.3s cubic-bezier(0.2, 0.9, 0.25, 1.05) both;
           transform-origin: bottom;
           will-change: transform, opacity;
@@ -1634,182 +1609,263 @@ const ChatView = () => {
         }
         .message-row.own .message-bubble { transform-origin: bottom right; }
         .message-row.partner .message-bubble { transform-origin: bottom left; }
+        @keyframes echoBubbleIn { 0% { opacity: 0; transform: translateY(10px) scale(0.84); } 60% { opacity: 1; transform: translateY(-1px) scale(1.03); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+        @media (hover: hover) { .message-row:hover .message-bubble { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,0.18); } }
+        .message-row.pressed .message-bubble { transform: scale(0.94); transition: transform 0.15s ease; }
+        .message-row .message-bubble.pending { animation: echoSendingPulse 1.4s ease-in-out infinite; }
+        @keyframes echoSendingPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(108, 60, 225, 0.0); } 50% { box-shadow: 0 0 0 4px rgba(108, 60, 225, 0.15); } }
 
-        @keyframes echoBubbleIn {
-          0% { opacity: 0; transform: translateY(10px) scale(0.84); }
-          60% { opacity: 1; transform: translateY(-1px) scale(1.03); }
-          100% { opacity: 1; transform: translateY(0) scale(1); }
-        }
-
-        @media (hover: hover) {
-          .message-row:hover .message-bubble {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 22px rgba(0,0,0,0.18);
-          }
-        }
-
-        .message-row.pressed .message-bubble {
-          transform: scale(0.94);
-          transition: transform 0.15s ease;
-        }
-
-        .message-row .message-bubble.pending {
-          animation: echoSendingPulse 1.4s ease-in-out infinite;
-        }
-        @keyframes echoSendingPulse {
-          0%, 100% { box-shadow: 0 0 0 0 rgba(108, 60, 225, 0.0); }
-          50%      { box-shadow: 0 0 0 4px rgba(108, 60, 225, 0.15); }
-        }
-
-        .message-receipt {
-          transition: color 0.25s ease, transform 0.25s ease;
-          display: inline-block;
-        }
+        .message-receipt { transition: color 0.25s ease, transform 0.25s ease; display: inline-block; }
         .message-receipt.sent { color: rgba(255, 255, 255, 0.55); }
-        .message-receipt.delivered {
-          color: rgba(255, 255, 255, 0.8);
-          animation: receiptDeliveredPop 0.32s cubic-bezier(0.2, 1.4, 0.4, 1) both;
-        }
-        .message-receipt.read {
-          color: #60A5FA;
-          animation: receiptReadPop 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) both;
-        }
-        @keyframes receiptDeliveredPop {
-          0%   { transform: scale(0.7); opacity: 0.4; }
-          60%  { transform: scale(1.18); opacity: 1; }
-          100% { transform: scale(1); opacity: 1; }
-        }
-        @keyframes receiptReadPop {
-          0%   { transform: scale(0.7); opacity: 0.4; color: rgba(255,255,255,0.6); }
-          40%  { transform: scale(1.25); opacity: 1; color: #60A5FA; }
-          100% { transform: scale(1); opacity: 1; color: #60A5FA; }
-        }
+        .message-receipt.delivered { color: rgba(255, 255, 255, 0.8); animation: receiptDeliveredPop 0.32s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
+        .message-receipt.read { color: #60A5FA; animation: receiptReadPop 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
+        @keyframes receiptDeliveredPop { 0% { transform: scale(0.7); opacity: 0.4; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
+        @keyframes receiptReadPop { 0% { transform: scale(0.7); opacity: 0.4; color: rgba(255,255,255,0.6); } 40% { transform: scale(1.25); opacity: 1; color: #60A5FA; } 100% { transform: scale(1); opacity: 1; color: #60A5FA; } }
 
-        .chat-send-btn {
-          position: relative;
-          overflow: visible;
-          transition: transform 0.12s ease, background 0.2s ease, box-shadow 0.2s ease;
-        }
+        .chat-send-btn { position: relative; overflow: visible; transition: transform 0.12s ease, background 0.2s ease, box-shadow 0.2s ease; }
         .chat-send-btn:not(:disabled):active { transform: scale(0.88); }
-        .chat-send-btn:not(:disabled):hover {
-          transform: scale(1.06);
-          box-shadow: 0 6px 18px rgba(108, 60, 225, 0.45);
-        }
-        .chat-send-btn.rippling::after {
-          content: '';
-          position: absolute;
-          inset: -4px;
-          border-radius: 50%;
-          border: 2px solid rgba(108, 60, 225, 0.55);
-          animation: sendRipple 0.6s cubic-bezier(0.2, 0.8, 0.4, 1) forwards;
-          pointer-events: none;
-        }
-        @keyframes sendRipple {
-          0%   { transform: scale(0.9); opacity: 0.85; }
-          100% { transform: scale(2.4); opacity: 0; }
-        }
+        .chat-send-btn:not(:disabled):hover { transform: scale(1.06); box-shadow: 0 6px 18px rgba(108, 60, 225, 0.45); }
+        .chat-send-btn.rippling::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid rgba(108, 60, 225, 0.55); animation: sendRipple 0.6s cubic-bezier(0.2, 0.8, 0.4, 1) forwards; pointer-events: none; }
+        @keyframes sendRipple { 0% { transform: scale(0.9); opacity: 0.85; } 100% { transform: scale(2.4); opacity: 0; } }
 
         .message-row.own.just-sent .message-bubble { animation: sentGlow 0.75s ease-out both; }
-        @keyframes sentGlow {
-          0%   { box-shadow: 0 0 0 0 rgba(108, 60, 225, 0.55), 0 4px 14px rgba(108,60,225,0.35); }
-          100% { box-shadow: 0 0 0 14px rgba(108, 60, 225, 0), 0 4px 14px rgba(108,60,225,0.35); }
-        }
-
+        @keyframes sentGlow { 0% { box-shadow: 0 0 0 0 rgba(108, 60, 225, 0.55), 0 4px 14px rgba(108,60,225,0.35); } 100% { box-shadow: 0 0 0 14px rgba(108, 60, 225, 0), 0 4px 14px rgba(108,60,225,0.35); } }
         .message-row.partner.just-arrived .message-bubble { animation: arrivedPulse 0.6s ease-out both; }
-        @keyframes arrivedPulse {
-          0%   { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.4); }
-          100% { box-shadow: 0 0 0 12px rgba(236, 72, 153, 0); }
-        }
+        @keyframes arrivedPulse { 0% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.4); } 100% { box-shadow: 0 0 0 12px rgba(236, 72, 153, 0); } }
 
-        @media (prefers-reduced-motion: reduce) {
-          .message-row.own .message-bubble,
-          .message-row.partner .message-bubble,
-          .message-row .message-bubble.pending,
-          .message-receipt.delivered,
-          .message-receipt.read,
-          .message-row.own.just-sent .message-bubble,
-          .message-row.partner.just-arrived .message-bubble,
-          .echo-reaction-bar,
-          .echo-reaction-emoji,
-          .message-inline-actions {
-            animation: none !important;
-            opacity: 1 !important;
-            transform: none !important;
-          }
-          .chat-send-btn:not(:disabled):active,
-          .chat-send-btn:not(:disabled):hover { transform: none; }
-          .message-row:hover .message-bubble { transform: none; }
-          .message-row.pressed .message-bubble { transform: none; }
-        }
-
-        .typing-indicator-container {
-          display: inline-flex;
-          align-items: center;
-          gap: 10px;
-          padding: 8px 14px 8px 8px;
-          border-radius: 22px 22px 22px 4px;
-          align-self: flex-start;
-          max-width: 260px;
-          margin: 6px 0 10px 12px;
-          background: rgba(20, 15, 35, 0.85);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-          border: 1px solid rgba(255, 255, 255, 0.15);
-          box-shadow:
-            0 8px 24px rgba(0, 0, 0, 0.45),
-            0 0 0 1px rgba(108, 60, 225, 0.35),
-            0 0 24px rgba(108, 60, 225, 0.25);
-          animation: typingContainerIn 0.28s cubic-bezier(0.2, 1.3, 0.4, 1);
-        }
-        html.theme-light .typing-indicator-container {
-          background: rgba(255, 255, 255, 0.94);
-          border: 1px solid rgba(0, 0, 0, 0.08);
-          box-shadow:
-            0 8px 24px rgba(0, 0, 0, 0.15),
-            0 0 0 1px rgba(108, 60, 225, 0.35),
-            0 0 24px rgba(108, 60, 225, 0.15);
-        }
-
-        .typing-echomoji-wrapper {
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          width: 44px;
-          height: 44px;
-          border-radius: 50%;
-          overflow: hidden;
-          background: linear-gradient(135deg, rgba(108, 60, 225, 0.25), rgba(236, 72, 153, 0.2));
-          box-shadow: 0 0 0 2px rgba(108, 60, 225, 0.5), 0 0 12px rgba(108, 60, 225, 0.4);
-          animation: typingEchoBob 1.4s ease-in-out infinite;
-          flex-shrink: 0;
-        }
-
-        @keyframes typingEchoBob {
-          0%, 100% { transform: translateY(0) rotate(0deg); }
-          25%      { transform: translateY(-2px) rotate(-2deg); }
-          75%      { transform: translateY(-2px) rotate(2deg); }
-        }
-
+        .typing-indicator-container { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-radius: 22px 22px 22px 4px; align-self: flex-start; max-width: 260px; margin: 6px 0 10px 12px; background: rgba(20, 15, 35, 0.85); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(108, 60, 225, 0.35), 0 0 24px rgba(108, 60, 225, 0.25); animation: typingContainerIn 0.28s cubic-bezier(0.2, 1.3, 0.4, 1); }
+        html.theme-light .typing-indicator-container { background: rgba(255, 255, 255, 0.94); border: 1px solid rgba(0, 0, 0, 0.08); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(108, 60, 225, 0.35), 0 0 24px rgba(108, 60, 225, 0.15); }
+        .typing-echomoji-wrapper { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, rgba(108, 60, 225, 0.25), rgba(236, 72, 153, 0.2)); box-shadow: 0 0 0 2px rgba(108, 60, 225, 0.5), 0 0 12px rgba(108, 60, 225, 0.4); animation: typingEchoBob 1.4s ease-in-out infinite; flex-shrink: 0; }
+        @keyframes typingEchoBob { 0%, 100% { transform: translateY(0) rotate(0deg); } 25% { transform: translateY(-2px) rotate(-2deg); } 75% { transform: translateY(-2px) rotate(2deg); } }
         .typing-dots-row { display: inline-flex; align-items: center; gap: 5px; }
-        .typing-dot {
-          display: inline-block;
-          width: 8px;
-          height: 8px;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #A78BFA, #F472B6);
-          box-shadow: 0 0 8px rgba(167, 139, 250, 0.65);
-          animation: typingBounce 1.4s infinite ease-in-out;
-        }
+        .typing-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: linear-gradient(135deg, #A78BFA, #F472B6); box-shadow: 0 0 8px rgba(167, 139, 250, 0.65); animation: typingBounce 1.4s infinite ease-in-out; }
         .typing-dot:nth-child(2) { animation-delay: 0.2s; }
         .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes typingBounce {
-          0%, 60%, 100% { transform: translateY(0) scale(1); opacity: 0.55; }
-          30% { transform: translateY(-5px) scale(1.15); opacity: 1; }
+        @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0) scale(1); opacity: 0.55; } 30% { transform: translateY(-5px) scale(1.15); opacity: 1; } }
+        @keyframes typingContainerIn { 0% { opacity: 0; transform: translateY(6px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+
+        /* ═══════════ NEW: Date separator ═══════════ */
+        .chat-date-separator {
+          position: sticky;
+          top: 8px;
+          z-index: 5;
+          display: flex;
+          justify-content: center;
+          margin: 10px 0 6px;
+          pointer-events: none;
         }
-        @keyframes typingContainerIn {
-          0% { opacity: 0; transform: translateY(6px) scale(0.9); }
-          100% { opacity: 1; transform: translateY(0) scale(1); }
+        .chat-date-separator > span {
+          pointer-events: auto;
+          background: rgba(20, 15, 35, 0.78);
+          backdrop-filter: blur(12px);
+          -webkit-backdrop-filter: blur(12px);
+          color: #fff;
+          font-size: 11.5px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          padding: 4px 12px;
+          border-radius: 999px;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+          border: 1px solid rgba(255,255,255,0.06);
         }
+        html.theme-light .chat-date-separator > span {
+          background: rgba(255,255,255,0.92);
+          color: #111;
+          border: 1px solid rgba(0,0,0,0.06);
+          box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+        }
+
+        /* ═══════════ NEW: Grouping ═══════════ */
+        .message-row.group-mid { margin-top: 1px; }
+        .message-row.group-top { margin-top: 8px; }
+        .message-row.group-mid .message-bubble,
+        .message-row.group-bottom .message-bubble { border-radius: 18px; }
+        /* Own (right) corner: bottom-right pointed only at group-bottom */
+        .message-row.own.group-top .message-bubble { border-bottom-right-radius: 18px; }
+        .message-row.own.group-mid .message-bubble { border-bottom-right-radius: 4px; border-top-right-radius: 4px; }
+        .message-row.own.group-bottom .message-bubble { border-top-right-radius: 4px; }
+        /* Partner (left) */
+        .message-row.partner.group-top .message-bubble { border-bottom-left-radius: 18px; }
+        .message-row.partner.group-mid .message-bubble { border-bottom-left-radius: 4px; border-top-left-radius: 4px; }
+        .message-row.partner.group-bottom .message-bubble { border-top-left-radius: 4px; }
+
+        /* Collapse the time row on mid-group messages */
+        .message-row.group-mid:not(.group-bottom) .message-meta-time { opacity: 0.55; }
+
+        /* Hide tail animation on grouped bubbles that are not the first in the group */
+        .message-row.group-mid .message-bubble,
+        .message-row.group-bottom:not(.group-top) .message-bubble {
+          animation: none;
+        }
+
+        /* ═══════════ NEW: FAB ═══════════ */
+        .chat-scroll-fab {
+          position: absolute;
+          right: 16px;
+          bottom: 96px;
+          z-index: 20;
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 14px 8px 12px;
+          border-radius: 999px;
+          background: linear-gradient(135deg, #6C3CE1, #EC4899);
+          color: #fff;
+          font-size: 13px;
+          font-weight: 600;
+          border: none;
+          cursor: pointer;
+          box-shadow: 0 8px 24px rgba(108,60,225,0.4);
+          animation: fabIn 0.25s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+        }
+        .chat-scroll-fab:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(108,60,225,0.5); }
+        .chat-scroll-fab svg { width: 16px; height: 16px; fill: currentColor; }
+        @keyframes fabIn { 0% { opacity: 0; transform: translateY(10px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+
+        /* ═══════════ NEW: Pin badge + banner ═══════════ */
+        .message-bubble.pinned { box-shadow: inset 0 0 0 1.5px rgba(255, 193, 7, 0.5); }
+        .message-pin-badge {
+          position: absolute;
+          top: -6px;
+          [isOwn ? 'left' : 'right']: 8px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 18px;
+          height: 18px;
+          border-radius: 50%;
+          background: #FFC107;
+          color: #111;
+          box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+        }
+        .pinned-banner {
+          position: sticky;
+          top: 0;
+          z-index: 9;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 8px 12px;
+          background: rgba(20, 15, 35, 0.92);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          border-bottom: 1px solid rgba(255,255,255,0.08);
+          color: #fff;
+          cursor: pointer;
+          animation: pinnedIn 0.25s cubic-bezier(0.2, 1.3, 0.4, 1) both;
+        }
+        html.theme-light .pinned-banner {
+          background: rgba(255,255,255,0.96);
+          border-bottom: 1px solid rgba(0,0,0,0.08);
+          color: #111;
+        }
+        .pinned-banner:hover { background: rgba(30, 20, 50, 0.96); }
+        html.theme-light .pinned-banner:hover { background: rgba(250, 250, 250, 1); }
+        .pinned-banner-icon {
+          width: 28px; height: 28px;
+          display: inline-flex; align-items: center; justify-content: center;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #FFC107, #FF9800);
+          color: #111;
+          flex-shrink: 0;
+        }
+        .pinned-banner-body { flex: 1; min-width: 0; }
+        .pinned-banner-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.75; margin-bottom: 1px; }
+        .pinned-banner-text { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pinned-banner-close { background: none; border: none; color: inherit; padding: 4px; cursor: pointer; opacity: 0.75; display: flex; align-items: center; justify-content: center; }
+        .pinned-banner-close:hover { opacity: 1; }
+        @keyframes pinnedIn { 0% { opacity: 0; transform: translateY(-10px); } 100% { opacity: 1; transform: translateY(0); } }
+
+        /* ═══════════ NEW: Select mode ═══════════ */
+        .message-row.select-mode { cursor: pointer; padding-left: 34px; padding-right: 34px; transition: background 0.15s ease; }
+        .message-row.select-mode.selected { background: rgba(108, 60, 225, 0.14); }
+        html.theme-light .message-row.select-mode.selected { background: rgba(108, 60, 225, 0.08); }
+        .select-checkbox {
+          position: absolute;
+          top: 50%;
+          transform: translateY(-50%);
+          [isOwn ? 'right' : 'left']: 8px;
+          width: 22px; height: 22px;
+          border-radius: 50%;
+          border: 2px solid rgba(255,255,255,0.5);
+          display: flex; align-items: center; justify-content: center;
+          background: transparent;
+          color: transparent;
+          transition: all 0.15s ease;
+        }
+        html.theme-light .select-checkbox { border-color: rgba(0,0,0,0.35); }
+        .select-checkbox.checked {
+          background: linear-gradient(135deg, #6C3CE1, #EC4899);
+          border-color: transparent;
+          color: #fff;
+          animation: checkboxPop 0.22s cubic-bezier(0.2, 1.4, 0.4, 1);
+        }
+        @keyframes checkboxPop { 0% { transform: translateY(-50%) scale(0.6); } 60% { transform: translateY(-50%) scale(1.15); } 100% { transform: translateY(-50%) scale(1); } }
+
+        .select-top-bar {
+          position: absolute;
+          top: 0; left: 0; right: 0;
+          z-index: 30;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 10px 14px;
+          background: rgba(20, 15, 35, 0.95);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          border-bottom: 1px solid rgba(255,255,255,0.1);
+          color: #fff;
+          animation: selectTopIn 0.22s ease both;
+        }
+        html.theme-light .select-top-bar { background: rgba(255,255,255,0.98); color: #111; border-bottom: 1px solid rgba(0,0,0,0.08); }
+        @keyframes selectTopIn { 0% { transform: translateY(-100%); } 100% { transform: translateY(0); } }
+        .select-top-title { flex: 1; font-size: 15px; font-weight: 700; }
+        .select-top-btn { background: none; border: none; color: inherit; cursor: pointer; padding: 6px 10px; border-radius: 8px; font-size: 14px; font-weight: 600; }
+        .select-top-btn:hover { background: rgba(255,255,255,0.1); }
+        html.theme-light .select-top-btn:hover { background: rgba(0,0,0,0.06); }
+
+        .select-bottom-bar {
+          position: absolute;
+          bottom: 0; left: 0; right: 0;
+          z-index: 30;
+          display: flex;
+          align-items: center;
+          justify-content: space-around;
+          gap: 4px;
+          padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
+          background: rgba(20, 15, 35, 0.95);
+          backdrop-filter: blur(14px);
+          -webkit-backdrop-filter: blur(14px);
+          border-top: 1px solid rgba(255,255,255,0.1);
+          animation: selectBottomIn 0.22s ease both;
+        }
+        html.theme-light .select-bottom-bar { background: rgba(255,255,255,0.98); border-top: 1px solid rgba(0,0,0,0.08); }
+        @keyframes selectBottomIn { 0% { transform: translateY(100%); } 100% { transform: translateY(0); } }
+        .select-action {
+          flex: 1;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 3px;
+          background: none;
+          border: none;
+          color: #fff;
+          cursor: pointer;
+          padding: 6px 4px;
+          border-radius: 10px;
+          transition: background 0.15s ease;
+          font-size: 11px;
+          font-weight: 600;
+        }
+        html.theme-light .select-action { color: #111; }
+        .select-action:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
+        html.theme-light .select-action:hover:not(:disabled) { background: rgba(0,0,0,0.06); }
+        .select-action:disabled { opacity: 0.35; cursor: not-allowed; }
+        .select-action svg { width: 20px; height: 20px; fill: currentColor; }
+        .select-action.danger { color: #ff6b6b; }
+
+        /* Prevent the messages container from scrolling under sticky elements */
+        .messages-container.has-pinned { padding-top: 0; }
       `}</style>
 
       <SEO title={`Chat with ${displayName}`} description={`Chat with ${displayName} on ECHO.`} />
@@ -1817,24 +1873,50 @@ const ChatView = () => {
       <div className="chat-view">
         <VideoAudioProvider>
           {chatBgEnabled && (<div className="echo-rings-bg is-active" aria-hidden="true"><span className="echo-bg-ring r1" /><span className="echo-bg-ring r2" /><span className="echo-bg-ring r3" /></div>)}
-          <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll} style={wallpaperStyle}>
-            {loadingMessages && messages.length === 0 ? (<div className="chat-skeleton-list"><SkeletonMessage /><SkeletonMessage /><SkeletonMessage /></div>) : messages.length === 0 ? (<div className="empty-chat-state"><i className="fas fa-paper-plane empty-icon" /><p>No messages yet. Say hello!</p></div>) : (sortMessages(messages).map((msg) => renderMessage(msg)))}
+
+          {/* ═══════════ Select mode top bar ═══════════ */}
+          {selectMode && (
+            <div className="select-top-bar">
+              <button type="button" className="select-top-btn" onClick={exitSelectMode} aria-label="Cancel select">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+              </button>
+              <span className="select-top-title">{selectedIds.size} selected</span>
+              <button type="button" className="select-top-btn" onClick={() => { if (selectedIds.size === messages.length) setSelectedIds(new Set()); else setSelectedIds(new Set(messages.map(m => m.id))); }}>{selectedIds.size === messages.length ? 'Clear' : 'All'}</button>
+            </div>
+          )}
+
+          {/* ═══════════ Pinned banner ═══════════ */}
+          {!selectMode && pinnedMessage && (
+            <div className="pinned-banner" onClick={() => jumpToMessage(pinnedMessage.id)} role="button" tabIndex={0}>
+              <span className="pinned-banner-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="14" height="14"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" fill="currentColor"/></svg>
+              </span>
+              <div className="pinned-banner-body">
+                <span className="pinned-banner-label">Pinned Message</span>
+                <span className="pinned-banner-text">{pinnedPreview || 'Message'}</span>
+              </div>
+              <button type="button" className="pinned-banner-close" onClick={(e) => { e.stopPropagation(); handlePinMessage(pinnedMessage); }} aria-label="Unpin">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+              </button>
+            </div>
+          )}
+
+          <div className={`messages-container ${pinnedMessage && !selectMode ? 'has-pinned' : ''}`} ref={messagesContainerRef} onScroll={handleScroll} style={wallpaperStyle}>
+            {loadingMessages && messages.length === 0 ? (
+              <div className="chat-skeleton-list"><SkeletonMessage /><SkeletonMessage /><SkeletonMessage /></div>
+            ) : messages.length === 0 ? (
+              <div className="empty-chat-state"><i className="fas fa-paper-plane empty-icon" /><p>No messages yet. Say hello!</p></div>
+            ) : (
+              groupedMessages.map((entry) => renderMessage(entry))
+            )}
             {isAILoading && (<div className="message-bubble partner"><div className="typing-indicator"><span></span><span></span><span></span></div></div>)}
             {partnerIsTyping && (
               <div className="typing-indicator-container">
                 <div className="typing-echomoji-wrapper">
-                  <ECHOMOJI
-                    mood={partnerProfile?.mood || 'happy'}
-                    skin={partnerProfile?.activeSkin ? getSkinById(partnerProfile.activeSkin) : null}
-                    size={44}
-                    interactive={false}
-                    animated={false}
-                  />
+                  <ECHOMOJI mood={partnerProfile?.mood || 'happy'} skin={partnerProfile?.activeSkin ? getSkinById(partnerProfile.activeSkin) : null} size={44} interactive={false} animated={false} />
                 </div>
                 <div className="typing-dots-row">
-                  <span className="typing-dot" />
-                  <span className="typing-dot" />
-                  <span className="typing-dot" />
+                  <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
                 </div>
               </div>
             )}
@@ -1842,24 +1924,22 @@ const ChatView = () => {
           </div>
         </VideoAudioProvider>
 
+        {/* ═══════════ Scroll-to-bottom FAB ═══════════ */}
+        {!isNearBottom && !selectMode && (
+          <button type="button" className="chat-scroll-fab" onClick={() => scrollToBottom(true)} aria-label="Scroll to latest">
+            <svg viewBox="0 0 24 24"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>
+            {unreadWhileScrolled > 0 ? `${unreadWhileScrolled} new` : ''}
+          </button>
+        )}
+
         {showEmojiPicker && (<ChatEmojiPicker onClose={() => setShowEmojiPicker(false)} onSelect={handleEmojiSelect} excludeRefs={[inputContainerRef, captionPreviewRef]} />)}
 
         {showReactionPicker && reactionPickerAnchor && (
           <>
             <div className="echo-reaction-backdrop" onClick={closeReactionPicker} />
-            <div
-              className="echo-reaction-bar"
-              style={{ top: reactionPickerAnchor.top, left: reactionPickerAnchor.left }}
-              onClick={(e) => e.stopPropagation()}
-            >
+            <div className="echo-reaction-bar" style={{ top: reactionPickerAnchor.top, left: reactionPickerAnchor.left }} onClick={(e) => e.stopPropagation()}>
               {REACTION_EMOJIS.map(({ key, Component }) => (
-                <button
-                  key={key}
-                  type="button"
-                  className={`echo-reaction-emoji${tappedEmoji === key ? ' tapped' : ''}`}
-                  onClick={() => handleReactionSelect(key)}
-                  aria-label={key}
-                >
+                <button key={key} type="button" className={`echo-reaction-emoji${tappedEmoji === key ? ' tapped' : ''}`} onClick={() => handleReactionSelect(key)} aria-label={key}>
                   <Component />
                 </button>
               ))}
@@ -1869,76 +1949,74 @@ const ChatView = () => {
 
         {reactionViewer && (<div className="reaction-viewer-modal" onClick={() => setReactionViewer(null)}><div className="reaction-viewer-content" onClick={(e) => e.stopPropagation()}><h3>{REACTION_LABELS[reactionViewer.emoji] || reactionViewer.emoji} Reactions</h3><div className="reaction-viewer-list">{reactionViewer.userIds.map((uid) => (<div key={uid} className="reaction-viewer-item"><Avatar uid={uid} size="small" /><span>{getProfile(uid)?.name || 'User'}</span></div>))}</div></div></div>)}
 
-        <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
-          {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
-
-          {replyToNote && (
-            <div className="note-reply-preview-banner">
-              <div className="note-reply-preview-banner-content">
-                <span className="note-reply-preview-banner-label">
-                  Replying to {replyToNote.authorName}'s note
-                </span>
-                {replyToNote.song?.title ? (
-                  <span className="note-reply-preview-banner-text">
-                    🎵 {replyToNote.song.title}
-                    {replyToNote.song.artist ? ` · ${replyToNote.song.artist}` : ''}
-                  </span>
-                ) : (
-                  <span className="note-reply-preview-banner-text">{replyToNote.text}</span>
+        {!selectMode && (
+          <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
+            {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
+            {replyToNote && (
+              <div className="note-reply-preview-banner">
+                <div className="note-reply-preview-banner-content">
+                  <span className="note-reply-preview-banner-label">Replying to {replyToNote.authorName}'s note</span>
+                  {replyToNote.song?.title ? (
+                    <span className="note-reply-preview-banner-text">🎵 {replyToNote.song.title}{replyToNote.song.artist ? ` · ${replyToNote.song.artist}` : ''}</span>
+                  ) : (
+                    <span className="note-reply-preview-banner-text">{replyToNote.text}</span>
+                  )}
+                </div>
+                <button type="button" className="note-reply-preview-banner-close" onClick={() => setReplyToNote(null)} aria-label="Cancel note reply">✕</button>
+              </div>
+            )}
+            <div className="chat-input-row">
+              <button type="button" className="chat-emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)} title="Emojis"><i className="fas fa-smile" /></button>
+              <button type="button" className="chat-voice-btn" onClick={() => { if (userId === ECHO_AI_ID) { setToast({ message: 'Voice notes are not available in ECHO AI chat right now.', type: 'info' }); setTimeout(() => setToast(null), 2800); return; } setShowVoiceRecorder(true); }} title="Voice note"><i className="fas fa-microphone" /></button>
+              <div className="chat-more-wrapper" ref={moreOptionsRef}>
+                <button type="button" className="chat-more-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowMoreOptions((v) => !v); }} title="More options"><i className="fas fa-ellipsis-h" /></button>
+                {showMoreOptions && (
+                  <div className="chat-more-options-popup" onClick={(e) => e.stopPropagation()}>
+                    <button type="button" className="chat-more-option" onClick={() => { fileInputRef.current?.click(); setShowMoreOptions(false); }}><i className="fas fa-paperclip" /><span>Attach</span></button>
+                    <button type="button" className="chat-more-option" onClick={() => { setShowWallpaperPicker(true); setShowMoreOptions(false); }}><i className="fas fa-image" /><span>Wallpaper</span></button>
+                    <button type="button" className="chat-more-option danger" onClick={() => { setShowMoreOptions(false); handleEndEcho(); }} disabled={ended} style={ended ? { opacity: 0.4, pointerEvents: 'none' } : undefined}><i className="fas fa-stop-circle" /><span>End ECHO</span></button>
+                  </div>
                 )}
               </div>
-              <button
-                type="button"
-                className="note-reply-preview-banner-close"
-                onClick={() => setReplyToNote(null)}
-                aria-label="Cancel note reply"
-              >
-                ✕
-              </button>
+              <input type="file" ref={fileInputRef} accept="image/*,video/*" style={{ display: 'none' }} onChange={handleFileSelect} />
+              <textarea
+                ref={inputRef}
+                className={`chat-input ${haloActive ? 'halo-active' : ''}`}
+                placeholder={`Message ${displayName}...`}
+                value={newMessage}
+                onChange={(e) => { setNewMessage(e.target.value); handleTyping(); }}
+                onBlur={clearMyTyping}
+                onKeyDown={handleKeyDown}
+                onPaste={handlePaste}
+                onPointerDown={handleInputPointerDown}
+                onPointerUp={handleInputPointerUp}
+                onPointerLeave={handleInputPointerLeave}
+                rows={1}
+                style={{ resize: 'none', overflow: 'hidden', minHeight: '44px', maxHeight: '120px', lineHeight: '1.4', fontFamily: 'inherit', flex: 1, padding: '10px 16px', borderRadius: '24px', border: '1px solid var(--border-color)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+                onFocus={() => { focusedField.current = 'main'; }}
+              />
+              <button ref={sendButtonRef} type="submit" className="chat-send-btn" disabled={!newMessage.trim()}><i className="fas fa-paper-plane" /></button>
             </div>
-          )}
+          </form>
+        )}
 
-          <div className="chat-input-row">
-            <button type="button" className="chat-emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)} title="Emojis"><i className="fas fa-smile" /></button>
-            <button type="button" className="chat-voice-btn" onClick={() => { if (userId === ECHO_AI_ID) { setToast({ message: 'Voice notes are not available in ECHO AI chat right now.', type: 'info' }); setTimeout(() => setToast(null), 2800); return; } setShowVoiceRecorder(true); }} title="Voice note"><i className="fas fa-microphone" /></button>
-
-            <div className="chat-more-wrapper" ref={moreOptionsRef}>
-              <button type="button" className="chat-more-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowMoreOptions((v) => !v); }} title="More options"><i className="fas fa-ellipsis-h" /></button>
-              {showMoreOptions && (
-                <div className="chat-more-options-popup" onClick={(e) => e.stopPropagation()}>
-                  <button type="button" className="chat-more-option" onClick={() => { fileInputRef.current?.click(); setShowMoreOptions(false); }}><i className="fas fa-paperclip" /><span>Attach</span></button>
-                  <button type="button" className="chat-more-option" onClick={() => { setShowWallpaperPicker(true); setShowMoreOptions(false); }}><i className="fas fa-image" /><span>Wallpaper</span></button>
-                  <button type="button" className="chat-more-option danger" onClick={() => { setShowMoreOptions(false); handleEndEcho(); }} disabled={ended} style={ended ? { opacity: 0.4, pointerEvents: 'none' } : undefined}><i className="fas fa-stop-circle" /><span>End ECHO</span></button>
-                </div>
-              )}
-            </div>
-
-            <input type="file" ref={fileInputRef} accept="image/*,video/*" style={{ display: 'none' }} onChange={handleFileSelect} />
-
-            <textarea
-              ref={inputRef}
-              className={`chat-input ${haloActive ? 'halo-active' : ''}`}
-              placeholder={`Message ${displayName}...`}
-              value={newMessage}
-              onChange={(e) => { setNewMessage(e.target.value); handleTyping(); }}
-              onBlur={clearMyTyping}
-              onKeyDown={handleKeyDown}
-              onPaste={handlePaste}
-              onPointerDown={handleInputPointerDown}
-              onPointerUp={handleInputPointerUp}
-              onPointerLeave={handleInputPointerLeave}
-              rows={1}
-              style={{
-                resize: 'none', overflow: 'hidden', minHeight: '44px', maxHeight: '120px', lineHeight: '1.4', fontFamily: 'inherit',
-                flex: 1, padding: '10px 16px', borderRadius: '24px', border: '1px solid var(--border-color)', background: 'var(--bg-input)',
-                color: 'var(--text-primary)', fontSize: '14px', outline: 'none', boxSizing: 'border-box',
-              }}
-              onFocus={() => { focusedField.current = 'main'; }}
-            />
-
-            <button ref={sendButtonRef} type="submit" className="chat-send-btn" disabled={!newMessage.trim()}><i className="fas fa-paper-plane" /></button>
+        {/* ═══════════ Select mode bottom bar ═══════════ */}
+        {selectMode && (
+          <div className="select-bottom-bar">
+            <button type="button" className="select-action" onClick={bulkCopy} disabled={selectedIds.size === 0}>
+              <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+              Copy
+            </button>
+            <button type="button" className="select-action" onClick={bulkSave} disabled={selectedIds.size === 0}>
+              <svg viewBox="0 0 24 24"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+              Save
+            </button>
+            <button type="button" className="select-action danger" onClick={bulkDelete} disabled={selectedIds.size === 0}>
+              <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+              Delete
+            </button>
           </div>
-        </form>
+        )}
 
         {showVoiceRecorder && (<VoiceRecorder onSend={handleVoiceSend} onCancel={() => setShowVoiceRecorder(false)} />)}
         {renderPreviewOverlay()}
@@ -1949,13 +2027,7 @@ const ChatView = () => {
         {videoPreview && (<CustomVideoPlayer src={videoPreview.src} onClose={() => setVideoPreview(null)} />)}
 
         {showWallpaperPicker && (
-          <WallpaperPicker
-            current={wallpaperId}
-            currentCustom={customWallpaper}
-            onSelect={handleWallpaperSelect}
-            onSelectCustom={handleCustomWallpaperSelect}
-            onClose={() => setShowWallpaperPicker(false)}
-          />
+          <WallpaperPicker current={wallpaperId} currentCustom={customWallpaper} onSelect={handleWallpaperSelect} onSelectCustom={handleCustomWallpaperSelect} onClose={() => setShowWallpaperPicker(false)} />
         )}
 
         <ConfirmModal isOpen={confirmModal.isOpen} onClose={closeConfirmModal} onConfirm={confirmModal.onConfirm} title={confirmModal.title} message={confirmModal.message} confirmText={confirmModal.confirmText} cancelText={confirmModal.cancelText} />
@@ -1965,5 +2037,10 @@ const ChatView = () => {
     </>
   );
 };
+
+/* Date separator component */
+const DateSeparator = ({ label }) => (
+  <div className="chat-date-separator"><span>{label}</span></div>
+);
 
 export default ChatView;
