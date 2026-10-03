@@ -61,8 +61,7 @@ import './ChatView.css';
    Visual-viewport hook.
    · On touch devices: lock .chat-view to visualViewport so the
      on-screen keyboard can't push the layout around.
-   · On desktop: full no-op, plus any stale CSS vars from a
-     prior mobile session get cleaned up.
+   · On desktop: no-op, plus cleanup of any stale CSS vars.
    ───────────────────────────────────────────────────────────── */
 const useVisualViewport = () => {
   useEffect(() => {
@@ -282,6 +281,14 @@ const ChatView = () => {
     return () => {
       window.removeEventListener('pointerdown', unlock);
       window.removeEventListener('keydown', unlock);
+    };
+  }, []);
+
+  // ─── NEW: always hide the bottom nav while inside a chat ───
+  useEffect(() => {
+    document.body.classList.add('echo-hide-bottom-nav');
+    return () => {
+      document.body.classList.remove('echo-hide-bottom-nav');
     };
   }, []);
 
