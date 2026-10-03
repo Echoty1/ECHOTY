@@ -1,19 +1,37 @@
 /* src/components/pages/Chat/ChatView.css */
+
+/* ═══════════════════════════════════════════════════════════════
+   Global lock — prevents the page from scrolling when a mobile
+   keyboard opens, so the layout can't jump around.
+   ═══════════════════════════════════════════════════════════════ */
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
 :root {
   --header-height: 60px;
   --nav-bottom-offset: 88px;
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Layout
+   Layout — locked to the visible viewport (visualViewport-aware)
    ═══════════════════════════════════════════════════════════════ */
 
 .chat-view {
   position: fixed;
-  top: var(--header-height);
-  bottom: var(--nav-bottom-offset);
   left: 0;
   right: 0;
+  top: var(--vvt, 0px);
+  height: var(--vvh, 100dvh);
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
@@ -24,12 +42,26 @@
   max-width: 100%;
   box-sizing: border-box;
   z-index: 10;
-  transition: bottom 0.25s ease;
+  overscroll-behavior: none;
+  transition:
+    height 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    top 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Fallback for older browsers without dvh */
+@supports not (height: 100dvh) {
+  .chat-view {
+    height: var(--vvh, 100vh);
+  }
 }
 
 .messages-container {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
   scroll-behavior: smooth;
   padding: 72px 16px 12px !important;
   display: flex;
@@ -39,7 +71,6 @@
   gap: 8px;
   margin: 0 !important;
   box-sizing: border-box;
-  -webkit-overflow-scrolling: touch;
   transition: padding-bottom 0.25s ease;
   position: relative;
   z-index: 2;
@@ -670,7 +701,7 @@ body.light .message-bubble.own:active {
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Input bar
+   Input bar — pinned at bottom of the visual viewport
    ═══════════════════════════════════════════════════════════════ */
 
 .chat-input-container {
@@ -679,7 +710,7 @@ body.light .message-bubble.own:active {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  padding: 10px 16px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
   background: rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -740,7 +771,7 @@ body.light .chat-input-container {
   border: 1px solid var(--border-color);
   background: var(--bg-input);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 16px; /* prevents iOS zoom on focus */
   outline: none;
   position: relative;
   transition: all 0.3s ease;
@@ -765,6 +796,11 @@ body.light .chat-input-container {
 .chat-send-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+}
+
+/* On larger screens, revert to 14px (no iOS zoom concern) */
+@media (min-width: 481px) {
+  .chat-input { font-size: 14px; }
 }
 
 /* Halo long-press ring on input */
@@ -2015,7 +2051,6 @@ body.light .echo-rings-bg.is-active .echo-bg-ring.r3 {
     font-size: 14px !important;
   }
   .chat-input {
-    font-size: 13px !important;
     padding: 10px 12px !important;
   }
   .message-bubble {
@@ -2023,7 +2058,7 @@ body.light .echo-rings-bg.is-active .echo-bg-ring.r3 {
     font-size: 13px;
     padding: 8px 12px;
   }
-  .chat-input-container { padding: 8px 12px; }
+  .chat-input-container { padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); }
   .chat-halo-btn { width: 34px; height: 34px; }
   .media-preview-overlay {
     padding: 16px 12px;
@@ -2081,6 +2116,7 @@ body.light .echo-rings-bg.is-active .echo-bg-ring.r3 {
   .message-row:hover .message-bubble { transform: none; }
   .message-row.pressed .message-bubble { transform: none; }
 }
+
 /* ═══════════════════════════════════════════════════════════════
    Telegram-style animated reaction emojis
    ═══════════════════════════════════════════════════════════════ */
@@ -2107,7 +2143,6 @@ body.light .echo-rings-bg.is-active .echo-bg-ring.r3 {
   overflow: visible;
 }
 
-/* Idle wiggle: subtle micro-bounce for each emoji, staggered */
 .echo-reaction-emoji .rx-svg {
   animation: rxIdleBounce 3.2s ease-in-out infinite;
 }
@@ -2124,7 +2159,6 @@ body.light .echo-rings-bg.is-active .echo-bg-ring.r3 {
   90%           { transform: translateY(0) scale(1); }
 }
 
-/* Hover: pause idle, do a bigger bounce */
 .echo-reaction-emoji:hover {
   background: rgba(255, 255, 255, 0.08);
   transform: scale(1.15);
@@ -2144,7 +2178,6 @@ body.light .echo-reaction-emoji:hover {
   background: rgba(0, 0, 0, 0.05);
 }
 
-/* On pick: full pop */
 .echo-reaction-emoji.tapped .rx-svg {
   animation: rxTapPop 0.42s cubic-bezier(0.2, 1.6, 0.4, 1);
 }
@@ -2155,9 +2188,6 @@ body.light .echo-reaction-emoji:hover {
   100% { transform: scale(1) rotate(0deg); }
 }
 
-/* ── Per-emoji sub-animations ────────────────────────────────── */
-
-/* Heart: beating */
 .rx-heart-path {
   transform-origin: 20px 24px;
   animation: rxHeartBeat 1.6s ease-in-out infinite;
@@ -2178,7 +2208,6 @@ body.light .echo-reaction-emoji:hover {
   30%      { opacity: 0.55; transform: scale(1); }
 }
 
-/* Laugh: squinting eyes + tear popping */
 .rx-laugh-eye-left,
 .rx-laugh-eye-right {
   transform-origin: center;
@@ -2198,7 +2227,6 @@ body.light .echo-reaction-emoji:hover {
   90%           { opacity: 0; transform: translateY(4px) scale(0.6); }
 }
 
-/* Wow: pulsing open mouth + eye dilation */
 .rx-wow-eye-left,
 .rx-wow-eye-right {
   transform-origin: center;
@@ -2217,7 +2245,6 @@ body.light .echo-reaction-emoji:hover {
   50%      { transform: scale(1.18); }
 }
 
-/* Sad: falling tear */
 .rx-sad-tear {
   animation: rxSadTear 2.4s ease-in-out infinite;
   transform-origin: 17px 20px;
@@ -2228,7 +2255,6 @@ body.light .echo-reaction-emoji:hover {
   90%           { opacity: 0; transform: translateY(6px) scale(0.7); }
 }
 
-/* Pray: gentle bow */
 .rx-pray-left  { transform-origin: 20px 34px; animation: rxPrayLeft 2.4s ease-in-out infinite; }
 .rx-pray-right { transform-origin: 20px 34px; animation: rxPrayRight 2.4s ease-in-out infinite; }
 @keyframes rxPrayLeft {
@@ -2248,7 +2274,6 @@ body.light .echo-reaction-emoji:hover {
   50%      { opacity: 1; transform: scale(1.35) rotate(180deg); }
 }
 
-/* Fire: flicker + flame tongues */
 .rx-fire-outer {
   transform-origin: 20px 34px;
   animation: rxFireFlicker 0.9s ease-in-out infinite;
@@ -2268,7 +2293,6 @@ body.light .echo-reaction-emoji:hover {
   50%      { transform: scale(0.85); opacity: 1; }
 }
 
-/* Respect reduced-motion */
 @media (prefers-reduced-motion: reduce) {
   .echo-reaction-emoji .rx-svg,
   .echo-reaction-emoji:hover .rx-svg,
@@ -2280,5 +2304,25 @@ body.light .echo-reaction-emoji:hover {
   .rx-pray-left, .rx-pray-right, .rx-pray-sparkle,
   .rx-fire-outer, .rx-fire-inner {
     animation: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Keyboard-open state
+   When the on-screen keyboard is up, hide the bottom nav so it
+   doesn't overlap the composer on iOS/Android.
+   ═══════════════════════════════════════════════════════════════ */
+
+html.keyboard-open .echo-v-nav,
+html.keyboard-open body.echo-hide-bottom-nav .echo-v-nav {
+  transform: translate3d(0, 180%, 0) !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+@supports (-webkit-touch-callout: none) {
+  html.keyboard-open .echo-v-nav {
+    display: none !important;
   }
 }
