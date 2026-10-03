@@ -1,5 +1,5 @@
 // src/hooks/usePresence.js
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { ref, onValue, set, onDisconnect, serverTimestamp } from 'firebase/database';
 import { db } from '../services/firebase';
 
@@ -7,17 +7,10 @@ let mountedCount = 0;
 let unsubConnection = null;
 let currentUid = null;
 
-/**
- * Mount ONCE at the App level. Writes:
- *   presence/{uid}       = { online, lastSeen }         ← read by UserProfile / ChatView
- *   presence/online/{uid}= true                          ← read by Chats.jsx (existing)
- * Cleans up on tab close via onDisconnect().
- */
 export const usePresence = (user) => {
   useEffect(() => {
-    if (!user?.uid) return;
+    if (!user?.uid) return undefined;
 
-    // Prevent double-mounting in React 18 StrictMode
     mountedCount += 1;
     if (mountedCount > 1) return () => { mountedCount -= 1; };
 
@@ -29,27 +22,14 @@ export const usePresence = (user) => {
 
     unsubConnection = onValue(connectedRef, (snap) => {
       if (snap.val() !== true) return;
-
-      // When we disconnect, Firebase flips these to false/null
       onDisconnect(myOnlineRef).set(null);
-      onDisconnect(myPresenceRef).set({
-        online: false,
-        lastSeen: serverTimestamp(),
-      });
-
-      // Now mark ourselves online
+      onDisconnect(myPresenceRef).set({ online: false, lastSeen: serverTimestamp() });
       set(myOnlineRef, true);
-      set(myPresenceRef, {
-        online: true,
-        lastSeen: Date.now(),
-      });
+      set(myPresenceRef, { online: true, lastSeen: Date.now() });
     });
 
-    // Heartbeat every 30s so lastSeen stays fresh while tab is open
     const hb = setInterval(() => {
-      if (currentUid) {
-        set(myPresenceRef, { online: true, lastSeen: Date.now() }).catch(() => {});
-      }
+      if (currentUid) set(myPresenceRef, { online: true, lastSeen: Date.now() }).catch(() => {});
     }, 30000);
 
     const onUnload = () => {
@@ -58,30 +38,31 @@ export const usePresence = (user) => {
         set(myPresenceRef, { online: false, lastSeen: Date.now() });
       } catch (_) {}
     };
-    window.addEventListener('beforeunload', onUnload);
-    document.addEventListener('visibilitychange', () => {
+    const onVis = () => {
       if (document.visibilityState === 'hidden') onUnload();
-      else if (document.visibilityState === 'visible' && currentUid) {
+      else if (currentUid) {
         set(myOnlineRef, true);
         set(myPresenceRef, { online: true, lastSeen: Date.now() }).catch(() => {});
       }
-    });
+    };
+    window.addEventListener('beforeunload', onUnload);
+    document.addEventListener('visibilitychange', onVis);
 
     return () => {
       mountedCount -= 1;
       if (unsubConnection) unsubConnection();
       if (hb) clearInterval(hb);
       window.removeEventListener('beforeunload', onUnload);
+      document.removeEventListener('visibilitychange', onVis);
       onUnload();
     };
   }, [user?.uid]);
 };
 
-/** Hook to read another user's presence. */
 export const useUserPresence = (uid) => {
   const [data, setData] = useState(null);
   useEffect(() => {
-    if (!uid) return;
+    if (!uid) return undefined;
     const r = ref(db, `presence/${uid}`);
     return onValue(r, (s) => setData(s.val() || null));
   }, [uid]);
