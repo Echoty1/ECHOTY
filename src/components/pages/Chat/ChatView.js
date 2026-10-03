@@ -246,13 +246,13 @@ const ChatView = () => {
   const [pressedMsgId, setPressedMsgId] = useState(null);
   const [tappedEmoji, setTappedEmoji] = useState(null);
 
-  /* ───── NEW: FAB + unread counter ───── */
+  /* FAB + unread counter */
   const [unreadWhileScrolled, setUnreadWhileScrolled] = useState(0);
 
-  /* ───── NEW: pinned message ───── */
+  /* pinned message */
   const [pinnedMessageId, setPinnedMessageId] = useState(null);
 
-  /* ───── NEW: select mode ───── */
+  /* select mode */
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
 
@@ -396,7 +396,7 @@ const ChatView = () => {
     return () => { unsubWp(); unsubCw(); };
   }, [user?.uid, userId]);
 
-  /* ───── NEW: pinned message subscription ───── */
+  /* pinned message subscription */
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -963,7 +963,7 @@ const ChatView = () => {
     setActiveMessageMenuId(null);
   };
 
-  /* ───── NEW: pin/unpin ───── */
+  /* pin/unpin */
   const handlePinMessage = async (msg) => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -971,7 +971,6 @@ const ChatView = () => {
     try {
       const currentlyPinned = pinnedMessageId === msg.id;
       await set(ref(db, `chats/${cId}/pinnedMessageId`), currentlyPinned ? null : msg.id);
-      // Also flip the message's own `pinned` flag so archive/tide logic still works
       await update(ref(db, `chats/${cId}/messages/${msg.id}`), { pinned: !currentlyPinned });
       setToast({ message: currentlyPinned ? 'Message unpinned' : 'Message pinned', type: 'success' });
     } catch (err) {
@@ -1157,7 +1156,7 @@ const ChatView = () => {
     );
   };
 
-  /* ───── NEW: grouping helpers (memoized per render list) ───── */
+  /* grouping helpers (memoized per render list) */
   const groupedMessages = useMemo(() => {
     const sorted = sortMessages(messages);
     return sorted.map((msg, i, arr) => {
@@ -1479,7 +1478,7 @@ const ChatView = () => {
         transition: 'background 0.3s ease',
       };
 
-  /* ───── NEW: pinned message preview lookup ───── */
+  /* pinned message preview lookup */
   const pinnedMessage = useMemo(() => {
     if (!pinnedMessageId) return null;
     return messages.find((m) => m.id === pinnedMessageId) || null;
@@ -1496,7 +1495,7 @@ const ChatView = () => {
     return pinnedMessage.text || '';
   }, [pinnedMessage]);
 
-  /* ───── NEW: select mode bulk actions ───── */
+  /* select mode bulk actions */
   const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
 
   const bulkCopy = async () => {
@@ -1541,7 +1540,7 @@ const ChatView = () => {
   return (
     <>
       <style>{`
-        /* ═══════════ Reaction bar (unchanged) ═══════════ */
+        /* ═══════════ Reaction bar ═══════════ */
         .echo-reaction-backdrop { position: fixed; inset: 0; z-index: 998; background: transparent; }
         .echo-reaction-bar { position: fixed; z-index: 1000; display: flex; align-items: center; gap: 2px; background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 999px; padding: 6px 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); transform: translateX(-50%); transform-origin: bottom center; animation: snapReactionPop 0.22s cubic-bezier(0.2, 1.3, 0.4, 1) both; }
         html[data-theme="light"] .echo-reaction-bar, html.theme-light .echo-reaction-bar { background: #ffffff; border-color: rgba(0, 0, 0, 0.08); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
@@ -1644,7 +1643,7 @@ const ChatView = () => {
         @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0) scale(1); opacity: 0.55; } 30% { transform: translateY(-5px) scale(1.15); opacity: 1; } }
         @keyframes typingContainerIn { 0% { opacity: 0; transform: translateY(6px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 
-        /* ═══════════ NEW: Date separator ═══════════ */
+        /* Date separator (sticky) */
         .chat-date-separator {
           position: sticky;
           top: 8px;
@@ -1675,30 +1674,26 @@ const ChatView = () => {
           box-shadow: 0 2px 8px rgba(0,0,0,0.12);
         }
 
-        /* ═══════════ NEW: Grouping ═══════════ */
+        /* Message grouping */
         .message-row.group-mid { margin-top: 1px; }
         .message-row.group-top { margin-top: 8px; }
         .message-row.group-mid .message-bubble,
         .message-row.group-bottom .message-bubble { border-radius: 18px; }
-        /* Own (right) corner: bottom-right pointed only at group-bottom */
         .message-row.own.group-top .message-bubble { border-bottom-right-radius: 18px; }
         .message-row.own.group-mid .message-bubble { border-bottom-right-radius: 4px; border-top-right-radius: 4px; }
         .message-row.own.group-bottom .message-bubble { border-top-right-radius: 4px; }
-        /* Partner (left) */
         .message-row.partner.group-top .message-bubble { border-bottom-left-radius: 18px; }
         .message-row.partner.group-mid .message-bubble { border-bottom-left-radius: 4px; border-top-left-radius: 4px; }
         .message-row.partner.group-bottom .message-bubble { border-top-left-radius: 4px; }
 
-        /* Collapse the time row on mid-group messages */
         .message-row.group-mid:not(.group-bottom) .message-meta-time { opacity: 0.55; }
 
-        /* Hide tail animation on grouped bubbles that are not the first in the group */
         .message-row.group-mid .message-bubble,
         .message-row.group-bottom:not(.group-top) .message-bubble {
           animation: none;
         }
 
-        /* ═══════════ NEW: FAB ═══════════ */
+        /* Scroll-to-bottom FAB */
         .chat-scroll-fab {
           position: absolute;
           right: 16px;
@@ -1722,12 +1717,12 @@ const ChatView = () => {
         .chat-scroll-fab svg { width: 16px; height: 16px; fill: currentColor; }
         @keyframes fabIn { 0% { opacity: 0; transform: translateY(10px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 
-        /* ═══════════ NEW: Pin badge + banner ═══════════ */
+        /* Pin badge (positions handled in ChatView.css) */
         .message-bubble.pinned { box-shadow: inset 0 0 0 1.5px rgba(255, 193, 7, 0.5); }
         .message-pin-badge {
           position: absolute;
           top: -6px;
-          [isOwn ? 'left' : 'right']: 8px;
+          right: 8px;
           display: inline-flex;
           align-items: center;
           justify-content: center;
@@ -1738,6 +1733,8 @@ const ChatView = () => {
           color: #111;
           box-shadow: 0 2px 6px rgba(0,0,0,0.25);
         }
+        .message-row.partner .message-pin-badge { right: auto; left: 8px; }
+
         .pinned-banner {
           position: sticky;
           top: 0;
@@ -1754,11 +1751,7 @@ const ChatView = () => {
           cursor: pointer;
           animation: pinnedIn 0.25s cubic-bezier(0.2, 1.3, 0.4, 1) both;
         }
-        html.theme-light .pinned-banner {
-          background: rgba(255,255,255,0.96);
-          border-bottom: 1px solid rgba(0,0,0,0.08);
-          color: #111;
-        }
+        html.theme-light .pinned-banner { background: rgba(255,255,255,0.96); border-bottom: 1px solid rgba(0,0,0,0.08); color: #111; }
         .pinned-banner:hover { background: rgba(30, 20, 50, 0.96); }
         html.theme-light .pinned-banner:hover { background: rgba(250, 250, 250, 1); }
         .pinned-banner-icon {
@@ -1776,15 +1769,15 @@ const ChatView = () => {
         .pinned-banner-close:hover { opacity: 1; }
         @keyframes pinnedIn { 0% { opacity: 0; transform: translateY(-10px); } 100% { opacity: 1; transform: translateY(0); } }
 
-        /* ═══════════ NEW: Select mode ═══════════ */
+        /* Select mode */
         .message-row.select-mode { cursor: pointer; padding-left: 34px; padding-right: 34px; transition: background 0.15s ease; }
         .message-row.select-mode.selected { background: rgba(108, 60, 225, 0.14); }
         html.theme-light .message-row.select-mode.selected { background: rgba(108, 60, 225, 0.08); }
         .select-checkbox {
           position: absolute;
           top: 50%;
+          left: 8px;
           transform: translateY(-50%);
-          [isOwn ? 'right' : 'left']: 8px;
           width: 22px; height: 22px;
           border-radius: 50%;
           border: 2px solid rgba(255,255,255,0.5);
@@ -1792,7 +1785,9 @@ const ChatView = () => {
           background: transparent;
           color: transparent;
           transition: all 0.15s ease;
+          z-index: 4;
         }
+        .message-row.own .select-checkbox { left: auto; right: 8px; }
         html.theme-light .select-checkbox { border-color: rgba(0,0,0,0.35); }
         .select-checkbox.checked {
           background: linear-gradient(135deg, #6C3CE1, #EC4899);
@@ -1864,7 +1859,6 @@ const ChatView = () => {
         .select-action svg { width: 20px; height: 20px; fill: currentColor; }
         .select-action.danger { color: #ff6b6b; }
 
-        /* Prevent the messages container from scrolling under sticky elements */
         .messages-container.has-pinned { padding-top: 0; }
       `}</style>
 
@@ -1874,7 +1868,6 @@ const ChatView = () => {
         <VideoAudioProvider>
           {chatBgEnabled && (<div className="echo-rings-bg is-active" aria-hidden="true"><span className="echo-bg-ring r1" /><span className="echo-bg-ring r2" /><span className="echo-bg-ring r3" /></div>)}
 
-          {/* ═══════════ Select mode top bar ═══════════ */}
           {selectMode && (
             <div className="select-top-bar">
               <button type="button" className="select-top-btn" onClick={exitSelectMode} aria-label="Cancel select">
@@ -1885,7 +1878,6 @@ const ChatView = () => {
             </div>
           )}
 
-          {/* ═══════════ Pinned banner ═══════════ */}
           {!selectMode && pinnedMessage && (
             <div className="pinned-banner" onClick={() => jumpToMessage(pinnedMessage.id)} role="button" tabIndex={0}>
               <span className="pinned-banner-icon" aria-hidden="true">
@@ -1924,7 +1916,6 @@ const ChatView = () => {
           </div>
         </VideoAudioProvider>
 
-        {/* ═══════════ Scroll-to-bottom FAB ═══════════ */}
         {!isNearBottom && !selectMode && (
           <button type="button" className="chat-scroll-fab" onClick={() => scrollToBottom(true)} aria-label="Scroll to latest">
             <svg viewBox="0 0 24 24"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>
@@ -2000,7 +1991,6 @@ const ChatView = () => {
           </form>
         )}
 
-        {/* ═══════════ Select mode bottom bar ═══════════ */}
         {selectMode && (
           <div className="select-bottom-bar">
             <button type="button" className="select-action" onClick={bulkCopy} disabled={selectedIds.size === 0}>
