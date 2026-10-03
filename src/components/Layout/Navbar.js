@@ -12,6 +12,8 @@ import Avatar from '../common/Avatar';
 import { preloadMedia } from '../../utils/mediaCache';
 import NotificationModal from '../common/NotificationModal';
 import ConfirmModal from '../common/ConfirmModal';
+import { useUserPresence } from '../../hooks/usePresence';
+import { formatLastSeen } from '../../utils/formatLastSeen';
 
 const ECHO_AI_GIF = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
 
@@ -284,13 +286,20 @@ const Navbar = memo(() => {
     }
   }, [chatAvatar]);
 
-  const isTargetOnline = targetUserId && !isEchoAiRoute ? isOnline(targetUserId) : false;
+  // ─── Live presence (falls back to ProfileContext online flag) ────
+  const partnerPresence = useUserPresence(
+    isChatRoute && targetUserId && !isEchoAiRoute ? targetUserId : null
+  );
+
+  const isTargetOnline = isEchoAiRoute
+    ? true
+    : (partnerPresence?.online === true) || (targetUserId ? isOnline(targetUserId) : false);
 
   const statusText = isEchoAiRoute
     ? 'AI Assistant'
-    : isTargetOnline
-    ? 'Online'
-    : 'Offline';
+    : (partnerPresence
+        ? formatLastSeen(partnerPresence)
+        : (isTargetOnline ? 'Online' : 'Offline'));
 
   const statusColor = isEchoAiRoute
     ? '#a78bfa'
@@ -309,6 +318,12 @@ const Navbar = memo(() => {
     if (isCommunityRoute && communityId) {
       navigate(`/community/${communityId}/${tab}`);
     }
+  };
+
+  // ─── Open the partner's profile ─────────────────────────────────
+  const openPartnerProfile = () => {
+    if (!isChatRoute || !targetUserId || isEchoAiRoute) return;
+    navigate(`/user/${targetUserId}`);
   };
 
   // ─── Determine if we need mobile community layout ─────────────
@@ -337,10 +352,10 @@ const Navbar = memo(() => {
       }}
     >
       {/* ─── LEFT SECTION ────────────────────────────────────────── */}
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: '10px', 
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '10px',
         minWidth: 0,
         flex: '1 1 auto',
         order: 0,
@@ -350,6 +365,7 @@ const Navbar = memo(() => {
         {showBackButton ? (
           <button
             onClick={handleBack}
+            aria-label="Back"
             style={{
               background: 'none',
               border: '1px solid transparent',
@@ -440,9 +456,53 @@ const Navbar = memo(() => {
           </div>
         )}
 
-        {/* ─── Chat Info ────────────────────────────────────────── */}
+        {/* ─── Chat Info (CLICKABLE) ───────────────────────────── */}
         {isChatRoute && !isCommunityRoute && (
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div
+            role={isEchoAiRoute ? undefined : 'button'}
+            tabIndex={isEchoAiRoute ? -1 : 0}
+            aria-label={isEchoAiRoute ? undefined : `Open ${chatName}'s profile`}
+            onClick={isEchoAiRoute ? undefined : openPartnerProfile}
+            onKeyDown={(e) => {
+              if (isEchoAiRoute) return;
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openPartnerProfile();
+              }
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              minWidth: 0,
+              cursor: isEchoAiRoute ? 'default' : 'pointer',
+              padding: '4px 6px',
+              marginLeft: '-6px',
+              borderRadius: '10px',
+              transition: 'background 0.15s ease, transform 0.15s ease',
+              WebkitTapHighlightColor: 'transparent',
+            }}
+            onMouseEnter={(e) => {
+              if (isEchoAiRoute) return;
+              e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+            }}
+            onMouseLeave={(e) => {
+              if (isEchoAiRoute) return;
+              e.currentTarget.style.background = 'transparent';
+            }}
+            onPointerDown={(e) => {
+              if (isEchoAiRoute) return;
+              e.currentTarget.style.transform = 'scale(0.97)';
+            }}
+            onPointerUp={(e) => {
+              if (isEchoAiRoute) return;
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+            onPointerCancel={(e) => {
+              if (isEchoAiRoute) return;
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
             <div
               style={{
                 width: '32px',
@@ -484,9 +544,10 @@ const Navbar = memo(() => {
                 </div>
               )}
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', minWidth: 0 }}>
                 <span
+                  className="nav-chat-name"
                   style={{
                     color: 'var(--text-primary)',
                     fontWeight: 700,
@@ -508,7 +569,17 @@ const Navbar = memo(() => {
                   animated={false}
                 />
               </div>
-              <span style={{ color: statusColor, fontSize: '10px', marginTop: '1px' }}>
+              <span
+                style={{
+                  color: statusColor,
+                  fontSize: '10px',
+                  marginTop: '1px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: '30vw',
+                }}
+              >
                 {statusText}
               </span>
             </div>
@@ -517,14 +588,14 @@ const Navbar = memo(() => {
       </div>
 
       {/* ─── CENTER – Community Tabs ─────────────────────────────── */}
-      <div 
+      <div
         className="echo-comm-tabs"
-        style={{ 
+        style={{
           flex: '0 0 auto',
-          display: 'flex', 
-          justifyContent: 'flex-end', 
-          alignItems: 'center', 
-          gap: '4px', 
+          display: 'flex',
+          justifyContent: 'flex-end',
+          alignItems: 'center',
+          gap: '4px',
           margin: '0 6px',
           minWidth: 0,
           overflow: 'visible',
@@ -585,10 +656,10 @@ const Navbar = memo(() => {
       </div>
 
       {/* ─── RIGHT SECTION ───────────────────────────────────────── */}
-      <div style={{ 
-        display: 'flex', 
-        alignItems: 'center', 
-        gap: '4px', 
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '4px',
         flexShrink: 0,
         order: 0,
         marginLeft: 0,
@@ -619,8 +690,8 @@ const Navbar = memo(() => {
         )}
 
         {/* Notification Bell - hidden on mobile */}
-        <div 
-          ref={bellRef} 
+        <div
+          ref={bellRef}
           className="notification-bell-wrapper desktop-only"
           style={{ position: 'relative' }}
         >
@@ -879,7 +950,7 @@ const Navbar = memo(() => {
           .desktop-only {
             display: none !important;
           }
-          
+
           .nav-tab {
             font-size: 12px !important;
             padding: 4px 8px !important;
@@ -888,11 +959,11 @@ const Navbar = memo(() => {
             font-size: 10px !important;
             margin-right: 3px !important;
           }
-          
+
           .nav-own-name {
             display: none !important;
           }
-          
+
           .nav-chat-name {
             max-width: 20vw !important;
             font-size: 12px !important;
