@@ -284,19 +284,16 @@ const ChatView = () => {
     };
   }, []);
 
-  // ─── NEW: always hide the bottom nav while inside a chat ───
+  // ─── Hide the bottom nav while the chat page is mounted ───
+  // Single source of truth. Do NOT add a second effect that toggles
+  // this class based on preview state — it will fight this one and
+  // remove the class right after mount, leaving the nav visible.
   useEffect(() => {
     document.body.classList.add('echo-hide-bottom-nav');
     return () => {
       document.body.classList.remove('echo-hide-bottom-nav');
     };
   }, []);
-
-  useEffect(() => {
-    const hide = Boolean(previewUrl || editingMediaMessage || mediaPreview);
-    document.body.classList.toggle('echo-hide-bottom-nav', hide);
-    return () => document.body.classList.remove('echo-hide-bottom-nav');
-  }, [previewUrl, editingMediaMessage, mediaPreview]);
 
   useEffect(() => {
     const id = setInterval(() => setTideTick(Date.now()), 30000);
