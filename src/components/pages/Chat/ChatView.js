@@ -58,24 +58,31 @@ import { REACTION_EMOJIS, REACTION_LABELS } from './ReactionEmoji';
 import './ChatView.css';
 
 /* ─────────────────────────────────────────────────────────────
-   Visual-viewport hook — mobile/touch devices only.
-   Keeps .chat-view locked to the *visible* area so mobile
-   keyboards (iOS Safari, Android Chrome) can't push the layout.
-   On desktop, this is a no-op so nothing shifts.
+   Visual-viewport hook.
+   · On touch devices: lock .chat-view to visualViewport so the
+     on-screen keyboard can't push the layout around.
+   · On desktop: full no-op, plus any stale CSS vars from a
+     prior mobile session get cleaned up.
    ───────────────────────────────────────────────────────────── */
 const useVisualViewport = () => {
   useEffect(() => {
-    // Desktop (mouse + fine pointer) — do nothing.
+    const root = document.documentElement;
     const isTouch =
       typeof window !== 'undefined' &&
       (window.matchMedia?.('(hover: none)').matches ||
         window.matchMedia?.('(pointer: coarse)').matches);
-    if (!isTouch) return;
+
+    if (!isTouch) {
+      // Desktop: make sure nothing stale lingers.
+      root.style.removeProperty('--vvh');
+      root.style.removeProperty('--vvt');
+      root.style.removeProperty('--kb');
+      root.classList.remove('keyboard-open');
+      return;
+    }
 
     const vv = window.visualViewport;
     if (!vv) return;
-
-    const root = document.documentElement;
 
     const apply = () => {
       const h = vv.height;
