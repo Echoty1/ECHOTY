@@ -6,15 +6,29 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   Layout — desktop default
+   Layout — locked to the visible viewport on every platform.
+   The JS hook sets --vvh / --vvt on touch devices only.
+   On desktop they fall back to 100dvh / 0.
    ═══════════════════════════════════════════════════════════════ */
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-text-size-adjust: 100%;
+}
+
+#root {
+  height: 100%;
+  overflow: hidden;
+}
 
 .chat-view {
   position: fixed;
-  top: var(--header-height);
-  bottom: var(--nav-bottom-offset);
   left: 0;
   right: 0;
+  top: var(--vvt, 0px);
+  height: var(--vvh, 100dvh);
   display: flex;
   flex-direction: column;
   background: var(--bg-primary);
@@ -25,7 +39,16 @@
   max-width: 100%;
   box-sizing: border-box;
   z-index: 10;
-  transition: bottom 0.25s ease;
+  overscroll-behavior: none;
+  transition:
+    height 0.18s cubic-bezier(0.22, 1, 0.36, 1),
+    top 0.18s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@supports not (height: 100dvh) {
+  .chat-view {
+    height: var(--vvh, 100vh);
+  }
 }
 
 .messages-container {
@@ -48,51 +71,6 @@
   position: relative;
   z-index: 2;
   background: transparent;
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   Mobile-only override — visual-viewport locked layout.
-   Prevents the on-screen keyboard from pushing the page around.
-   ═══════════════════════════════════════════════════════════════ */
-
-@media (max-width: 820px) and (hover: none),
-       (max-width: 820px) and (pointer: coarse) {
-
-  html, body {
-    height: 100%;
-    overflow: hidden;
-    overscroll-behavior: none;
-    -webkit-text-size-adjust: 100%;
-  }
-
-  #root {
-    height: 100%;
-    overflow: hidden;
-  }
-
-  .chat-view {
-    position: fixed;
-    top: var(--vvt, 0px);
-    height: var(--vvh, 100dvh);
-    bottom: auto;
-    transition:
-      height 0.18s cubic-bezier(0.22, 1, 0.36, 1),
-      top 0.18s cubic-bezier(0.22, 1, 0.36, 1);
-  }
-
-  .chat-input {
-    font-size: 16px; /* iOS Safari won't zoom when font-size >= 16px */
-  }
-}
-
-/* Fallback for browsers without dvh on mobile */
-@supports not (height: 100dvh) {
-  @media (max-width: 820px) and (hover: none),
-         (max-width: 820px) and (pointer: coarse) {
-    .chat-view {
-      height: var(--vvh, 100vh);
-    }
-  }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -728,7 +706,7 @@ body.light .message-bubble.own:active {
   flex-shrink: 0;
   display: flex;
   flex-direction: column;
-  padding: 10px 16px;
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
   background: rgba(0, 0, 0, 0.35);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -789,12 +767,16 @@ body.light .chat-input-container {
   border: 1px solid var(--border-color);
   background: var(--bg-input);
   color: var(--text-primary);
-  font-size: 14px;
+  font-size: 16px; /* ≥16px prevents iOS zoom on focus */
   outline: none;
   position: relative;
   transition: all 0.3s ease;
 }
 .chat-input:focus { border-color: #6C3CE1; }
+
+@media (min-width: 481px) {
+  .chat-input { font-size: 14px; }
+}
 
 .chat-send-btn {
   width: 42px;
@@ -2068,7 +2050,7 @@ body.light .echo-rings-bg.is-active .echo-bg-ring.r3 {
     font-size: 13px;
     padding: 8px 12px;
   }
-  .chat-input-container { padding: 8px 12px; }
+  .chat-input-container { padding: 8px 12px calc(8px + env(safe-area-inset-bottom, 0px)); }
   .chat-halo-btn { width: 34px; height: 34px; }
   .media-preview-overlay {
     padding: 16px 12px;
@@ -2314,5 +2296,25 @@ body.light .echo-reaction-emoji:hover {
   .rx-pray-left, .rx-pray-right, .rx-pray-sparkle,
   .rx-fire-outer, .rx-fire-inner {
     animation: none !important;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   Keyboard-open state
+   When the on-screen keyboard is up (mobile), hide the bottom nav
+   so it doesn't overlap the composer.
+   ═══════════════════════════════════════════════════════════════ */
+
+html.keyboard-open .echo-v-nav,
+html.keyboard-open body.echo-hide-bottom-nav .echo-v-nav {
+  transform: translate3d(0, 180%, 0) !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}
+
+@supports (-webkit-touch-callout: none) {
+  html.keyboard-open .echo-v-nav {
+    display: none !important;
   }
 }
