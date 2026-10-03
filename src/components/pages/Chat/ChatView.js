@@ -44,6 +44,9 @@ import WallpaperPicker from './WallpaperPicker';
 import { getWallpaperById } from '../../../constants/wallpapers';
 import { playSentSound, unlockAudio, getSoundEnabled } from '../../../services/notificationService';
 import { REACTION_EMOJIS, REACTION_LABELS } from './ReactionEmoji';
+import { useUserPresence } from '../../../hooks/usePresence';
+import { formatLastSeen } from '../../../utils/formatLastSeen';
+import { isBlocked as checkIsBlocked, unblockUser } from '../../../services/blockService';
 import './ChatView.css';
 
 /* ─────────────────────────────────────────────────────────────
@@ -256,6 +259,10 @@ const ChatView = () => {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
 
+  /* ─── NEW: presence + blocked state ─────────────────────────── */
+  const partnerPresence = useUserPresence(userId);
+  const [blockedByMe, setBlockedByMe] = useState(false);
+
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false, title: '', message: '', confirmText: 'Confirm', cancelText: 'Cancel', onConfirm: null,
   });
@@ -403,6 +410,16 @@ const ChatView = () => {
     const pinRef = ref(db, `chats/${cId}/pinnedMessageId`);
     const unsub = onValue(pinRef, (snap) => setPinnedMessageId(snap.val() || null));
     return () => unsub();
+  }, [user?.uid, userId]);
+
+  /* ─── NEW: block-check effect ───────────────────────────────── */
+  useEffect(() => {
+    if (!user?.uid || !userId) return undefined;
+    let mounted = true;
+    checkIsBlocked(user.uid, userId)
+      .then((v) => { if (mounted) setBlockedByMe(!!v); })
+      .catch(() => {});
+    return () => { mounted = false; };
   }, [user?.uid, userId]);
 
   const handleWallpaperSelect = async (id) => {
@@ -1938,9 +1955,52 @@ const ChatView = () => {
           </>
         )}
 
-        {reactionViewer && (<div className="reaction-viewer-modal" onClick={() => setReactionViewer(null)}><div className="reaction-viewer-content" onClick={(e) => e.stopPropagation()}><h3>{REACTION_LABELS[reactionViewer.emoji] || reactionViewer.emoji} Reactions</h3><div className="reaction-viewer-list">{reactionViewer.userIds.map((uid) => (<div key={uid} className="reaction-viewer-item"><Avatar uid={uid} size="small" /><span>{getProfile(uid)?.name || 'User'}</span></div>))}</div></div></div>)}
+        {reactionViewer && (
+          <div className="reaction-viewer-modal" onClick={() => setReactionViewer(null)}>
+            <div className="reaction-viewer-content" onClick={(e) => e.stopPropagation()}>
+              <h3>{REACTION_LABELS[reactionViewer.emoji] || reactionViewer.emoji} Reactions</h3>
+              <div className="reaction-viewer-list">
+                {reactionViewer.userIds.map((uid) => (
+                  <div
+                    key={uid}
+                    className="reaction-viewer-item"
+                    onClick={() => { setReactionViewer(null); navigate(`/user/${uid}`); }}
+                    role="button"
+                    tabIndex={0}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <Avatar uid={uid} size="small" />
+                    <span>{getProfile(uid)?.name || 'User'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
-        {!selectMode && (
+        {/* ─── Blocked composer bar ───────────────────────────── */}
+        {!selectMode && blockedByMe && (
+          <div className="blocked-composer-bar">
+            <span>You blocked this user.</span>
+            <button
+              type="button"
+              className="blocked-composer-unblock"
+              onClick={async () => {
+                try {
+                  await unblockUser(user.uid, userId);
+                  setBlockedByMe(false);
+                  setToast({ message: 'User unblocked', type: 'success' });
+                  setTimeout(() => setToast(null), 2500);
+                } catch (_) {
+                  setToast({ message: 'Failed to unblock', type: 'error' });
+                  setTimeout(() => setToast(null), 2500);
+                }
+              }}
+            >Unblock</button>
+          </div>
+        )}
+
+        {!selectMode && !blockedByMe && (
           <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
             {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
             {replyToNote && (
