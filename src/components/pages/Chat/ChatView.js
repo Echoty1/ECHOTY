@@ -17,7 +17,7 @@ import { sortMessages as sortMessagesByTime } from '../../../utils/sortMessages'
 import { useProfile } from '../../../contexts/ProfileContext';
 import { auth, db } from '../../../services/firebase';
 import { apiUrl } from '../../../utils/api';
-import { postNoteReply } from '../../../services/notesService'; // NEW
+import { postNoteReply } from '../../../services/notesService';
 import {
   loadMessagesFromCache,
   upsertMessageInCache,
@@ -56,6 +56,43 @@ import { getWallpaperById } from '../../../constants/wallpapers';
 import { playSentSound, unlockAudio, getSoundEnabled } from '../../../services/notificationService';
 import { REACTION_EMOJIS, REACTION_LABELS } from './ReactionEmoji';
 import './ChatView.css';
+
+/* ─────────────────────────────────────────────────────────────
+   NEW: Visual-viewport hook
+   Keeps .chat-view locked to the *visible* area so mobile
+   keyboards (iOS Safari, Android Chrome) can't push the layout.
+   ───────────────────────────────────────────────────────────── */
+const useVisualViewport = () => {
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+
+    const root = document.documentElement;
+
+    const apply = () => {
+      const h = vv.height;
+      const top = vv.offsetTop;
+      const kb = Math.max(0, window.innerHeight - h - top);
+
+      root.style.setProperty('--vvh', `${h}px`);
+      root.style.setProperty('--vvt', `${top}px`);
+      root.style.setProperty('--kb', `${kb}px`);
+      root.classList.toggle('keyboard-open', kb > 120);
+    };
+
+    apply();
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+    return () => {
+      vv.removeEventListener('resize', apply);
+      vv.removeEventListener('scroll', apply);
+      root.style.removeProperty('--vvh');
+      root.style.removeProperty('--vvt');
+      root.style.removeProperty('--kb');
+      root.classList.remove('keyboard-open');
+    };
+  }, []);
+};
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
@@ -128,6 +165,9 @@ const ChatView = () => {
   const location = useLocation();
   const { getProfile, fetchProfile } = useProfile();
 
+  // ── NEW: lock layout to the visible viewport
+  useVisualViewport();
+
   const [partnerProfile, setPartnerProfile] = useState(null);
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -154,7 +194,6 @@ const ChatView = () => {
   const [activeMessageMenuId, setActiveMessageMenuId] = useState(null);
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
 
-  // ─── NOTE REPLY STATE ─────────────────────────────────────
   const [replyToNote, setReplyToNote] = useState(null);
 
   const [wallpaperId, setWallpaperId] = useState('default');
@@ -214,7 +253,7 @@ const ChatView = () => {
   const justSentIdsRef = useRef(new Set());
   const justArrivedIdsRef = useRef(new Set());
   const sendButtonRef = useRef(null);
-  const noteReplyContext = useRef(null); // NEW: remembers the note we're replying to (survives state clear)
+  const noteReplyContext = useRef(null);
 
   useEffect(() => {
     const t = setTimeout(() => setLoadingMessages(false), 1200);
@@ -242,7 +281,28 @@ const ChatView = () => {
     return () => clearInterval(id);
   }, []);
 
-  // ─── NOTE REPLY: read navigation state & prefill ─────────────
+  // ── NEW: when keyboard opens, snap the message list to the bottom
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    let raf = null;
+    const onResize = () => {
+      if (raf) cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const el = messagesContainerRef.current;
+        if (el && isNearBottomRef.current) {
+          el.scrollTop = el.scrollHeight;
+        }
+      });
+    };
+    vv.addEventListener('resize', onResize);
+    return () => {
+      vv.removeEventListener('resize', onResize);
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, []);
+
+  // ── NOTE REPLY: read navigation state & prefill ─────────────
   useEffect(() => {
     const state = location.state;
     if (!state) return;
@@ -256,7 +316,6 @@ const ChatView = () => {
         song: state.noteSong || null,
       };
       setReplyToNote(noteContext);
-      // NEW: also stash in ref so it survives after UI state clears on send
       noteReplyContext.current = noteContext;
 
       if (typeof state.prefilledNote === 'string' && state.prefilledNote) {
@@ -288,7 +347,6 @@ const ChatView = () => {
     }
   }, [location.state, location.pathname, navigate]);
 
-  // NEW: clear note reply context when switching to a different chat
   useEffect(() => {
     return () => {
       noteReplyContext.current = null;
@@ -511,12 +569,10 @@ const ChatView = () => {
     setTimeout(() => btn.classList.remove('rippling'), 650);
   };
 
-  // ─── Helper to publish a reply to the note thread ─────────
-  // NEW: fires when the DM was opened from a note and we've stashed context.
   const publishNoteReply = (text, song = null) => {
     const ctx = noteReplyContext.current;
     if (!ctx?.authorUid || !user?.uid) return;
-    if (ctx.authorUid === user.uid) return; // can't reply to own note
+    if (ctx.authorUid === user.uid) return;
     postNoteReply(ctx.authorUid, {
       authorUid: user.uid,
       authorName: currentUserProfile?.name || user.displayName || 'User',
@@ -524,11 +580,9 @@ const ChatView = () => {
       text: text || '',
       song: song || null,
     }).catch((err) => console.warn('postNoteReply failed', err));
-    // Clear so subsequent messages in this DM aren't tied to the note
     noteReplyContext.current = null;
   };
 
-  // ─── Send text ─────────────────────────────────────────────
   const handleSendText = async (e) => {
     e?.preventDefault?.();
     const textToSend = (typeof e === 'string' ? e : newMessage).trim();
@@ -568,7 +622,6 @@ const ChatView = () => {
 
     try { await set(newMsgRef, msgData); } catch (err) { console.error('Send failed:', err); setMessages((prev) => prev.filter((m) => m.id !== tempId)); return; }
 
-    // NEW: auto-post to the note reply thread
     if (currentNoteReply) {
       publishNoteReply(textToSend);
     }
@@ -654,7 +707,6 @@ const ChatView = () => {
       setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
       URL.revokeObjectURL(blobUrl);
 
-      // NEW: auto-post to the note reply thread (text = caption or icon)
       if (noteReply) {
         publishNoteReply(caption || mediaIcon);
       }
@@ -717,7 +769,6 @@ const ChatView = () => {
       setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
       URL.revokeObjectURL(blobUrl);
 
-      // NEW: auto-post to the note reply thread
       if (noteReply) {
         publishNoteReply('🎤 Voice note');
       }
@@ -1356,6 +1407,7 @@ const ChatView = () => {
 
   return (
     <>
+      {/* ...all your existing <style> block stays exactly the same... */}
       <style>{`
         /* ═══════════ Animated Telegram-style Reaction Bar ═══════════ */
         .echo-reaction-backdrop { position: fixed; inset: 0; z-index: 998; background: transparent; }
@@ -1536,7 +1588,6 @@ const ChatView = () => {
 
         .echo-reaction-bar-arrow { display: none; }
 
-        /* ═══════════ Rest of ChatView styles (unchanged) ═══════════ */
         .highlight-flash { animation: highlightFlash 1.6s ease; }
         @keyframes highlightFlash { 0%, 100% { background: transparent; } 20% { background: rgba(255, 215, 0, 0.3); } }
         .message-inline-menu-wrapper { display: flex; width: 100%; margin-top: 8px; z-index: 10; }
