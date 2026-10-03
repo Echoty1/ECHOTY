@@ -44,6 +44,8 @@ import WallpaperPicker from './WallpaperPicker';
 import { getWallpaperById } from '../../../constants/wallpapers';
 import { playSentSound, unlockAudio, getSoundEnabled } from '../../../services/notificationService';
 import { REACTION_EMOJIS, REACTION_LABELS } from './ReactionEmoji';
+import { useUserSettings } from '../../../hooks/useUserSettings';
+import { useUserPrivacy } from '../../../hooks/useUserPrivacy';
 import { useUserPresence } from '../../../hooks/usePresence';
 import { formatLastSeen } from '../../../utils/formatLastSeen';
 import { isBlocked as checkIsBlocked, unblockUser } from '../../../services/blockService';
@@ -103,6 +105,8 @@ const REACTION_ARROW_SIZE = 12;
 const REACTION_BAR_HALF_WIDTH = 150;
 
 const GROUP_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
+
+const FONT_SIZE_MAP = { sm: '13px', md: '15px', lg: '17px' };
 
 const sanitizeName = (rawName, userId) => {
   if (!rawName) return 'User';
@@ -192,6 +196,19 @@ const ChatView = () => {
 
   useVisualViewport();
 
+  /* ─── NEW: settings + privacy + presence ───────────────────── */
+  const { settings: userSettings } = useUserSettings(user?.uid);
+  const partnerPrivacy = useUserPrivacy(userId);
+  const partnerPresence = useUserPresence(userId);
+
+  const tideTTL = userSettings?.echo?.defaultTideTTL ?? PRIVATE_TTL_MS;
+  const enterToSend = userSettings?.chats?.enterToSend !== false;
+  const showTyping = userSettings?.chats?.showTyping !== false;
+  const sendReadReceipts = userSettings?.chats?.sendReadReceipts !== false;
+  const fontSize = userSettings?.chats?.fontSize || 'md';
+
+  const [blockedByMe, setBlockedByMe] = useState(false);
+
   const [partnerProfile, setPartnerProfile] = useState(null);
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -258,10 +275,6 @@ const ChatView = () => {
   /* select mode */
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
-
-  /* ─── NEW: presence + blocked state ─────────────────────────── */
-  const partnerPresence = useUserPresence(userId);
-  const [blockedByMe, setBlockedByMe] = useState(false);
 
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false, title: '', message: '', confirmText: 'Confirm', cancelText: 'Cancel', onConfirm: null,
@@ -486,6 +499,8 @@ const ChatView = () => {
 
   const markMessagesAsRead = async () => {
     if (!user?.uid || !userId) return;
+    // ─── NEW: respect the user's read-receipts preference ─────────
+    if (!sendReadReceipts) return;
     const cId = [user.uid, userId].sort().join('_');
     try {
       const messagesRef = ref(db, `chats/${cId}/messages`);
@@ -512,7 +527,8 @@ const ChatView = () => {
         if (msg.receiverId === user.uid && msg.isRead === false) {
           updates[`chats/${cId}/messages/${msg.key}/isRead`] = true;
           updates[`chats/${cId}/messages/${msg.key}/readAt`] = Date.now();
-          updates[`chats/${cId}/messages/${msg.key}/expiresAt`] = privateExpiresAt();
+          // ─── NEW: use the user's preferred Tide TTL ────────────
+          updates[`chats/${cId}/messages/${msg.key}/expiresAt`] = privateExpiresAt(Date.now(), tideTTL);
           hasUnread = true;
         }
       });
@@ -555,6 +571,8 @@ const ChatView = () => {
 
   const handleTyping = useCallback(() => {
     if (!user?.uid || !userId) return;
+    // ─── NEW: respect the user's showTyping preference ────────────
+    if (!showTyping) return;
     const cId = [user.uid, userId].sort().join('_');
     const typingRef = ref(db, `chats/${cId}/typing/${user.uid}`);
     set(typingRef, { isTyping: true, timestamp: Date.now() }).catch(() => {});
@@ -562,7 +580,7 @@ const ChatView = () => {
     typingTimeoutRef.current = setTimeout(() => {
       set(typingRef, { isTyping: false, timestamp: Date.now() }).catch(() => {});
     }, 2500);
-  }, [user?.uid, userId]);
+  }, [user?.uid, userId, showTyping]);
 
   const clearMyTyping = useCallback(() => {
     if (!user?.uid || !userId) return;
@@ -627,7 +645,8 @@ const ChatView = () => {
 
     const cId = [user.uid, userId].sort().join('_');
     const tempId = `temp_${Date.now()}`;
-    const optimisticMsg = { id: tempId, senderId: user.uid, receiverId: userId, type: 'text', text: textToSend, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(), pending: true };
+    // ─── NEW: use tideTTL from settings ───────────────────────────
+    const optimisticMsg = { id: tempId, senderId: user.uid, receiverId: userId, type: 'text', text: textToSend, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(Date.now(), tideTTL), pending: true };
     if (replyToSave) optimisticMsg.replyTo = { messageId: replyToSave.messageId, senderName: replyToSave.senderName, messageType: replyToSave.messageType, textSnippet: replyToSave.textSnippet };
     if (currentNoteReply) optimisticMsg.replyToNote = { ...currentNoteReply };
     setMessages((prev) => sortMessages([...prev, optimisticMsg]));
@@ -636,7 +655,7 @@ const ChatView = () => {
 
     const messagesRef = ref(db, `chats/${cId}/messages`);
     const newMsgRef = push(messagesRef);
-    const msgData = { senderId: user.uid, receiverId: userId, type: 'text', text: textToSend, timestamp: Date.now(), clientTs: Date.now(), isRead: false, expiresAt: privateExpiresAt() };
+    const msgData = { senderId: user.uid, receiverId: userId, type: 'text', text: textToSend, timestamp: Date.now(), clientTs: Date.now(), isRead: false, expiresAt: privateExpiresAt(Date.now(), tideTTL) };
     if (replyToSave) msgData.replyTo = { messageId: replyToSave.messageId, senderName: replyToSave.senderName, messageType: replyToSave.messageType, textSnippet: replyToSave.textSnippet };
     if (currentNoteReply) msgData.replyToNote = { ...currentNoteReply };
 
@@ -702,7 +721,7 @@ const ChatView = () => {
     const blobUrl = URL.createObjectURL(file);
     const currentReply = reply || replyTo;
 
-    const optimisticMsg = { id: tempId, senderId: user.uid, receiverId: userId, type: 'media', mediaType, mediaUrl: blobUrl, realUrl: null, caption, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(), isUploading: true, uploadProgress: 0, isMediaReady: true, uploadFailed: false, _file: file };
+    const optimisticMsg = { id: tempId, senderId: user.uid, receiverId: userId, type: 'media', mediaType, mediaUrl: blobUrl, realUrl: null, caption, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(Date.now(), tideTTL), isUploading: true, uploadProgress: 0, isMediaReady: true, uploadFailed: false, _file: file };
     if (currentReply) { optimisticMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet }; setReplyTo(null); }
     if (noteReply) { optimisticMsg.replyToNote = { ...noteReply }; setReplyToNote(null); }
 
@@ -715,7 +734,7 @@ const ChatView = () => {
       const downloadURL = await uploadToCloudinary(file, (progress) => { setUploadProgress(progress); setMessages((prev) => prev.map((m) => m.id === tempId ? { ...m, uploadProgress: progress } : m)); });
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const newMsgRef = push(messagesRef);
-      const realMsg = { senderId: user.uid, receiverId: userId, type: 'media', mediaType, mediaUrl: downloadURL, caption, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt() };
+      const realMsg = { senderId: user.uid, receiverId: userId, type: 'media', mediaType, mediaUrl: downloadURL, caption, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(Date.now(), tideTTL) };
       if (currentReply) realMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet };
       if (noteReply) realMsg.replyToNote = { ...noteReply };
       await set(newMsgRef, realMsg);
@@ -756,7 +775,7 @@ const ChatView = () => {
     const blobUrl = URL.createObjectURL(audioBlob);
     const currentReply = replyTo;
     const noteReply = replyToNote;
-    const optimisticMsg = { id: tempId, senderId: user.uid, receiverId: userId, type: 'media', mediaType: 'audio', mediaUrl: blobUrl, duration, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(), isUploading: true, uploadProgress: 0, isMediaReady: false, uploadFailed: false, _file: audioBlob };
+    const optimisticMsg = { id: tempId, senderId: user.uid, receiverId: userId, type: 'media', mediaType: 'audio', mediaUrl: blobUrl, duration, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(Date.now(), tideTTL), isUploading: true, uploadProgress: 0, isMediaReady: false, uploadFailed: false, _file: audioBlob };
     if (currentReply) { optimisticMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet }; setReplyTo(null); }
     if (noteReply) { optimisticMsg.replyToNote = { ...noteReply }; setReplyToNote(null); }
     setMessages((prev) => sortMessages([...prev, optimisticMsg]));
@@ -773,7 +792,7 @@ const ChatView = () => {
       const downloadURL = await uploadPromise;
       const messagesRef = ref(db, `chats/${cId}/messages`);
       const newMsgRef = push(messagesRef);
-      const realMsg = { senderId: user.uid, receiverId: userId, type: 'media', mediaType: 'audio', mediaUrl: downloadURL, duration, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt() };
+      const realMsg = { senderId: user.uid, receiverId: userId, type: 'media', mediaType: 'audio', mediaUrl: downloadURL, duration, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(Date.now(), tideTTL) };
       if (currentReply) realMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet };
       if (noteReply) realMsg.replyToNote = { ...noteReply };
       await set(newMsgRef, realMsg);
@@ -1059,8 +1078,16 @@ const ChatView = () => {
     } else { setNewMessage((prev) => prev + emoji); setTimeout(() => inputRef.current?.focus(), 0); }
   };
 
+  /* ─── NEW: enterToSend gate ─────────────────────────────────── */
   const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendText(e); }
+    if (e.key !== 'Enter') return;
+    if (enterToSend && !e.shiftKey) {
+      e.preventDefault();
+      handleSendText(e);
+    } else if (!enterToSend && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      handleSendText(e);
+    }
   };
 
   const renderPreviewOverlay = () => {
@@ -1187,14 +1214,12 @@ const ChatView = () => {
       const withinPrev = sameSenderAsPrev && Math.abs(msgTime(msg) - msgTime(prev)) < GROUP_WINDOW_MS;
       const withinNext = sameSenderAsNext && Math.abs(msgTime(next) - msgTime(msg)) < GROUP_WINDOW_MS;
 
-      // Break groups on reply-to or note-reply (Telegram does the same)
       const breaksTop = !withinPrev || !!msg.replyTo || !!msg.replyToNote;
       const breaksBottom = !withinNext || !!next?.replyTo || !!next?.replyToNote;
 
       const groupTop = breaksTop;
       const groupBottom = breaksBottom;
 
-      // Date separator between this and prev
       const dayThis = startOfDay(msgTime(msg) || Date.now());
       const dayPrev = prev ? startOfDay(msgTime(prev) || Date.now()) : null;
       const showDateSeparator = dayPrev === null || dayThis !== dayPrev;
@@ -1332,7 +1357,8 @@ const ChatView = () => {
     clearUnreadInstantly();
     const syncTimer = setTimeout(() => { if (isMounted.current) markMessagesAsRead(); }, 100);
     return () => clearTimeout(syncTimer);
-  }, [user?.uid, userId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid, userId, sendReadReceipts]);
 
   useEffect(() => {
     if (!user?.uid || !userId) { setLoadingMessages(false); return; }
@@ -1377,7 +1403,6 @@ const ChatView = () => {
 
       if (grew && isIncoming && newest?.id) flashArrived(newest.id);
 
-      // Unread counter for FAB
       if (grew && isIncoming && !isNearBottomRef.current) {
         setUnreadWhileScrolled((n) => n + Math.max(1, visible.length - prevCount));
       }
@@ -1485,7 +1510,7 @@ const ChatView = () => {
   const wallpaper = isCustom ? null : getWallpaperById(wallpaperId);
 
   const wallpaperStyle = isCustom
-    ? { backgroundImage: `url(${customWallpaper})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', transition: 'background 0.3s ease' }
+    ? { backgroundImage: `url(${customWallpaper})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', transition: 'background 0.3s ease', '--msg-font-size': FONT_SIZE_MAP[fontSize] || FONT_SIZE_MAP.md }
     : {
         background: (wallpaper.type === 'color' || wallpaper.type === 'gradient') ? (wallpaper.value === 'transparent' ? 'var(--bg-primary)' : wallpaper.value) : 'var(--bg-primary)',
         backgroundImage: wallpaper.type === 'pattern' ? wallpaper.value : 'none',
@@ -1493,6 +1518,7 @@ const ChatView = () => {
         backgroundRepeat: wallpaper.type === 'pattern' ? 'repeat' : 'no-repeat',
         backgroundPosition: 'center',
         transition: 'background 0.3s ease',
+        '--msg-font-size': FONT_SIZE_MAP[fontSize] || FONT_SIZE_MAP.md,
       };
 
   /* pinned message preview lookup */
@@ -1734,7 +1760,7 @@ const ChatView = () => {
         .chat-scroll-fab svg { width: 16px; height: 16px; fill: currentColor; }
         @keyframes fabIn { 0% { opacity: 0; transform: translateY(10px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 
-        /* Pin badge (positions handled in ChatView.css) */
+        /* Pin badge */
         .message-bubble.pinned { box-shadow: inset 0 0 0 1.5px rgba(255, 193, 7, 0.5); }
         .message-pin-badge {
           position: absolute;
@@ -1877,6 +1903,32 @@ const ChatView = () => {
         .select-action.danger { color: #ff6b6b; }
 
         .messages-container.has-pinned { padding-top: 0; }
+
+        /* ─── Message font size (respects Settings → Chats) ─── */
+        .messages-container .message-text { font-size: var(--msg-font-size, 15px); }
+
+        /* ─── Blocked composer bar ─────────────────────────── */
+        .blocked-composer-bar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 12px;
+          padding: 14px 16px;
+          background: var(--bg-input);
+          border-top: 1px solid var(--border-color);
+          color: var(--text-secondary);
+          font-size: 14px;
+        }
+        .blocked-composer-unblock {
+          padding: 8px 18px;
+          border-radius: 20px;
+          border: none;
+          background: linear-gradient(135deg, #6C3CE1, #EC4899);
+          color: #fff;
+          font-weight: 600;
+          cursor: pointer;
+          font-family: inherit;
+        }
       `}</style>
 
       <SEO title={`Chat with ${displayName}`} description={`Chat with ${displayName} on ECHO.`} />
