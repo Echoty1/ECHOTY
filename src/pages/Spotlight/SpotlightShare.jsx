@@ -3,7 +3,8 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ref, onValue } from 'firebase/database';
 import { db } from '../../services/firebase';
-import { spotlightShareUrl, spotlightShareText } from '../../utils/echoWatermark';
+
+const SITE = 'https://echoty.xyz';
 
 const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
   const navigate = useNavigate();
@@ -39,9 +40,10 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
     };
   }, [isOpen, onClose]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !post) return null;
 
-  const url = spotlightShareUrl(post?.id);
+  const url = `${SITE}/spotlight?focus=${post.id}&w=1`;
+  const shareText = `Watch "${post.caption || 'this Spotlight'}" by @${(post.authorName || 'user').replace(/\s+/g, '').toLowerCase()} on ECHO 🎬`;
 
   const handleCopy = async () => {
     try {
@@ -49,19 +51,34 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
       setCopied(true);
       onToast?.({ message: 'Link copied', type: 'success' });
       setTimeout(() => setCopied(false), 2000);
+      setTimeout(() => onToast?.(null), 1800);
     } catch (_) {
       onToast?.({ message: 'Copy failed', type: 'error' });
+      setTimeout(() => onToast?.(null), 2200);
     }
   };
 
-  const handleNativeShare = async () => {
+  const openWindow = (target) => {
+    window.open(target, '_blank', 'noopener,noreferrer');
+    onClose?.();
+  };
+
+  const handleWhatsApp = () => {
+    openWindow(`https://wa.me/?text=${encodeURIComponent(`${shareText}\n${url}`)}`);
+  };
+
+  const handleTwitter = () => {
+    openWindow(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(url)}`);
+  };
+
+  const handleTelegram = () => {
+    openWindow(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(shareText)}`);
+  };
+
+  const handleNative = async () => {
     try {
       if (navigator.share) {
-        await navigator.share({
-          title: `${post.authorName || 'Someone'} on ECHO Spotlight`,
-          text: spotlightShareText(post, post.authorName),
-          url,
-        });
+        await navigator.share({ title: shareText, text: shareText, url });
         onClose?.();
       } else {
         handleCopy();
@@ -71,9 +88,7 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
 
   const handleSendToChat = (partnerId) => {
     navigate(`/chat/${partnerId}`, {
-      state: {
-        prefilledNote: `Check this out on ECHO Spotlight 🎬 ${url}`,
-      },
+      state: { prefilledNote: `${shareText}\n${url}` },
     });
     onClose?.();
   };
@@ -90,6 +105,27 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
         </div>
 
         <div className="spotlight-share-quickrow">
+          <button type="button" className="spotlight-share-quick" onClick={handleWhatsApp}>
+            <span className="spotlight-share-quick-icon whatsapp">
+              <i className="fab fa-whatsapp" />
+            </span>
+            <span className="spotlight-share-quick-label">WhatsApp</span>
+          </button>
+
+          <button type="button" className="spotlight-share-quick" onClick={handleTwitter}>
+            <span className="spotlight-share-quick-icon twitter">
+              <i className="fab fa-x-twitter" />
+            </span>
+            <span className="spotlight-share-quick-label">X</span>
+          </button>
+
+          <button type="button" className="spotlight-share-quick" onClick={handleTelegram}>
+            <span className="spotlight-share-quick-icon telegram">
+              <i className="fab fa-telegram" />
+            </span>
+            <span className="spotlight-share-quick-label">Telegram</span>
+          </button>
+
           <button type="button" className="spotlight-share-quick" onClick={handleCopy}>
             <span className="spotlight-share-quick-icon copy">
               <i className={copied ? 'fas fa-check' : 'fas fa-link'} />
@@ -97,18 +133,11 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
             <span className="spotlight-share-quick-label">{copied ? 'Copied' : 'Copy link'}</span>
           </button>
 
-          <button type="button" className="spotlight-share-quick" onClick={handleNativeShare}>
+          <button type="button" className="spotlight-share-quick" onClick={handleNative}>
             <span className="spotlight-share-quick-icon native">
               <i className="fas fa-share-alt" />
             </span>
             <span className="spotlight-share-quick-label">More</span>
-          </button>
-
-          <button type="button" className="spotlight-share-quick" onClick={() => { window.open(url, '_blank', 'noopener'); onClose?.(); }}>
-            <span className="spotlight-share-quick-icon open">
-              <i className="fas fa-external-link-alt" />
-            </span>
-            <span className="spotlight-share-quick-label">Open</span>
           </button>
         </div>
 
