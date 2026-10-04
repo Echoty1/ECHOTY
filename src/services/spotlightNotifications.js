@@ -3,6 +3,7 @@ import { ref, push, set, get, update, remove, onValue, query, orderByChild, limi
 import { db } from './firebase';
 
 const ROOT = 'spotlightNotifications';
+const UNREAD_ROOT = 'spotlightUnread';
 
 /**
  * Push a notification to `toUid`'s inbox.
@@ -19,7 +20,7 @@ export const pushSpotlightNotification = async ({
   postThumb,
   text = '',
 }) => {
-  if (!toUid || !actorUid || toUid === actorUid || !type || !postId) return null;
+  if (!toUid || !actorUid || toUid === actorUid || !type) return null;
 
   try {
     const notifsRef = ref(db, `${ROOT}/${toUid}`);
@@ -30,7 +31,7 @@ export const pushSpotlightNotification = async ({
       actorUid,
       actorName: actorName || 'Someone',
       actorAvatar: actorAvatar || '',
-      postId,
+      postId: postId || '',
       postThumb: postThumb || '',
       text: (text || '').slice(0, 200),
       createdAt: Date.now(),
@@ -39,14 +40,14 @@ export const pushSpotlightNotification = async ({
     await set(newRef, payload);
 
     // Bump unread counter for badge
-    const countRef = ref(db, `${ROOT}/${toUid}_unread`);
+    const countRef = ref(db, `${UNREAD_ROOT}/${toUid}`);
     const snap = await get(countRef);
     const current = snap.exists() ? Number(snap.val()) || 0 : 0;
     await set(countRef, current + 1);
 
     return payload;
   } catch (err) {
-    console.warn('[Spotlight notif] push failed:', err);
+    console.warn('[Spotlight notif] push failed:', err?.code || err?.message);
     return null;
   }
 };
@@ -64,7 +65,7 @@ export const listenToSpotlightNotifications = (uid, cb) => {
 
 export const listenToSpotlightUnreadCount = (uid, cb) => {
   if (!uid) return () => {};
-  return onValue(ref(db, `${ROOT}/${uid}_unread`), (snap) => {
+  return onValue(ref(db, `${UNREAD_ROOT}/${uid}`), (snap) => {
     cb(Number(snap.val()) || 0);
   });
 };
@@ -76,15 +77,17 @@ export const markAllSpotlightNotificationsRead = async (uid, notifs = []) => {
     notifs.forEach((n) => {
       if (!n.read) updates[`${ROOT}/${uid}/${n.id}/read`] = true;
     });
-    await update(ref(db), updates);
-    await set(ref(db, `${ROOT}/${uid}_unread`), 0);
+    if (Object.keys(updates).length > 0) {
+      await update(ref(db), updates);
+    }
+    await set(ref(db, `${UNREAD_ROOT}/${uid}`), 0);
   } catch (err) {
-    console.warn('[Spotlight notif] markAllRead failed:', err);
+    console.warn('[Spotlight notif] markAllRead failed:', err?.code || err?.message);
   }
 };
 
 export const clearSpotlightNotifications = async (uid) => {
   if (!uid) return;
   await remove(ref(db, `${ROOT}/${uid}`)).catch(() => {});
-  await remove(ref(db, `${ROOT}/${uid}_unread`)).catch(() => {});
+  await remove(ref(db, `${UNREAD_ROOT}/${uid}`)).catch(() => {});
 };
