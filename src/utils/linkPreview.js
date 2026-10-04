@@ -1,19 +1,41 @@
 // src/utils/linkPreview.js
 
 /**
- * Extract the first URL from a text string.
- * Returns null if no URL is found.
+ * Extract the first URL from a text string, with or without a protocol.
+ * Returns a normalized URL (always prefixed with https://) or null if none found.
  */
 export const extractFirstUrl = (text) => {
   if (!text || typeof text !== 'string') return null;
-  const urlRegex = /(https?:\/\/[^\s<>"']+)/i;
-  const match = text.match(urlRegex);
-  if (!match) return null;
-  // Strip trailing punctuation that often gets glued on
-  let url = match[1].replace(/[.,;:!?)\]}]+$/g, '');
-  // Upgrade http to https for security
-  if (url.startsWith('http://')) url = 'https://' + url.slice(7);
-  return url;
+
+  // 1) First, try a full URL that already has a protocol (http/https)
+  const protocolRegex = /(https?:\/\/[^\s<>"']+)/i;
+  let match = text.match(protocolRegex);
+
+  if (match) {
+    // Strip trailing punctuation that often gets glued on
+    let url = match[1].replace(/[.,;:!?)\]}]+$/g, '');
+    // Upgrade http to https for security
+    if (url.startsWith('http://')) url = 'https://' + url.slice(7);
+    return url;
+  }
+
+  // 2) If no protocol, try to match a domain-like pattern.
+  //    Matches things like: example.com, sub.domain.co.uk, echoty.xyz/path
+  //    Requires at least one dot and a TLD of 2+ letters.
+  const domainRegex = /\b((?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}(?:\/[^\s<>"']*)?)\b/i;
+  match = text.match(domainRegex);
+
+  if (match) {
+    // Strip trailing punctuation that often gets glued on
+    let url = match[1].replace(/[.,;:!?)\]}]+$/g, '');
+    // Prepend https:// if missing
+    if (!/^https?:\/\//i.test(url)) {
+      url = 'https://' + url;
+    }
+    return url;
+  }
+
+  return null;
 };
 
 /**
