@@ -71,25 +71,24 @@ const BottomNav = () => {
   const isSupport = user?.uid === SUPPORT_UID;
 
   // ====================== UPDATED TABS ======================
-  // Shop and Drop are hidden (commented out) for now.
+  // Spotlight is now the 3rd tab for everyone.
+  // Shop and Drop remain hidden.
   const baseTabs = useMemo(() => {
     if (isSupport) {
       return [
         { to: '/', label: 'Home', icon: 'fa-house', id: 'home' },
         { to: '/control', label: 'Control', icon: 'fa-sliders-h', id: 'control' },
         { to: '/chats', label: 'Chats', icon: 'fa-comment-dots', id: 'chats' },
+        { to: '/spotlight', label: 'Spotlight', icon: 'fa-bolt', id: 'spotlight' },
         { to: '/communities', label: 'Communities', icon: 'fa-users', id: 'communities' },
-        // { to: '/echodrop', label: 'Drop', icon: 'fa-bolt', id: 'echodrop' }, // hidden
-        // { to: '/shop', label: 'Shop', icon: 'fa-store', id: 'shop' },        // hidden
         { to: '/other', label: 'Other', icon: 'fa-ellipsis-h', id: 'other' },
       ];
     }
     return [
       { to: '/', label: 'Home', icon: 'fa-house', id: 'home' },
       { to: '/chats', label: 'Chats', icon: 'fa-comment-dots', id: 'chats' },
+      { to: '/spotlight', label: 'Spotlight', icon: 'fa-bolt', id: 'spotlight' },
       { to: '/communities', label: 'Communities', icon: 'fa-users', id: 'communities' },
-      // { to: '/echodrop', label: 'Drop', icon: 'fa-bolt', id: 'echodrop' }, // hidden
-      // { to: '/shop', label: 'Shop', icon: 'fa-store', id: 'shop' },        // hidden
       { to: '/other', label: 'Other', icon: 'fa-ellipsis-h', id: 'other' },
     ];
   }, [isSupport]);
@@ -634,9 +633,8 @@ const BottomNav = () => {
             <div className="grid">
               {[
                 { label: 'Chats', icon: 'fa-comment-dots', to: '/chats' },
+                { label: 'Spotlight', icon: 'fa-bolt', to: '/spotlight' },
                 { label: 'Communities', icon: 'fa-users', to: '/communities' },
-                // { label: 'Drop', icon: 'fa-bolt', to: '/echodrop' },   // hidden
-                // { label: 'Shop', icon: 'fa-store', to: '/shop' },       // hidden
                 { label: 'Online', icon: 'fa-video', action: openOnlineSheet },
               ].map((a) => (
                 <button
