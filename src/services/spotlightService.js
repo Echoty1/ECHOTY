@@ -6,6 +6,32 @@ import { db } from './firebase';
 
 const ROOT = 'spotlight';
 
+/* ─── Real-time feed listener ──────────────────────────────── */
+
+export const listenToSpotlightFeed = ({ maxCount = 80 } = {}, cb) => {
+  const postsQuery = query(
+    ref(db, `${ROOT}/posts`),
+    orderByChild('createdAt'),
+    limitToLast(maxCount)
+  );
+
+  return onValue(
+    postsQuery,
+    (snap) => {
+      if (!snap.exists()) {
+        cb([]);
+        return;
+      }
+      const all = Object.entries(snap.val()).map(([id, val]) => ({ id, ...val }));
+      const visible = all.filter((p) => !p.deleted);
+      cb(visible);
+    },
+    (err) => {
+      console.warn('[Spotlight] listener error:', err?.code || err?.message);
+    }
+  );
+};
+
 /* ─── Upload / publish ─────────────────────────────────────── */
 
 export const publishSpotlightPost = async ({
@@ -59,7 +85,7 @@ export const deleteSpotlightPost = async (uid, postId) => {
   await remove(ref(db, `${ROOT}/users/${uid}/reechoed/${postId}`)).catch(() => {});
 };
 
-/* ─── Feed fetch — VERBOSE ────────────────────────────────── */
+/* ─── One-shot fetch (still used elsewhere) ────────────────── */
 
 export const fetchSpotlightFeed = async ({ maxCount = 60 } = {}) => {
   try {
@@ -175,7 +201,7 @@ export const deleteSpotlightComment = async (postId, commentId) => {
   await runTransaction(ref(db, `${ROOT}/posts/${postId}/commentCount`), (c) => Math.max(0, (c || 0) - 1));
 };
 
-/* ─── Reecho (repost) ──────────────────────────────────────── */
+/* ─── Reecho ──────────────────────────────────────────────── */
 
 export const toggleSpotlightReecho = async (postId, uid) => {
   if (!postId || !uid) return false;
@@ -252,7 +278,7 @@ export const fetchSeenSpotlightIds = async (uid) => {
     if (!snap.exists()) return new Set();
     return new Set(Object.keys(snap.val()));
   } catch (err) {
-    console.warn('[Spotlight] fetchSeenSpotlightIds failed (probably no rules yet):', err?.code);
+    console.warn('[Spotlight] fetchSeenSpotlightIds failed:', err?.code);
     return new Set();
   }
 };
