@@ -1,0 +1,269 @@
+/* src/pages/Spotlight/SpotlightRecorder.css */
+
+.spotlight-recorder {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  z-index: 500;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spotlight-recorder-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+  transform: scaleX(-1);
+}
+
+/* Front camera mirror: only the preview is mirrored. The recorded file
+   is not mirrored — good, that's what users expect. */
+
+.spotlight-recorder-scrim {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.55), transparent 22%, transparent 78%, rgba(0, 0, 0, 0.65));
+}
+
+/* Top bar */
+.spotlight-recorder-top {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 16px 12px;
+  padding-top: max(16px, env(safe-area-inset-top, 16px));
+}
+
+.spotlight-recorder-icon-btn {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.45);
+  color: #fff;
+  font-size: 15px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.2s, transform 0.15s;
+}
+.spotlight-recorder-icon-btn:hover { background: rgba(0, 0, 0, 0.65); transform: scale(1.05); }
+.spotlight-recorder-icon-btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none; }
+
+.spotlight-recorder-timer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+.spotlight-recorder-timer.live { background: rgba(220, 38, 38, 0.55); border-color: rgba(255, 255, 255, 0.2); }
+.spotlight-recorder-timer-max { font-weight: 500; opacity: 0.65; margin-left: 2px; }
+.spotlight-recorder-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  animation: recorderDotPulse 1s infinite;
+}
+@keyframes recorderDotPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.3; }
+}
+
+/* Error banner */
+.spotlight-recorder-error {
+  position: absolute;
+  top: 90px;
+  left: 16px;
+  right: 16px;
+  z-index: 6;
+  background: rgba(127, 29, 29, 0.85);
+  border: 1px solid rgba(239, 68, 68, 0.5);
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: #fff;
+  font-size: 13px;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.spotlight-recorder-error i { font-size: 20px; color: #fca5a5; }
+.spotlight-recorder-error p { flex: 1; margin: 0; }
+.spotlight-recorder-error button {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: none;
+  background: #fff;
+  color: #7f1d1d;
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+/* Bottom controls */
+.spotlight-recorder-bottom {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-around;
+  padding: 24px 24px 40px;
+  padding-bottom: max(40px, env(safe-area-inset-bottom, 40px));
+}
+
+.spotlight-recorder-flip-side,
+.spotlight-recorder-pause-side {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.2s, transform 0.15s, opacity 0.2s;
+}
+.spotlight-recorder-flip-side:hover:not(:disabled),
+.spotlight-recorder-pause-side:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.7);
+  transform: scale(1.06);
+}
+.spotlight-recorder-flip-side:disabled,
+.spotlight-recorder-pause-side:disabled { opacity: 0.35; cursor: not-allowed; }
+
+/* Shutter button with progress ring */
+.spotlight-recorder-shutter {
+  position: relative;
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s;
+}
+.spotlight-recorder-shutter:not(:disabled):active { transform: scale(0.94); }
+.spotlight-recorder-shutter:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.spotlight-recorder-ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transition: stroke-dasharray 0.1s linear;
+}
+
+.spotlight-recorder-shutter-core {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+  transition: all 0.2s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+.spotlight-recorder-shutter-core.recording {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #ec4899, #6C3CE1);
+  box-shadow: 0 0 24px rgba(236, 72, 153, 0.6);
+}
+.spotlight-recorder-shutter.paused .spotlight-recorder-shutter-core {
+  animation: recorderShutterPausedPulse 1s ease-in-out infinite;
+}
+@keyframes recorderShutterPausedPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(0.94); }
+}
+
+/* Hint */
+.spotlight-recorder-hint {
+  position: absolute;
+  bottom: 150px;
+  left: 50%;
+  transform: translateX(-50%);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-align: center;
+  pointer-events: none;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+  max-width: 80%;
+}
+
+/* Paused pill */
+.spotlight-recorder-paused-pill {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 10px 22px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: recorderPillIn 0.25s cubic-bezier(0.2, 1.3, 0.4, 1);
+  pointer-events: none;
+  z-index: 6;
+}
+@keyframes recorderPillIn {
+  from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
+  to   { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* Mobile tweaks */
+@media (max-width: 480px) {
+  .spotlight-recorder-shutter { width: 88px; height: 88px; }
+  .spotlight-recorder-shutter-core { width: 62px; height: 62px; }
+  .spotlight-recorder-shutter-core.recording { width: 34px; height: 34px; }
+  .spotlight-recorder-flip-side,
+  .spotlight-recorder-pause-side { width: 46px; height: 46px; font-size: 16px; }
+  .spotlight-recorder-hint { bottom: 140px; font-size: 11px; }
+}
