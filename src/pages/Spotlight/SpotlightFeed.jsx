@@ -19,7 +19,7 @@ const SpotlightFeed = () => {
   const { user } = useAuth();
   const { getProfile, fetchProfile } = useProfile();
   const navigate = useNavigate();
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
 
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +40,7 @@ const SpotlightFeed = () => {
 
   const containerRef = useRef(null);
   const videoRefs = useRef({});
-  const focusPostId = params.get('post');
+  const focusPostId = params.get('focus');
 
   useEffect(() => {
     try {
@@ -62,17 +62,40 @@ const SpotlightFeed = () => {
         fetchSpotlightFeed({ maxCount: 80 }),
         user?.uid ? fetchSeenSpotlightIds(user.uid) : Promise.resolve(new Set()),
       ]);
-      let ranked = rankSpotlightFeed(all, seenSet);
 
+      // Never apply the "seen" penalty to the focused post — a
+      // freshly-uploaded post should always rank first for its author.
+      const seenForRanking = new Set(seenSet);
+      if (focusPostId) seenForRanking.delete(focusPostId);
+
+      let ranked = rankSpotlightFeed(all, seenForRanking);
+
+      // If arriving with ?focus=ID, force that post to the very top.
       if (focusPostId) {
         const idx = ranked.findIndex((p) => p.id === focusPostId);
         if (idx > 0) {
           const [target] = ranked.splice(idx, 1);
           ranked = [target, ...ranked];
+        } else if (idx === -1) {
+          // Post not in the ranked list — pull it fresh from the DB
+          // so the author still sees what they just posted.
+          try {
+            const { ref, get } = await import('firebase/database');
+            const { db } = await import('../../services/firebase');
+            const snap = await get(ref(db, `spotlight/posts/${focusPostId}`));
+            if (snap.exists()) {
+              ranked = [{ id: focusPostId, ...snap.val() }, ...ranked];
+            }
+          } catch (_) {}
         }
       }
+
       setPosts(ranked);
       setActiveIndex(0);
+      requestAnimationFrame(() => {
+        const el = containerRef.current;
+        if (el) el.scrollTop = 0;
+      });
     } catch (err) {
       console.error('Spotlight feed load failed:', err);
       setToast({ message: 'Could not load Spotlight', type: 'error' });
@@ -82,6 +105,19 @@ const SpotlightFeed = () => {
   }, [focusPostId, user?.uid]);
 
   useEffect(() => { loadFeed(); }, [loadFeed]);
+
+  // Strip ?focus=ID from the URL after a couple of seconds so refreshing
+  // the page doesn't keep pinning the same post to the top.
+  useEffect(() => {
+    if (!focusPostId) return;
+    const t = setTimeout(() => {
+      const next = new URLSearchParams(params);
+      next.delete('focus');
+      setParams(next, { replace: true });
+    }, 2500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusPostId]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -212,7 +248,6 @@ const SpotlightFeed = () => {
         )}
       </div>
 
-      {/* Feed counter — moved up so it doesn't collide with the ECHO watermark */}
       {posts.length > 1 && (
         <div className="spotlight-feed-counter" aria-hidden="true">
           <span>{activeIndex + 1}</span>
@@ -221,7 +256,6 @@ const SpotlightFeed = () => {
         </div>
       )}
 
-      {/* Floating Create button — always reachable, bottom-right of feed */}
       <button
         type="button"
         className="spotlight-fab-create"
