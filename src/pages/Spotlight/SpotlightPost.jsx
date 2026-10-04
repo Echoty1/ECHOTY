@@ -10,7 +10,7 @@ import {
   markSpotlightSeen,
 } from '../../services/spotlightService';
 import SpotlightActions from './SpotlightActions';
-import EchoLoader from '../../common/EchoLoader';
+import EchoLoader from '../../components/common/EchoLoader';
 
 const LONG_PRESS_MS = 500;
 
@@ -86,7 +86,6 @@ const SpotlightPost = ({
     if (!v || !s) return;
 
     const sync = () => {
-      // Keep the source roughly in step with the duet
       try {
         if (Math.abs(v.currentTime - s.currentTime) > 0.25) {
           s.currentTime = v.currentTime % (s.duration || 1);
@@ -217,7 +216,7 @@ const SpotlightPost = ({
 
   const handleDuet = useCallback(() => {
     if (!currentUser?.uid) return;
-    if (post.uid === currentUser.uid) return; // no duetting yourself
+    if (post.uid === currentUser.uid) return;
     onOpenDuet?.(post);
   }, [post, currentUser?.uid, onOpenDuet]);
 
