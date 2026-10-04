@@ -1512,3 +1512,242 @@
   .spotlight-pull-indicator { top: 60px; font-size: 11px; padding: 7px 14px; }
   .spotlight-new-pill { top: 68px; font-size: 12px; padding: 8px 16px; }
 }
+/* ═══════════════════════════════════════════════════════════════
+   ECHO LOADER inside a Spotlight post
+   ═══════════════════════════════════════════════════════════════ */
+
+.spotlight-video-loader {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 5;
+  background: radial-gradient(
+    circle at center,
+    rgba(0, 0, 0, 0.35) 0%,
+    rgba(0, 0, 0, 0.15) 40%,
+    transparent 70%
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   SHARE — external app icons
+   ═══════════════════════════════════════════════════════════════ */
+
+.spotlight-share-quickrow {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+@media (max-width: 480px) {
+  .spotlight-share-quickrow {
+    grid-template-columns: repeat(5, 1fr);
+    gap: 6px;
+  }
+}
+
+.spotlight-share-quick-icon.whatsapp { background: linear-gradient(135deg, #25D366, #128C7E); }
+.spotlight-share-quick-icon.twitter  { background: linear-gradient(135deg, #000000, #1a1a1a); }
+.spotlight-share-quick-icon.telegram { background: linear-gradient(135deg, #229ED9, #0088cc); }
+.spotlight-share-quick-icon.copy     { background: linear-gradient(135deg, #6C3CE1, #EC4899); }
+.spotlight-share-quick-icon.native   { background: linear-gradient(135deg, #10b981, #06b6d4); }
+
+.spotlight-share-quick-label {
+  font-size: 11px;
+  letter-spacing: 0.01em;
+}
+@media (max-width: 480px) {
+  .spotlight-share-quick-label { font-size: 10px; }
+  .spotlight-share-quick-icon  { width: 40px; height: 40px; font-size: 17px; }
+  .spotlight-share-quick       { padding: 10px 4px; }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   COMMENT LIKES
+   ═══════════════════════════════════════════════════════════════ */
+
+.spotlight-comment-right {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.spotlight-comment-like { position: relative; }
+
+.spotlight-comment-like-btn {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.15s, color 0.2s;
+}
+.spotlight-comment-like-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  color: #ec4899;
+}
+.spotlight-comment-like-btn.active { font-size: 16px; color: #ec4899; }
+
+.spotlight-comment-like-picker {
+  position: absolute;
+  bottom: 40px;
+  right: 0;
+  display: flex;
+  gap: 2px;
+  padding: 6px 8px;
+  border-radius: 999px;
+  background: #1e1830;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  animation: spotlightCommentPickerIn 0.2s cubic-bezier(0.2, 1.3, 0.4, 1);
+  z-index: 10;
+}
+@keyframes spotlightCommentPickerIn {
+  from { opacity: 0; transform: translateY(6px) scale(0.9); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.spotlight-comment-like-pick {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: none;
+  font-size: 18px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, background 0.15s;
+}
+.spotlight-comment-like-pick:hover {
+  transform: scale(1.2);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   UNDO TOAST
+   ═══════════════════════════════════════════════════════════════ */
+
+.spotlight-undo-toast {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 500;
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 18px;
+  border-radius: 999px;
+  background: rgba(20, 16, 30, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.6);
+  animation: spotlightUndoIn 0.3s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+@keyframes spotlightUndoIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.spotlight-undo-toast button {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.spotlight-undo-toast button:hover { transform: scale(1.04); }
+
+/* ═══════════════════════════════════════════════════════════════
+   PROFILE — action buttons + preview modal
+   ═══════════════════════════════════════════════════════════════ */
+
+.spotlight-profile-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.spotlight-profile-preview-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 500;
+  background: rgba(0, 0, 0, 0.85);
+  backdrop-filter: blur(10px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: spFadeIn 0.2s ease;
+}
+.spotlight-profile-preview {
+  position: relative;
+  max-width: min(560px, 100%);
+  max-height: 90vh;
+  background: #14101e;
+  border-radius: 20px;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+  display: flex;
+  flex-direction: column;
+  animation: spSheetUp 0.28s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+.spotlight-profile-preview-media {
+  width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  background: #000;
+  display: block;
+}
+.spotlight-profile-preview-caption {
+  padding: 12px 16px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.spotlight-profile-preview-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0, 0, 0, 0.6);
+  color: #fff;
+  cursor: pointer;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.spotlight-profile-preview-open {
+  padding: 14px;
+  border: none;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  font-weight: 700;
+  font-size: 14px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.spotlight-profile-preview-open:hover { opacity: 0.9; }
