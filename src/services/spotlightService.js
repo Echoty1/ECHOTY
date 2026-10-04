@@ -85,6 +85,45 @@ export const deleteSpotlightPost = async (uid, postId) => {
   await remove(ref(db, `${ROOT}/users/${uid}/reechoed/${postId}`)).catch(() => {});
 };
 
+/* ─── Soft delete + undo (used by the 5s undo flow) ────────── */
+
+/**
+ * Marks a post as deleted but keeps the data intact so it can be
+ * restored within the undo window. The post disappears from the feed
+ * immediately (listenToSpotlightFeed filters out deleted === true).
+ */
+export const softDeleteSpotlightPost = async (postId) => {
+  if (!postId) return;
+  await update(ref(db, `${ROOT}/posts/${postId}`), {
+    deleted: true,
+    softDeletedAt: Date.now(),
+  });
+};
+
+/**
+ * Reverses a soft delete. Used when the user taps Undo within 5s.
+ */
+export const restoreSpotlightPost = async (postId) => {
+  if (!postId) return;
+  await update(ref(db, `${ROOT}/posts/${postId}`), {
+    deleted: false,
+    softDeletedAt: null,
+  });
+};
+
+/**
+ * Permanently removes the post, its user index entry, and any
+ * reecho index entries. Called after the undo window expires.
+ */
+export const hardDeleteSpotlightPost = async (postId, uid) => {
+  if (!postId) return;
+  await remove(ref(db, `${ROOT}/posts/${postId}`)).catch(() => {});
+  if (uid) {
+    await remove(ref(db, `${ROOT}/users/${uid}/posts/${postId}`)).catch(() => {});
+    await remove(ref(db, `${ROOT}/users/${uid}/reechoed/${postId}`)).catch(() => {});
+  }
+};
+
 /* ─── One-shot fetch (still used elsewhere) ────────────────── */
 
 export const fetchSpotlightFeed = async ({ maxCount = 60 } = {}) => {
@@ -139,7 +178,7 @@ export const listenToUserReechoedPosts = (uid, cb) => {
   });
 };
 
-/* ─── Likes ────────────────────────────────────────────────── */
+/* ─── Post likes ───────────────────────────────────────────── */
 
 export const toggleSpotlightLike = async (postId, uid) => {
   if (!postId || !uid) return false;
@@ -166,6 +205,52 @@ export const listenToSpotlightLike = (postId, uid, cb) => {
   return onValue(ref(db, `${ROOT}/posts/${postId}/likes/${uid}`), (snap) => cb(!!snap.val()));
 };
 
+/* ─── Comment likes (emoji reactions) ──────────────────────── */
+
+/**
+ * Toggle a reaction on a specific comment.
+ * Stored at: spotlight/posts/{postId}/comments/{commentId}/likes/{uid}
+ * Value: the emoji string (e.g. '❤️'). One reaction per user per comment.
+ */
+export const toggleCommentLike = async (postId, commentId, uid, emoji) => {
+  if (!postId || !commentId || !uid) return false;
+  const likeRef = ref(db, `${ROOT}/posts/${postId}/comments/${commentId}/likes/${uid}`);
+  const countRef = ref(db, `${ROOT}/posts/${postId}/comments/${commentId}/likeCount`);
+
+  let wasActive = false;
+  let nowActive = false;
+
+  await runTransaction(likeRef, (current) => {
+    if (current && current === emoji) {
+      // Same emoji tapped → remove
+      wasActive = true;
+      nowActive = false;
+      return null;
+    }
+    // Either no reaction, or a different emoji → set new
+    wasActive = !!current;
+    nowActive = true;
+    return emoji;
+  });
+
+  // Update count: net change is 0 if switching emoji, +1 if new, -1 if removed
+  if (!wasActive && nowActive) {
+    await runTransaction(countRef, (c) => (c || 0) + 1);
+  } else if (wasActive && !nowActive) {
+    await runTransaction(countRef, (c) => Math.max(0, (c || 0) - 1));
+  }
+
+  return nowActive;
+};
+
+export const listenToCommentLike = (postId, commentId, uid, cb) => {
+  if (!postId || !commentId || !uid) return () => {};
+  return onValue(
+    ref(db, `${ROOT}/posts/${postId}/comments/${commentId}/likes/${uid}`),
+    (snap) => cb(snap.val() || null)
+  );
+};
+
 /* ─── Comments ─────────────────────────────────────────────── */
 
 export const addSpotlightComment = async (postId, uid, authorName, authorAvatar, text) => {
@@ -179,6 +264,7 @@ export const addSpotlightComment = async (postId, uid, authorName, authorAvatar,
     authorAvatar: authorAvatar || '',
     text: text.trim().slice(0, 500),
     createdAt: Date.now(),
+    likeCount: 0,
   };
   await set(newRef, payload);
   await runTransaction(ref(db, `${ROOT}/posts/${postId}/commentCount`), (c) => (c || 0) + 1);
@@ -201,7 +287,7 @@ export const deleteSpotlightComment = async (postId, commentId) => {
   await runTransaction(ref(db, `${ROOT}/posts/${postId}/commentCount`), (c) => Math.max(0, (c || 0) - 1));
 };
 
-/* ─── Reecho ──────────────────────────────────────────────── */
+/* ─── Reecho (repost) ──────────────────────────────────────── */
 
 export const toggleSpotlightReecho = async (postId, uid) => {
   if (!postId || !uid) return false;
@@ -260,6 +346,12 @@ export const listenToEchoAuthor = (authorUid, myUid, cb) => {
 export const fetchEchoersCount = async (authorUid) => {
   if (!authorUid) return 0;
   const snap = await get(ref(db, `${ROOT}/echoers/${authorUid}`));
+  return snap.exists() ? Object.keys(snap.val()).length : 0;
+};
+
+export const fetchEchoingCount = async (uid) => {
+  if (!uid) return 0;
+  const snap = await get(ref(db, `${ROOT}/echoes/${uid}`));
   return snap.exists() ? Object.keys(snap.val()).length : 0;
 };
 
