@@ -46,19 +46,33 @@ const SpotlightPost = ({
     return () => unsubs.forEach((u) => u && u());
   }, [post?.id, post?.uid, currentUser?.uid]);
 
+  /* ─── Play / pause based on active state ────────────────── */
   useEffect(() => {
     const v = videoRef.current;
     if (!v || post.mediaType !== 'video') return;
+
     if (isActive) {
-      v.currentTime = 0;
-      v.play().catch(() => {});
+      // Reset and play. Some browsers need a small retry to allow
+      // playback right after a source swap.
+      try {
+        if (Math.abs(v.currentTime) > 0.1 && v.duration && v.currentTime >= v.duration - 0.2) {
+          v.currentTime = 0;
+        }
+      } catch (_) {}
+      const attemptPlay = () => {
+        v.play().catch(() => {});
+      };
+      attemptPlay();
+      const retry = setTimeout(attemptPlay, 150);
       setPaused(false);
       if (currentUser?.uid) markSpotlightSeen(currentUser.uid, post.id).catch(() => {});
+      return () => clearTimeout(retry);
     } else {
-      v.pause();
+      try { v.pause(); } catch (_) {}
     }
   }, [isActive, post.id, post.mediaType, currentUser?.uid]);
 
+  /* ─── Mute sync ─────────────────────────────────────────── */
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -69,6 +83,7 @@ const SpotlightPost = ({
     return () => v.removeEventListener('loadedmetadata', onLoaded);
   }, [muted, isActive, post.id]);
 
+  /* ─── Progress bar ─────────────────────────────────────── */
   useEffect(() => {
     const v = videoRef.current;
     if (!v || post.mediaType !== 'video') return;
@@ -176,7 +191,7 @@ const SpotlightPost = ({
             playsInline
             muted={muted}
             loop
-            preload="metadata"
+            preload="auto"
           />
         ) : (
           <img
@@ -240,8 +255,6 @@ const SpotlightPost = ({
           </div>
         )}
       </div>
-
-      {/* Note: no floating mute button. The top-bar mute toggle handles this. */}
     </div>
   );
 };
