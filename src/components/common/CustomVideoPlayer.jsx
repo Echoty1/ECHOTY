@@ -4,7 +4,7 @@ import ReactDOM from 'react-dom';
 import { useCachedBlobUrl } from '../../utils/mediaCache';
 import './CustomVideoPlayer.css';
 
-const CustomVideoPlayer = ({ src, onClose, poster }) => {
+const CustomVideoPlayer = ({ src, onClose, poster, autoFullscreen = false }) => {
   // ─── Use cached blob URL ──────────────────────────────────────
   const { blobUrl, isLoading: cacheLoading, error: cacheError } = useCachedBlobUrl(src);
 
@@ -12,35 +12,49 @@ const CustomVideoPlayer = ({ src, onClose, poster }) => {
   const containerRef = useRef(null);
   const progressRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [showControls, setShowControls] = useState(true);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const controlsTimeout = useRef(null);
   const [touchStartX, setTouchStartX] = useState(null);
   const playPromiseRef = useRef(null);
+  const autoFsTriggeredRef = useRef(false);
 
-  // ─── When blobUrl is ready, we can play ──────────────────────
+  // ─── When blobUrl is ready, play + optionally go fullscreen ──
   useEffect(() => {
     if (blobUrl && !cacheLoading && !cacheError) {
       setIsLoading(false);
-      // Auto-play the video
       const video = videoRef.current;
       if (video) {
         const promise = video.play();
         if (promise !== undefined) {
           promise
             .then(() => setIsPlaying(true))
-            .catch(err => {
+            .catch((err) => {
               if (err.name !== 'AbortError') {
                 console.warn('Auto-play error:', err);
               }
             });
         }
       }
-    }
-  }, [blobUrl, cacheLoading, cacheError]);
 
+      if (autoFullscreen && !autoFsTriggeredRef.current) {
+        autoFsTriggeredRef.current = true;
+        setTimeout(() => {
+          const el = containerRef.current;
+          if (!el) return;
+          if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+          else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+          else if (videoRef.current?.webkitEnterFullscreen) videoRef.current.webkitEnterFullscreen();
+        }, 150);
+      }
+    }
+  }, [blobUrl, cacheLoading, cacheError, autoFullscreen]);
+
+  // ─── Body scroll lock + cleanup ──────────────────────────────
   useEffect(() => {
     document.body.style.overflow = 'hidden';
     return () => {
@@ -52,7 +66,24 @@ const CustomVideoPlayer = ({ src, onClose, poster }) => {
     };
   }, []);
 
-  // Hide controls after 3 seconds of inactivity (when playing)
+  // ─── Fullscreen change listener ──────────────────────────────
+  useEffect(() => {
+    const onChange = () => {
+      const full =
+        document.fullscreenElement === containerRef.current ||
+        document.webkitFullscreenElement === containerRef.current ||
+        videoRef.current?.webkitDisplayingFullscreen === true;
+      setIsFullscreen(!!full);
+    };
+    document.addEventListener('fullscreenchange', onChange);
+    document.addEventListener('webkitfullscreenchange', onChange);
+    return () => {
+      document.removeEventListener('fullscreenchange', onChange);
+      document.removeEventListener('webkitfullscreenchange', onChange);
+    };
+  }, []);
+
+  // ─── Auto-hide controls after 3s of inactivity ───────────────
   useEffect(() => {
     if (isPlaying && showControls) {
       if (controlsTimeout.current) clearTimeout(controlsTimeout.current);
@@ -83,7 +114,7 @@ const CustomVideoPlayer = ({ src, onClose, poster }) => {
       if (promise !== undefined) {
         promise
           .then(() => setIsPlaying(true))
-          .catch(err => {
+          .catch((err) => {
             if (err.name !== 'AbortError') {
               console.warn('Play error:', err);
             }
@@ -94,6 +125,43 @@ const CustomVideoPlayer = ({ src, onClose, poster }) => {
       setIsPlaying(false);
     }
     handleUserInteraction();
+  };
+
+  const toggleMute = () => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.muted = !video.muted;
+    setIsMuted(video.muted);
+    handleUserInteraction();
+  };
+
+  const toggleFullscreen = () => {
+    const el = containerRef.current;
+    if (!el) return;
+    const currentlyFull =
+      document.fullscreenElement === el ||
+      document.webkitFullscreenElement === el;
+    if (!currentlyFull) {
+      if (el.requestFullscreen) el.requestFullscreen().catch(() => {});
+      else if (el.webkitRequestFullscreen) el.webkitRequestFullscreen();
+      else if (videoRef.current?.webkitEnterFullscreen) videoRef.current.webkitEnterFullscreen();
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen().catch(() => {});
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+      else if (videoRef.current?.webkitExitFullscreen) videoRef.current.webkitExitFullscreen();
+    }
+    handleUserInteraction();
+  };
+
+  const handleDownload = () => {
+    if (!blobUrl) return;
+    const a = document.createElement('a');
+    a.href = blobUrl;
+    const stamp = Date.now();
+    a.download = `echo_video_${stamp}.mp4`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const handleTimeUpdate = () => {
@@ -149,15 +217,25 @@ const CustomVideoPlayer = ({ src, onClose, poster }) => {
 
   useEffect(() => {
     const handleKey = (e) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') {
+        if (document.fullscreenElement) document.exitFullscreen?.();
+        else onClose();
+      }
       if (e.key === ' ' || e.key === 'Space') {
         e.preventDefault();
         togglePlay();
       }
+      if (e.key === 'f' || e.key === 'F') {
+        toggleFullscreen();
+      }
+      if (e.key === 'm' || e.key === 'M') {
+        toggleMute();
+      }
     };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, [onClose, togglePlay]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [onClose, isPlaying]);
 
   const handleClose = () => {
     const video = videoRef.current;
@@ -165,6 +243,7 @@ const CustomVideoPlayer = ({ src, onClose, poster }) => {
       video.pause();
       setIsPlaying(false);
     }
+    if (document.fullscreenElement) document.exitFullscreen?.();
     onClose();
   };
 
@@ -216,14 +295,17 @@ const CustomVideoPlayer = ({ src, onClose, poster }) => {
 
   return ReactDOM.createPortal(
     <div
-      className="echo-video-player-overlay"
+      className={`echo-video-player-overlay ${isFullscreen ? 'is-fullscreen' : ''}`}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) handleClose();
       }}
       onMouseMove={handleUserInteraction}
       onTouchStart={handleUserInteraction}
     >
-      <div className="echo-video-player-content" ref={containerRef}>
+      <div
+        className={`echo-video-player-content ${isFullscreen ? 'is-fullscreen' : ''}`}
+        ref={containerRef}
+      >
         {isLoading && (
           <div className="echo-video-loader">
             <div className="echo-video-spinner" />
@@ -293,9 +375,36 @@ const CustomVideoPlayer = ({ src, onClose, poster }) => {
               >
                 <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'}`} />
               </button>
+
+              <button
+                className="echo-video-control-btn"
+                onClick={toggleMute}
+                aria-label={isMuted ? 'Unmute' : 'Mute'}
+              >
+                <i className={`fas ${isMuted ? 'fa-volume-mute' : 'fa-volume-up'}`} />
+              </button>
+
               <span className="echo-video-time">
                 {formatTime(videoRef.current?.currentTime || 0)} / {formatTime(duration)}
               </span>
+
+              <div className="echo-video-controls-spacer" />
+
+              <button
+                className="echo-video-control-btn"
+                onClick={handleDownload}
+                aria-label="Download"
+              >
+                <i className="fas fa-download" />
+              </button>
+
+              <button
+                className="echo-video-control-btn"
+                onClick={toggleFullscreen}
+                aria-label={isFullscreen ? 'Exit fullscreen' : 'Enter fullscreen'}
+              >
+                <i className={`fas ${isFullscreen ? 'fa-compress' : 'fa-expand'}`} />
+              </button>
             </div>
           </div>
         </div>
