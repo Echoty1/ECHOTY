@@ -1298,3 +1298,161 @@
 }
 .spotlight-profile-empty i { font-size: 40px; opacity: 0.4; }
 .spotlight-profile-empty p { margin: 0; font-size: 14px; }
+
+/* ═══════════════════════════════════════════════════════════════
+   TOP-BAR OVERLAP FIX
+   Push the feed down so it doesn't sit behind the floating bar
+   ═══════════════════════════════════════════════════════════════ */
+
+.spotlight-feed-container {
+  padding-top: 64px;
+}
+@media (max-width: 480px) {
+  .spotlight-feed-container {
+    padding-top: 60px;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   OPTIONS SHEET (TikTok-style long-press menu)
+   ═══════════════════════════════════════════════════════════════ */
+
+.spotlight-options-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 88px;
+  animation: spFadeIn 0.2s ease;
+}
+
+.spotlight-options-sheet {
+  width: 100%;
+  max-width: 520px;
+  background: #14101e;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 8px 14px 14px;
+  display: flex;
+  flex-direction: column;
+  animation: spSheetUp 0.28s cubic-bezier(0.2, 1.2, 0.4, 1);
+  margin: 0 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+
+.spotlight-options-handle {
+  width: 42px; height: 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 4px auto 10px;
+}
+
+.spotlight-options-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 4px 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 12px;
+}
+.spotlight-options-title {
+  color: #fff;
+  font-weight: 800;
+  font-size: 15px;
+  letter-spacing: 0.01em;
+}
+.spotlight-options-close {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spotlight-options-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 14px;
+}
+.spotlight-option-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px 4px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s;
+}
+.spotlight-option-tile:hover { background: rgba(255, 255, 255, 0.07); transform: translateY(-1px); }
+.spotlight-option-tile:disabled { opacity: 0.6; cursor: not-allowed; }
+.spotlight-option-icon {
+  width: 46px; height: 46px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+.spotlight-option-icon.download { background: linear-gradient(135deg, #6C3CE1, #EC4899); }
+.spotlight-option-icon.copy     { background: linear-gradient(135deg, #06b6d4, #3b82f6); }
+.spotlight-option-icon.share    { background: linear-gradient(135deg, #10b981, #84cc16); }
+.spotlight-option-label {
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.spotlight-options-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  padding-top: 8px;
+}
+.spotlight-option-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 12px;
+  border-radius: 12px;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s;
+  font-family: inherit;
+  text-align: left;
+}
+.spotlight-option-row:hover { background: rgba(255, 255, 255, 0.05); }
+.spotlight-option-row i {
+  width: 22px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 15px;
+}
+.spotlight-option-row.danger { color: #f87171; }
+.spotlight-option-row.danger i { color: #f87171; }
+.spotlight-option-row.danger:hover { background: rgba(239, 68, 68, 0.1); }
+
+@media (max-width: 480px) {
+  .spotlight-options-backdrop { padding-bottom: 84px; }
+  .spotlight-options-sheet { max-width: 100%; margin: 0 6px; }
+}
