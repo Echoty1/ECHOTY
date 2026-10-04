@@ -8,7 +8,9 @@ import SpotlightPost from './SpotlightPost';
 import SpotlightComments from './SpotlightComments';
 import SpotlightShare from './SpotlightShare';
 import SpotlightOptions from './SpotlightOptions';
+import SpotlightNotifications from './SpotlightNotifications';
 import useSpotlightSEO from '../../hooks/useSpotlightSEO';
+import { listenToSpotlightUnreadCount } from '../../services/spotlightNotifications';
 import {
   listenToSpotlightFeed,
   rankSpotlightFeed,
@@ -42,6 +44,8 @@ const SpotlightFeed = () => {
   const [commentsFor, setCommentsFor] = useState(null);
   const [shareFor, setShareFor] = useState(null);
   const [optionsFor, setOptionsFor] = useState(null);
+  const [notifsOpen, setNotifsOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
   const [toast, setToast] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
 
@@ -49,8 +53,7 @@ const SpotlightFeed = () => {
   const [refreshing, setRefreshing] = useState(false);
   const [hasNewAbove, setHasNewAbove] = useState(false);
 
-  // Undo delete
-  const [pendingDelete, setPendingDelete] = useState(null); // { post, timerId }
+  const [pendingDelete, setPendingDelete] = useState(null);
   const [showUndoToast, setShowUndoToast] = useState(false);
 
   const containerRef = useRef(null);
@@ -63,7 +66,6 @@ const SpotlightFeed = () => {
   const freshPostId = location.state?.freshPostId || null;
   const focusPostId = params.get('focus');
 
-  /* SEO — if arrived via share link */
   useSpotlightSEO(focusPostId);
 
   useEffect(() => {
@@ -78,6 +80,12 @@ const SpotlightFeed = () => {
     if (cached) setMyProfile(cached);
     else fetchProfile(user.uid);
   }, [user?.uid, getProfile, fetchProfile]);
+
+  /* Unread notifications count for bell badge */
+  useEffect(() => {
+    if (!user?.uid) return () => {};
+    return listenToSpotlightUnreadCount(user.uid, setUnreadCount);
+  }, [user?.uid]);
 
   /* Real-time feed */
   useEffect(() => {
@@ -132,7 +140,6 @@ const SpotlightFeed = () => {
     };
   }, [user?.uid, freshPostId, focusPostId]);
 
-  /* Scroll to fresh/focus post */
   useEffect(() => {
     if (!freshPostId) return;
     setActiveIndex(0);
@@ -147,7 +154,6 @@ const SpotlightFeed = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [freshPostId]);
 
-  /* Active slide detection */
   useEffect(() => {
     const container = containerRef.current;
     if (!container || posts.length === 0) return;
@@ -177,7 +183,6 @@ const SpotlightFeed = () => {
     return () => observer.disconnect();
   }, [posts.length]);
 
-  /* Scroll-end + pull-to-refresh */
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -241,6 +246,7 @@ const SpotlightFeed = () => {
         setCommentsFor(null);
         setShareFor(null);
         setOptionsFor(null);
+        setNotifsOpen(false);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -255,7 +261,6 @@ const SpotlightFeed = () => {
   const handleOpenProfile = (uid) => navigate(`/spotlight/user/${uid}`);
   const handleOpenOptions = useCallback((post) => setOptionsFor(post), []);
 
-  /* ─── Delete flow with 5s undo ─────────────────────────── */
   const handleConfirmDelete = useCallback(async (post) => {
     if (!post || !user?.uid) return;
     try {
@@ -266,19 +271,15 @@ const SpotlightFeed = () => {
       setTimeout(() => setToast(null), 2200);
       return;
     }
-    // Immediately remove from local list
     setPosts((prev) => prev.filter((p) => p.id !== post.id));
     setShowUndoToast(true);
-    setToast({ message: 'Deleted · Undo', type: 'info', action: 'Undo' });
 
-    // Start the countdown. If user taps Undo before it fires, we restore.
     const timerId = setTimeout(async () => {
       try {
         await hardDeleteSpotlightPost(post.id, user.uid);
       } catch (_) {}
       setPendingDelete(null);
       setShowUndoToast(false);
-      setToast(null);
     }, UNDO_WINDOW_MS);
 
     setPendingDelete({ post, timerId });
@@ -314,12 +315,28 @@ const SpotlightFeed = () => {
           <button
             type="button"
             className="spotlight-top-btn"
+            onClick={() => setNotifsOpen(true)}
+            aria-label="Activity"
+            title="Activity"
+          >
+            <i className="far fa-bell" />
+            {unreadCount > 0 && (
+              <span className="spotlight-top-badge">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            className="spotlight-top-btn"
             onClick={() => setMuted((m) => !m)}
             aria-label={muted ? 'Unmute' : 'Mute'}
             title={muted ? 'Unmute' : 'Mute'}
           >
             <i className={muted ? 'fas fa-volume-mute' : 'fas fa-volume-up'} />
           </button>
+
           <button
             type="button"
             className="spotlight-top-btn primary"
@@ -368,6 +385,7 @@ const SpotlightFeed = () => {
                 post={post}
                 isActive={i === activeIndex}
                 currentUser={user}
+                currentProfile={myProfile}
                 muted={muted}
                 onToggleMute={() => setMuted((m) => !m)}
                 onOpenComments={(p) => setCommentsFor(p)}
@@ -428,6 +446,14 @@ const SpotlightFeed = () => {
         onClose={() => setOptionsFor(null)}
         onToast={setToast}
         onConfirmDelete={handleConfirmDelete}
+      />
+
+      <SpotlightNotifications
+        isOpen={notifsOpen}
+        uid={user?.uid}
+        onClose={() => setNotifsOpen(false)}
+        onOpenPost={(id) => navigate(`/spotlight?focus=${id}`)}
+        onOpenProfile={(uid) => navigate(`/spotlight/user/${uid}`)}
       />
 
       {showUndoToast && (
