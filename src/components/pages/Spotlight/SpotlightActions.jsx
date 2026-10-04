@@ -22,7 +22,6 @@ const SpotlightActions = ({
 }) => {
   return (
     <div className="spotlight-actions">
-      {/* Author avatar with Echo (+ follow) indicator */}
       <button
         type="button"
         className="spotlight-actions-avatar-btn"
@@ -54,7 +53,6 @@ const SpotlightActions = ({
         )}
       </button>
 
-      {/* Like */}
       <button
         type="button"
         className={`spotlight-action ${liked ? 'active like' : ''}`}
@@ -67,7 +65,6 @@ const SpotlightActions = ({
         <span className="spotlight-action-count">{fmt(post.likeCount)}</span>
       </button>
 
-      {/* Comment */}
       <button
         type="button"
         className="spotlight-action"
@@ -80,7 +77,6 @@ const SpotlightActions = ({
         <span className="spotlight-action-count">{fmt(post.commentCount)}</span>
       </button>
 
-      {/* Reecho */}
       <button
         type="button"
         className={`spotlight-action ${reechoed ? 'active reecho' : ''}`}
@@ -94,7 +90,6 @@ const SpotlightActions = ({
         <span className="spotlight-action-count">{fmt(post.reechoCount)}</span>
       </button>
 
-      {/* Share */}
       <button
         type="button"
         className="spotlight-action"
