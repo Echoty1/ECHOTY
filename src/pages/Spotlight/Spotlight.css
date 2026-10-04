@@ -1440,3 +1440,75 @@
   .spotlight-options-backdrop { padding-bottom: 84px; }
   .spotlight-options-sheet { max-width: 100%; margin: 0 6px; }
 }
+/* ═══════════════════════════════════════════════════════════════
+   PULL-TO-REFRESH INDICATOR
+   ═══════════════════════════════════════════════════════════════ */
+
+.spotlight-pull-indicator {
+  position: absolute;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.65);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.spotlight-pull-indicator i {
+  font-size: 12px;
+  color: #a78bfa;
+}
+.spotlight-pull-indicator i.fa-spinner { color: #ec4899; }
+
+/* ═══════════════════════════════════════════════════════════════
+   "NEW SPOTLIGHT ↑" PILL
+   ═══════════════════════════════════════════════════════════════ */
+
+.spotlight-new-pill {
+  position: absolute;
+  top: 76px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 18px;
+  border-radius: 999px;
+  border: none;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  box-shadow: 0 10px 28px rgba(108, 60, 225, 0.5);
+  animation: spotlightPillIn 0.3s cubic-bezier(0.2, 1.3, 0.4, 1);
+  transition: transform 0.15s ease;
+}
+.spotlight-new-pill:hover { transform: translateX(-50%) translateY(-1px) scale(1.03); }
+.spotlight-new-pill:active { transform: translateX(-50%) translateY(0) scale(0.97); }
+.spotlight-new-pill i { font-size: 12px; }
+
+@keyframes spotlightPillIn {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(-14px); }
+  100% { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+@media (max-width: 480px) {
+  .spotlight-pull-indicator { top: 60px; font-size: 11px; padding: 7px 14px; }
+  .spotlight-new-pill { top: 68px; font-size: 12px; padding: 8px 16px; }
+}
