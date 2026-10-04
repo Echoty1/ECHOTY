@@ -2158,3 +2158,44 @@
   .spotlight-notifs-sheet { max-height: calc(74vh - 84px); max-width: 100%; margin: 0 6px; }
   .spotlight-notif-text { font-size: 13px; }
 }
+.spotlight-share-preview {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #000;
+  margin-bottom: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  position: relative;
+}
+.spotlight-share-preview-media {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  display: block;
+  background: #000;
+}
+.spotlight-share-preview-loading {
+  min-height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #a78bfa;
+  font-size: 22px;
+}
+.spotlight-share-preview-label {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(0, 0, 0, 0.7);
+  color: #10b981;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}
