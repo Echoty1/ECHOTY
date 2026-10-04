@@ -1,5 +1,6 @@
 // src/components/pages/Other/About.js
 import React, { useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import './About.css';
@@ -9,7 +10,15 @@ const About = () => {
     {
       icon: 'fa-pen-fancy',
       title: 'The Beginning',
-      text: 'Lawal Abdul Malik wrote the first ECHO by hand in HTML, CSS, and JavaScript. It was a raw idea: a chat that felt like you.'
+      text: (
+        <>
+          <Link to="/lawal-abdulmalik" className="about-founder-link">
+            Lawal Abdul Malik
+          </Link>{' '}
+          wrote the first ECHO by hand in HTML, CSS, and JavaScript. It was a raw
+          idea: a chat that felt like you.
+        </>
+      ),
     },
     {
       icon: 'fa-code-branch',
@@ -72,13 +81,31 @@ const About = () => {
 
   return (
     <>
-      <SEO title="About ECHO" description="The story and product behind ECHO." />
+      <SEO
+        title="About ECHO — Founded by Lawal Abdulmalik"
+        description="The story and product behind ECHO (Echoty), the future of chat. Founded by Lawal Abdulmalik in 2024."
+        image="https://echoty.xyz/lawal-abdulmalik.jpg"
+      />
       <StructuredData />
       <div className="about-page">
         <header className="about-hero">
           <p className="about-kicker">ECHO</p>
           <h1>Made to be heard.</h1>
           <p>Discover. Connect. Echo.</p>
+
+          {/* ─── Founder card (SEO signal for Knowledge Panel) ─── */}
+          <Link to="/lawal-abdulmalik" className="about-founder-card">
+            <img
+              src="/lawal-abdulmalik.jpg"
+              alt="Lawal Abdulmalik, Founder & CEO of ECHO"
+              className="about-founder-photo"
+              loading="lazy"
+            />
+            <div className="about-founder-meta">
+              <span className="about-founder-name">Lawal Abdulmalik</span>
+              <span className="about-founder-role">Founder &amp; CEO of ECHO</span>
+            </div>
+          </Link>
         </header>
 
         <div className="about-timeline">
@@ -93,7 +120,7 @@ const About = () => {
               </div>
               <div className="about-item-content">
                 <h3>{section.title}</h3>
-                <p>{section.text}</p>
+                {typeof section.text === 'string' ? <p>{section.text}</p> : <p>{section.text}</p>}
               </div>
               {index < sections.length - 1 && <div className="about-item-line" />}
             </div>
