@@ -79,9 +79,6 @@ const SpotlightUpload = () => {
         if (xhr.status === 200) {
           try {
             const data = JSON.parse(xhr.responseText);
-            console.log('[Spotlight] Cloudinary response:', data);
-            // Only build a thumbnail URL if Cloudinary provides a public_id;
-            // otherwise leave it empty (video preview will just be the video itself).
             const safePoster = isVideo && data.public_id
               ? `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload/so_0/${data.public_id}.jpg`
               : '';
@@ -96,7 +93,6 @@ const SpotlightUpload = () => {
             reject(err);
           }
         } else {
-          console.error('[Spotlight] Cloudinary error response:', xhr.responseText);
           reject(new Error(`Cloudinary ${xhr.status}`));
         }
       };
@@ -109,11 +105,9 @@ const SpotlightUpload = () => {
     if (!file || !user?.uid || uploading) return;
     setUploading(true);
     setProgress(0);
-    console.log('[Spotlight] Starting publish, size:', file.size, 'type:', file.type);
 
     try {
       const res = await uploadToCloudinary(file, setProgress);
-      console.log('[Spotlight] Upload succeeded, now writing to Firebase…');
 
       const postId = await publishSpotlightPost({
         uid: user.uid,
@@ -128,9 +122,12 @@ const SpotlightUpload = () => {
         height: res.height,
       });
 
-      console.log('[Spotlight] Post written with id:', postId);
       setToast({ message: 'Posted to Spotlight! 🎬', type: 'success' });
-      setTimeout(() => navigate('/spotlight'), 900);
+
+      // Navigate to the feed with ?focus=<postId> so the feed puts this post first.
+      setTimeout(() => {
+        navigate(`/spotlight?focus=${postId}`);
+      }, 600);
     } catch (err) {
       console.error('[Spotlight] Publish FAILED:', err?.code || '', err?.message || err);
       const msg = err?.message?.includes('PERMISSION_DENIED')
