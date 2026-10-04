@@ -18,7 +18,9 @@ const SpotlightActions = ({
   onShare,
   onReecho,
   onEcho,
+  onDuet,
   onAuthorTap,
+  showDuet = true,
 }) => {
   return (
     <div className="spotlight-actions">
@@ -89,6 +91,23 @@ const SpotlightActions = ({
         </span>
         <span className="spotlight-action-count">{fmt(post.reechoCount)}</span>
       </button>
+
+      {showDuet && (
+        <button
+          type="button"
+          className="spotlight-action duet"
+          onClick={onDuet}
+          aria-label="Duet"
+          title="Duet this Spotlight"
+        >
+          <span className="spotlight-action-icon">
+            <i className="fas fa-clone" />
+          </span>
+          <span className="spotlight-action-count">
+            {post.duetCount ? fmt(post.duetCount) : 'Duet'}
+          </span>
+        </button>
+      )}
 
       <button
         type="button"
