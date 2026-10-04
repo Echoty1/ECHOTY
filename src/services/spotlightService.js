@@ -4,19 +4,6 @@ import {
 } from 'firebase/database';
 import { db } from './firebase';
 
-/* ─────────────────────────────────────────────────────────────
-   Paths:
-     spotlight/posts/{postId}                     → the post itself
-     spotlight/posts/{postId}/likes/{uid}         → true
-     spotlight/posts/{postId}/comments/{id}       → { uid, text, createdAt }
-     spotlight/posts/{postId}/reechoes/{uid}      → timestamp
-     spotlight/users/{uid}/posts/{postId}         → true  (author index)
-     spotlight/users/{uid}/reechoed/{postId}      → timestamp (repost index)
-     spotlight/echoes/{followerUid}/{authorUid}   → timestamp (follow graph)
-     spotlight/echoers/{authorUid}/{followerUid}  → timestamp (reverse index for counts)
-     spotlight/views/{uid}/{postId}               → timestamp (so we don't over-rank seen posts)
-   ───────────────────────────────────────────────────────────── */
-
 const ROOT = 'spotlight';
 
 /* ─── Upload / publish ─────────────────────────────────────── */
@@ -26,10 +13,10 @@ export const publishSpotlightPost = async ({
   authorName,
   authorAvatar,
   mediaUrl,
-  mediaType, // 'video' | 'image'
-  posterUrl, // optional thumbnail for videos
+  mediaType,
+  posterUrl,
   caption,
-  duration,  // seconds, optional
+  duration,
   width,
   height,
 }) => {
@@ -61,6 +48,7 @@ export const publishSpotlightPost = async ({
 
   await set(newRef, payload);
   await set(ref(db, `${ROOT}/users/${uid}/posts/${postId}`), Date.now());
+  console.log('[Spotlight] Published post:', postId);
   return postId;
 };
 
@@ -71,14 +59,24 @@ export const deleteSpotlightPost = async (uid, postId) => {
   await remove(ref(db, `${ROOT}/users/${uid}/reechoed/${postId}`)).catch(() => {});
 };
 
-/* ─── Feed fetch ───────────────────────────────────────────── */
+/* ─── Feed fetch — VERBOSE ────────────────────────────────── */
 
 export const fetchSpotlightFeed = async ({ maxCount = 60 } = {}) => {
-  const postsRef = query(ref(db, `${ROOT}/posts`), orderByChild('createdAt'), limitToLast(maxCount));
-  const snap = await get(postsRef);
-  if (!snap.exists()) return [];
-  const all = Object.entries(snap.val()).map(([id, val]) => ({ id, ...val }));
-  return all.filter((p) => !p.deleted);
+  try {
+    const postsRef = query(ref(db, `${ROOT}/posts`), orderByChild('createdAt'), limitToLast(maxCount));
+    const snap = await get(postsRef);
+    if (!snap.exists()) {
+      console.log('[Spotlight] Feed is empty (no /spotlight/posts node)');
+      return [];
+    }
+    const all = Object.entries(snap.val()).map(([id, val]) => ({ id, ...val }));
+    const visible = all.filter((p) => !p.deleted);
+    console.log(`[Spotlight] Feed fetched ${visible.length} posts (${all.length} total)`);
+    return visible;
+  } catch (err) {
+    console.error('[Spotlight] fetchSpotlightFeed ERROR:', err?.code || '', err?.message || err);
+    throw err;
+  }
 };
 
 export const listenToSpotlightPost = (postId, cb) => {
@@ -208,7 +206,7 @@ export const listenToSpotlightReecho = (postId, uid, cb) => {
   return onValue(ref(db, `${ROOT}/posts/${postId}/reechoes/${uid}`), (snap) => cb(!!snap.val()));
 };
 
-/* ─── Echo (follow the author) ─────────────────────────────── */
+/* ─── Echo (follow author) ─────────────────────────────────── */
 
 export const toggleEchoAuthor = async (authorUid, myUid) => {
   if (!authorUid || !myUid || authorUid === myUid) return false;
@@ -239,7 +237,7 @@ export const fetchEchoersCount = async (authorUid) => {
   return snap.exists() ? Object.keys(snap.val()).length : 0;
 };
 
-/* ─── Views (used for ranking) ─────────────────────────────── */
+/* ─── Views ────────────────────────────────────────────────── */
 
 export const markSpotlightSeen = async (uid, postId) => {
   if (!uid || !postId) return;
@@ -249,12 +247,17 @@ export const markSpotlightSeen = async (uid, postId) => {
 
 export const fetchSeenSpotlightIds = async (uid) => {
   if (!uid) return new Set();
-  const snap = await get(ref(db, `${ROOT}/views/${uid}`));
-  if (!snap.exists()) return new Set();
-  return new Set(Object.keys(snap.val()));
+  try {
+    const snap = await get(ref(db, `${ROOT}/views/${uid}`));
+    if (!snap.exists()) return new Set();
+    return new Set(Object.keys(snap.val()));
+  } catch (err) {
+    console.warn('[Spotlight] fetchSeenSpotlightIds failed (probably no rules yet):', err?.code);
+    return new Set();
+  }
 };
 
-/* ─── Ranking (For You) ────────────────────────────────────── */
+/* ─── Ranking ──────────────────────────────────────────────── */
 
 export const rankSpotlightFeed = (posts, seenSet = new Set()) => {
   const now = Date.now();
@@ -265,7 +268,7 @@ export const rankSpotlightFeed = (posts, seenSet = new Set()) => {
       const reechoes = p.reechoCount || 0;
       const views = p.viewCount || 0;
       const ageHrs = Math.max(0, (now - (p.createdAt || now)) / 3600000);
-      const recencyBoost = Math.max(0, 72 - ageHrs) / 6; // fade over ~3 days
+      const recencyBoost = Math.max(0, 72 - ageHrs) / 6;
       const seenPenalty = seenSet.has(p.id) ? -6 : 0;
       const engagement = likes * 2 + comments * 1.5 + reechoes * 2.5 + Math.min(views, 100) * 0.2;
       const score = engagement + recencyBoost + seenPenalty;
