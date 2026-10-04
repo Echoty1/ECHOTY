@@ -6,7 +6,7 @@ import { useProfile } from '../../contexts/ProfileContext';
 import Toast from '../../components/Toast/Toast';
 import SpotlightPost from './SpotlightPost';
 import SpotlightComments from './SpotlightComments';
-import SpotifyShare from './SpotlightShare';
+import SpotlightShare from './SpotlightShare';
 import {
   fetchSpotlightFeed,
   rankSpotlightFeed,
@@ -213,7 +213,7 @@ const SpotlightFeed = () => {
       />
 
       {/* Share sheet */}
-      <SpotifyShare
+      <SpotlightShare
         isOpen={!!shareFor}
         post={shareFor}
         currentUser={user}
