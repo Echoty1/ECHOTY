@@ -7,10 +7,12 @@ import Toast from '../../components/Toast/Toast';
 import SpotlightPost from './SpotlightPost';
 import SpotlightComments from './SpotlightComments';
 import SpotlightShare from './SpotlightShare';
+import SpotlightOptions from './SpotlightOptions';
 import {
   fetchSpotlightFeed,
   rankSpotlightFeed,
   fetchSeenSpotlightIds,
+  deleteSpotlightPost,
 } from '../../services/spotlightService';
 
 const SpotlightFeed = () => {
@@ -22,7 +24,6 @@ const SpotlightFeed = () => {
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
-  // ─── Persist mute preference ────────────────────────────────
   const [muted, setMuted] = useState(() => {
     try {
       const saved = localStorage.getItem('echo_spotlight_muted');
@@ -33,6 +34,7 @@ const SpotlightFeed = () => {
   });
   const [commentsFor, setCommentsFor] = useState(null);
   const [shareFor, setShareFor] = useState(null);
+  const [optionsFor, setOptionsFor] = useState(null);
   const [toast, setToast] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
 
@@ -40,14 +42,12 @@ const SpotlightFeed = () => {
   const videoRefs = useRef({});
   const focusPostId = params.get('post');
 
-  // Save mute preference whenever it changes
   useEffect(() => {
     try {
       localStorage.setItem('echo_spotlight_muted', muted ? '1' : '0');
     } catch (_) {}
   }, [muted]);
 
-  /* Load profile of current user for comment authorship */
   useEffect(() => {
     if (!user?.uid) return;
     const cached = getProfile(user.uid);
@@ -55,7 +55,6 @@ const SpotlightFeed = () => {
     else fetchProfile(user.uid);
   }, [user?.uid, getProfile, fetchProfile]);
 
-  /* Fetch the feed */
   const loadFeed = useCallback(async () => {
     setLoading(true);
     try {
@@ -84,7 +83,6 @@ const SpotlightFeed = () => {
 
   useEffect(() => { loadFeed(); }, [loadFeed]);
 
-  /* Snap-scroll: track which slide is active using IntersectionObserver */
   useEffect(() => {
     const container = containerRef.current;
     if (!container || posts.length === 0) return;
@@ -106,12 +104,12 @@ const SpotlightFeed = () => {
     return () => observer.disconnect();
   }, [posts.length]);
 
-  /* Escape closes any sheet */
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') {
         setCommentsFor(null);
         setShareFor(null);
+        setOptionsFor(null);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -123,20 +121,30 @@ const SpotlightFeed = () => {
     else delete videoRefs.current[postId];
   }, []);
 
-  const scrollToIndex = (i) => {
-    const container = containerRef.current;
-    if (!container) return;
-    const slide = container.querySelector(`.spotlight-slide[data-index="${i}"]`);
-    slide?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  };
-
   const handleOpenProfile = (uid) => {
     navigate(`/spotlight/user/${uid}`);
   };
 
+  const handleOpenOptions = useCallback((post) => {
+    setOptionsFor(post);
+  }, []);
+
+  const handleDeletePost = useCallback(async (post) => {
+    if (!post || !user?.uid) return;
+    try {
+      await deleteSpotlightPost(user.uid, post.id);
+      setPosts((prev) => prev.filter((p) => p.id !== post.id));
+      setToast({ message: 'Spotlight deleted', type: 'success' });
+      setTimeout(() => setToast(null), 2200);
+    } catch (err) {
+      console.warn('Delete failed:', err);
+      setToast({ message: 'Could not delete', type: 'error' });
+      setTimeout(() => setToast(null), 2200);
+    }
+  }, [user?.uid]);
+
   return (
     <div className="spotlight-feed-page">
-      {/* Top bar */}
       <div className="spotlight-top-bar">
         <h1 className="spotlight-top-title">
           <span className="spotlight-top-title-tick" />
@@ -165,7 +173,6 @@ const SpotlightFeed = () => {
         </div>
       </div>
 
-      {/* Feed */}
       <div className="spotlight-feed-container" ref={containerRef}>
         {loading ? (
           <div className="spotlight-feed-loading">
@@ -187,11 +194,7 @@ const SpotlightFeed = () => {
           </div>
         ) : (
           posts.map((post, i) => (
-            <div
-              key={post.id}
-              className="spotlight-slide"
-              data-index={i}
-            >
+            <div key={post.id} className="spotlight-slide" data-index={i}>
               <SpotlightPost
                 post={post}
                 isActive={i === activeIndex}
@@ -200,6 +203,7 @@ const SpotlightFeed = () => {
                 onToggleMute={() => setMuted((m) => !m)}
                 onOpenComments={(p) => setCommentsFor(p)}
                 onOpenShare={(p) => setShareFor(p)}
+                onOpenOptions={handleOpenOptions}
                 onOpenProfile={handleOpenProfile}
                 onRegisterVideo={handleRegisterVideo}
               />
@@ -208,7 +212,6 @@ const SpotlightFeed = () => {
         )}
       </div>
 
-      {/* Floating counter */}
       {posts.length > 1 && (
         <div className="spotlight-feed-counter" aria-hidden="true">
           <span>{activeIndex + 1}</span>
@@ -217,7 +220,6 @@ const SpotlightFeed = () => {
         </div>
       )}
 
-      {/* Comments sheet */}
       <SpotlightComments
         isOpen={!!commentsFor}
         post={commentsFor}
@@ -226,13 +228,21 @@ const SpotlightFeed = () => {
         onClose={() => setCommentsFor(null)}
       />
 
-      {/* Share sheet */}
       <SpotlightShare
         isOpen={!!shareFor}
         post={shareFor}
         currentUser={user}
         onClose={() => setShareFor(null)}
         onToast={setToast}
+      />
+
+      <SpotlightOptions
+        isOpen={!!optionsFor}
+        post={optionsFor}
+        currentUser={user}
+        onClose={() => setOptionsFor(null)}
+        onToast={setToast}
+        onDeleted={handleDeletePost}
       />
 
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
