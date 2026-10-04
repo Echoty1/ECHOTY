@@ -122,12 +122,12 @@ const SpotlightUpload = () => {
         height: res.height,
       });
 
-      setToast({ message: 'Posted to Spotlight! 🎬', type: 'success' });
-
-      // Navigate to the feed with ?focus=<postId> so the feed puts this post first.
-      setTimeout(() => {
-        navigate(`/spotlight?focus=${postId}`);
-      }, 600);
+      // Navigate immediately. Pass the freshly-published post as router
+      // state so the feed trusts it without re-fetching.
+      navigate('/spotlight', {
+        replace: true,
+        state: { freshPostId: postId },
+      });
     } catch (err) {
       console.error('[Spotlight] Publish FAILED:', err?.code || '', err?.message || err);
       const msg = err?.message?.includes('PERMISSION_DENIED')
