@@ -51,6 +51,11 @@ import { formatLastSeen } from '../../../utils/formatLastSeen';
 import { isBlocked as checkIsBlocked, unblockUser } from '../../../services/blockService';
 import './ChatView.css';
 
+// ─── NEW: Link preview imports ──────────────────────────────────
+import LinkPreviewCard from './LinkPreviewCard';
+import { extractFirstUrl, fetchLinkPreview } from '../../../utils/linkPreview';
+// ────────────────────────────────────────────────────────────────
+
 /* ─────────────────────────────────────────────────────────────
    Visual-viewport hook (unchanged)
    ───────────────────────────────────────────────────────────── */
@@ -660,6 +665,19 @@ const ChatView = () => {
     if (currentNoteReply) msgData.replyToNote = { ...currentNoteReply };
 
     try { await set(newMsgRef, msgData); } catch (err) { console.error('Send failed:', err); setMessages((prev) => prev.filter((m) => m.id !== tempId)); return; }
+
+    // ─── NEW: Detect URL and fetch link preview in the background ──
+    const detectedUrl = extractFirstUrl(textToSend);
+    if (detectedUrl) {
+      fetchLinkPreview(detectedUrl)
+        .then((preview) => {
+          if (!preview) return;
+          // Attach the preview to the message we just sent
+          update(ref(db, `chats/${cId}/messages/${newMsgRef.key}`), { linkPreview: preview }).catch(() => {});
+        })
+        .catch(() => {});
+    }
+    // ─────────────────────────────────────────────────────────────
 
     if (currentNoteReply) publishNoteReply(textToSend);
     triggerSendRipple();
@@ -1335,7 +1353,25 @@ const ChatView = () => {
       }
       content = shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}{inner}</>);
     } else {
-      content = shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}<div className="message-text" style={{ whiteSpace: userId === ECHO_AI_ID && !isOwn ? 'normal' : 'pre-wrap' }}>{userId === ECHO_AI_ID && !isOwn ? <AiRichText text={msg.text} onFollowup={(q) => handleSendText(q)} /> : msg.text}{msg.isEdited && <span className="message-edited-badge">(edited)</span>}</div></>);
+      content = shell(<>
+        {replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}
+        {noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}
+        <div className="message-text" style={{ whiteSpace: userId === ECHO_AI_ID && !isOwn ? 'normal' : 'pre-wrap' }}>
+          {userId === ECHO_AI_ID && !isOwn ? <AiRichText text={msg.text} onFollowup={(q) => handleSendText(q)} /> : msg.text}
+          {msg.isEdited && <span className="message-edited-badge">(edited)</span>}
+        </div>
+        {/* ─── NEW: Link Preview Card ─────────────────────────── */}
+        {msg.linkPreview && <LinkPreviewCard preview={msg.linkPreview} />}
+        {/* ─── NEW: Link Preview Loading Skeleton ─────────────── */}
+        {!msg.linkPreview && !msg.pending && extractFirstUrl(msg.text || '') && (
+          <div className="link-preview-loading">
+            <div className="link-preview-skeleton-line w70" />
+            <div className="link-preview-skeleton-line w90" />
+            <div className="link-preview-skeleton-line w50" />
+          </div>
+        )}
+        {/* ────────────────────────────────────────────────────── */}
+      </>);
     }
 
     return (
