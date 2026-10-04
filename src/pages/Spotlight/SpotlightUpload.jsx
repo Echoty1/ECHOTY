@@ -8,7 +8,7 @@ import { publishSpotlightPost } from '../../services/spotlightService';
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
-const MAX_FILE_SIZE = 100 * 1024 * 1024; // 100 MB for videos
+const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
 const SpotlightUpload = () => {
   const { user } = useAuth();
@@ -62,7 +62,9 @@ const SpotlightUpload = () => {
       const form = new FormData();
       form.append('file', f);
       form.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-      const endpoint = f.type.startsWith('video/')
+
+      const isVideo = f.type.startsWith('video/');
+      const endpoint = isVideo
         ? `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/video/upload`
         : `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`;
 
@@ -77,15 +79,26 @@ const SpotlightUpload = () => {
         if (xhr.status === 200) {
           try {
             const data = JSON.parse(xhr.responseText);
+            console.log('[Spotlight] Cloudinary response:', data);
+            // Only build a thumbnail URL if Cloudinary provides a public_id;
+            // otherwise leave it empty (video preview will just be the video itself).
+            const safePoster = isVideo && data.public_id
+              ? `https://res.cloudinary.com/${CLOUDINARY_CLOUD_NAME}/video/upload/so_0/${data.public_id}.jpg`
+              : '';
             resolve({
               url: data.secure_url,
-              posterUrl: data.secure_url.replace(/\.(mp4|mov|webm)$/i, '.jpg'),
+              posterUrl: safePoster,
               duration: data.duration || 0,
               width: data.width || 0,
               height: data.height || 0,
             });
-          } catch (err) { reject(err); }
-        } else reject(new Error('Upload failed'));
+          } catch (err) {
+            reject(err);
+          }
+        } else {
+          console.error('[Spotlight] Cloudinary error response:', xhr.responseText);
+          reject(new Error(`Cloudinary ${xhr.status}`));
+        }
       };
       xhr.onerror = () => reject(new Error('Network error'));
       xhr.send(form);
@@ -96,9 +109,13 @@ const SpotlightUpload = () => {
     if (!file || !user?.uid || uploading) return;
     setUploading(true);
     setProgress(0);
+    console.log('[Spotlight] Starting publish, size:', file.size, 'type:', file.type);
+
     try {
       const res = await uploadToCloudinary(file, setProgress);
-      await publishSpotlightPost({
+      console.log('[Spotlight] Upload succeeded, now writing to Firebase…');
+
+      const postId = await publishSpotlightPost({
         uid: user.uid,
         authorName: profile?.name || user.displayName || 'User',
         authorAvatar: profile?.avatar || '',
@@ -110,11 +127,16 @@ const SpotlightUpload = () => {
         width: res.width,
         height: res.height,
       });
+
+      console.log('[Spotlight] Post written with id:', postId);
       setToast({ message: 'Posted to Spotlight! 🎬', type: 'success' });
       setTimeout(() => navigate('/spotlight'), 900);
     } catch (err) {
-      console.error('Publish failed:', err);
-      setToast({ message: 'Upload failed. Try again.', type: 'error' });
+      console.error('[Spotlight] Publish FAILED:', err?.code || '', err?.message || err);
+      const msg = err?.message?.includes('PERMISSION_DENIED')
+        ? 'Permission denied — check Firebase rules'
+        : err?.message || 'Upload failed. Try again.';
+      setToast({ message: msg, type: 'error' });
       setUploading(false);
     }
   };
@@ -171,7 +193,6 @@ const SpotlightUpload = () => {
               />
             )}
 
-            {/* Watermark preview */}
             <div className="spotlight-upload-watermark">
               <span className="spotlight-upload-watermark-tick" />
               <span className="spotlight-upload-watermark-text">ECHO</span>
