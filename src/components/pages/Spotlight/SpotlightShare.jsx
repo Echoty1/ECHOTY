@@ -1,11 +1,11 @@
 // src/pages/Spotlight/SpotlightShare.jsx
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ref, get, onValue } from 'firebase/database';
+import { ref, onValue } from 'firebase/database';
 import { db } from '../../services/firebase';
 import { spotlightShareUrl, spotlightShareText } from '../../utils/echoWatermark';
 
-const SpotifyShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
+const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
   const navigate = useNavigate();
   const [chats, setChats] = useState([]);
   const [copied, setCopied] = useState(false);
@@ -145,4 +145,4 @@ const SpotifyShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
   );
 };
 
-export default SpotifyShare;
+export default SpotlightShare;
