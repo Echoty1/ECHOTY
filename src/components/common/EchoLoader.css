@@ -1,0 +1,69 @@
+/* src/components/common/EchoLoader.css */
+
+.echo-loader {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  pointer-events: none;
+  position: relative;
+}
+
+.echo-loader-rings {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.echo-loader-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  border-radius: 50%;
+  border: 2px solid rgba(167, 139, 250, 0.5);
+  transform: translate(-50%, -50%) scale(0.6);
+  animation: echoLoaderPulse 2s cubic-bezier(0.2, 0.9, 0.35, 1) infinite;
+}
+.echo-loader-ring.r1 { width: 60px; height: 60px; animation-delay: 0s; }
+.echo-loader-ring.r2 { width: 90px; height: 90px; animation-delay: 0.5s; border-color: rgba(236, 72, 153, 0.4); }
+.echo-loader-ring.r3 { width: 120px; height: 120px; animation-delay: 1s; border-color: rgba(108, 60, 225, 0.3); }
+
+@keyframes echoLoaderPulse {
+  0%   { transform: translate(-50%, -50%) scale(0.6); opacity: 0.9; }
+  70%  { transform: translate(-50%, -50%) scale(1.15); opacity: 0; }
+  100% { transform: translate(-50%, -50%) scale(1.15); opacity: 0; }
+}
+
+.echo-loader-mark {
+  position: relative;
+  z-index: 2;
+  animation: echoLoaderFloat 2.2s ease-in-out infinite;
+}
+.echo-loader-mark svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  filter: drop-shadow(0 4px 16px rgba(108, 60, 225, 0.4));
+}
+@keyframes echoLoaderFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-3px); }
+}
+
+/* Size variants */
+.echo-loader-sm .echo-loader-mark { width: 44px; height: 44px; }
+.echo-loader-md .echo-loader-mark { width: 72px; height: 72px; }
+.echo-loader-lg .echo-loader-mark { width: 100px; height: 100px; }
+
+.echo-loader-label {
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  z-index: 2;
+}
