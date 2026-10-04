@@ -18,6 +18,7 @@ const SpotlightPost = ({
   post,
   isActive,
   currentUser,
+  currentProfile,
   onOpenComments,
   onOpenShare,
   onOpenProfile,
@@ -52,7 +53,6 @@ const SpotlightPost = ({
     return () => unsubs.forEach((u) => u && u());
   }, [post?.id, post?.uid, currentUser?.uid]);
 
-  /* Play / pause (both videos for duets) */
   useEffect(() => {
     const v = videoRef.current;
     const s = sourceVideoRef.current;
@@ -78,13 +78,11 @@ const SpotlightPost = ({
     }
   }, [isActive, post.id, post.mediaType, currentUser?.uid]);
 
-  /* Sync source video to duet video */
   useEffect(() => {
     if (!isDuet) return;
     const v = videoRef.current;
     const s = sourceVideoRef.current;
     if (!v || !s) return;
-
     const sync = () => {
       try {
         if (Math.abs(v.currentTime - s.currentTime) > 0.25) {
@@ -96,7 +94,6 @@ const SpotlightPost = ({
     return () => v.removeEventListener('timeupdate', sync);
   }, [isDuet]);
 
-  /* Mute sync */
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -107,7 +104,6 @@ const SpotlightPost = ({
     return () => v.removeEventListener('loadedmetadata', onLoaded);
   }, [muted, isActive, post.id]);
 
-  /* Progress */
   useEffect(() => {
     const v = videoRef.current;
     if (!v || post.mediaType !== 'video') return;
@@ -130,7 +126,6 @@ const SpotlightPost = ({
     };
   }, [post.mediaType]);
 
-  /* Video readiness */
   useEffect(() => {
     const v = videoRef.current;
     if (!v || post.mediaType !== 'video') return;
@@ -198,21 +193,34 @@ const SpotlightPost = ({
     lastTapRef.current = now;
   };
 
+  const actorMeta = {
+    name: currentProfile?.name || currentUser?.displayName || 'Someone',
+    avatar: currentProfile?.avatar || '',
+  };
+  const postMeta = {
+    uid: post.uid,
+    posterUrl: post.posterUrl,
+    mediaUrl: post.mediaUrl,
+  };
+
   const handleLike = useCallback(async (force = false) => {
     if (!currentUser?.uid) return;
     if (force && liked) return;
-    try { await toggleSpotlightLike(post.id, currentUser.uid); } catch (_) {}
-  }, [post.id, currentUser?.uid, liked]);
+    try { await toggleSpotlightLike(post.id, currentUser.uid, actorMeta, postMeta); } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post.id, post.uid, currentUser?.uid, currentProfile?.name, currentProfile?.avatar, liked, post.posterUrl, post.mediaUrl]);
 
   const handleReecho = useCallback(async () => {
     if (!currentUser?.uid) return;
-    try { await toggleSpotlightReecho(post.id, currentUser.uid); } catch (_) {}
-  }, [post.id, currentUser?.uid]);
+    try { await toggleSpotlightReecho(post.id, currentUser.uid, actorMeta, postMeta); } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post.id, post.uid, currentUser?.uid, currentProfile?.name, currentProfile?.avatar, post.posterUrl, post.mediaUrl]);
 
   const handleEcho = useCallback(async () => {
     if (!currentUser?.uid || post.uid === currentUser.uid) return;
-    try { await toggleEchoAuthor(post.uid, currentUser.uid); } catch (_) {}
-  }, [post.uid, currentUser?.uid]);
+    try { await toggleEchoAuthor(post.uid, currentUser.uid, actorMeta); } catch (_) {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post.uid, currentUser?.uid, currentProfile?.name, currentProfile?.avatar]);
 
   const handleDuet = useCallback(() => {
     if (!currentUser?.uid) return;
@@ -249,11 +257,7 @@ const SpotlightPost = ({
           <div className="spotlight-duet-frame">
             <div className="spotlight-duet-half top">
               {post.duet.sourceMediaType === 'image' ? (
-                <img
-                  src={post.duet.sourceMediaUrl}
-                  alt=""
-                  className="spotlight-duet-media"
-                />
+                <img src={post.duet.sourceMediaUrl} alt="" className="spotlight-duet-media" />
               ) : (
                 <video
                   ref={sourceVideoRef}
