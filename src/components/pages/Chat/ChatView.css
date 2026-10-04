@@ -2711,102 +2711,158 @@ body.light .echo-reaction-emoji:hover {
    ★ NEW: Link preview card
    ═══════════════════════════════════════════════════════════════ */
 
+./* ═══════════════════════════════════════════════════════════════
+   ★ Link Preview Card — Snapchat-style
+   ═══════════════════════════════════════════════════════════════ */
+
 .link-preview-card {
   display: flex;
   flex-direction: column;
   margin-top: 8px;
-  border-radius: 14px;
+  border-radius: 16px;
   overflow: hidden;
   background: rgba(255, 255, 255, 0.06);
-  border-left: 3px solid #6C3CE1;
+  border: 1px solid rgba(255, 255, 255, 0.08);
   cursor: pointer;
-  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
   max-width: 420px;
-  min-width: 220px;
+  min-width: 260px;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
+
 html.theme-light .link-preview-card,
 html[data-theme="light"] .link-preview-card,
 body.light .link-preview-card {
-  background: rgba(0, 0, 0, 0.04);
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
 }
+
 .link-preview-card:hover {
+  transform: translateY(-2px);
   background: rgba(255, 255, 255, 0.1);
-  transform: translateY(-1px);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.25);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
 }
 html.theme-light .link-preview-card:hover,
 html[data-theme="light"] .link-preview-card:hover,
 body.light .link-preview-card:hover {
-  background: rgba(0, 0, 0, 0.07);
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
+
 .link-preview-card:active {
   transform: translateY(0) scale(0.99);
 }
 
+/* ─── Big hero image ─── */
 .link-preview-image {
   width: 100%;
-  max-height: 190px;
+  max-height: 220px;
   overflow: hidden;
-  background: rgba(0, 0, 0, 0.25);
+  background: rgba(0, 0, 0, 0.3);
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
 }
 .link-preview-image img {
   width: 100%;
   height: auto;
-  max-height: 190px;
+  max-height: 220px;
   object-fit: cover;
   display: block;
 }
 
+/* ─── Body ─── */
 .link-preview-body {
-  padding: 10px 12px 11px;
+  padding: 12px 14px 14px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   min-width: 0;
 }
 
-.link-preview-host {
+/* ─── Header row with big logo ─── */
+.link-preview-header {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-weight: 600;
+  gap: 12px;
   min-width: 0;
 }
-.link-preview-favicon,
-.link-preview-favicon-fallback {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
+
+.link-preview-logo-box {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 12px;
+  background: rgba(108, 60, 225, 0.15);
+  border: 1px solid rgba(108, 60, 225, 0.25);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
   flex-shrink: 0;
-  object-fit: contain;
+  padding: 6px;
+  box-sizing: border-box;
 }
-.link-preview-favicon-fallback {
+html.theme-light .link-preview-logo-box,
+html[data-theme="light"] .link-preview-logo-box,
+body.light .link-preview-logo-box {
+  background: rgba(108, 60, 225, 0.08);
+  border-color: rgba(108, 60, 225, 0.18);
+}
+
+.link-preview-logo {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  display: block;
+  border-radius: 6px;
+}
+
+.link-preview-logo-fallback {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(108, 60, 225, 0.25);
+  width: 100%;
+  height: 100%;
   color: #a78bfa;
-  font-size: 8px;
+  font-size: 18px;
 }
+
+/* ─── Header text ─── */
+.link-preview-header-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1;
+}
+
 .link-preview-host-text {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: 100%;
 }
 
+.link-preview-url {
+  font-size: 11.5px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ─── Title ─── */
 .link-preview-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 700;
   color: var(--text-primary);
   line-height: 1.3;
@@ -2815,58 +2871,75 @@ body.light .link-preview-card:hover {
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-word;
+  margin-top: 2px;
 }
 
+/* ─── Description ─── */
 .link-preview-description {
-  font-size: 12.5px;
+  font-size: 13px;
   color: var(--text-secondary);
-  line-height: 1.35;
+  line-height: 1.4;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
   word-break: break-word;
 }
 
-.link-preview-url {
-  font-size: 11px;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  margin-top: 2px;
-}
-
-/* For OWN messages (purple bubble) — adjust card tint so it doesn't clash */
+/* ─── On OWN messages (purple bubble) ─── */
 .message-bubble.own .link-preview-card {
-  background: rgba(0, 0, 0, 0.22);
-  border-left-color: #c4b5fd;
+  background: rgba(0, 0, 0, 0.25);
+  border-color: rgba(255, 255, 255, 0.12);
 }
 .message-bubble.own .link-preview-card:hover {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.35);
 }
-.message-bubble.own .link-preview-title { color: #fff; }
+.message-bubble.own .link-preview-logo-box {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
+}
+.message-bubble.own .link-preview-title { color: #ffffff; }
 .message-bubble.own .link-preview-description { color: rgba(255, 255, 255, 0.85); }
-.message-bubble.own .link-preview-host { color: rgba(255, 255, 255, 0.7); }
-.message-bubble.own .link-preview-url { color: rgba(255, 255, 255, 0.6); }
+.message-bubble.own .link-preview-host-text { color: #ffffff; }
+.message-bubble.own .link-preview-url { color: rgba(255, 255, 255, 0.65); }
+.message-bubble.own .link-preview-logo-fallback { color: #ffffff; }
 
-/* ─── Link preview loading skeleton ─────────────────────────── */
+/* ─── Loading skeleton ─── */
 .link-preview-loading {
   margin-top: 8px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.04);
-  border-left: 3px solid rgba(108, 60, 225, 0.4);
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   display: flex;
-  flex-direction: column;
-  gap: 6px;
-  max-width: 340px;
-  min-width: 200px;
+  align-items: center;
+  gap: 12px;
+  max-width: 360px;
+  min-width: 220px;
   animation: linkPreviewPulse 1.2s ease-in-out infinite;
 }
 @keyframes linkPreviewPulse {
   0%, 100% { opacity: 0.55; }
   50%      { opacity: 1; }
+}
+.link-preview-skeleton-logo {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+}
+html.theme-light .link-preview-skeleton-logo,
+html[data-theme="light"] .link-preview-skeleton-logo,
+body.light .link-preview-skeleton-logo {
+  background: rgba(0, 0, 0, 0.06);
+}
+.link-preview-skeleton-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
 }
 .link-preview-skeleton-line {
   height: 10px;
@@ -2876,7 +2949,7 @@ body.light .link-preview-card:hover {
 html.theme-light .link-preview-skeleton-line,
 html[data-theme="light"] .link-preview-skeleton-line,
 body.light .link-preview-skeleton-line {
-  background: rgba(0, 0, 0, 0.08);
+  background: rgba(0, 0, 0, 0.06);
 }
 .link-preview-skeleton-line.w70 { width: 70%; }
 .link-preview-skeleton-line.w90 { width: 90%; }
