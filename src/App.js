@@ -135,6 +135,7 @@ function AppContent() {
   const [playStoreUrl, setPlayStoreUrl] = useState('');
   const [appVersion] = useState(process.env.REACT_APP_VERSION || '1.0');
   const showLoading = loading || !minTimePassed;
+  const isSpotlightRoute = pathname.startsWith('/spotlight');
   const showHappr =
     Boolean(user) &&
     !showLoading &&
@@ -337,7 +338,7 @@ function AppContent() {
 
   return (
     <>
-      <Navbar />
+      {!isSpotlightRoute && <Navbar />}
       <MessageNotifier />
       <NetworkStatus />
       <DesktopInstallPrompt />
@@ -345,13 +346,13 @@ function AppContent() {
       <div
         id="main-content"
         style={{
-          paddingTop: '60px',
-          paddingBottom: '72px',
+          paddingTop: isSpotlightRoute ? 0 : '60px',
+          paddingBottom: isSpotlightRoute ? 0 : '72px',
           height: '100vh',
           overflowY: 'auto',
           overflowX: 'hidden',
           background: 'var(--bg-primary)',
-          maxWidth: '1400px',
+          maxWidth: isSpotlightRoute ? '100%' : '1400px',
           margin: '0 auto',
           width: '100%',
         }}
