@@ -1,28 +1,20 @@
 // src/services/spotlightDuets.js
-import { ref, push, set, remove, update, get, onValue, runTransaction, serverTimestamp } from 'firebase/database';
+import { ref, push, set, remove, get, onValue, runTransaction, serverTimestamp } from 'firebase/database';
 import { db } from './firebase';
+import { pushSpotlightNotification } from './spotlightNotifications';
 
 const ROOT = 'spotlight';
 
-/**
- * Publish a duet post.
- *
- * A duet is stored as a normal Spotlight post with `type: 'duet'` plus a
- * `duet` object referencing the source post. The feed renders duets as a
- * split-screen card (original on top, recording on bottom).
- */
 export const publishSpotlightDuet = async ({
   uid,
   authorName,
   authorAvatar,
-  mediaUrl,        // your reaction video (uploaded to Cloudinary)
+  mediaUrl,
   posterUrl,
   caption,
   duration,
   width,
   height,
-  // Source post fields (copied at publish time so the duet survives even if
-  // the source is later deleted — we keep a soft reference)
   sourcePostId,
   sourceUid,
   sourceAuthorName,
@@ -75,13 +67,11 @@ export const publishSpotlightDuet = async ({
   await set(newRef, payload);
   await set(ref(db, `${ROOT}/users/${uid}/posts/${postId}`), Date.now());
 
-  // Track duets count on the source post
   await runTransaction(
     ref(db, `${ROOT}/posts/${sourcePostId}/duetCount`),
     (c) => (c || 0) + 1
   ).catch(() => {});
 
-  // Index the duet under the source so we can show "N duets" on the original
   await set(
     ref(db, `${ROOT}/duets/${sourcePostId}/${postId}`),
     {
@@ -92,6 +82,19 @@ export const publishSpotlightDuet = async ({
       createdAt: Date.now(),
     }
   ).catch(() => {});
+
+  // Notify the source author
+  if (sourceUid && sourceUid !== uid) {
+    pushSpotlightNotification({
+      toUid: sourceUid,
+      actorUid: uid,
+      actorName: authorName || 'Someone',
+      actorAvatar: authorAvatar || '',
+      type: 'duet',
+      postId,
+      postThumb: posterUrl || mediaUrl || '',
+    }).catch(() => {});
+  }
 
   console.log('[Spotlight] Published duet:', postId, 'on', sourcePostId);
   return postId;
