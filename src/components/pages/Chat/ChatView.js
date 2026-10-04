@@ -212,6 +212,8 @@ const ChatView = () => {
   const fontSize = userSettings?.chats?.fontSize || 'md';
   // ─── Auto-save: driven by Settings → Chats → Media auto-download ───
   const autoSaveMedia = userSettings?.chats?.mediaAutoDownload === 'always';
+  // ─── Video playback mode: fullscreen (default) or inline ───
+  const videoFullscreenDefault = userSettings?.chats?.videoFullscreen !== false;
 
   const [blockedByMe, setBlockedByMe] = useState(false);
 
@@ -269,8 +271,8 @@ const ChatView = () => {
   const stampedLegacyTides = useRef(false);
   const [tideTick, setTideTick] = useState(Date.now());
 
-  // ─── NEW: download state per message ─────────────────────
-  const [savingIds, setSavingIds] = useState({}); // { [msgId]: 'saving' | 'saved' }
+  // ─── download state per message ─────────────────────
+  const [savingIds, setSavingIds] = useState({});
 
   const [pressedMsgId, setPressedMsgId] = useState(null);
   const [tappedEmoji, setTappedEmoji] = useState(null);
@@ -627,7 +629,7 @@ const ChatView = () => {
     noteReplyContext.current = null;
   };
 
-  // ─── NEW: Download / auto-save media to device ─────────────
+  // ─── Download / auto-save media to device ─────────────
   const handleDownloadMedia = async (msg, isAuto = false) => {
     if (!msg || !msg.mediaUrl || !msg.mediaUrl.startsWith('http')) return;
     const id = msg.id;
@@ -737,7 +739,6 @@ const ChatView = () => {
 
     try { await set(newMsgRef, msgData); } catch (err) { console.error('Send failed:', err); setMessages((prev) => prev.filter((m) => m.id !== tempId)); return; }
 
-    // ─── Detect URL and fetch link preview in the background ──
     const detectedUrl = extractFirstUrl(textToSend);
     if (detectedUrl) {
       fetchLinkPreview(detectedUrl)
@@ -747,7 +748,6 @@ const ChatView = () => {
         })
         .catch(() => {});
     }
-    // ─────────────────────────────────────────────────────────────
 
     if (currentNoteReply) publishNoteReply(textToSend);
     triggerSendRipple();
@@ -1176,7 +1176,6 @@ const ChatView = () => {
     }
   };
 
-  // ─── UPDATED: Snapchat-style media preview overlay ─────────
   const renderPreviewOverlay = () => {
     if (!previewUrl) return null;
     return (
@@ -1781,7 +1780,6 @@ const ChatView = () => {
   return (
     <>
       <style>{`
-        /* ═══════════ Reaction bar ═══════════ */
         .echo-reaction-backdrop { position: fixed; inset: 0; z-index: 998; background: transparent; }
         .echo-reaction-bar { position: fixed; z-index: 1000; display: flex; align-items: center; gap: 2px; background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 999px; padding: 6px 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); transform: translateX(-50%); transform-origin: bottom center; animation: snapReactionPop 0.22s cubic-bezier(0.2, 1.3, 0.4, 1) both; }
         html[data-theme="light"] .echo-reaction-bar, html.theme-light .echo-reaction-bar { background: #ffffff; border-color: rgba(0, 0, 0, 0.08); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
@@ -2316,7 +2314,13 @@ const ChatView = () => {
         <EditMediaCaptionModal isOpen={!!editingMediaMessage} onClose={() => setEditingMediaMessage(null)} currentCaption={editingMediaMessage?.caption || ''} mediaType={editingMediaMessage?.mediaType} onSave={saveEditedMediaCaption} />
 
         {mediaPreview && (<MediaPreview src={mediaPreview.src} type={mediaPreview.type} alt={mediaPreview.alt} onClose={() => setMediaPreview(null)} />)}
-        {videoPreview && (<CustomVideoPlayer src={videoPreview.src} onClose={() => setVideoPreview(null)} />)}
+        {videoPreview && (
+          <CustomVideoPlayer
+            src={videoPreview.src}
+            autoFullscreen={videoFullscreenDefault}
+            onClose={() => setVideoPreview(null)}
+          />
+        )}
 
         {showWallpaperPicker && (
           <WallpaperPicker current={wallpaperId} currentCustom={customWallpaper} onSelect={handleWallpaperSelect} onSelectCustom={handleCustomWallpaperSelect} onClose={() => setShowWallpaperPicker(false)} />
