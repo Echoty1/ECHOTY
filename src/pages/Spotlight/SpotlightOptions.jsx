@@ -1,6 +1,6 @@
 // src/pages/Spotlight/SpotlightOptions.jsx
 import React, { useEffect, useState } from 'react';
-import ConfirmModal from '../../common/ConfirmModal';
+import ConfirmModal from '../../components/common/ConfirmModal';
 
 const SITE = 'https://echoty.xyz';
 
