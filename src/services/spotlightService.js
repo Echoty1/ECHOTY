@@ -3,6 +3,7 @@ import {
   ref, push, set, update, remove, get, onValue, runTransaction, serverTimestamp, query, orderByChild, limitToLast,
 } from 'firebase/database';
 import { db } from './firebase';
+import { pushSpotlightNotification } from './spotlightNotifications';
 
 const ROOT = 'spotlight';
 
@@ -87,11 +88,6 @@ export const deleteSpotlightPost = async (uid, postId) => {
 
 /* ─── Soft delete + undo (used by the 5s undo flow) ────────── */
 
-/**
- * Marks a post as deleted but keeps the data intact so it can be
- * restored within the undo window. The post disappears from the feed
- * immediately (listenToSpotlightFeed filters out deleted === true).
- */
 export const softDeleteSpotlightPost = async (postId) => {
   if (!postId) return;
   await update(ref(db, `${ROOT}/posts/${postId}`), {
@@ -100,9 +96,6 @@ export const softDeleteSpotlightPost = async (postId) => {
   });
 };
 
-/**
- * Reverses a soft delete. Used when the user taps Undo within 5s.
- */
 export const restoreSpotlightPost = async (postId) => {
   if (!postId) return;
   await update(ref(db, `${ROOT}/posts/${postId}`), {
@@ -111,10 +104,6 @@ export const restoreSpotlightPost = async (postId) => {
   });
 };
 
-/**
- * Permanently removes the post, its user index entry, and any
- * reecho index entries. Called after the undo window expires.
- */
 export const hardDeleteSpotlightPost = async (postId, uid) => {
   if (!postId) return;
   await remove(ref(db, `${ROOT}/posts/${postId}`)).catch(() => {});
@@ -180,7 +169,7 @@ export const listenToUserReechoedPosts = (uid, cb) => {
 
 /* ─── Post likes ───────────────────────────────────────────── */
 
-export const toggleSpotlightLike = async (postId, uid) => {
+export const toggleSpotlightLike = async (postId, uid, actorMeta = null, postMeta = null) => {
   if (!postId || !uid) return false;
   const likeRef = ref(db, `${ROOT}/posts/${postId}/likes/${uid}`);
   const countRef = ref(db, `${ROOT}/posts/${postId}/likeCount`);
@@ -197,6 +186,19 @@ export const toggleSpotlightLike = async (postId, uid) => {
     return next;
   });
 
+  // Notify on like (not unlike)
+  if (nowLiked && postMeta && postMeta.uid && postMeta.uid !== uid) {
+    pushSpotlightNotification({
+      toUid: postMeta.uid,
+      actorUid: uid,
+      actorName: actorMeta?.name || 'Someone',
+      actorAvatar: actorMeta?.avatar || '',
+      type: 'like',
+      postId,
+      postThumb: postMeta.posterUrl || postMeta.mediaUrl || '',
+    }).catch(() => {});
+  }
+
   return nowLiked;
 };
 
@@ -207,11 +209,6 @@ export const listenToSpotlightLike = (postId, uid, cb) => {
 
 /* ─── Comment likes (emoji reactions) ──────────────────────── */
 
-/**
- * Toggle a reaction on a specific comment.
- * Stored at: spotlight/posts/{postId}/comments/{commentId}/likes/{uid}
- * Value: the emoji string (e.g. '❤️'). One reaction per user per comment.
- */
 export const toggleCommentLike = async (postId, commentId, uid, emoji) => {
   if (!postId || !commentId || !uid) return false;
   const likeRef = ref(db, `${ROOT}/posts/${postId}/comments/${commentId}/likes/${uid}`);
@@ -222,18 +219,15 @@ export const toggleCommentLike = async (postId, commentId, uid, emoji) => {
 
   await runTransaction(likeRef, (current) => {
     if (current && current === emoji) {
-      // Same emoji tapped → remove
       wasActive = true;
       nowActive = false;
       return null;
     }
-    // Either no reaction, or a different emoji → set new
     wasActive = !!current;
     nowActive = true;
     return emoji;
   });
 
-  // Update count: net change is 0 if switching emoji, +1 if new, -1 if removed
   if (!wasActive && nowActive) {
     await runTransaction(countRef, (c) => (c || 0) + 1);
   } else if (wasActive && !nowActive) {
@@ -253,7 +247,7 @@ export const listenToCommentLike = (postId, commentId, uid, cb) => {
 
 /* ─── Comments ─────────────────────────────────────────────── */
 
-export const addSpotlightComment = async (postId, uid, authorName, authorAvatar, text) => {
+export const addSpotlightComment = async (postId, uid, authorName, authorAvatar, text, postMeta = null) => {
   if (!postId || !uid || !text?.trim()) return null;
   const commentsRef = ref(db, `${ROOT}/posts/${postId}/comments`);
   const newRef = push(commentsRef);
@@ -268,6 +262,20 @@ export const addSpotlightComment = async (postId, uid, authorName, authorAvatar,
   };
   await set(newRef, payload);
   await runTransaction(ref(db, `${ROOT}/posts/${postId}/commentCount`), (c) => (c || 0) + 1);
+
+  if (postMeta && postMeta.uid && postMeta.uid !== uid) {
+    pushSpotlightNotification({
+      toUid: postMeta.uid,
+      actorUid: uid,
+      actorName: authorName || 'Someone',
+      actorAvatar: authorAvatar || '',
+      type: 'comment',
+      postId,
+      postThumb: postMeta.posterUrl || postMeta.mediaUrl || '',
+      text: payload.text,
+    }).catch(() => {});
+  }
+
   return payload;
 };
 
@@ -289,7 +297,7 @@ export const deleteSpotlightComment = async (postId, commentId) => {
 
 /* ─── Reecho (repost) ──────────────────────────────────────── */
 
-export const toggleSpotlightReecho = async (postId, uid) => {
+export const toggleSpotlightReecho = async (postId, uid, actorMeta = null, postMeta = null) => {
   if (!postId || !uid) return false;
   const reechoRef = ref(db, `${ROOT}/posts/${postId}/reechoes/${uid}`);
   const userRef = ref(db, `${ROOT}/users/${uid}/reechoed/${postId}`);
@@ -310,6 +318,18 @@ export const toggleSpotlightReecho = async (postId, uid) => {
     return next;
   });
 
+  if (nowReechoed && postMeta && postMeta.uid && postMeta.uid !== uid) {
+    pushSpotlightNotification({
+      toUid: postMeta.uid,
+      actorUid: uid,
+      actorName: actorMeta?.name || 'Someone',
+      actorAvatar: actorMeta?.avatar || '',
+      type: 'reecho',
+      postId,
+      postThumb: postMeta.posterUrl || postMeta.mediaUrl || '',
+    }).catch(() => {});
+  }
+
   return nowReechoed;
 };
 
@@ -320,7 +340,7 @@ export const listenToSpotlightReecho = (postId, uid, cb) => {
 
 /* ─── Echo (follow author) ─────────────────────────────────── */
 
-export const toggleEchoAuthor = async (authorUid, myUid) => {
+export const toggleEchoAuthor = async (authorUid, myUid, actorMeta = null) => {
   if (!authorUid || !myUid || authorUid === myUid) return false;
   const fwd = ref(db, `${ROOT}/echoes/${myUid}/${authorUid}`);
   const rev = ref(db, `${ROOT}/echoers/${authorUid}/${myUid}`);
@@ -334,6 +354,18 @@ export const toggleEchoAuthor = async (authorUid, myUid) => {
 
   if (nowEchoed) await set(rev, Date.now());
   else await remove(rev);
+
+  if (nowEchoed && actorMeta) {
+    pushSpotlightNotification({
+      toUid: authorUid,
+      actorUid: myUid,
+      actorName: actorMeta.name || 'Someone',
+      actorAvatar: actorMeta.avatar || '',
+      type: 'echo',
+      postId: '',
+      postThumb: '',
+    }).catch(() => {});
+  }
 
   return nowEchoed;
 };
