@@ -31,7 +31,6 @@ const SpotlightPost = ({
   const [showHeart, setShowHeart] = useState(false);
   const lastTapRef = useRef(0);
 
-  /* ─── Realtime subscriptions for this post ─── */
   useEffect(() => {
     if (!post?.id || !currentUser?.uid) return () => {};
     const unsubs = [
@@ -42,7 +41,6 @@ const SpotlightPost = ({
     return () => unsubs.forEach((u) => u && u());
   }, [post?.id, post?.uid, currentUser?.uid]);
 
-  /* ─── Play / pause based on active state ─── */
   useEffect(() => {
     const v = videoRef.current;
     if (!v || post.mediaType !== 'video') return;
@@ -56,13 +54,11 @@ const SpotlightPost = ({
     }
   }, [isActive, post.id, post.mediaType, currentUser?.uid]);
 
-  /* ─── Sync mute state ─── */
   useEffect(() => {
     const v = videoRef.current;
     if (v) v.muted = !!muted;
   }, [muted, isActive]);
 
-  /* ─── Progress bar ─── */
   useEffect(() => {
     const v = videoRef.current;
     if (!v || post.mediaType !== 'video') return;
@@ -70,7 +66,6 @@ const SpotlightPost = ({
       if (v.duration) setProgress((v.currentTime / v.duration) * 100);
     };
     const onEnd = () => {
-      // Loop
       v.currentTime = 0;
       v.play().catch(() => {});
     };
@@ -87,16 +82,13 @@ const SpotlightPost = ({
     return () => { if (onRegisterVideo) onRegisterVideo(post.id, null); };
   }, [post.id, onRegisterVideo]);
 
-  /* ─── Handlers ─── */
   const handleTap = () => {
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
-      // Double tap → like with heart animation
       if (!liked) handleLike(true);
       setShowHeart(true);
       setTimeout(() => setShowHeart(false), 800);
     } else {
-      // Single tap → toggle play/pause
       const v = videoRef.current;
       if (v) {
         if (v.paused) { v.play().catch(() => {}); setPaused(false); }
@@ -127,14 +119,12 @@ const SpotlightPost = ({
 
   return (
     <div className="spotlight-post">
-      {/* Progress bar (videos only) */}
       {post.mediaType === 'video' && (
         <div className="spotlight-progress-track">
           <div className="spotlight-progress-fill" style={{ width: `${progress}%` }} />
         </div>
       )}
 
-      {/* Media */}
       <div className="spotlight-media" onClick={handleTap} role="button" tabIndex={0}>
         {post.mediaType === 'video' ? (
           <video
@@ -156,20 +146,17 @@ const SpotlightPost = ({
           />
         )}
 
-        {/* In-app watermark (bottom-left, always visible) */}
         <div className="spotlight-watermark" aria-hidden="true">
           <span className="spotlight-watermark-tick" />
           <span className="spotlight-watermark-text">ECHO</span>
         </div>
 
-        {/* Big pause icon when paused */}
         {paused && post.mediaType === 'video' && (
           <div className="spotlight-pause-indicator">
             <i className="fas fa-play" />
           </div>
         )}
 
-        {/* Double-tap heart */}
         {showHeart && (
           <div className="spotlight-heart-pop">
             <i className="fas fa-heart" />
@@ -177,7 +164,6 @@ const SpotlightPost = ({
         )}
       </div>
 
-      {/* Right-side action rail */}
       <SpotlightActions
         post={post}
         liked={liked}
@@ -191,7 +177,6 @@ const SpotlightPost = ({
         onAuthorTap={() => onOpenProfile?.(post.uid)}
       />
 
-      {/* Bottom-left author + caption */}
       <div className="spotlight-bottom-left">
         <button
           type="button"
@@ -215,7 +200,6 @@ const SpotlightPost = ({
         )}
       </div>
 
-      {/* Mute toggle (bottom-right of media, above the rail) */}
       {post.mediaType === 'video' && (
         <button
           type="button"
