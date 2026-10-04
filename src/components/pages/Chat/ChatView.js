@@ -51,7 +51,7 @@ import { formatLastSeen } from '../../../utils/formatLastSeen';
 import { isBlocked as checkIsBlocked, unblockUser } from '../../../services/blockService';
 import './ChatView.css';
 
-// ─── NEW: Link preview imports ──────────────────────────────────
+// ─── Link preview imports ──────────────────────────────────────
 import LinkPreviewCard from './LinkPreviewCard';
 import { extractFirstUrl, fetchLinkPreview } from '../../../utils/linkPreview';
 // ────────────────────────────────────────────────────────────────
@@ -201,7 +201,7 @@ const ChatView = () => {
 
   useVisualViewport();
 
-  /* ─── NEW: settings + privacy + presence ───────────────────── */
+  /* ─── settings + privacy + presence ───────────────────── */
   const { settings: userSettings } = useUserSettings(user?.uid);
   const partnerPrivacy = useUserPrivacy(userId);
   const partnerPresence = useUserPresence(userId);
@@ -430,7 +430,7 @@ const ChatView = () => {
     return () => unsub();
   }, [user?.uid, userId]);
 
-  /* ─── NEW: block-check effect ───────────────────────────────── */
+  /* ─── block-check effect ───────────────────────────────── */
   useEffect(() => {
     if (!user?.uid || !userId) return undefined;
     let mounted = true;
@@ -504,7 +504,6 @@ const ChatView = () => {
 
   const markMessagesAsRead = async () => {
     if (!user?.uid || !userId) return;
-    // ─── NEW: respect the user's read-receipts preference ─────────
     if (!sendReadReceipts) return;
     const cId = [user.uid, userId].sort().join('_');
     try {
@@ -532,7 +531,6 @@ const ChatView = () => {
         if (msg.receiverId === user.uid && msg.isRead === false) {
           updates[`chats/${cId}/messages/${msg.key}/isRead`] = true;
           updates[`chats/${cId}/messages/${msg.key}/readAt`] = Date.now();
-          // ─── NEW: use the user's preferred Tide TTL ────────────
           updates[`chats/${cId}/messages/${msg.key}/expiresAt`] = privateExpiresAt(Date.now(), tideTTL);
           hasUnread = true;
         }
@@ -576,7 +574,6 @@ const ChatView = () => {
 
   const handleTyping = useCallback(() => {
     if (!user?.uid || !userId) return;
-    // ─── NEW: respect the user's showTyping preference ────────────
     if (!showTyping) return;
     const cId = [user.uid, userId].sort().join('_');
     const typingRef = ref(db, `chats/${cId}/typing/${user.uid}`);
@@ -650,7 +647,6 @@ const ChatView = () => {
 
     const cId = [user.uid, userId].sort().join('_');
     const tempId = `temp_${Date.now()}`;
-    // ─── NEW: use tideTTL from settings ───────────────────────────
     const optimisticMsg = { id: tempId, senderId: user.uid, receiverId: userId, type: 'text', text: textToSend, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(Date.now(), tideTTL), pending: true };
     if (replyToSave) optimisticMsg.replyTo = { messageId: replyToSave.messageId, senderName: replyToSave.senderName, messageType: replyToSave.messageType, textSnippet: replyToSave.textSnippet };
     if (currentNoteReply) optimisticMsg.replyToNote = { ...currentNoteReply };
@@ -666,13 +662,12 @@ const ChatView = () => {
 
     try { await set(newMsgRef, msgData); } catch (err) { console.error('Send failed:', err); setMessages((prev) => prev.filter((m) => m.id !== tempId)); return; }
 
-    // ─── NEW: Detect URL and fetch link preview in the background ──
+    // ─── Detect URL and fetch link preview in the background ──
     const detectedUrl = extractFirstUrl(textToSend);
     if (detectedUrl) {
       fetchLinkPreview(detectedUrl)
         .then((preview) => {
           if (!preview) return;
-          // Attach the preview to the message we just sent
           update(ref(db, `chats/${cId}/messages/${newMsgRef.key}`), { linkPreview: preview }).catch(() => {});
         })
         .catch(() => {});
@@ -1096,7 +1091,6 @@ const ChatView = () => {
     } else { setNewMessage((prev) => prev + emoji); setTimeout(() => inputRef.current?.focus(), 0); }
   };
 
-  /* ─── NEW: enterToSend gate ─────────────────────────────────── */
   const handleKeyDown = (e) => {
     if (e.key !== 'Enter') return;
     if (enterToSend && !e.shiftKey) {
@@ -1360,14 +1354,17 @@ const ChatView = () => {
           {userId === ECHO_AI_ID && !isOwn ? <AiRichText text={msg.text} onFollowup={(q) => handleSendText(q)} /> : msg.text}
           {msg.isEdited && <span className="message-edited-badge">(edited)</span>}
         </div>
-        {/* ─── NEW: Link Preview Card ─────────────────────────── */}
+        {/* ─── Link Preview Card ─────────────────────────────── */}
         {msg.linkPreview && <LinkPreviewCard preview={msg.linkPreview} />}
-        {/* ─── NEW: Link Preview Loading Skeleton ─────────────── */}
+        {/* ─── Link Preview Loading Skeleton ─────────────────── */}
         {!msg.linkPreview && !msg.pending && extractFirstUrl(msg.text || '') && (
           <div className="link-preview-loading">
-            <div className="link-preview-skeleton-line w70" />
-            <div className="link-preview-skeleton-line w90" />
-            <div className="link-preview-skeleton-line w50" />
+            <div className="link-preview-skeleton-logo" />
+            <div className="link-preview-skeleton-lines">
+              <div className="link-preview-skeleton-line w70" />
+              <div className="link-preview-skeleton-line w90" />
+              <div className="link-preview-skeleton-line w50" />
+            </div>
           </div>
         )}
         {/* ────────────────────────────────────────────────────── */}
