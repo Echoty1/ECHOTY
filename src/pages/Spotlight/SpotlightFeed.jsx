@@ -212,6 +212,7 @@ const SpotlightFeed = () => {
         )}
       </div>
 
+      {/* Feed counter — moved up so it doesn't collide with the ECHO watermark */}
       {posts.length > 1 && (
         <div className="spotlight-feed-counter" aria-hidden="true">
           <span>{activeIndex + 1}</span>
@@ -219,6 +220,17 @@ const SpotlightFeed = () => {
           <span>{posts.length}</span>
         </div>
       )}
+
+      {/* Floating Create button — always reachable, bottom-right of feed */}
+      <button
+        type="button"
+        className="spotlight-fab-create"
+        onClick={() => navigate('/spotlight/upload')}
+        aria-label="Create Spotlight"
+        title="Create Spotlight"
+      >
+        <i className="fas fa-plus" />
+      </button>
 
       <SpotlightComments
         isOpen={!!commentsFor}
