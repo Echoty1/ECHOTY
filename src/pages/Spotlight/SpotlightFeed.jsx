@@ -1,6 +1,6 @@
 // src/pages/Spotlight/SpotlightFeed.jsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../contexts/ProfileContext';
 import Toast from '../../components/Toast/Toast';
@@ -8,20 +8,25 @@ import SpotlightPost from './SpotlightPost';
 import SpotlightComments from './SpotlightComments';
 import SpotlightShare from './SpotlightShare';
 import SpotlightOptions from './SpotlightOptions';
+import useSpotlightSEO from '../../hooks/useSpotlightSEO';
 import {
   listenToSpotlightFeed,
   rankSpotlightFeed,
   fetchSeenSpotlightIds,
-  deleteSpotlightPost,
+  softDeleteSpotlightPost,
+  restoreSpotlightPost,
+  hardDeleteSpotlightPost,
 } from '../../services/spotlightService';
 
 const PULL_THRESHOLD = 80;
+const UNDO_WINDOW_MS = 5000;
 
 const SpotlightFeed = () => {
   const { user } = useAuth();
   const { getProfile, fetchProfile } = useProfile();
   const navigate = useNavigate();
   const location = useLocation();
+  const [params] = useSearchParams();
 
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,12 +45,13 @@ const SpotlightFeed = () => {
   const [toast, setToast] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
 
-  // Pull-to-refresh
   const [pullY, setPullY] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
-
-  // "New Spotlight ↑" pill
   const [hasNewAbove, setHasNewAbove] = useState(false);
+
+  // Undo delete
+  const [pendingDelete, setPendingDelete] = useState(null); // { post, timerId }
+  const [showUndoToast, setShowUndoToast] = useState(false);
 
   const containerRef = useRef(null);
   const videoRefs = useRef({});
@@ -55,15 +61,17 @@ const SpotlightFeed = () => {
   const pullStartRef = useRef(null);
 
   const freshPostId = location.state?.freshPostId || null;
+  const focusPostId = params.get('focus');
 
-  /* Mute pref persistence */
+  /* SEO — if arrived via share link */
+  useSpotlightSEO(focusPostId);
+
   useEffect(() => {
     try {
       localStorage.setItem('echo_spotlight_muted', muted ? '1' : '0');
     } catch (_) {}
   }, [muted]);
 
-  /* My profile for comments */
   useEffect(() => {
     if (!user?.uid) return;
     const cached = getProfile(user.uid);
@@ -71,13 +79,12 @@ const SpotlightFeed = () => {
     else fetchProfile(user.uid);
   }, [user?.uid, getProfile, fetchProfile]);
 
-  /* ─── Real-time feed ──────────────────────────────────────── */
+  /* Real-time feed */
   useEffect(() => {
     let cancelled = false;
     let unsub = null;
 
     (async () => {
-      // Fetch seen IDs once (for ranking)
       const seenSet = user?.uid ? await fetchSeenSpotlightIds(user.uid) : new Set();
       if (cancelled) return;
       seenIdsRef.current = seenSet;
@@ -85,31 +92,25 @@ const SpotlightFeed = () => {
       unsub = listenToSpotlightFeed({ maxCount: 80 }, (rawPosts) => {
         if (cancelled) return;
 
-        // Fresh post should never be seen-penalized
+        const pinnedId = freshPostId || focusPostId;
         const seenForRanking = new Set(seenIdsRef.current);
-        if (freshPostId) seenForRanking.delete(freshPostId);
+        if (pinnedId) seenForRanking.delete(pinnedId);
 
         let ranked = rankSpotlightFeed(rawPosts, seenForRanking);
 
-        // Pin fresh post to top
-        if (freshPostId) {
-          const idx = ranked.findIndex((p) => p.id === freshPostId);
+        if (pinnedId) {
+          const idx = ranked.findIndex((p) => p.id === pinnedId);
           if (idx > 0) {
             const [target] = ranked.splice(idx, 1);
             ranked = [target, ...ranked];
           }
         }
 
-        // Detect brand-new posts arriving from other users
         const newestCreatedAt = ranked.reduce(
           (max, p) => Math.max(max, p.createdAt || 0),
           0
         );
 
-        // Only show the "new above" pill if:
-        // - we already had posts (so this isn't the initial load)
-        // - the newest post is newer than the newest we've shown
-        // - the user isn't at the top of the feed
         if (
           newestSeenCreatedAtRef.current > 0 &&
           newestCreatedAt > newestSeenCreatedAtRef.current &&
@@ -129,9 +130,9 @@ const SpotlightFeed = () => {
       cancelled = true;
       if (unsub) unsub();
     };
-  }, [user?.uid, freshPostId]);
+  }, [user?.uid, freshPostId, focusPostId]);
 
-  /* Scroll to top on fresh post */
+  /* Scroll to fresh/focus post */
   useEffect(() => {
     if (!freshPostId) return;
     setActiveIndex(0);
@@ -139,7 +140,6 @@ const SpotlightFeed = () => {
       const el = containerRef.current;
       if (el) el.scrollTop = 0;
     });
-    // Clear router state so refresh doesn't re-pin
     const t = setTimeout(() => {
       navigate(location.pathname, { replace: true, state: null });
     }, 2500);
@@ -147,13 +147,12 @@ const SpotlightFeed = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [freshPostId]);
 
-  /* ─── Active slide detection ─────────────────────────────── */
+  /* Active slide detection */
   useEffect(() => {
     const container = containerRef.current;
     if (!container || posts.length === 0) return;
 
     const ratios = new Map();
-
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((e) => {
@@ -161,7 +160,6 @@ const SpotlightFeed = () => {
           if (Number.isNaN(idx)) return;
           ratios.set(idx, e.isIntersecting ? e.intersectionRatio : 0);
         });
-
         let bestIdx = 0;
         let bestRatio = 0;
         ratios.forEach((r, i) => {
@@ -172,18 +170,14 @@ const SpotlightFeed = () => {
         });
         if (bestRatio > 0.4) setActiveIndex(bestIdx);
       },
-      {
-        root: container,
-        threshold: [0, 0.25, 0.5, 0.75, 1.0],
-      }
+      { root: container, threshold: [0, 0.25, 0.5, 0.75, 1.0] }
     );
-
     const slides = container.querySelectorAll('.spotlight-slide');
     slides.forEach((s) => observer.observe(s));
     return () => observer.disconnect();
   }, [posts.length]);
 
-  /* Scroll-end fallback + pull-to-refresh + clear "new above" */
+  /* Scroll-end + pull-to-refresh */
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -193,13 +187,10 @@ const SpotlightFeed = () => {
       scrollEndTimer.current = setTimeout(() => {
         const h = container.clientHeight || 1;
         const top = container.scrollTop;
-        const idx = Math.round(top / h);
-        setActiveIndex(idx);
+        setActiveIndex(Math.round(top / h));
         if (top < 40) setHasNewAbove(false);
       }, 90);
     };
-
-    // ── Pull-to-refresh (touch only) ─────────────────────────
     const onTouchStart = (e) => {
       if (container.scrollTop > 0) return;
       pullStartRef.current = e.touches[0].clientY;
@@ -218,12 +209,7 @@ const SpotlightFeed = () => {
       if (pullStartRef.current == null) return;
       const shouldRefresh = pullY > PULL_THRESHOLD;
       pullStartRef.current = null;
-      if (!shouldRefresh) {
-        setPullY(0);
-        return;
-      }
-      // Trigger refresh: re-fetch seen IDs, re-sort. Realtime listener
-      // will deliver the newest posts.
+      if (!shouldRefresh) { setPullY(0); return; }
       setRefreshing(true);
       try {
         const seenSet = user?.uid ? await fetchSeenSpotlightIds(user.uid) : new Set();
@@ -249,7 +235,6 @@ const SpotlightFeed = () => {
     };
   }, [user?.uid, pullY]);
 
-  /* Escape closes any sheet */
   useEffect(() => {
     const onKey = (e) => {
       if (e.key === 'Escape') {
@@ -267,27 +252,49 @@ const SpotlightFeed = () => {
     else delete videoRefs.current[postId];
   }, []);
 
-  const handleOpenProfile = (uid) => {
-    navigate(`/spotlight/user/${uid}`);
-  };
+  const handleOpenProfile = (uid) => navigate(`/spotlight/user/${uid}`);
+  const handleOpenOptions = useCallback((post) => setOptionsFor(post), []);
 
-  const handleOpenOptions = useCallback((post) => {
-    setOptionsFor(post);
-  }, []);
-
-  const handleDeletePost = useCallback(async (post) => {
+  /* ─── Delete flow with 5s undo ─────────────────────────── */
+  const handleConfirmDelete = useCallback(async (post) => {
     if (!post || !user?.uid) return;
     try {
-      await deleteSpotlightPost(user.uid, post.id);
-      // Realtime listener will deliver the removal automatically
-      setToast({ message: 'Spotlight deleted', type: 'success' });
-      setTimeout(() => setToast(null), 2200);
+      await softDeleteSpotlightPost(post.id);
     } catch (err) {
-      console.warn('Delete failed:', err);
+      console.warn('Soft delete failed:', err);
       setToast({ message: 'Could not delete', type: 'error' });
       setTimeout(() => setToast(null), 2200);
+      return;
     }
+    // Immediately remove from local list
+    setPosts((prev) => prev.filter((p) => p.id !== post.id));
+    setShowUndoToast(true);
+    setToast({ message: 'Deleted · Undo', type: 'info', action: 'Undo' });
+
+    // Start the countdown. If user taps Undo before it fires, we restore.
+    const timerId = setTimeout(async () => {
+      try {
+        await hardDeleteSpotlightPost(post.id, user.uid);
+      } catch (_) {}
+      setPendingDelete(null);
+      setShowUndoToast(false);
+      setToast(null);
+    }, UNDO_WINDOW_MS);
+
+    setPendingDelete({ post, timerId });
   }, [user?.uid]);
+
+  const handleUndoDelete = useCallback(async () => {
+    if (!pendingDelete) return;
+    clearTimeout(pendingDelete.timerId);
+    try {
+      await restoreSpotlightPost(pendingDelete.post.id);
+      setToast({ message: 'Restored', type: 'success' });
+      setTimeout(() => setToast(null), 1500);
+    } catch (_) {}
+    setPendingDelete(null);
+    setShowUndoToast(false);
+  }, [pendingDelete]);
 
   const jumpToTop = () => {
     const el = containerRef.current;
@@ -325,7 +332,6 @@ const SpotlightFeed = () => {
         </div>
       </div>
 
-      {/* Pull-to-refresh indicator */}
       {(pullY > 0 || refreshing) && (
         <div
           className="spotlight-pull-indicator"
@@ -375,15 +381,9 @@ const SpotlightFeed = () => {
         )}
       </div>
 
-      {/* "New Spotlight ↑" pill */}
       {hasNewAbove && (
-        <button
-          type="button"
-          className="spotlight-new-pill"
-          onClick={jumpToTop}
-        >
-          <i className="fas fa-arrow-up" />
-          New Spotlight
+        <button type="button" className="spotlight-new-pill" onClick={jumpToTop}>
+          <i className="fas fa-arrow-up" /> New Spotlight
         </button>
       )}
 
@@ -427,10 +427,19 @@ const SpotlightFeed = () => {
         currentUser={user}
         onClose={() => setOptionsFor(null)}
         onToast={setToast}
-        onDeleted={handleDeletePost}
+        onConfirmDelete={handleConfirmDelete}
       />
 
-      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+      {showUndoToast && (
+        <div className="spotlight-undo-toast">
+          <span>Deleted</span>
+          <button type="button" onClick={handleUndoDelete}>Undo</button>
+        </div>
+      )}
+
+      {toast && !showUndoToast && (
+        <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />
+      )}
     </div>
   );
 };
