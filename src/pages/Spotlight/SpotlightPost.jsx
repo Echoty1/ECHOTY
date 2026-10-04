@@ -11,6 +11,8 @@ import {
 } from '../../services/spotlightService';
 import SpotlightActions from './SpotlightActions';
 
+const LONG_PRESS_MS = 500;
+
 const SpotlightPost = ({
   post,
   isActive,
@@ -19,6 +21,7 @@ const SpotlightPost = ({
   onOpenShare,
   onOpenProfile,
   onRegisterVideo,
+  onOpenOptions,
   muted,
   onToggleMute,
 }) => {
@@ -30,6 +33,8 @@ const SpotlightPost = ({
   const [progress, setProgress] = useState(0);
   const [showHeart, setShowHeart] = useState(false);
   const lastTapRef = useRef(0);
+  const pressTimerRef = useRef(null);
+  const longPressTriggered = useRef(false);
 
   useEffect(() => {
     if (!post?.id || !currentUser?.uid) return () => {};
@@ -56,8 +61,13 @@ const SpotlightPost = ({
 
   useEffect(() => {
     const v = videoRef.current;
-    if (v) v.muted = !!muted;
-  }, [muted, isActive]);
+    if (!v) return;
+    v.muted = !!muted;
+    const onLoaded = () => { if (v) v.muted = !!muted; };
+    v.addEventListener('loadedmetadata', onLoaded);
+    if (v.readyState >= 1) v.muted = !!muted;
+    return () => v.removeEventListener('loadedmetadata', onLoaded);
+  }, [muted, isActive, post.id]);
 
   useEffect(() => {
     const v = videoRef.current;
@@ -82,7 +92,27 @@ const SpotlightPost = ({
     return () => { if (onRegisterVideo) onRegisterVideo(post.id, null); };
   }, [post.id, onRegisterVideo]);
 
+  /* ─── Long press → open options sheet ─────────────────── */
+  const startLongPress = () => {
+    longPressTriggered.current = false;
+    if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+    pressTimerRef.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      onOpenOptions?.(post);
+    }, LONG_PRESS_MS);
+  };
+  const cancelLongPress = () => {
+    if (pressTimerRef.current) {
+      clearTimeout(pressTimerRef.current);
+      pressTimerRef.current = null;
+    }
+  };
+
   const handleTap = () => {
+    if (longPressTriggered.current) {
+      longPressTriggered.current = false;
+      return;
+    }
     const now = Date.now();
     if (now - lastTapRef.current < 300) {
       if (!liked) handleLike(true);
@@ -125,7 +155,19 @@ const SpotlightPost = ({
         </div>
       )}
 
-      <div className="spotlight-media" onClick={handleTap} role="button" tabIndex={0}>
+      <div
+        className="spotlight-media"
+        onClick={handleTap}
+        onMouseDown={startLongPress}
+        onMouseUp={cancelLongPress}
+        onMouseLeave={cancelLongPress}
+        onTouchStart={startLongPress}
+        onTouchEnd={cancelLongPress}
+        onTouchCancel={cancelLongPress}
+        onContextMenu={(e) => { e.preventDefault(); onOpenOptions?.(post); }}
+        role="button"
+        tabIndex={0}
+      >
         {post.mediaType === 'video' ? (
           <video
             ref={videoRef}
