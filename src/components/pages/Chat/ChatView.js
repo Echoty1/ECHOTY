@@ -174,7 +174,6 @@ const formatDayLabel = (ts) => {
     : { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
-/* Deterministic sender color (for reply strips / group avatar rings) */
 const senderColor = (uid) => {
   const colors = ['#e17076', '#7bc862', '#e5ca77', '#65aadd', '#a695e7', '#ee7aae', '#6ec9cb', '#faa774'];
   if (!uid) return colors[0];
@@ -211,6 +210,8 @@ const ChatView = () => {
   const showTyping = userSettings?.chats?.showTyping !== false;
   const sendReadReceipts = userSettings?.chats?.sendReadReceipts !== false;
   const fontSize = userSettings?.chats?.fontSize || 'md';
+  // ─── Auto-save: driven by Settings → Chats → Media auto-download ───
+  const autoSaveMedia = userSettings?.chats?.mediaAutoDownload === 'always';
 
   const [blockedByMe, setBlockedByMe] = useState(false);
 
@@ -268,6 +269,9 @@ const ChatView = () => {
   const stampedLegacyTides = useRef(false);
   const [tideTick, setTideTick] = useState(Date.now());
 
+  // ─── NEW: download state per message ─────────────────────
+  const [savingIds, setSavingIds] = useState({}); // { [msgId]: 'saving' | 'saved' }
+
   const [pressedMsgId, setPressedMsgId] = useState(null);
   const [tappedEmoji, setTappedEmoji] = useState(null);
 
@@ -321,7 +325,6 @@ const ChatView = () => {
     };
   }, []);
 
-  // Hide bottom nav while chat is mounted
   useEffect(() => {
     document.body.classList.add('echo-hide-bottom-nav');
     return () => document.body.classList.remove('echo-hide-bottom-nav');
@@ -421,7 +424,6 @@ const ChatView = () => {
     return () => { unsubWp(); unsubCw(); };
   }, [user?.uid, userId]);
 
-  /* pinned message subscription */
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -430,7 +432,6 @@ const ChatView = () => {
     return () => unsub();
   }, [user?.uid, userId]);
 
-  /* ─── block-check effect ───────────────────────────────── */
   useEffect(() => {
     if (!user?.uid || !userId) return undefined;
     let mounted = true;
@@ -624,6 +625,80 @@ const ChatView = () => {
       song: song || null,
     }).catch((err) => console.warn('postNoteReply failed', err));
     noteReplyContext.current = null;
+  };
+
+  // ─── NEW: Download / auto-save media to device ─────────────
+  const handleDownloadMedia = async (msg, isAuto = false) => {
+    if (!msg || !msg.mediaUrl || !msg.mediaUrl.startsWith('http')) return;
+    const id = msg.id;
+    if (savingIds[id] === 'saving') return;
+    setSavingIds((prev) => ({ ...prev, [id]: 'saving' }));
+
+    try {
+      const res = await fetch(msg.mediaUrl, { mode: 'cors' });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+
+      let ext = 'jpg';
+      if (msg.mediaType === 'video') ext = 'mp4';
+      else if (msg.mediaType === 'audio') ext = 'webm';
+      else if (blob.type) {
+        if (blob.type.includes('png')) ext = 'png';
+        else if (blob.type.includes('gif')) ext = 'gif';
+        else if (blob.type.includes('webp')) ext = 'webp';
+        else if (blob.type.includes('jpeg') || blob.type.includes('jpg')) ext = 'jpg';
+      }
+      const safeSender = (msg.senderName || 'echo').replace(/[^a-z0-9]/gi, '_').slice(0, 20);
+      const filename = `echo_${safeSender}_${Date.now()}.${ext}`;
+
+      if (window.showSaveFilePicker && !isAuto) {
+        const handle = await window.showSaveFilePicker({
+          suggestedName: filename,
+          types: [
+            {
+              description: msg.mediaType === 'video' ? 'Video' : 'Image',
+              accept: { [blob.type || 'application/octet-stream']: ['.' + ext] },
+            },
+          ],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+      } else {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+      }
+
+      setSavingIds((prev) => ({ ...prev, [id]: 'saved' }));
+      if (!isAuto) {
+        setToast({ message: 'Saved to your device', type: 'success' });
+        setTimeout(() => setToast(null), 2200);
+      }
+      setTimeout(() => {
+        setSavingIds((prev) => {
+          const n = { ...prev };
+          delete n[id];
+          return n;
+        });
+      }, 2500);
+    } catch (err) {
+      console.warn('Download failed:', err);
+      setSavingIds((prev) => {
+        const n = { ...prev };
+        delete n[id];
+        return n;
+      });
+      if (!isAuto) {
+        setToast({ message: 'Could not save media', type: 'error' });
+        setTimeout(() => setToast(null), 2200);
+      }
+    }
   };
 
   const handleSendText = async (e) => {
@@ -1012,7 +1087,6 @@ const ChatView = () => {
     setActiveMessageMenuId(null);
   };
 
-  /* pin/unpin */
   const handlePinMessage = async (msg) => {
     if (!user?.uid || !userId) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -1102,21 +1176,70 @@ const ChatView = () => {
     }
   };
 
+  // ─── UPDATED: Snapchat-style media preview overlay ─────────
   const renderPreviewOverlay = () => {
     if (!previewUrl) return null;
     return (
       <div className="media-preview-overlay" onClick={(e) => { if (e.target === e.currentTarget) cancelMediaPreview(); }}>
         <div className="media-preview-content" onClick={(e) => e.stopPropagation()}>
-          <button className="media-preview-close" onClick={cancelMediaPreview}><i className="fas fa-times" /></button>
+          <button
+            type="button"
+            className="media-preview-close"
+            onClick={cancelMediaPreview}
+            aria-label="Close preview"
+          >
+            <i className="fas fa-times" />
+          </button>
+
           <div className="media-preview-media">
-            {selectedFile?.type.startsWith('video/') ? <video src={previewUrl} controls autoPlay loop muted playsInline className="media-preview-video" /> : <img src={previewUrl} alt="Preview" className="media-preview-image" />}
+            {selectedFile?.type.startsWith('video/') ? (
+              <video src={previewUrl} controls autoPlay loop muted playsInline className="media-preview-video" />
+            ) : (
+              <img src={previewUrl} alt="Preview" className="media-preview-image" />
+            )}
           </div>
-          <div ref={captionPreviewRef} style={{ display: 'flex', gap: '8px', alignItems: 'center', width: '100%' }}>
-            <textarea ref={captionInputRef} className="media-preview-caption" placeholder="Add a caption..." value={captionText} onChange={(e) => setCaptionText(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMediaMessage(); } }} style={{ flex: 1, resize: 'none', minHeight: '44px', maxHeight: '120px', lineHeight: '1.4', fontFamily: 'inherit', padding: '10px 16px', borderRadius: '24px', border: '1px solid var(--border-color)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }} onFocus={() => focusedField.current = 'caption'} />
-            <button type="button" className="media-preview-emoji-btn" onClick={() => setShowCaptionEmoji(!showCaptionEmoji)} style={{ background: 'none', border: 'none', color: '#888', fontSize: '22px', cursor: 'pointer', padding: '4px 8px', flexShrink: 0 }}><i className="fas fa-smile" /></button>
+
+          <div className="media-preview-caption-row" ref={captionPreviewRef}>
+            <textarea
+              ref={captionInputRef}
+              className="media-preview-caption"
+              placeholder="Add a caption..."
+              value={captionText}
+              onChange={(e) => setCaptionText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  sendMediaMessage();
+                }
+              }}
+              onFocus={() => { focusedField.current = 'caption'; }}
+            />
+            <button
+              type="button"
+              className="media-preview-emoji-btn"
+              onClick={() => setShowCaptionEmoji(!showCaptionEmoji)}
+              aria-label="Emojis"
+            >
+              <i className="fas fa-smile" />
+            </button>
           </div>
-          {showCaptionEmoji && <ChatEmojiPicker onClose={() => setShowCaptionEmoji(false)} onSelect={(emoji) => setCaptionText((t) => t + emoji)} excludeRefs={[captionPreviewRef]} />}
-          <button className="media-preview-send" onClick={() => sendMediaMessage()} disabled={isUploading}>{isUploading ? `Uploading ${Math.round(uploadProgress)}%` : 'Send Media'}</button>
+
+          {showCaptionEmoji && (
+            <ChatEmojiPicker
+              onClose={() => setShowCaptionEmoji(false)}
+              onSelect={(emoji) => setCaptionText((t) => t + emoji)}
+              excludeRefs={[captionPreviewRef]}
+            />
+          )}
+
+          <button
+            type="button"
+            className="media-preview-send"
+            onClick={() => sendMediaMessage()}
+            disabled={isUploading}
+          >
+            {isUploading ? `Uploading ${Math.round(uploadProgress)}%` : 'Send Media'}
+          </button>
         </div>
       </div>
     );
@@ -1273,6 +1396,7 @@ const ChatView = () => {
     const isPressed = pressedMsgId === msg.id;
     const isSelected = selectedIds.has(msg.id);
     const isPinned = pinnedMessageId === msg.id;
+    const saveState = savingIds[msg.id];
 
     const shell = (inner) => {
       const row = (
@@ -1342,8 +1466,36 @@ const ChatView = () => {
         else if (msg.uploadFailed) inner = <div className="media-error-placeholder"><i className="fas fa-exclamation-triangle" /><span>Upload failed</span><button onClick={handleRetry}>Retry</button></div>;
         else inner = <AudioPlayer src={msg.mediaUrl} />;
       } else {
-        if (msg.uploadFailed) inner = <div className="media-error-placeholder"><i className="fas fa-exclamation-triangle" /><span>Upload failed</span><button onClick={handleRetry}>Retry</button></div>;
-        else inner = <div onClick={!msg.isUploading && !selectMode ? handleMediaClick : undefined} style={{ cursor: !msg.isUploading && !selectMode ? 'pointer' : 'default' }}><ChatMediaMessage message={msg} isUploading={msg.isUploading} uploadProgress={msg.uploadProgress} disablePreview={true} /></div>;
+        if (msg.uploadFailed) {
+          inner = <div className="media-error-placeholder"><i className="fas fa-exclamation-triangle" /><span>Upload failed</span><button onClick={handleRetry}>Retry</button></div>;
+        } else {
+          inner = (
+            <div
+              className={msg.mediaType === 'video' ? 'chat-media-video-wrapper' : 'chat-media-image-wrapper'}
+              onClick={!msg.isUploading && !selectMode ? handleMediaClick : undefined}
+              style={{ cursor: !msg.isUploading && !selectMode ? 'pointer' : 'default', position: 'relative' }}
+            >
+              <ChatMediaMessage message={msg} isUploading={msg.isUploading} uploadProgress={msg.uploadProgress} disablePreview={true} />
+              {!msg.isUploading && !selectMode && msg.mediaUrl && msg.mediaUrl.startsWith('http') && (
+                <button
+                  type="button"
+                  className={`media-download-btn${saveState ? ' ' + saveState : ''}`}
+                  onClick={(e) => { e.stopPropagation(); handleDownloadMedia(msg); }}
+                  title="Save to device"
+                  aria-label="Save to device"
+                >
+                  {saveState === 'saving' ? (
+                    <i className="fas fa-spinner fa-spin" />
+                  ) : saveState === 'saved' ? (
+                    <i className="fas fa-check" />
+                  ) : (
+                    <i className="fas fa-download" />
+                  )}
+                </button>
+              )}
+            </div>
+          );
+        }
       }
       content = shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}{inner}</>);
     } else {
@@ -1354,9 +1506,7 @@ const ChatView = () => {
           {userId === ECHO_AI_ID && !isOwn ? <AiRichText text={msg.text} onFollowup={(q) => handleSendText(q)} /> : msg.text}
           {msg.isEdited && <span className="message-edited-badge">(edited)</span>}
         </div>
-        {/* ─── Link Preview Card ─────────────────────────────── */}
         {msg.linkPreview && <LinkPreviewCard preview={msg.linkPreview} />}
-        {/* ─── Link Preview Loading Skeleton ─────────────────── */}
         {!msg.linkPreview && !msg.pending && extractFirstUrl(msg.text || '') && (
           <div className="link-preview-loading">
             <div className="link-preview-skeleton-logo" />
@@ -1367,7 +1517,6 @@ const ChatView = () => {
             </div>
           </div>
         )}
-        {/* ────────────────────────────────────────────────────── */}
       </>);
     }
 
@@ -1428,6 +1577,25 @@ const ChatView = () => {
         return sortMessages([...visible, ...stillPending]);
       });
       setLoadingMessages(false);
+
+      // ─── Auto-save incoming media when user opted in ─────
+      if (autoSaveMedia && userId !== ECHO_AI_ID) {
+        const incomingMedia = visible.filter(
+          (m) =>
+            m.type === 'media' &&
+            m.mediaType !== 'audio' &&
+            m.senderId !== user.uid &&
+            m.mediaUrl &&
+            m.mediaUrl.startsWith('http') &&
+            !savingIds[m.id]
+        );
+        if (incomingMedia.length > 0) {
+          const newest = incomingMedia[incomingMedia.length - 1];
+          handleDownloadMedia(newest, true);
+        }
+      }
+      // ─────────────────────────────────────────────────────
+
       const prevCount = prevMsgCountRef.current;
       const grew = visible.length > prevCount;
       const newest = visible[visible.length - 1];
@@ -1496,7 +1664,6 @@ const ChatView = () => {
     if (isNearBottomRef.current) messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  // Esc exits select mode
   useEffect(() => {
     if (!selectMode) return;
     const onKey = (e) => { if (e.key === 'Escape') { setSelectMode(false); setSelectedIds(new Set()); } };
@@ -1554,7 +1721,6 @@ const ChatView = () => {
         '--msg-font-size': FONT_SIZE_MAP[fontSize] || FONT_SIZE_MAP.md,
       };
 
-  /* pinned message preview lookup */
   const pinnedMessage = useMemo(() => {
     if (!pinnedMessageId) return null;
     return messages.find((m) => m.id === pinnedMessageId) || null;
@@ -1571,7 +1737,6 @@ const ChatView = () => {
     return pinnedMessage.text || '';
   }, [pinnedMessage]);
 
-  /* select mode bulk actions */
   const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
 
   const bulkCopy = async () => {
@@ -1719,7 +1884,6 @@ const ChatView = () => {
         @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0) scale(1); opacity: 0.55; } 30% { transform: translateY(-5px) scale(1.15); opacity: 1; } }
         @keyframes typingContainerIn { 0% { opacity: 0; transform: translateY(6px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 
-        /* Date separator (sticky) */
         .chat-date-separator {
           position: sticky;
           top: 8px;
@@ -1750,7 +1914,6 @@ const ChatView = () => {
           box-shadow: 0 2px 8px rgba(0,0,0,0.12);
         }
 
-        /* Message grouping */
         .message-row.group-mid { margin-top: 1px; }
         .message-row.group-top { margin-top: 8px; }
         .message-row.group-mid .message-bubble,
@@ -1769,7 +1932,6 @@ const ChatView = () => {
           animation: none;
         }
 
-        /* Scroll-to-bottom FAB */
         .chat-scroll-fab {
           position: absolute;
           right: 16px;
@@ -1793,7 +1955,6 @@ const ChatView = () => {
         .chat-scroll-fab svg { width: 16px; height: 16px; fill: currentColor; }
         @keyframes fabIn { 0% { opacity: 0; transform: translateY(10px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 
-        /* Pin badge */
         .message-bubble.pinned { box-shadow: inset 0 0 0 1.5px rgba(255, 193, 7, 0.5); }
         .message-pin-badge {
           position: absolute;
@@ -1845,7 +2006,6 @@ const ChatView = () => {
         .pinned-banner-close:hover { opacity: 1; }
         @keyframes pinnedIn { 0% { opacity: 0; transform: translateY(-10px); } 100% { opacity: 1; transform: translateY(0); } }
 
-        /* Select mode */
         .message-row.select-mode { cursor: pointer; padding-left: 34px; padding-right: 34px; transition: background 0.15s ease; }
         .message-row.select-mode.selected { background: rgba(108, 60, 225, 0.14); }
         html.theme-light .message-row.select-mode.selected { background: rgba(108, 60, 225, 0.08); }
@@ -1937,10 +2097,8 @@ const ChatView = () => {
 
         .messages-container.has-pinned { padding-top: 0; }
 
-        /* ─── Message font size (respects Settings → Chats) ─── */
         .messages-container .message-text { font-size: var(--msg-font-size, 15px); }
 
-        /* ─── Blocked composer bar ─────────────────────────── */
         .blocked-composer-bar {
           display: flex;
           align-items: center;
@@ -2063,7 +2221,6 @@ const ChatView = () => {
           </div>
         )}
 
-        {/* ─── Blocked composer bar ───────────────────────────── */}
         {!selectMode && blockedByMe && (
           <div className="blocked-composer-bar">
             <span>You blocked this user.</span>
