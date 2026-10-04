@@ -32,11 +32,12 @@ const SpotlightProfile = () => {
   const [loading, setLoading] = useState(true);
   const [echoed, setEchoed] = useState(false);
   const [echoersCount, setEchoersCount] = useState(0);
+  const [echoingCount, setEchoingCount] = useState(0);
+  const [previewPost, setPreviewPost] = useState(null);
   const [toast, setToast] = useState(null);
 
   const isMe = user?.uid === uid;
 
-  /* Load profile */
   useEffect(() => {
     if (!uid) return;
     let cancelled = false;
@@ -47,11 +48,18 @@ const SpotlightProfile = () => {
       } catch (_) {}
       const cnt = await fetchEchoersCount(uid);
       if (!cancelled) setEchoersCount(cnt);
+
+      // Echoing count = how many users this person has echoed
+      try {
+        const echoSnap = await get(ref(db, `spotlight/echoes/${uid}`));
+        if (!cancelled) {
+          setEchoingCount(echoSnap.exists() ? Object.keys(echoSnap.val()).length : 0);
+        }
+      } catch (_) {}
     })();
     return () => { cancelled = true; };
   }, [uid]);
 
-  /* Live posts */
   useEffect(() => {
     if (!uid) return () => {};
     setLoading(true);
@@ -62,14 +70,12 @@ const SpotlightProfile = () => {
     return () => unsub && unsub();
   }, [uid]);
 
-  /* Live reechoed */
   useEffect(() => {
     if (!uid) return () => {};
     const unsub = listenToUserReechoedPosts(uid, setReechoed);
     return () => unsub && unsub();
   }, [uid]);
 
-  /* Echo status */
   useEffect(() => {
     if (!uid || !user?.uid || isMe) return () => {};
     const unsub = listenToEchoAuthor(uid, user.uid, setEchoed);
@@ -88,6 +94,10 @@ const SpotlightProfile = () => {
       setToast({ message: 'Something went wrong', type: 'error' });
       setTimeout(() => setToast(null), 2000);
     }
+  };
+
+  const openOwnSpotlight = () => {
+    navigate('/spotlight');
   };
 
   const name = profile?.name || 'User';
@@ -117,7 +127,7 @@ const SpotlightProfile = () => {
             key={p.id}
             type="button"
             className="spotlight-profile-tile"
-            onClick={() => navigate(`/spotlight?post=${p.id}`)}
+            onClick={() => setPreviewPost(p)}
           >
             {p.mediaType === 'video' ? (
               <>
@@ -184,27 +194,43 @@ const SpotlightProfile = () => {
               <span>Reechoed</span>
             </div>
             <div className="spotlight-profile-stat">
+              <strong>{fmt(echoingCount)}</strong>
+              <span>Echoing</span>
+            </div>
+            <div className="spotlight-profile-stat">
               <strong>{fmt(echoersCount)}</strong>
               <span>Echoers</span>
             </div>
           </div>
 
-          {!isMe && (
-            <button
-              type="button"
-              className={`spotlight-profile-echo-btn ${echoed ? 'echoed' : ''}`}
-              onClick={handleEcho}
-            >
-              {echoed ? (
-                <>
-                  <i className="fas fa-check" /> Echoed
-                </>
-              ) : (
-                <>
-                  <i className="fas fa-plus" /> Echo
-                </>
-              )}
-            </button>
+          {isMe ? (
+            <div className="spotlight-profile-actions">
+              <button
+                type="button"
+                className="spotlight-profile-echo-btn"
+                onClick={openOwnSpotlight}
+              >
+                <i className="fas fa-bolt" /> Open Spotlight
+              </button>
+            </div>
+          ) : (
+            <div className="spotlight-profile-actions">
+              <button
+                type="button"
+                className={`spotlight-profile-echo-btn ${echoed ? 'echoed' : ''}`}
+                onClick={handleEcho}
+              >
+                {echoed ? (
+                  <>
+                    <i className="fas fa-check" /> Echoed
+                  </>
+                ) : (
+                  <>
+                    <i className="fas fa-plus" /> Echo
+                  </>
+                )}
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -230,6 +256,57 @@ const SpotlightProfile = () => {
         {tab === 'posts' && renderGrid(posts, isMe ? 'You haven\u2019t posted yet' : 'No posts yet')}
         {tab === 'reechoed' && renderGrid(reechoed, 'No Reechoed posts yet')}
       </div>
+
+      {previewPost && (
+        <div
+          className="spotlight-profile-preview-backdrop"
+          onClick={() => setPreviewPost(null)}
+        >
+          <div
+            className="spotlight-profile-preview"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="spotlight-profile-preview-close"
+              onClick={() => setPreviewPost(null)}
+              aria-label="Close"
+            >
+              <i className="fas fa-times" />
+            </button>
+            {previewPost.mediaType === 'video' ? (
+              <video
+                src={previewPost.mediaUrl}
+                className="spotlight-profile-preview-media"
+                controls
+                autoPlay
+                loop
+                playsInline
+                muted
+              />
+            ) : (
+              <img
+                src={previewPost.mediaUrl}
+                alt=""
+                className="spotlight-profile-preview-media"
+              />
+            )}
+            {previewPost.caption && (
+              <div className="spotlight-profile-preview-caption">{previewPost.caption}</div>
+            )}
+            <button
+              type="button"
+              className="spotlight-profile-preview-open"
+              onClick={() => {
+                setPreviewPost(null);
+                navigate(`/spotlight?focus=${previewPost.id}`);
+              }}
+            >
+              Open in feed →
+            </button>
+          </div>
+        </div>
+      )}
 
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
     </div>
