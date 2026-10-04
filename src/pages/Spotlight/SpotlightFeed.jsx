@@ -1,6 +1,6 @@
 // src/pages/Spotlight/SpotlightFeed.jsx
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../contexts/ProfileContext';
 import Toast from '../../components/Toast/Toast';
@@ -19,7 +19,7 @@ const SpotlightFeed = () => {
   const { user } = useAuth();
   const { getProfile, fetchProfile } = useProfile();
   const navigate = useNavigate();
-  const [params, setParams] = useSearchParams();
+  const location = useLocation();
 
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -40,7 +40,10 @@ const SpotlightFeed = () => {
 
   const containerRef = useRef(null);
   const videoRefs = useRef({});
-  const focusPostId = params.get('focus');
+  const scrollEndTimer = useRef(null);
+
+  // The upload page passes { freshPostId } via router state.
+  const freshPostId = location.state?.freshPostId || null;
 
   useEffect(() => {
     try {
@@ -63,28 +66,26 @@ const SpotlightFeed = () => {
         user?.uid ? fetchSeenSpotlightIds(user.uid) : Promise.resolve(new Set()),
       ]);
 
-      // Never apply the "seen" penalty to the focused post — a
-      // freshly-uploaded post should always rank first for its author.
+      // Don't penalize the fresh post for being "seen"
       const seenForRanking = new Set(seenSet);
-      if (focusPostId) seenForRanking.delete(focusPostId);
+      if (freshPostId) seenForRanking.delete(freshPostId);
 
       let ranked = rankSpotlightFeed(all, seenForRanking);
 
-      // If arriving with ?focus=ID, force that post to the very top.
-      if (focusPostId) {
-        const idx = ranked.findIndex((p) => p.id === focusPostId);
+      // Pin the fresh post to the top
+      if (freshPostId) {
+        const idx = ranked.findIndex((p) => p.id === freshPostId);
         if (idx > 0) {
           const [target] = ranked.splice(idx, 1);
           ranked = [target, ...ranked];
         } else if (idx === -1) {
-          // Post not in the ranked list — pull it fresh from the DB
-          // so the author still sees what they just posted.
+          // Rare: not yet in DB read. Fetch directly.
           try {
             const { ref, get } = await import('firebase/database');
             const { db } = await import('../../services/firebase');
-            const snap = await get(ref(db, `spotlight/posts/${focusPostId}`));
+            const snap = await get(ref(db, `spotlight/posts/${freshPostId}`));
             if (snap.exists()) {
-              ranked = [{ id: focusPostId, ...snap.val() }, ...ranked];
+              ranked = [{ id: freshPostId, ...snap.val() }, ...ranked];
             }
           } catch (_) {}
         }
@@ -102,43 +103,82 @@ const SpotlightFeed = () => {
     } finally {
       setLoading(false);
     }
-  }, [focusPostId, user?.uid]);
+  }, [freshPostId, user?.uid]);
 
   useEffect(() => { loadFeed(); }, [loadFeed]);
 
-  // Strip ?focus=ID from the URL after a couple of seconds so refreshing
-  // the page doesn't keep pinning the same post to the top.
+  // Clear router state once we've consumed it, so refreshing the page
+  // doesn't keep pinning the same post.
   useEffect(() => {
-    if (!focusPostId) return;
+    if (!freshPostId) return;
     const t = setTimeout(() => {
-      const next = new URLSearchParams(params);
-      next.delete('focus');
-      setParams(next, { replace: true });
+      navigate(location.pathname, { replace: true, state: null });
     }, 2500);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [focusPostId]);
+  }, [freshPostId]);
 
+  // ─── Snap-scroll → active slide detection ──────────────────
+  // Uses 0.5 threshold so a slide becomes "active" as soon as it's
+  // half visible. This is what makes the video autoplay on swipe.
   useEffect(() => {
     const container = containerRef.current;
     if (!container || posts.length === 0) return;
 
+    const ratios = new Map();
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((e) => {
-          if (e.isIntersecting && e.intersectionRatio > 0.6) {
-            const idx = Number(e.target.getAttribute('data-index'));
-            if (!Number.isNaN(idx)) setActiveIndex(idx);
+          const idx = Number(e.target.getAttribute('data-index'));
+          if (Number.isNaN(idx)) return;
+          ratios.set(idx, e.isIntersecting ? e.intersectionRatio : 0);
+        });
+
+        // Pick the index with the highest visibility ratio
+        let bestIdx = 0;
+        let bestRatio = 0;
+        ratios.forEach((r, i) => {
+          if (r > bestRatio) {
+            bestRatio = r;
+            bestIdx = i;
           }
         });
+        if (bestRatio > 0.4) setActiveIndex(bestIdx);
       },
-      { root: container, threshold: [0.6, 0.9] }
+      {
+        root: container,
+        threshold: [0, 0.25, 0.5, 0.75, 1.0],
+      }
     );
 
     const slides = container.querySelectorAll('.spotlight-slide');
     slides.forEach((s) => observer.observe(s));
     return () => observer.disconnect();
   }, [posts.length]);
+
+  // Fallback: after the user stops scrolling, re-evaluate which slide is
+  // most visible (in case the observer missed a moment).
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const onScroll = () => {
+      if (scrollEndTimer.current) clearTimeout(scrollEndTimer.current);
+      scrollEndTimer.current = setTimeout(() => {
+        const h = container.clientHeight || 1;
+        const top = container.scrollTop;
+        const idx = Math.round(top / h);
+        setActiveIndex(idx);
+      }, 90);
+    };
+
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      if (scrollEndTimer.current) clearTimeout(scrollEndTimer.current);
+    };
+  }, []);
 
   useEffect(() => {
     const onKey = (e) => {
