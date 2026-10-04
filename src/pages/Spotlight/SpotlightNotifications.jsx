@@ -1,6 +1,5 @@
 // src/pages/Spotlight/SpotlightNotifications.jsx
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import {
   listenToSpotlightNotifications,
   markAllSpotlightNotificationsRead,
@@ -46,13 +45,15 @@ const SpotlightNotifications = ({ isOpen, uid, onClose, onOpenPost, onOpenProfil
   useEffect(() => {
     if (!isOpen || !uid) return () => {};
     setLoading(true);
+    let currentList = [];
     const unsub = listenToSpotlightNotifications(uid, (list) => {
+      currentList = list;
       setNotifs(list);
       setLoading(false);
     });
-    // Mark all read after 1.2s
+    // Mark all read after a moment
     const t = setTimeout(() => {
-      markAllSpotlightNotificationsRead(uid, list).catch(() => {});
+      markAllSpotlightNotificationsRead(uid, currentList).catch(() => {});
     }, 1200);
     return () => { unsub && unsub(); clearTimeout(t); };
   }, [isOpen, uid]);
@@ -128,6 +129,9 @@ const SpotlightNotifications = ({ isOpen, uid, onClose, onOpenPost, onOpenProfil
                 onClick={() => {
                   if (n.postId) {
                     onOpenPost?.(n.postId);
+                    onClose?.();
+                  } else if (n.actorUid) {
+                    onOpenProfile?.(n.actorUid);
                     onClose?.();
                   }
                 }}
