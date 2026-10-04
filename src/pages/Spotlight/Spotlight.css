@@ -2199,3 +2199,97 @@
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
+.spotlight-edit-caption-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 88px;
+  animation: spFadeIn 0.2s ease;
+}
+.spotlight-edit-caption-sheet {
+  width: 100%;
+  max-width: 520px;
+  background: #14101e;
+  border-radius: 22px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 16px 18px 18px;
+  margin: 0 8px;
+  animation: spSheetUp 0.28s cubic-bezier(0.2, 1.2, 0.4, 1);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.spotlight-edit-caption-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #fff;
+  font-weight: 800;
+  font-size: 16px;
+}
+.spotlight-edit-caption-header button {
+  width: 30px; height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.75);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.spotlight-edit-caption-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+  font-size: 14px;
+  font-family: inherit;
+  line-height: 1.4;
+  resize: vertical;
+  min-height: 96px;
+  max-height: 200px;
+  outline: none;
+  box-sizing: border-box;
+}
+.spotlight-edit-caption-textarea:focus {
+  border-color: #6C3CE1;
+  background: rgba(108, 60, 225, 0.06);
+}
+.spotlight-edit-caption-count {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  text-align: right;
+}
+.spotlight-edit-caption-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.spotlight-edit-cancel,
+.spotlight-edit-save {
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: none;
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: inherit;
+}
+.spotlight-edit-cancel {
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.7);
+}
+.spotlight-edit-save {
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+}
+.spotlight-edit-save:disabled { opacity: 0.6; cursor: not-allowed; }
