@@ -52,17 +52,22 @@
     />
     <meta name="twitter:image" content="https://echoty.xyz/featured-graphic.png" />
     <meta name="twitter:image:alt" content="ECHO — the future of chat" />
-    <meta name="twitter:site" content="@echoty" />
-    <meta name="twitter:creator" content="@echoty" />
+    <meta name="twitter:site" content="@Abdulmaliklam" />
+    <meta name="twitter:creator" content="@Abdulmaliklam" />
 
     <!-- ══════════════════════════════════════════════════════════════
          STRUCTURED DATA (JSON-LD)
-         A complete Organization + WebSite + Person + FAQ graph so
-         Google and AI Overviews can answer:
-           - "Who is the CEO of ECHO?"
-           - "Who founded Echoty?"
-           - "What is ECHO?"
-         with a confident, single answer.
+
+         A complete Organization + Person + WebSite + WebPage + FAQ
+         graph. All @id values are stable, so Google can treat them as
+         canonical entities:
+
+           - Organization  → https://echoty.xyz/#organization
+           - Person        → https://echoty.xyz/#lawal-abdulmalik
+           - WebSite       → https://echoty.xyz/#website
+
+         Person.sameAs links to every verified external profile so
+         Google's Knowledge Graph can reconcile the entities.
          ══════════════════════════════════════════════════════════════ -->
     <script type="application/ld+json">
     {
@@ -87,21 +92,9 @@
           "image": { "@id": "https://echoty.xyz/#logo" },
           "description": "ECHO (Echoty) is a modern real-time messaging platform built around animated avatars, expressive chat, and vibrant communities.",
           "foundingDate": "2024",
-          "founder": {
-            "@type": "Person",
-            "@id": "https://echoty.xyz/#lawal-abdulmalik",
-            "name": "Lawal Abdulmalik"
-          },
-          "ceo": {
-            "@type": "Person",
-            "@id": "https://echoty.xyz/#lawal-abdulmalik",
-            "name": "Lawal Abdulmalik"
-          },
-          "employee": {
-            "@type": "Person",
-            "@id": "https://echoty.xyz/#lawal-abdulmalik",
-            "name": "Lawal Abdulmalik"
-          },
+          "founder": { "@id": "https://echoty.xyz/#lawal-abdulmalik" },
+          "ceo": { "@id": "https://echoty.xyz/#lawal-abdulmalik" },
+          "employee": { "@id": "https://echoty.xyz/#lawal-abdulmalik" },
           "contactPoint": {
             "@type": "ContactPoint",
             "contactType": "customer support",
@@ -109,6 +102,7 @@
             "availableLanguage": ["English"]
           },
           "sameAs": [
+            "https://www.wikidata.org/wiki/Q141639039",
             "https://echoty.xyz/"
           ]
         },
@@ -119,13 +113,25 @@
           "name": "Lawal Abdulmalik",
           "givenName": "Lawal",
           "familyName": "Abdulmalik",
-          "alternateName": ["Lawalabdulmalik", "Lawal AbdulMalik"],
+          "alternateName": [
+            "Lawalabdulmalik",
+            "Lawal AbdulMalik",
+            "Abdulmalik Lawal",
+            "Lawal Abdul Malik"
+          ],
           "jobTitle": "Founder & CEO",
           "description": "Lawal Abdulmalik is the founder and CEO of ECHO (echoty.xyz), a real-time messaging platform with animated avatars and expressive chat.",
           "worksFor": { "@id": "https://echoty.xyz/#organization" },
           "founder": { "@id": "https://echoty.xyz/#organization" },
           "url": "https://echoty.xyz/",
-          "image": "https://echoty.xyz/favicon-96x96.png",
+          "mainEntityOfPage": "https://echoty.xyz/",
+          "image": {
+            "@type": "ImageObject",
+            "url": "https://echoty.xyz/lawal-abdulmalik.jpg",
+            "contentUrl": "https://echoty.xyz/lawal-abdulmalik.jpg",
+            "caption": "Lawal Abdulmalik, Founder & CEO of ECHO"
+          },
+          "email": "lawalabdulmalik2011@gmail.com",
           "nationality": {
             "@type": "Country",
             "name": "Nigeria"
@@ -135,7 +141,16 @@
             "Real-time chat",
             "Animated avatars",
             "Community platforms",
-            "Product design"
+            "Product design",
+            "Software engineering",
+            "Entrepreneurship"
+          ],
+          "sameAs": [
+            "https://www.wikidata.org/wiki/Q141639028",
+            "https://www.linkedin.com/in/lawal-abdul-malik-b32957385",
+            "https://x.com/Abdulmaliklam",
+            "https://www.instagram.com/lawalabdulmalik_lam9/",
+            "https://www.crunchbase.com/person/abdulmalik-lawal"
           ]
         },
 
@@ -217,6 +232,14 @@
               "acceptedAnswer": {
                 "@type": "Answer",
                 "text": "Yes. ECHO and Echoty refer to the same platform, available at echoty.xyz."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "Who is Lawal Abdulmalik?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Lawal Abdulmalik is a Nigerian entrepreneur and software engineer. He is the founder and CEO of ECHO (Echoty), a real-time messaging platform launched in 2024."
               }
             }
           ]
