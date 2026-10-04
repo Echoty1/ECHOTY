@@ -4,7 +4,10 @@ import {
   listenToSpotlightComments,
   addSpotlightComment,
   deleteSpotlightComment,
+  toggleCommentLike,
 } from '../../services/spotlightService';
+
+const QUICK_EMOJIS = ['❤️', '😂', '🔥', '👏', '😮'];
 
 const timeAgo = (ts) => {
   if (!ts) return '';
@@ -14,6 +17,65 @@ const timeAgo = (ts) => {
   if (s < 86400) return `${Math.floor(s / 3600)}h`;
   if (s < 604800) return `${Math.floor(s / 86400)}d`;
   return new Date(ts).toLocaleDateString();
+};
+
+const CommentLikePill = ({ postId, comment, currentUser }) => {
+  const [reaction, setReaction] = useState(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+
+  useEffect(() => {
+    // The current user's reaction to this comment is stored under
+    // spotlight/posts/<postId>/comments/<commentId>/likes/<uid>
+    // value is the emoji string.
+    const { ref: fbRef, onValue: fbOnValue } = require('firebase/database');
+    const { db } = require('../../services/firebase');
+    if (!currentUser?.uid) return () => {};
+    const unsub = fbOnValue(
+      fbRef(db, `spotlight/posts/${postId}/comments/${comment.id}/likes/${currentUser.uid}`),
+      (snap) => setReaction(snap.val() || null)
+    );
+    return () => unsub();
+  }, [postId, comment.id, currentUser?.uid]);
+
+  const pick = async (emoji) => {
+    setPickerOpen(false);
+    try {
+      const { ref: fbRef, set: fbSet, remove: fbRemove } = require('firebase/database');
+      const { db } = require('../../services/firebase');
+      const r = fbRef(db, `spotlight/posts/${postId}/comments/${comment.id}/likes/${currentUser.uid}`);
+      if (reaction === emoji) {
+        await fbRemove(r);
+      } else {
+        await fbSet(r, emoji);
+      }
+    } catch (_) {}
+  };
+
+  return (
+    <div className="spotlight-comment-like">
+      <button
+        type="button"
+        className={`spotlight-comment-like-btn ${reaction ? 'active' : ''}`}
+        onClick={() => setPickerOpen((v) => !v)}
+      >
+        {reaction ? reaction : <i className="far fa-heart" />}
+      </button>
+      {pickerOpen && (
+        <div className="spotlight-comment-like-picker">
+          {QUICK_EMOJIS.map((e) => (
+            <button
+              key={e}
+              type="button"
+              className="spotlight-comment-like-pick"
+              onClick={() => pick(e)}
+            >
+              {e}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 };
 
 const SpotlightComments = ({ isOpen, post, currentUser, currentProfile, onClose }) => {
@@ -119,16 +181,21 @@ const SpotlightComments = ({ isOpen, post, currentUser, currentProfile, onClose 
                     </div>
                     <div className="spotlight-comment-text">{c.text}</div>
                   </div>
-                  {mine && (
-                    <button
-                      type="button"
-                      className="spotlight-comment-delete"
-                      onClick={() => handleDelete(c.id)}
-                      aria-label="Delete comment"
-                    >
-                      <i className="fas fa-trash" />
-                    </button>
-                  )}
+                  <div className="spotlight-comment-right">
+                    {currentUser?.uid && (
+                      <CommentLikePill postId={post.id} comment={c} currentUser={currentUser} />
+                    )}
+                    {mine && (
+                      <button
+                        type="button"
+                        className="spotlight-comment-delete"
+                        onClick={() => handleDelete(c.id)}
+                        aria-label="Delete comment"
+                      >
+                        <i className="fas fa-trash" />
+                      </button>
+                    )}
+                  </div>
                 </div>
               );
             })
