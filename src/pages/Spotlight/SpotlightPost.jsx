@@ -92,7 +92,6 @@ const SpotlightPost = ({
     return () => { if (onRegisterVideo) onRegisterVideo(post.id, null); };
   }, [post.id, onRegisterVideo]);
 
-  /* ─── Long press → open options sheet ─────────────────── */
   const startLongPress = () => {
     longPressTriggered.current = false;
     if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
@@ -242,16 +241,7 @@ const SpotlightPost = ({
         )}
       </div>
 
-      {post.mediaType === 'video' && (
-        <button
-          type="button"
-          className="spotlight-mute-btn"
-          onClick={(e) => { e.stopPropagation(); onToggleMute?.(); }}
-          aria-label={muted ? 'Unmute' : 'Mute'}
-        >
-          <i className={muted ? 'fas fa-volume-mute' : 'fas fa-volume-up'} />
-        </button>
-      )}
+      {/* Note: no floating mute button. The top-bar mute toggle handles this. */}
     </div>
   );
 };
