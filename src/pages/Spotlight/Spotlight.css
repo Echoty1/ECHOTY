@@ -510,12 +510,14 @@
 .spotlight-comments-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 200;
   background: rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  padding-bottom: 88px;
   animation: spFadeIn 0.2s ease;
 }
 @keyframes spFadeIn { from { opacity: 0; } to { opacity: 1; } }
@@ -523,16 +525,16 @@
 .spotlight-comments-sheet {
   width: 100%;
   max-width: 560px;
-  max-height: 78vh;
+  max-height: calc(78vh - 88px);
   background: #14101e;
-  border-top-left-radius: 22px;
-  border-top-right-radius: 22px;
+  border-radius: 22px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-bottom: none;
   padding: 8px 16px 14px;
   display: flex;
   flex-direction: column;
   animation: spSheetUp 0.28s cubic-bezier(0.2, 1.2, 0.4, 1);
+  margin: 0 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
 }
 @keyframes spSheetUp {
   from { transform: translateY(100%); }
@@ -696,28 +698,30 @@
 .spotlight-share-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 60;
+  z-index: 200;
   background: rgba(0, 0, 0, 0.65);
   backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   display: flex;
   align-items: flex-end;
   justify-content: center;
+  padding-bottom: 88px;
   animation: spFadeIn 0.2s ease;
 }
 .spotlight-share-sheet {
   width: 100%;
   max-width: 560px;
-  max-height: 82vh;
+  max-height: calc(82vh - 88px);
   background: #14101e;
-  border-top-left-radius: 22px;
-  border-top-right-radius: 22px;
+  border-radius: 22px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  border-bottom: none;
   padding: 8px 18px 18px;
   display: flex;
   flex-direction: column;
   animation: spSheetUp 0.28s cubic-bezier(0.2, 1.2, 0.4, 1);
   overflow-y: auto;
+  margin: 0 8px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
 }
 .spotlight-share-handle {
   width: 42px; height: 4px;
@@ -1069,7 +1073,21 @@
   .spotlight-feed-counter { bottom: 86px; left: 12px; }
 
   .spotlight-share-quickrow { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+
+  .spotlight-comments-backdrop {
+    padding-bottom: 84px;
+  }
+  .spotlight-comments-sheet {
+    max-height: calc(72vh - 84px);
+  }
+  .spotlight-share-backdrop {
+    padding-bottom: 84px;
+  }
+  .spotlight-share-sheet {
+    max-height: calc(76vh - 84px);
+  }
 }
+
 /* ═══════════════════════════════════════════════════════════════
    PROFILE PAGE
    ═══════════════════════════════════════════════════════════════ */
