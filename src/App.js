@@ -42,7 +42,13 @@ import EchoDropPage from './components/pages/EchoDrop/EchoDropPage';
 import MessageNotifier from './components/common/MessageNotifier';
 import { useGlobalMessageListener } from './hooks/useGlobalMessageListener';
 import { unlockAudio } from './services/notificationService';
-import { usePresence } from './hooks/usePresence';
+
+// ─── Spotlight ─────────────────────────────────────────────
+import SpotlightFeed from './pages/Spotlight/SpotlightFeed';
+import SpotlightUpload from './pages/Spotlight/SpotlightUpload';
+import SpotlightProfile from './pages/Spotlight/SpotlightProfile';
+import './pages/Spotlight/Spotlight.css';
+// ────────────────────────────────────────────────────────────
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
@@ -122,7 +128,6 @@ function AppContent() {
   const { fetchProfile } = useProfile();
 
   useGlobalMessageListener();
-  usePresence(user);
 
   const [minTimePassed, setMinTimePassed] = useState(false);
   const [showUpdatePopup, setShowUpdatePopup] = useState(false);
@@ -325,6 +330,7 @@ function AppContent() {
   if (showLoading) return <LoadingScreen />;
   if (!user) return <Login />;
 
+  // 👇 Verification gate — user is signed in but not verified
   if (user.emailVerified === false) {
     return <VerifyEmailScreen />;
   }
@@ -366,6 +372,13 @@ function AppContent() {
           <Route path="/legal" element={<Legal />} />
           <Route path="/communities" element={<Communities />} />
           <Route path="/echodrop" element={<EchoDropPage />} />
+
+          {/* ─── Spotlight ──────────────────────────────── */}
+          <Route path="/spotlight" element={<SpotlightFeed />} />
+          <Route path="/spotlight/upload" element={<SpotlightUpload />} />
+          <Route path="/spotlight/user/:uid" element={<SpotlightProfile />} />
+          {/* ────────────────────────────────────────────── */}
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
