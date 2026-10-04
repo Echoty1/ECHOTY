@@ -3,13 +3,26 @@ import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ref, onValue } from 'firebase/database';
 import { db } from '../../services/firebase';
+import { getShareableFile, spotlightShareUrl } from '../../utils/echoWatermark';
 
 const SITE = 'https://echoty.xyz';
+
+const canShareFiles = () => {
+  if (typeof navigator === 'undefined') return false;
+  if (!navigator.share || !navigator.canShare) return false;
+  try {
+    const probe = new File([new Blob([''], { type: 'video/mp4' })], 't.mp4', { type: 'video/mp4' });
+    return navigator.canShare({ files: [probe] });
+  } catch (_) {
+    return false;
+  }
+};
 
 const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
   const navigate = useNavigate();
   const [chats, setChats] = useState([]);
   const [copied, setCopied] = useState(false);
+  const [sending, setSending] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !currentUser?.uid) return () => {};
@@ -43,7 +56,87 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
   if (!isOpen || !post) return null;
 
   const url = `${SITE}/spotlight?focus=${post.id}&w=1`;
-  const shareText = `Watch "${post.caption || 'this Spotlight'}" by @${(post.authorName || 'user').replace(/\s+/g, '').toLowerCase()} on ECHO 🎬`;
+  const shareText = `Watch "${post.caption || 'this Spotlight'}" by @${(post.authorName || 'user')
+    .replace(/\s+/g, '')
+    .toLowerCase()} on ECHO 🎬`;
+
+  const caption = `${shareText}\n${url}`;
+
+  /* ─── Try sending the file via navigator.share ──────────── */
+  const tryShareFile = async (fallbackAction) => {
+    if (sending) return;
+    setSending(true);
+
+    try {
+      if (canShareFiles()) {
+        const result = await getShareableFile(post);
+        if (result?.file) {
+          try {
+            await navigator.share({
+              files: [result.file],
+              title: shareText,
+              text: caption,
+            });
+            setSending(false);
+            onClose?.();
+            return true;
+          } catch (err) {
+            // User cancelled — that's fine, don't fall back
+            if (err?.name === 'AbortError') {
+              setSending(false);
+              return true;
+            }
+            console.warn('[Share] file share failed, falling back:', err);
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('[Share] getShareableFile error:', err);
+    }
+
+    // Fallback
+    setSending(false);
+    fallbackAction?.();
+    return false;
+  };
+
+  const handleWhatsApp = async () => {
+    // WhatsApp accepts files via native share only. If files aren't
+    // supported, fall back to opening WhatsApp with the caption+link
+    // (user can attach manually), or to copy-to-clipboard.
+    const shared = await tryShareFile(() => {
+      // Fallback: open WhatsApp web with caption (link only).
+      // wa.me accepts text only — no file upload path on desktop.
+      window.open(
+        `https://wa.me/?text=${encodeURIComponent(caption)}`,
+        '_blank',
+        'noopener,noreferrer'
+      );
+      onClose?.();
+    });
+    return shared;
+  };
+
+  const handleTelegram = async () => {
+    const shared = await tryShareFile(() => {
+      window.open(
+        `https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(shareText)}`,
+        '_blank',
+        'noopener,noreferrer'
+      );
+      onClose?.();
+    });
+    return shared;
+  };
+
+  const handleTwitter = () => {
+    window.open(
+      `https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(url)}`,
+      '_blank',
+      'noopener,noreferrer'
+    );
+    onClose?.();
+  };
 
   const handleCopy = async () => {
     try {
@@ -58,32 +151,8 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
     }
   };
 
-  const openWindow = (target) => {
-    window.open(target, '_blank', 'noopener,noreferrer');
-    onClose?.();
-  };
-
-  const handleWhatsApp = () => {
-    openWindow(`https://wa.me/?text=${encodeURIComponent(`${shareText}\n${url}`)}`);
-  };
-
-  const handleTwitter = () => {
-    openWindow(`https://twitter.com/intent/tweet?text=${encodeURIComponent(shareText)}&url=${encodeURIComponent(url)}`);
-  };
-
-  const handleTelegram = () => {
-    openWindow(`https://t.me/share/url?url=${encodeURIComponent(url)}&text=${encodeURIComponent(shareText)}`);
-  };
-
   const handleNative = async () => {
-    try {
-      if (navigator.share) {
-        await navigator.share({ title: shareText, text: shareText, url });
-        onClose?.();
-      } else {
-        handleCopy();
-      }
-    } catch (_) { /* user cancelled */ }
+    await tryShareFile(handleCopy);
   };
 
   const handleSendToChat = (partnerId) => {
@@ -105,9 +174,14 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
         </div>
 
         <div className="spotlight-share-quickrow">
-          <button type="button" className="spotlight-share-quick" onClick={handleWhatsApp}>
+          <button
+            type="button"
+            className="spotlight-share-quick"
+            onClick={handleWhatsApp}
+            disabled={sending}
+          >
             <span className="spotlight-share-quick-icon whatsapp">
-              <i className="fab fa-whatsapp" />
+              {sending ? <i className="fas fa-spinner fa-spin" /> : <i className="fab fa-whatsapp" />}
             </span>
             <span className="spotlight-share-quick-label">WhatsApp</span>
           </button>
@@ -119,9 +193,14 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
             <span className="spotlight-share-quick-label">X</span>
           </button>
 
-          <button type="button" className="spotlight-share-quick" onClick={handleTelegram}>
+          <button
+            type="button"
+            className="spotlight-share-quick"
+            onClick={handleTelegram}
+            disabled={sending}
+          >
             <span className="spotlight-share-quick-icon telegram">
-              <i className="fab fa-telegram" />
+              {sending ? <i className="fas fa-spinner fa-spin" /> : <i className="fab fa-telegram" />}
             </span>
             <span className="spotlight-share-quick-label">Telegram</span>
           </button>
@@ -133,7 +212,12 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
             <span className="spotlight-share-quick-label">{copied ? 'Copied' : 'Copy link'}</span>
           </button>
 
-          <button type="button" className="spotlight-share-quick" onClick={handleNative}>
+          <button
+            type="button"
+            className="spotlight-share-quick"
+            onClick={handleNative}
+            disabled={sending}
+          >
             <span className="spotlight-share-quick-icon native">
               <i className="fas fa-share-alt" />
             </span>
