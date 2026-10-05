@@ -23,6 +23,7 @@ const getCopy = (type) => {
     case 'reecho': return 'reechoed your Spotlight';
     case 'duet': return 'started a duet with you';
     case 'echo': return 'echoed you';
+    case 'spotlight_share': return 'shared a Spotlight with you';
     default: return 'interacted with your Spotlight';
   }
 };
@@ -34,11 +35,19 @@ const getIcon = (type) => {
     case 'reecho': return 'fa-retweet';
     case 'duet': return 'fa-clone';
     case 'echo': return 'fa-bolt';
+    case 'spotlight_share': return 'fa-share';
     default: return 'fa-bell';
   }
 };
 
-const SpotlightNotifications = ({ isOpen, uid, onClose, onOpenPost, onOpenProfile }) => {
+const SpotlightNotifications = ({
+  isOpen,
+  uid,
+  onClose,
+  onOpenPost,
+  onOpenProfile,
+  onOpenHistory,
+}) => {
   const [notifs, setNotifs] = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -51,7 +60,6 @@ const SpotlightNotifications = ({ isOpen, uid, onClose, onOpenPost, onOpenProfil
       setNotifs(list);
       setLoading(false);
     });
-    // Mark all read after a moment
     const t = setTimeout(() => {
       markAllSpotlightNotificationsRead(uid, currentList).catch(() => {});
     }, 1200);
@@ -88,6 +96,16 @@ const SpotlightNotifications = ({ isOpen, uid, onClose, onOpenPost, onOpenProfil
         <div className="spotlight-notifs-header">
           <span className="spotlight-notifs-title">Activity</span>
           <div className="spotlight-notifs-header-actions">
+            {onOpenHistory && (
+              <button
+                type="button"
+                className="spotlight-notifs-clear"
+                onClick={onOpenHistory}
+                title="Watch history"
+              >
+                <i className="fas fa-history" />
+              </button>
+            )}
             {notifs.length > 0 && (
               <button
                 type="button"
