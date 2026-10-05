@@ -422,3 +422,113 @@ export const rankSpotlightFeed = (posts, seenSet = new Set()) => {
     .sort((a, b) => b.score - a.score)
     .map((x) => x.post);
 };
+
+/* ─── Fresh-feed rotation ──────────────────────────────────── */
+
+/**
+ * Fisher–Yates shuffle using a seeded PRNG so the same seed
+ * always produces the same order (stable within a session).
+ */
+const mulberry32 = (seed) => {
+  let a = seed >>> 0;
+  return () => {
+    a |= 0;
+    a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+};
+
+const seededShuffle = (arr, seed) => {
+  const rng = mulberry32(seed);
+  const out = arr.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [out[i], out[j]] = [out[j], out[i]];
+  }
+  return out;
+};
+
+/**
+ * Session-scoped rotation seed.
+ * Same seed for the whole browsing session → stable order while scrolling.
+ * Pass forceNew=true to mint a fresh seed (used on every Spotlight mount).
+ */
+export const getOrCreateSessionSeed = (forceNew = false) => {
+  const KEY = 'spotlight_rotation_seed';
+  try {
+    if (!forceNew) {
+      const existing = sessionStorage.getItem(KEY);
+      if (existing) return Number(existing);
+    }
+    const fresh = (Math.floor(Math.random() * 0xFFFFFFFF) >>> 0) || 1;
+    sessionStorage.setItem(KEY, String(fresh));
+    return fresh;
+  } catch (_) {
+    return (Math.floor(Math.random() * 0xFFFFFFFF) >>> 0) || 1;
+  }
+};
+
+/**
+ * Rank posts for a "fresh feed" experience:
+ *
+ *   1. Unseen posts (not in seenIds) go to the top.
+ *   2. Within unseen: interleave so a single creator can't dominate.
+ *   3. Within seen: most-recently-seen go last, so you don't see
+ *      the same clip twice in a row.
+ *   4. Finally, apply a seeded shuffle so two visits don't show
+ *      the exact same order.
+ */
+export const rankFreshFeed = (posts, seenIds = new Set(), seed = 1) => {
+  if (!Array.isArray(posts) || posts.length === 0) return [];
+
+  const seen = seenIds instanceof Set ? seenIds : new Set(seenIds || []);
+  const unseen = [];
+  const seenList = [];
+
+  for (const p of posts) {
+    if (!p || p.deleted) continue;
+    if (seen.has(p.id)) seenList.push(p);
+    else unseen.push(p);
+  }
+
+  // Interleave unseen by author so a single uploader can't fill the feed
+  const byAuthor = new Map();
+  for (const p of unseen) {
+    if (!byAuthor.has(p.uid)) byAuthor.set(p.uid, []);
+    byAuthor.get(p.uid).push(p);
+  }
+  // Sort each author's bucket newest-first
+  for (const list of byAuthor.values()) {
+    list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  }
+  const interleaved = [];
+  let added = true;
+  while (added) {
+    added = false;
+    for (const list of byAuthor.values()) {
+      if (list.length) {
+        interleaved.push(list.shift());
+        added = true;
+      }
+    }
+  }
+
+  // Seen posts: sort by createdAt desc (freshest memories surface higher)
+  seenList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+
+  const ordered = [...interleaved, ...seenList];
+  return seededShuffle(ordered, seed);
+};
+
+/**
+ * Rotate an array by N positions. Useful when the user pulls
+ * to refresh — bump N and the order visibly changes even if the
+ * underlying data is identical.
+ */
+export const rotateArray = (arr, n = 0) => {
+  if (!Array.isArray(arr) || arr.length === 0) return [];
+  const k = ((n % arr.length) + arr.length) % arr.length;
+  return [...arr.slice(k), ...arr.slice(0, k)];
+};
