@@ -1,9 +1,10 @@
 // src/pages/Spotlight/SpotlightShare.jsx
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ref, onValue, push, set, update, runTransaction } from 'firebase/database';
+import { ref, onValue, push, set, runTransaction } from 'firebase/database';
 import { db } from '../../services/firebase';
 import { getShareableFile, spotlightShareUrl } from '../../utils/echoWatermark';
+import { notifySpotlightShare } from '../../services/spotlightNotifications';
 
 const SITE = 'https://echoty.xyz';
 
@@ -151,7 +152,6 @@ const SpotlightShare = ({
     await tryShareFile(handleCopy);
   };
 
-  /* ─── SEND-TO-CHAT: writes a rich spotlight message into the thread ─── */
   const handleSendToChat = async (partnerId) => {
     if (!currentUser?.uid || !partnerId) return;
     setSendingToId(partnerId);
@@ -188,7 +188,23 @@ const SpotlightShare = ({
 
       await set(newMsgRef, payload);
 
-      /* Update BOTH userChats entries so the chat list reflects it */
+      // Fire "shared with you" notification
+      try {
+        await notifySpotlightShare({
+          recipientUid: partnerId,
+          senderUid: currentUser.uid,
+          senderName: currentProfile?.name || currentUser.displayName || 'User',
+          senderAvatar: currentProfile?.avatar || '',
+          postId: post.id,
+          postThumbnail: thumbnail,
+          postCaption: post.caption || '',
+          postAuthorName: post.authorName || 'User',
+          chatId: cId,
+        });
+      } catch (err) {
+        console.warn('[Share] notification failed:', err);
+      }
+
       const now = Date.now();
       const myName = currentProfile?.name || currentUser.displayName || 'User';
       const myAvatar = currentProfile?.avatar || '';
@@ -242,7 +258,6 @@ const SpotlightShare = ({
       console.error('[Share] send-to-chat failed:', err);
       onToast?.({ message: 'Could not send', type: 'error' });
       setTimeout(() => onToast?.(null), 2200);
-      /* Fallback: navigate with a prefilled link so the user isn't stuck */
       navigate(`/chat/${partnerId}`, {
         state: { prefilledNote: caption },
       });
