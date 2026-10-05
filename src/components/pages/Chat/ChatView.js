@@ -56,6 +56,10 @@ import LinkPreviewCard from './LinkPreviewCard';
 import { extractFirstUrl, fetchLinkPreview } from '../../../utils/linkPreview';
 // ────────────────────────────────────────────────────────────────
 
+// ─── Spotlight share card (NEW) ────────────────────────────────
+import ChatSpotlightCard from './ChatSpotlightCard';
+// ────────────────────────────────────────────────────────────────
+
 /* ─────────────────────────────────────────────────────────────
    Visual-viewport hook (unchanged)
    ───────────────────────────────────────────────────────────── */
@@ -210,9 +214,7 @@ const ChatView = () => {
   const showTyping = userSettings?.chats?.showTyping !== false;
   const sendReadReceipts = userSettings?.chats?.sendReadReceipts !== false;
   const fontSize = userSettings?.chats?.fontSize || 'md';
-  // ─── Auto-save: driven by Settings → Chats → Media auto-download ───
   const autoSaveMedia = userSettings?.chats?.mediaAutoDownload === 'always';
-  // ─── Video playback mode: fullscreen (default) or inline ───
   const videoFullscreenDefault = userSettings?.chats?.videoFullscreen !== false;
 
   const [blockedByMe, setBlockedByMe] = useState(false);
@@ -271,19 +273,15 @@ const ChatView = () => {
   const stampedLegacyTides = useRef(false);
   const [tideTick, setTideTick] = useState(Date.now());
 
-  // ─── download state per message ─────────────────────
   const [savingIds, setSavingIds] = useState({});
 
   const [pressedMsgId, setPressedMsgId] = useState(null);
   const [tappedEmoji, setTappedEmoji] = useState(null);
 
-  /* FAB + unread counter */
   const [unreadWhileScrolled, setUnreadWhileScrolled] = useState(0);
 
-  /* pinned message */
   const [pinnedMessageId, setPinnedMessageId] = useState(null);
 
-  /* select mode */
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
 
@@ -523,9 +521,12 @@ const ChatView = () => {
       const msgs = sortMessages(Object.entries(data).map(([key, val]) => ({ id: key, key, ...val })));
       const latest = msgs[msgs.length - 1];
       if (latest) {
+        // ─── spotlight preview (NEW) ───
         if (latest.type === 'media') latestMsg = latest.mediaType === 'video' ? '🎬 Video' : latest.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
         else if (latest.type === 'echomoji') latestMsg = `😤 ECHOMOJI (${latest.mood || 'neutral'})`;
+        else if (latest.type === 'spotlight') latestMsg = '🎬 Spotlight';
         else latestMsg = latest.text || '';
+        // ────────────────────────────────
         latestSender = latest.senderId || '';
         latestTimestamp = latest.timestamp || Date.now();
       }
@@ -629,7 +630,6 @@ const ChatView = () => {
     noteReplyContext.current = null;
   };
 
-  // ─── Download / auto-save media to device ─────────────
   const handleDownloadMedia = async (msg, isAuto = false) => {
     if (!msg || !msg.mediaUrl || !msg.mediaUrl.startsWith('http')) return;
     const id = msg.id;
@@ -932,9 +932,12 @@ const ChatView = () => {
     const isOwnMsg = String(msg.senderId || '') === String(user?.uid || '');
     const senderName = isOwnMsg ? (currentUserProfile?.name || 'You') : (partnerProfile?.name || location.state?.userName || 'User');
     let textSnippet;
+    // ─── spotlight reply snippet (NEW) ───
     if (msg.type === 'media') textSnippet = msg.mediaType === 'video' ? '🎬 Video' : msg.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
     else if (msg.type === 'echomoji') textSnippet = `😤 ECHOMOJI (${msg.mood || 'neutral'})`;
+    else if (msg.type === 'spotlight') textSnippet = '🎬 Spotlight';
     else textSnippet = msg.text || 'Message';
+    // ─────────────────────────────────────
     setReplyTo({ messageId: msg.id, senderName, messageType: msg.type || 'text', textSnippet, originalMessage: msg });
     setNewMessage('');
     setActiveMessageMenuId(null);
@@ -1455,7 +1458,25 @@ const ChatView = () => {
     };
 
     let content;
-    if (msg.type === 'echomoji') {
+    // ─── spotlight message type (NEW) ───
+    if (msg.type === 'spotlight') {
+      content = shell(
+        <>
+          {replyToDisplay && (
+            <RepliedMessage
+              replyTo={replyToDisplay}
+              onTap={() => jumpToMessage(replyToDisplay.messageId)}
+            />
+          )}
+          {noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}
+          <ChatSpotlightCard
+            spotlight={msg.spotlight}
+            onOpen={(postId) => navigate(`/spotlight?focus=${postId}`)}
+          />
+        </>
+      );
+    } else if (msg.type === 'echomoji') {
+    // ────────────────────────────────────
       const skinObj = msg.skinId ? getSkinById(msg.skinId) : null;
       content = shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}<div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}><ECHOMOJI mood={msg.mood || 'neutral'} skin={skinObj} size={56} interactive={false} animated={true} /></div></>);
     } else if (msg.type === 'media') {
@@ -1733,6 +1754,7 @@ const ChatView = () => {
       return pinnedMessage.caption || '📷 Image';
     }
     if (pinnedMessage.type === 'echomoji') return `😤 ECHOMOJI (${pinnedMessage.mood || 'neutral'})`;
+    if (pinnedMessage.type === 'spotlight') return '🎬 Spotlight'; // NEW
     return pinnedMessage.text || '';
   }, [pinnedMessage]);
 
