@@ -9,6 +9,7 @@ import SpotlightComments from './SpotlightComments';
 import SpotlightShare from './SpotlightShare';
 import SpotlightOptions from './SpotlightOptions';
 import SpotlightNotifications from './SpotlightNotifications';
+import SpotlightHashtagSheet from './SpotlightHashtagSheet';
 import useSpotlightSEO from '../../hooks/useSpotlightSEO';
 import { listenToSpotlightUnreadCount } from '../../services/spotlightNotifications';
 import {
@@ -18,6 +19,7 @@ import {
   softDeleteSpotlightPost,
   restoreSpotlightPost,
   hardDeleteSpotlightPost,
+  listenToMyEchoing,
 } from '../../services/spotlightService';
 
 const PULL_THRESHOLD = 80;
@@ -45,9 +47,16 @@ const SpotlightFeed = () => {
   const [shareFor, setShareFor] = useState(null);
   const [optionsFor, setOptionsFor] = useState(null);
   const [notifsOpen, setNotifsOpen] = useState(false);
+  const [hashtagSheet, setHashtagSheet] = useState(null);
   const [unreadCount, setUnreadCount] = useState(0);
   const [toast, setToast] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
+
+  // Feed tabs + search
+  const [feedTab, setFeedTab] = useState('foryou'); // 'foryou' | 'following'
+  const [echoing, setEchoing] = useState([]);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const [pullY, setPullY] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
@@ -59,6 +68,7 @@ const SpotlightFeed = () => {
   const containerRef = useRef(null);
   const videoRefs = useRef({});
   const seenIdsRef = useRef(new Set());
+  const rawPostsRef = useRef([]);
   const newestSeenCreatedAtRef = useRef(0);
   const scrollEndTimer = useRef(null);
   const pullStartRef = useRef(null);
@@ -81,13 +91,82 @@ const SpotlightFeed = () => {
     else fetchProfile(user.uid);
   }, [user?.uid, getProfile, fetchProfile]);
 
-  /* Unread notifications count for bell badge */
+  /* Unread count for bell badge */
   useEffect(() => {
     if (!user?.uid) return () => {};
     return listenToSpotlightUnreadCount(user.uid, setUnreadCount);
   }, [user?.uid]);
 
-  /* Real-time feed */
+  /* Listen to who I'm echoing */
+  useEffect(() => {
+    if (!user?.uid) return () => {};
+    return listenToMyEchoing(user.uid, setEchoing);
+  }, [user?.uid]);
+
+  /* Hashtag sheet custom event */
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail) setHashtagSheet(e.detail);
+    };
+    window.addEventListener('spotlight-hashtag-tap', handler);
+    return () => window.removeEventListener('spotlight-hashtag-tap', handler);
+  }, []);
+
+  /* Recompute visible feed whenever data / tab / search changes */
+  const applyFilters = useCallback(() => {
+    const raw = rawPostsRef.current || [];
+    const pinnedId = freshPostId || focusPostId;
+    const seenForRanking = new Set(seenIdsRef.current);
+    if (pinnedId) seenForRanking.delete(pinnedId);
+
+    let ranked = rankSpotlightFeed(raw, seenForRanking);
+
+    if (pinnedId) {
+      const idx = ranked.findIndex((p) => p.id === pinnedId);
+      if (idx > 0) {
+        const [target] = ranked.splice(idx, 1);
+        ranked = [target, ...ranked];
+      }
+    }
+
+    // Following tab
+    if (feedTab === 'following') {
+      const set = new Set(echoing);
+      ranked = ranked.filter((p) => set.has(p.uid));
+    }
+
+    // Search filter
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      ranked = ranked.filter((p) => {
+        const caption = (p.caption || '').toLowerCase();
+        const author = (p.authorName || '').toLowerCase();
+        return caption.includes(q) || author.includes(q);
+      });
+    }
+
+    const newestCreatedAt = ranked.reduce(
+      (max, p) => Math.max(max, p.createdAt || 0),
+      0
+    );
+
+    if (
+      newestSeenCreatedAtRef.current > 0 &&
+      newestCreatedAt > newestSeenCreatedAtRef.current &&
+      containerRef.current &&
+      containerRef.current.scrollTop > 40 &&
+      feedTab === 'foryou' &&
+      !q
+    ) {
+      setHasNewAbove(true);
+    }
+
+    newestSeenCreatedAtRef.current = newestCreatedAt;
+    setPosts(ranked);
+    setLoading(false);
+  }, [feedTab, echoing, searchQuery, freshPostId, focusPostId]);
+
+  /* Real-time feed — keep raw posts cached, apply filters separately */
   useEffect(() => {
     let cancelled = false;
     let unsub = null;
@@ -99,38 +178,8 @@ const SpotlightFeed = () => {
 
       unsub = listenToSpotlightFeed({ maxCount: 80 }, (rawPosts) => {
         if (cancelled) return;
-
-        const pinnedId = freshPostId || focusPostId;
-        const seenForRanking = new Set(seenIdsRef.current);
-        if (pinnedId) seenForRanking.delete(pinnedId);
-
-        let ranked = rankSpotlightFeed(rawPosts, seenForRanking);
-
-        if (pinnedId) {
-          const idx = ranked.findIndex((p) => p.id === pinnedId);
-          if (idx > 0) {
-            const [target] = ranked.splice(idx, 1);
-            ranked = [target, ...ranked];
-          }
-        }
-
-        const newestCreatedAt = ranked.reduce(
-          (max, p) => Math.max(max, p.createdAt || 0),
-          0
-        );
-
-        if (
-          newestSeenCreatedAtRef.current > 0 &&
-          newestCreatedAt > newestSeenCreatedAtRef.current &&
-          containerRef.current &&
-          containerRef.current.scrollTop > 40
-        ) {
-          setHasNewAbove(true);
-        }
-
-        newestSeenCreatedAtRef.current = newestCreatedAt;
-        setPosts(ranked);
-        setLoading(false);
+        rawPostsRef.current = rawPosts;
+        applyFilters();
       });
     })();
 
@@ -138,7 +187,13 @@ const SpotlightFeed = () => {
       cancelled = true;
       if (unsub) unsub();
     };
-  }, [user?.uid, freshPostId, focusPostId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.uid]);
+
+  /* Reapply filters when tab / search / echoing change */
+  useEffect(() => {
+    if (rawPostsRef.current.length > 0) applyFilters();
+  }, [applyFilters]);
 
   useEffect(() => {
     if (!freshPostId) return;
@@ -154,6 +209,7 @@ const SpotlightFeed = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [freshPostId]);
 
+  /* Active slide detection */
   useEffect(() => {
     const container = containerRef.current;
     if (!container || posts.length === 0) return;
@@ -183,6 +239,7 @@ const SpotlightFeed = () => {
     return () => observer.disconnect();
   }, [posts.length]);
 
+  /* Scroll-end + pull-to-refresh */
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -219,6 +276,7 @@ const SpotlightFeed = () => {
       try {
         const seenSet = user?.uid ? await fetchSeenSpotlightIds(user.uid) : new Set();
         seenIdsRef.current = seenSet;
+        applyFilters();
       } catch (_) {}
       setPullY(0);
       setTimeout(() => {
@@ -238,7 +296,7 @@ const SpotlightFeed = () => {
       container.removeEventListener('touchend', onTouchEnd);
       if (scrollEndTimer.current) clearTimeout(scrollEndTimer.current);
     };
-  }, [user?.uid, pullY]);
+  }, [user?.uid, pullY, applyFilters]);
 
   useEffect(() => {
     const onKey = (e) => {
@@ -247,6 +305,8 @@ const SpotlightFeed = () => {
         setShareFor(null);
         setOptionsFor(null);
         setNotifsOpen(false);
+        setHashtagSheet(null);
+        setSearchOpen(false);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -266,24 +326,22 @@ const SpotlightFeed = () => {
     try {
       await softDeleteSpotlightPost(post.id);
     } catch (err) {
-      console.warn('Soft delete failed:', err);
       setToast({ message: 'Could not delete', type: 'error' });
       setTimeout(() => setToast(null), 2200);
       return;
     }
-    setPosts((prev) => prev.filter((p) => p.id !== post.id));
+    rawPostsRef.current = rawPostsRef.current.filter((p) => p.id !== post.id);
+    applyFilters();
     setShowUndoToast(true);
 
     const timerId = setTimeout(async () => {
-      try {
-        await hardDeleteSpotlightPost(post.id, user.uid);
-      } catch (_) {}
+      try { await hardDeleteSpotlightPost(post.id, user.uid); } catch (_) {}
       setPendingDelete(null);
       setShowUndoToast(false);
     }, UNDO_WINDOW_MS);
 
     setPendingDelete({ post, timerId });
-  }, [user?.uid]);
+  }, [user?.uid, applyFilters]);
 
   const handleUndoDelete = useCallback(async () => {
     if (!pendingDelete) return;
@@ -301,6 +359,16 @@ const SpotlightFeed = () => {
     const el = containerRef.current;
     if (el) el.scrollTo({ top: 0, behavior: 'smooth' });
     setHasNewAbove(false);
+  };
+
+  const switchTab = (tab) => {
+    if (tab === feedTab) return;
+    setFeedTab(tab);
+    setActiveIndex(0);
+    requestAnimationFrame(() => {
+      const el = containerRef.current;
+      if (el) el.scrollTop = 0;
+    });
   };
 
   return (
@@ -349,6 +417,49 @@ const SpotlightFeed = () => {
         </div>
       </div>
 
+      {/* Feed tabs */}
+      <div className="spotlight-feed-tabs">
+        <button
+          type="button"
+          className={`spotlight-feed-tab ${feedTab === 'foryou' ? 'active' : ''}`}
+          onClick={() => switchTab('foryou')}
+        >
+          For You
+        </button>
+        <button
+          type="button"
+          className={`spotlight-feed-tab ${feedTab === 'following' ? 'active' : ''}`}
+          onClick={() => switchTab('following')}
+        >
+          Following
+        </button>
+        <button
+          type="button"
+          className={`spotlight-feed-tab search ${searchOpen ? 'active' : ''}`}
+          onClick={() => setSearchOpen((v) => !v)}
+          aria-label="Search"
+        >
+          <i className="fas fa-search" />
+        </button>
+      </div>
+
+      {searchOpen && (
+        <div className="spotlight-feed-search">
+          <input
+            type="text"
+            placeholder="Search captions or @users..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            autoFocus
+          />
+          {searchQuery && (
+            <button type="button" onClick={() => setSearchQuery('')} aria-label="Clear">
+              <i className="fas fa-times" />
+            </button>
+          )}
+        </div>
+      )}
+
       {(pullY > 0 || refreshing) && (
         <div
           className="spotlight-pull-indicator"
@@ -367,9 +478,21 @@ const SpotlightFeed = () => {
           </div>
         ) : posts.length === 0 ? (
           <div className="spotlight-feed-empty">
-            <i className="fas fa-video" />
-            <h2>No Spotlights yet</h2>
-            <p>Be the first to post a video or image.</p>
+            <i className={feedTab === 'following' ? 'fas fa-user-plus' : 'fas fa-video'} />
+            <h2>
+              {feedTab === 'following'
+                ? 'Nothing from people you Echo yet'
+                : searchQuery
+                  ? 'No matching posts'
+                  : 'No Spotlights yet'}
+            </h2>
+            <p>
+              {feedTab === 'following'
+                ? 'Echo creators you like and their posts show up here.'
+                : searchQuery
+                  ? 'Try a different search term.'
+                  : 'Be the first to post a video or image.'}
+            </p>
             <button
               type="button"
               className="spotlight-empty-cta"
@@ -454,6 +577,13 @@ const SpotlightFeed = () => {
         onClose={() => setNotifsOpen(false)}
         onOpenPost={(id) => navigate(`/spotlight?focus=${id}`)}
         onOpenProfile={(uid) => navigate(`/spotlight/user/${uid}`)}
+      />
+
+      <SpotlightHashtagSheet
+        isOpen={!!hashtagSheet}
+        tag={hashtagSheet}
+        onClose={() => setHashtagSheet(null)}
+        onPickPost={(id) => navigate(`/spotlight?focus=${id}`)}
       />
 
       {showUndoToast && (
