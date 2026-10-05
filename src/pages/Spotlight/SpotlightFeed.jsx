@@ -285,14 +285,26 @@ const SpotlightFeed = () => {
       try {
         const seenSet = user?.uid ? await fetchSeenSpotlightIds(user.uid) : new Set();
         seenIdsRef.current = seenSet;
-        // Rotate the feed so refresh visibly changes the order
+
+        // Reset active index BEFORE the new list renders, so the fresh
+        // first slide is already flagged active on the next paint and
+        // its autoplay effect fires with isActive=true.
+        setActiveIndex(0);
         setRotationOffset((n) => n + 1);
         applyFilters();
+
+        // Also force the scroll container to top synchronously so the
+        // browser doesn't try to preserve scroll position when the
+        // slide order changes.
+        const el = containerRef.current;
+        if (el) el.scrollTop = 0;
       } catch (_) {}
       setPullY(0);
       setTimeout(() => {
         setRefreshing(false);
-        container.scrollTo({ top: 0, behavior: 'smooth' });
+        const el = containerRef.current;
+        if (el) el.scrollTo({ top: 0, behavior: 'auto' });
+        setActiveIndex(0);
       }, 600);
     };
 
