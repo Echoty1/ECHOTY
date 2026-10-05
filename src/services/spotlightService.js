@@ -425,10 +425,6 @@ export const rankSpotlightFeed = (posts, seenSet = new Set()) => {
 
 /* ─── Fresh-feed rotation ──────────────────────────────────── */
 
-/**
- * Fisher–Yates shuffle using a seeded PRNG so the same seed
- * always produces the same order (stable within a session).
- */
 const mulberry32 = (seed) => {
   let a = seed >>> 0;
   return () => {
@@ -450,11 +446,6 @@ const seededShuffle = (arr, seed) => {
   return out;
 };
 
-/**
- * Session-scoped rotation seed.
- * Same seed for the whole browsing session → stable order while scrolling.
- * Pass forceNew=true to mint a fresh seed (used on every Spotlight mount).
- */
 export const getOrCreateSessionSeed = (forceNew = false) => {
   const KEY = 'spotlight_rotation_seed';
   try {
@@ -470,16 +461,6 @@ export const getOrCreateSessionSeed = (forceNew = false) => {
   }
 };
 
-/**
- * Rank posts for a "fresh feed" experience:
- *
- *   1. Unseen posts (not in seenIds) go to the top.
- *   2. Within unseen: interleave so a single creator can't dominate.
- *   3. Within seen: most-recently-seen go last, so you don't see
- *      the same clip twice in a row.
- *   4. Finally, apply a seeded shuffle so two visits don't show
- *      the exact same order.
- */
 export const rankFreshFeed = (posts, seenIds = new Set(), seed = 1) => {
   if (!Array.isArray(posts) || posts.length === 0) return [];
 
@@ -493,13 +474,11 @@ export const rankFreshFeed = (posts, seenIds = new Set(), seed = 1) => {
     else unseen.push(p);
   }
 
-  // Interleave unseen by author so a single uploader can't fill the feed
   const byAuthor = new Map();
   for (const p of unseen) {
     if (!byAuthor.has(p.uid)) byAuthor.set(p.uid, []);
     byAuthor.get(p.uid).push(p);
   }
-  // Sort each author's bucket newest-first
   for (const list of byAuthor.values()) {
     list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
   }
@@ -515,20 +494,186 @@ export const rankFreshFeed = (posts, seenIds = new Set(), seed = 1) => {
     }
   }
 
-  // Seen posts: sort by createdAt desc (freshest memories surface higher)
   seenList.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
 
   const ordered = [...interleaved, ...seenList];
   return seededShuffle(ordered, seed);
 };
 
-/**
- * Rotate an array by N positions. Useful when the user pulls
- * to refresh — bump N and the order visibly changes even if the
- * underlying data is identical.
- */
 export const rotateArray = (arr, n = 0) => {
   if (!Array.isArray(arr) || arr.length === 0) return [];
   const k = ((n % arr.length) + arr.length) % arr.length;
   return [...arr.slice(k), ...arr.slice(0, k)];
+};
+
+/* ─── Comment replies ──────────────────────────────────────── */
+
+export const addCommentReply = async (postId, commentId, uid, authorName, authorAvatar, text) => {
+  if (!postId || !commentId || !uid || !text?.trim()) return null;
+  const repliesRef = ref(db, `${ROOT}/posts/${postId}/comments/${commentId}/replies`);
+  const newRef = push(repliesRef);
+  const payload = {
+    id: newRef.key,
+    uid,
+    authorName: authorName || 'User',
+    authorAvatar: authorAvatar || '',
+    text: text.trim().slice(0, 500),
+    createdAt: Date.now(),
+    likeCount: 0,
+  };
+  await set(newRef, payload);
+  runTransaction(
+    ref(db, `${ROOT}/posts/${postId}/comments/${commentId}/replyCount`),
+    (c) => (c || 0) + 1
+  ).catch(() => {});
+  return payload;
+};
+
+export const listenToCommentReplies = (postId, commentId, cb) => {
+  if (!postId || !commentId) return () => {};
+  return onValue(
+    ref(db, `${ROOT}/posts/${postId}/comments/${commentId}/replies`),
+    (snap) => {
+      if (!snap.exists()) return cb([]);
+      const list = Object.entries(snap.val()).map(([id, val]) => ({ id, ...val }));
+      list.sort((a, b) => (a.createdAt || 0) - (b.createdAt || 0));
+      cb(list);
+    }
+  );
+};
+
+export const deleteCommentReply = async (postId, commentId, replyId) => {
+  if (!postId || !commentId || !replyId) return;
+  await remove(ref(db, `${ROOT}/posts/${postId}/comments/${commentId}/replies/${replyId}`));
+  runTransaction(
+    ref(db, `${ROOT}/posts/${postId}/comments/${commentId}/replyCount`),
+    (c) => Math.max(0, (c || 0) - 1)
+  ).catch(() => {});
+};
+
+/* ─── Watch history ────────────────────────────────────────── */
+
+export const fetchWatchHistory = async (uid, { maxCount = 60 } = {}) => {
+  if (!uid) return [];
+  try {
+    const snap = await get(ref(db, `${ROOT}/views/${uid}`));
+    if (!snap.exists()) return [];
+    const rows = Object.entries(snap.val())
+      .map(([postId, val]) => ({
+        postId,
+        viewedAt: typeof val === 'number' ? val : (val?.ts || 0),
+      }))
+      .sort((a, b) => b.viewedAt - a.viewedAt)
+      .slice(0, maxCount);
+
+    const posts = await Promise.all(
+      rows.map(async ({ postId, viewedAt }) => {
+        const s = await get(ref(db, `${ROOT}/posts/${postId}`));
+        return s.exists() && !s.val().deleted
+          ? { id: postId, ...s.val(), viewedAt }
+          : null;
+      })
+    );
+    return posts.filter(Boolean);
+  } catch (err) {
+    console.warn('[Spotlight] fetchWatchHistory failed:', err?.code);
+    return [];
+  }
+};
+
+export const clearWatchHistory = async (uid) => {
+  if (!uid) return;
+  await remove(ref(db, `${ROOT}/views/${uid}`)).catch(() => {});
+};
+
+/* ─── Trending hashtags ────────────────────────────────────── */
+
+export const fetchTrendingHashtags = async ({
+  maxCount = 20,
+  windowMs = 7 * 24 * 60 * 60 * 1000,
+} = {}) => {
+  try {
+    const snap = await get(ref(db, `${ROOT}/hashtags`));
+    if (!snap.exists()) return [];
+    const cutoff = Date.now() - windowMs;
+    const rows = [];
+    for (const [tag, posts] of Object.entries(snap.val())) {
+      const recent = Object.values(posts).filter((ts) => (Number(ts) || 0) >= cutoff);
+      if (recent.length > 0) rows.push({ tag, count: recent.length });
+    }
+    rows.sort((a, b) => b.count - a.count);
+    return rows.slice(0, maxCount);
+  } catch (err) {
+    console.warn('[Spotlight] fetchTrendingHashtags failed:', err?.code);
+    return [];
+  }
+};
+
+/* ─── Search: authors + hashtags ───────────────────────────── */
+
+export const searchAuthorsAndHashtags = async (query, { maxCount = 8 } = {}) => {
+  const q = String(query || '').trim().toLowerCase();
+  if (!q) return { authors: [], hashtags: [] };
+  const cleanQ = q.replace(/^[@#]/, '');
+
+  try {
+    const [profilesSnap, hashtagsSnap] = await Promise.all([
+      get(ref(db, 'profiles')),
+      get(ref(db, `${ROOT}/hashtags`)),
+    ]);
+
+    const authors = [];
+    if (profilesSnap.exists()) {
+      for (const [uid, val] of Object.entries(profilesSnap.val())) {
+        const name = (val?.name || '').toLowerCase();
+        const handle = (val?.username || '').toLowerCase();
+        if (name.includes(cleanQ) || handle.includes(cleanQ)) {
+          authors.push({
+            uid,
+            name: val.name || 'User',
+            username: val.username || '',
+            avatar: val.avatar || '',
+          });
+          if (authors.length >= maxCount) break;
+        }
+      }
+    }
+
+    const hashtags = [];
+    if (hashtagsSnap.exists()) {
+      for (const [tag, posts] of Object.entries(hashtagsSnap.val())) {
+        if (tag.includes(cleanQ)) {
+          hashtags.push({ tag, count: Object.keys(posts).length });
+          if (hashtags.length >= maxCount) break;
+        }
+      }
+      hashtags.sort((a, b) => b.count - a.count);
+    }
+
+    return { authors, hashtags };
+  } catch (err) {
+    console.warn('[Spotlight] searchAuthorsAndHashtags failed:', err?.code);
+    return { authors: [], hashtags: [] };
+  }
+};
+
+export const fetchPostsByAuthor = async (uid, { maxCount = 60 } = {}) => {
+  if (!uid) return [];
+  try {
+    const idsSnap = await get(ref(db, `${ROOT}/users/${uid}/posts`));
+    if (!idsSnap.exists()) return [];
+    const ids = Object.keys(idsSnap.val()).slice(0, maxCount);
+    const posts = await Promise.all(
+      ids.map(async (id) => {
+        const s = await get(ref(db, `${ROOT}/posts/${id}`));
+        return s.exists() && !s.val().deleted ? { id, ...s.val() } : null;
+      })
+    );
+    return posts
+      .filter(Boolean)
+      .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+  } catch (err) {
+    console.warn('[Spotlight] fetchPostsByAuthor failed:', err?.code);
+    return [];
+  }
 };
