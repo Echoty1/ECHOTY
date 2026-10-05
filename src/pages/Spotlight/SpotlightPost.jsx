@@ -14,6 +14,56 @@ import EchoLoader from '../../components/common/EchoLoader';
 
 const LONG_PRESS_MS = 500;
 
+/* Render caption with clickable #hashtags.
+   Handles trailing punctuation like #fyp, #fyp! #fyp. and leading spaces. */
+const renderCaptionWithHashtags = (caption) => {
+  if (!caption) return null;
+
+  // Split on whitespace but keep the whitespace tokens
+  const tokens = String(caption).split(/(\s+)/);
+
+  return tokens.map((token, i) => {
+    // Match hashtag anywhere in the token (allows trailing punctuation)
+    const match = token.match(/#([a-zA-Z0-9_]{1,40})/);
+
+    if (!match) return <span key={i}>{token}</span>;
+
+    const tag = match[1];
+    const before = token.slice(0, match.index);
+    const after = token.slice(match.index + match[0].length);
+
+    return (
+      <span key={i}>
+        {before}
+        <span
+          className="spotlight-caption-hashtag"
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            window.dispatchEvent(
+              new CustomEvent('spotlight-hashtag-tap', { detail: tag })
+            );
+          }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') {
+              e.stopPropagation();
+              e.preventDefault();
+              window.dispatchEvent(
+                new CustomEvent('spotlight-hashtag-tap', { detail: tag })
+              );
+            }
+          }}
+        >
+          #{tag}
+        </span>
+        {after}
+      </span>
+    );
+  });
+};
+
 const SpotlightPost = ({
   post,
   isActive,
@@ -158,12 +208,33 @@ const SpotlightPost = ({
       onOpenOptions?.(post);
     }, LONG_PRESS_MS);
   };
+
   const cancelLongPress = () => {
     if (pressTimerRef.current) {
       clearTimeout(pressTimerRef.current);
       pressTimerRef.current = null;
     }
   };
+
+  const handleLike = useCallback(
+    async (force = false) => {
+      if (!currentUser?.uid) return;
+      if (force && liked) return;
+      const actorMeta = {
+        name: currentProfile?.name || currentUser?.displayName || 'Someone',
+        avatar: currentProfile?.avatar || '',
+      };
+      const postMeta = {
+        uid: post.uid,
+        posterUrl: post.posterUrl,
+        mediaUrl: post.mediaUrl,
+      };
+      try {
+        await toggleSpotlightLike(post.id, currentUser.uid, actorMeta, postMeta);
+      } catch (_) {}
+    },
+    [post.id, post.uid, currentUser?.uid, currentProfile?.name, currentProfile?.avatar, liked, post.posterUrl, post.mediaUrl]
+  );
 
   const handleTap = () => {
     if (longPressTriggered.current) {
@@ -193,33 +264,31 @@ const SpotlightPost = ({
     lastTapRef.current = now;
   };
 
-  const actorMeta = {
-    name: currentProfile?.name || currentUser?.displayName || 'Someone',
-    avatar: currentProfile?.avatar || '',
-  };
-  const postMeta = {
-    uid: post.uid,
-    posterUrl: post.posterUrl,
-    mediaUrl: post.mediaUrl,
-  };
-
-  const handleLike = useCallback(async (force = false) => {
-    if (!currentUser?.uid) return;
-    if (force && liked) return;
-    try { await toggleSpotlightLike(post.id, currentUser.uid, actorMeta, postMeta); } catch (_) {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [post.id, post.uid, currentUser?.uid, currentProfile?.name, currentProfile?.avatar, liked, post.posterUrl, post.mediaUrl]);
-
   const handleReecho = useCallback(async () => {
     if (!currentUser?.uid) return;
-    try { await toggleSpotlightReecho(post.id, currentUser.uid, actorMeta, postMeta); } catch (_) {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const actorMeta = {
+      name: currentProfile?.name || currentUser?.displayName || 'Someone',
+      avatar: currentProfile?.avatar || '',
+    };
+    const postMeta = {
+      uid: post.uid,
+      posterUrl: post.posterUrl,
+      mediaUrl: post.mediaUrl,
+    };
+    try {
+      await toggleSpotlightReecho(post.id, currentUser.uid, actorMeta, postMeta);
+    } catch (_) {}
   }, [post.id, post.uid, currentUser?.uid, currentProfile?.name, currentProfile?.avatar, post.posterUrl, post.mediaUrl]);
 
   const handleEcho = useCallback(async () => {
     if (!currentUser?.uid || post.uid === currentUser.uid) return;
-    try { await toggleEchoAuthor(post.uid, currentUser.uid, actorMeta); } catch (_) {}
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const actorMeta = {
+      name: currentProfile?.name || currentUser?.displayName || 'Someone',
+      avatar: currentProfile?.avatar || '',
+    };
+    try {
+      await toggleEchoAuthor(post.uid, currentUser.uid, actorMeta);
+    } catch (_) {}
   }, [post.uid, currentUser?.uid, currentProfile?.name, currentProfile?.avatar]);
 
   const handleDuet = useCallback(() => {
@@ -381,7 +450,9 @@ const SpotlightPost = ({
 
         {caption && (
           <div className="spotlight-caption">
-            {caption.length > 140 ? `${caption.slice(0, 140)}…` : caption}
+            {renderCaptionWithHashtags(
+              caption.length > 140 ? `${caption.slice(0, 140)}…` : caption
+            )}
           </div>
         )}
       </div>
