@@ -13,25 +13,19 @@ import SpotlightActions from './SpotlightActions';
 import EchoLoader from '../../components/common/EchoLoader';
 
 const LONG_PRESS_MS = 500;
+const DEFAULT_IMAGE_DURATION_MS = 3000;
+const AUTO_ADVANCE_DELAY_MS = 1000;
 
-/* Render caption with clickable #hashtags.
-   Handles trailing punctuation like #fyp, #fyp! #fyp. and leading spaces. */
+/* Render caption with clickable #hashtags. */
 const renderCaptionWithHashtags = (caption) => {
   if (!caption) return null;
-
-  // Split on whitespace but keep the whitespace tokens
   const tokens = String(caption).split(/(\s+)/);
-
   return tokens.map((token, i) => {
-    // Match hashtag anywhere in the token (allows trailing punctuation)
     const match = token.match(/#([a-zA-Z0-9_]{1,40})/);
-
     if (!match) return <span key={i}>{token}</span>;
-
     const tag = match[1];
     const before = token.slice(0, match.index);
     const after = token.slice(match.index + match[0].length);
-
     return (
       <span key={i}>
         {before}
@@ -77,6 +71,10 @@ const SpotlightPost = ({
   onRegisterVideo,
   muted,
   onToggleMute,
+  // ─── Auto-advance ─────────────────────────────
+  autoAdvance = false,
+  imageDurationMs = DEFAULT_IMAGE_DURATION_MS,
+  onEnded, // (postId) => void — called after delay when this post is done
 }) => {
   const videoRef = useRef(null);
   const sourceVideoRef = useRef(null);
@@ -90,9 +88,19 @@ const SpotlightPost = ({
   const lastTapRef = useRef(0);
   const pressTimerRef = useRef(null);
   const longPressTriggered = useRef(false);
+  const autoAdvanceTimerRef = useRef(null);
+  const endedFiredRef = useRef(false);
 
   const isDuet = post.type === 'duet' && post.duet;
 
+  const clearAutoAdvanceTimer = () => {
+    if (autoAdvanceTimerRef.current) {
+      clearTimeout(autoAdvanceTimerRef.current);
+      autoAdvanceTimerRef.current = null;
+    }
+  };
+
+  /* ─── Likes / reechoes / echo listener ───────────────────── */
   useEffect(() => {
     if (!post?.id || !currentUser?.uid) return () => {};
     const unsubs = [
@@ -103,11 +111,7 @@ const SpotlightPost = ({
     return () => unsubs.forEach((u) => u && u());
   }, [post?.id, post?.uid, currentUser?.uid]);
 
-  /* ─── Autoplay with retry loop ─────────────────────────────────
-     Fixes: first video pausing after feed reorder (pull-to-refresh).
-     Video may not be ready when the slide becomes active, so we
-     keep attempting play() over ~2.5s until the element confirms
-     it is actually playing. ──────────────────────────────────── */
+  /* ─── Autoplay with retry loop ───────────────────────────── */
   useEffect(() => {
     const v = videoRef.current;
     const s = sourceVideoRef.current;
@@ -142,10 +146,8 @@ const SpotlightPost = ({
         if (s && s.duration && s.currentTime >= s.duration - 0.2) s.currentTime = 0;
       } catch (_) {}
 
-      // Immediate attempt
       tryPlay();
 
-      // Retry at increasing intervals until play() succeeds (~2.5s total)
       const delays = [80, 180, 320, 550, 900, 1400];
       delays.forEach((d) => {
         timers.push(setTimeout(() => {
@@ -166,6 +168,7 @@ const SpotlightPost = ({
     };
   }, [isActive, post.id, post.mediaType, currentUser?.uid, muted]);
 
+  /* ─── Duet sync ──────────────────────────────────────────── */
   useEffect(() => {
     if (!isDuet) return;
     const v = videoRef.current;
@@ -182,6 +185,7 @@ const SpotlightPost = ({
     return () => v.removeEventListener('timeupdate', sync);
   }, [isDuet]);
 
+  /* ─── Muted sync ─────────────────────────────────────────── */
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
@@ -192,28 +196,67 @@ const SpotlightPost = ({
     return () => v.removeEventListener('loadedmetadata', onLoaded);
   }, [muted, isActive, post.id]);
 
+  /* ─── Progress + auto-advance on video end ───────────────── */
   useEffect(() => {
     const v = videoRef.current;
     if (!v || post.mediaType !== 'video') return;
+    endedFiredRef.current = false;
+
     const onTime = () => {
       if (v.duration) setProgress((v.currentTime / v.duration) * 100);
     };
+
     const onEnd = () => {
-      v.currentTime = 0;
-      v.play().catch(() => {});
-      if (sourceVideoRef.current) {
-        sourceVideoRef.current.currentTime = 0;
-        sourceVideoRef.current.play().catch(() => {});
+      // If auto-advance is on and the post finished naturally, fire onEnded
+      if (autoAdvance && isActive && !endedFiredRef.current) {
+        endedFiredRef.current = true;
+        clearAutoAdvanceTimer();
+        autoAdvanceTimerRef.current = setTimeout(() => {
+          if (!endedFiredRef.current) return;
+          onEnded?.(post.id);
+        }, AUTO_ADVANCE_DELAY_MS);
+      }
+      // Reset for loop
+      if (!autoAdvance || !isActive) {
+        v.currentTime = 0;
+        v.play().catch(() => {});
+        if (sourceVideoRef.current) {
+          sourceVideoRef.current.currentTime = 0;
+          sourceVideoRef.current.play().catch(() => {});
+        }
+      } else {
+        // Auto-advancing: hold on last frame until parent moves us
+        try { v.pause(); } catch (_) {}
+        if (sourceVideoRef.current) {
+          try { sourceVideoRef.current.pause(); } catch (_) {}
+        }
       }
     };
+
     v.addEventListener('timeupdate', onTime);
     v.addEventListener('ended', onEnd);
     return () => {
       v.removeEventListener('timeupdate', onTime);
       v.removeEventListener('ended', onEnd);
+      clearAutoAdvanceTimer();
     };
-  }, [post.mediaType]);
+  }, [post.mediaType, autoAdvance, isActive, post.id, onEnded]);
 
+  /* ─── Auto-advance for image posts ───────────────────────── */
+  useEffect(() => {
+    if (post.mediaType !== 'image') return;
+    if (!autoAdvance || !isActive) return;
+    endedFiredRef.current = false;
+    const t = setTimeout(() => {
+      if (!endedFiredRef.current) {
+        endedFiredRef.current = true;
+        onEnded?.(post.id);
+      }
+    }, imageDurationMs);
+    return () => clearTimeout(t);
+  }, [post.mediaType, autoAdvance, isActive, post.id, imageDurationMs, onEnded]);
+
+  /* ─── Ready state ────────────────────────────────────────── */
   useEffect(() => {
     const v = videoRef.current;
     if (!v || post.mediaType !== 'video') return;
@@ -238,10 +281,6 @@ const SpotlightPost = ({
     return () => { if (onRegisterVideo) onRegisterVideo(post.id, null); };
   }, [post.id, onRegisterVideo]);
 
-  /* Re-arm readiness + clear stale paused flag when this slide
-     becomes the active one. Prevents a remounted <video> from
-     inheriting the previous mount's ready state and hiding the
-     loader / skipping the play attempt. */
   useEffect(() => {
     if (post.mediaType !== 'video') return;
     if (isActive) {
@@ -309,6 +348,7 @@ const SpotlightPost = ({
           v.pause();
           s?.pause();
           setPaused(true);
+          clearAutoAdvanceTimer();
         }
       }
     }
@@ -385,7 +425,7 @@ const SpotlightPost = ({
                   className="spotlight-duet-media"
                   playsInline
                   muted={muted}
-                  loop
+                  loop={!autoAdvance}
                   preload="metadata"
                 />
               )}
@@ -402,7 +442,7 @@ const SpotlightPost = ({
                 className="spotlight-duet-media"
                 playsInline
                 muted={muted}
-                loop
+                loop={!autoAdvance}
                 preload="auto"
               />
               <div className="spotlight-duet-tag">
@@ -419,7 +459,7 @@ const SpotlightPost = ({
             poster={post.posterUrl || ''}
             playsInline
             muted={muted}
-            loop
+            loop={!autoAdvance}
             preload="auto"
           />
         ) : (
