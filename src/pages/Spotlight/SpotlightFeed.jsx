@@ -334,4 +334,281 @@ const SpotlightFeed = () => {
 
   const handleConfirmDelete = useCallback(async (post) => {
     if (!post || !user?.uid) return;
-    try
+    try {
+      await softDeleteSpotlightPost(post.id);
+    } catch (err) {
+      setToast({ message: 'Could not delete', type: 'error' });
+      setTimeout(() => setToast(null), 2200);
+      return;
+    }
+    rawPostsRef.current = rawPostsRef.current.filter((p) => p.id !== post.id);
+    applyFilters();
+    setShowUndoToast(true);
+
+    const timerId = setTimeout(async () => {
+      try { await hardDeleteSpotlightPost(post.id, user.uid); } catch (_) {}
+      setPendingDelete(null);
+      setShowUndoToast(false);
+    }, UNDO_WINDOW_MS);
+
+    setPendingDelete({ post, timerId });
+  }, [user?.uid, applyFilters]);
+
+  const handleUndoDelete = useCallback(async () => {
+    if (!pendingDelete) return;
+    clearTimeout(pendingDelete.timerId);
+    try {
+      await restoreSpotlightPost(pendingDelete.post.id);
+      setToast({ message: 'Restored', type: 'success' });
+      setTimeout(() => setToast(null), 1500);
+    } catch (_) {}
+    setPendingDelete(null);
+    setShowUndoToast(false);
+  }, [pendingDelete]);
+
+  const jumpToTop = () => {
+    const el = containerRef.current;
+    if (el) el.scrollTo({ top: 0, behavior: 'smooth' });
+    setHasNewAbove(false);
+  };
+
+  const switchTab = (tab) => {
+    if (tab === feedTab) return;
+    setFeedTab(tab);
+    setActiveIndex(0);
+    requestAnimationFrame(() => {
+      const el = containerRef.current;
+      if (el) el.scrollTop = 0;
+    });
+  };
+
+  return (
+    <div className="spotlight-feed-page">
+      <div className="spotlight-top-bar">
+        <h1 className="spotlight-top-title">
+          <span className="spotlight-top-title-tick" />
+          Spotlight
+        </h1>
+
+        <div className="spotlight-top-actions">
+          <button
+            type="button"
+            className="spotlight-top-btn"
+            onClick={() => setNotifsOpen(true)}
+            aria-label="Activity"
+            title="Activity"
+          >
+            <i className="far fa-bell" />
+            {unreadCount > 0 && (
+              <span className="spotlight-top-badge">
+                {unreadCount > 9 ? '9+' : unreadCount}
+              </span>
+            )}
+          </button>
+
+          <button
+            type="button"
+            className="spotlight-top-btn"
+            onClick={() => setMuted((m) => !m)}
+            aria-label={muted ? 'Unmute' : 'Mute'}
+            title={muted ? 'Unmute' : 'Mute'}
+          >
+            <i className={muted ? 'fas fa-volume-mute' : 'fas fa-volume-up'} />
+          </button>
+
+          <button
+            type="button"
+            className="spotlight-top-btn primary"
+            onClick={() => navigate('/spotlight/upload')}
+            aria-label="Upload"
+            title="Upload"
+          >
+            <i className="fas fa-plus" />
+          </button>
+        </div>
+      </div>
+
+      {/* Feed tabs */}
+      <div className="spotlight-feed-tabs">
+        <button
+          type="button"
+          className={`spotlight-feed-tab ${feedTab === 'foryou' ? 'active' : ''}`}
+          onClick={() => switchTab('foryou')}
+        >
+          For You
+        </button>
+        <button
+          type="button"
+          className={`spotlight-feed-tab ${feedTab === 'following' ? 'active' : ''}`}
+          onClick={() => switchTab('following')}
+        >
+          Following
+        </button>
+        <button
+          type="button"
+          className={`spotlight-feed-tab search ${searchOpen ? 'active' : ''}`}
+          onClick={() => setSearchOpen((v) => !v)}
+          aria-label="Search"
+        >
+          <i className="fas fa-search" />
+        </button>
+      </div>
+
+      {searchOpen && (
+        <div className="spotlight-feed-search">
+          <input
+            type="text"
+            placeholder="Search captions or @users..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            autoFocus
+          />
+          {searchQuery && (
+            <button type="button" onClick={() => setSearchQuery('')} aria-label="Clear">
+              <i className="fas fa-times" />
+            </button>
+          )}
+        </div>
+      )}
+
+      {(pullY > 0 || refreshing) && (
+        <div
+          className="spotlight-pull-indicator"
+          style={{ transform: `translateY(${refreshing ? 60 : pullY}px)` }}
+        >
+          <i className={refreshing ? 'fas fa-spinner fa-spin' : 'fas fa-arrow-down'} />
+          <span>{refreshing ? 'Refreshing…' : pullY > PULL_THRESHOLD ? 'Release to refresh' : 'Pull to refresh'}</span>
+        </div>
+      )}
+
+      <div className="spotlight-feed-container" ref={containerRef}>
+        {loading ? (
+          <div className="spotlight-feed-loading">
+            <div className="spotlight-feed-spinner" />
+            <p>Loading Spotlight…</p>
+          </div>
+        ) : posts.length === 0 ? (
+          <div className="spotlight-feed-empty">
+            <i className={feedTab === 'following' ? 'fas fa-user-plus' : 'fas fa-video'} />
+            <h2>
+              {feedTab === 'following'
+                ? 'Nothing from people you Echo yet'
+                : searchQuery
+                  ? 'No matching posts'
+                  : 'No Spotlights yet'}
+            </h2>
+            <p>
+              {feedTab === 'following'
+                ? 'Echo creators you like and their posts show up here.'
+                : searchQuery
+                  ? 'Try a different search term.'
+                  : 'Be the first to post a video or image.'}
+            </p>
+            <button
+              type="button"
+              className="spotlight-empty-cta"
+              onClick={() => navigate('/spotlight/upload')}
+            >
+              <i className="fas fa-plus" /> Create Spotlight
+            </button>
+          </div>
+        ) : (
+          posts.map((post, i) => (
+            <div key={post.id} className="spotlight-slide" data-index={i}>
+              <SpotlightPost
+                post={post}
+                isActive={i === activeIndex}
+                currentUser={user}
+                currentProfile={myProfile}
+                muted={muted}
+                onToggleMute={() => setMuted((m) => !m)}
+                onOpenComments={(p) => setCommentsFor(p)}
+                onOpenShare={(p) => setShareFor(p)}
+                onOpenOptions={handleOpenOptions}
+                onOpenProfile={handleOpenProfile}
+                onRegisterVideo={handleRegisterVideo}
+              />
+            </div>
+          ))
+        )}
+      </div>
+
+      {hasNewAbove && (
+        <button type="button" className="spotlight-new-pill" onClick={jumpToTop}>
+          <i className="fas fa-arrow-up" /> New Spotlight
+        </button>
+      )}
+
+      {posts.length > 1 && (
+        <div className="spotlight-feed-counter" aria-hidden="true">
+          <span>{activeIndex + 1}</span>
+          <span className="spotlight-feed-counter-sep">/</span>
+          <span>{posts.length}</span>
+        </div>
+      )}
+
+      <button
+        type="button"
+        className="spotlight-fab-create"
+        onClick={() => navigate('/spotlight/upload')}
+        aria-label="Create Spotlight"
+        title="Create Spotlight"
+      >
+        <i className="fas fa-plus" />
+      </button>
+
+      <SpotlightComments
+        isOpen={!!commentsFor}
+        post={commentsFor}
+        currentUser={user}
+        currentProfile={myProfile}
+        onClose={() => setCommentsFor(null)}
+      />
+
+      <SpotlightShare
+        isOpen={!!shareFor}
+        post={shareFor}
+        currentUser={user}
+        onClose={() => setShareFor(null)}
+        onToast={setToast}
+      />
+
+      <SpotlightOptions
+        isOpen={!!optionsFor}
+        post={optionsFor}
+        currentUser={user}
+        onClose={() => setOptionsFor(null)}
+        onToast={setToast}
+        onConfirmDelete={handleConfirmDelete}
+      />
+
+      <SpotlightNotifications
+        isOpen={notifsOpen}
+        uid={user?.uid}
+        onClose={() => setNotifsOpen(false)}
+        onOpenPost={(id) => navigate(`/spotlight?focus=${id}`)}
+        onOpenProfile={(uid) => navigate(`/spotlight/user/${uid}`)}
+      />
+
+      <SpotlightHashtagSheet
+        isOpen={!!hashtagSheet}
+        tag={hashtagSheet}
+        onClose={() => setHashtagSheet(null)}
+        onPickPost={(id) => navigate(`/spotlight?focus=${id}`)}
+      />
+
+      {showUndoToast && (
+        <div className="spotlight-undo-toast">
+          <span>Deleted</span>
+          <button type="button" onClick={handleUndoDelete}>Undo</button>
+        </div>
+      )}
+
+      {toast && !showUndoToast && (
+        <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />
+      )}
+    </div>
+  );
+};
+
+export default SpotlightFeed;
