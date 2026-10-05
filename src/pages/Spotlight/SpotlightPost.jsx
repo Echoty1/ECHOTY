@@ -103,30 +103,68 @@ const SpotlightPost = ({
     return () => unsubs.forEach((u) => u && u());
   }, [post?.id, post?.uid, currentUser?.uid]);
 
+  /* ─── Autoplay with retry loop ─────────────────────────────────
+     Fixes: first video pausing after feed reorder (pull-to-refresh).
+     Video may not be ready when the slide becomes active, so we
+     keep attempting play() over ~2.5s until the element confirms
+     it is actually playing. ──────────────────────────────────── */
   useEffect(() => {
     const v = videoRef.current;
     const s = sourceVideoRef.current;
     if (post.mediaType !== 'video') return;
+
+    let cancelled = false;
+    const timers = [];
+
+    const tryPlay = async () => {
+      if (cancelled) return false;
+      try {
+        if (v) v.muted = !!muted;
+        if (s) s.muted = !!muted;
+        const p1 = v ? v.play() : Promise.resolve();
+        const p2 = s ? s.play() : Promise.resolve();
+        await Promise.all([p1.catch(() => {}), p2.catch(() => {})]);
+        if (cancelled) return false;
+        if (v && !v.paused) {
+          setPaused(false);
+          setVideoReady(true);
+          return true;
+        }
+        return false;
+      } catch (_) {
+        return false;
+      }
+    };
 
     if (isActive) {
       try {
         if (v && v.duration && v.currentTime >= v.duration - 0.2) v.currentTime = 0;
         if (s && s.duration && s.currentTime >= s.duration - 0.2) s.currentTime = 0;
       } catch (_) {}
-      const attemptPlay = () => {
-        v?.play().catch(() => {});
-        s?.play().catch(() => {});
-      };
-      attemptPlay();
-      const retry = setTimeout(attemptPlay, 150);
+
+      // Immediate attempt
+      tryPlay();
+
+      // Retry at increasing intervals until play() succeeds (~2.5s total)
+      const delays = [80, 180, 320, 550, 900, 1400];
+      delays.forEach((d) => {
+        timers.push(setTimeout(() => {
+          if (!cancelled) tryPlay();
+        }, d));
+      });
+
       setPaused(false);
       if (currentUser?.uid) markSpotlightSeen(currentUser.uid, post.id).catch(() => {});
-      return () => clearTimeout(retry);
     } else {
       try { v?.pause(); } catch (_) {}
       try { s?.pause(); } catch (_) {}
     }
-  }, [isActive, post.id, post.mediaType, currentUser?.uid]);
+
+    return () => {
+      cancelled = true;
+      timers.forEach((t) => clearTimeout(t));
+    };
+  }, [isActive, post.id, post.mediaType, currentUser?.uid, muted]);
 
   useEffect(() => {
     if (!isDuet) return;
@@ -199,6 +237,19 @@ const SpotlightPost = ({
     if (onRegisterVideo) onRegisterVideo(post.id, videoRef.current);
     return () => { if (onRegisterVideo) onRegisterVideo(post.id, null); };
   }, [post.id, onRegisterVideo]);
+
+  /* Re-arm readiness + clear stale paused flag when this slide
+     becomes the active one. Prevents a remounted <video> from
+     inheriting the previous mount's ready state and hiding the
+     loader / skipping the play attempt. */
+  useEffect(() => {
+    if (post.mediaType !== 'video') return;
+    if (isActive) {
+      const v = videoRef.current;
+      if (!v || v.readyState < 2) setVideoReady(false);
+      setPaused(false);
+    }
+  }, [isActive, post.id, post.mediaType]);
 
   const startLongPress = () => {
     longPressTriggered.current = false;
