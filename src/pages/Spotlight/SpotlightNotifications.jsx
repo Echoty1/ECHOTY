@@ -139,47 +139,57 @@ const SpotlightNotifications = ({
               <span>Likes, comments, reechoes and duets show up here.</span>
             </div>
           ) : (
-            notifs.map((n) => (
-              <button
-                key={n.id}
-                type="button"
-                className={`spotlight-notif-row ${n.read ? 'read' : 'unread'}`}
-                onClick={() => {
-                  if (n.postId) {
-                    onOpenPost?.(n.postId);
-                    onClose?.();
-                  } else if (n.actorUid) {
-                    onOpenProfile?.(n.actorUid);
-                    onClose?.();
-                  }
-                }}
-              >
-                <div className="spotlight-notif-avatar">
-                  {n.actorAvatar ? (
-                    <img src={n.actorAvatar} alt="" loading="lazy" />
-                  ) : (
-                    <span>{(n.actorName || 'U').charAt(0).toUpperCase()}</span>
-                  )}
-                  <span className={`spotlight-notif-type ${n.type}`}>
-                    <i className={`fas ${getIcon(n.type)}`} />
-                  </span>
-                </div>
-                <div className="spotlight-notif-body">
-                  <div className="spotlight-notif-text">
-                    <strong>{n.actorName || 'Someone'}</strong> {getCopy(n.type)}
+            notifs.map((n) => {
+              const isShare = n.type === 'spotlight_share';
+              return (
+                <button
+                  key={n.id}
+                  type="button"
+                  className={`spotlight-notif-row ${n.read ? 'read' : 'unread'} ${isShare ? 'is-share' : ''}`}
+                  onClick={() => {
+                    if (n.postId) {
+                      onOpenPost?.(n.postId);
+                      onClose?.();
+                    } else if (n.actorUid) {
+                      onOpenProfile?.(n.actorUid);
+                      onClose?.();
+                    }
+                  }}
+                >
+                  <div className="spotlight-notif-avatar">
+                    {n.actorAvatar ? (
+                      <img src={n.actorAvatar} alt="" loading="lazy" />
+                    ) : (
+                      <span>{(n.actorName || 'U').charAt(0).toUpperCase()}</span>
+                    )}
+                    <span className={`spotlight-notif-type ${n.type}`}>
+                      <i className={`fas ${getIcon(n.type)}`} />
+                    </span>
                   </div>
-                  {n.text && (
-                    <div className="spotlight-notif-snippet">"{n.text}"</div>
-                  )}
-                  <div className="spotlight-notif-time">{timeAgo(n.createdAt)}</div>
-                </div>
-                {n.postThumb && (
-                  <div className="spotlight-notif-thumb">
-                    <img src={n.postThumb} alt="" loading="lazy" />
+
+                  <div className="spotlight-notif-body">
+                    <div className="spotlight-notif-text">
+                      <strong>{n.actorName || 'Someone'}</strong> {getCopy(n.type)}
+                    </div>
+                    {n.text && (
+                      <div className="spotlight-notif-snippet">"{n.text}"</div>
+                    )}
+                    <div className="spotlight-notif-time">{timeAgo(n.createdAt)}</div>
                   </div>
-                )}
-              </button>
-            ))
+
+                  {n.postThumb && (
+                    <div className={`spotlight-notif-thumb ${isShare ? 'share' : ''}`}>
+                      <img src={n.postThumb} alt="" loading="lazy" />
+                      {isShare && (
+                        <span className="spotlight-notif-thumb-play" aria-hidden="true">
+                          <i className="fas fa-play" />
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </button>
+              );
+            })
           )}
         </div>
       </div>
