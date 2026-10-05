@@ -1,7 +1,7 @@
 // src/pages/Spotlight/SpotlightShare.jsx
 import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, push, set, update, runTransaction } from 'firebase/database';
 import { db } from '../../services/firebase';
 import { getShareableFile, spotlightShareUrl } from '../../utils/echoWatermark';
 
@@ -18,11 +18,19 @@ const canShareFiles = () => {
   }
 };
 
-const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
+const SpotlightShare = ({
+  isOpen,
+  post,
+  currentUser,
+  currentProfile,
+  onClose,
+  onToast,
+}) => {
   const navigate = useNavigate();
   const [chats, setChats] = useState([]);
   const [copied, setCopied] = useState(false);
   const [sending, setSending] = useState(false);
+  const [sendingToId, setSendingToId] = useState(null);
 
   useEffect(() => {
     if (!isOpen || !currentUser?.uid) return () => {};
@@ -56,17 +64,13 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
   if (!isOpen || !post) return null;
 
   const url = `${SITE}/spotlight?focus=${post.id}&w=1`;
-  const shareText = `Watch "${post.caption || 'this Spotlight'}" by @${(post.authorName || 'user')
-    .replace(/\s+/g, '')
-    .toLowerCase()} on ECHO 🎬`;
-
+  const handle = (post.authorName || 'user').replace(/\s+/g, '').toLowerCase();
+  const shareText = `Watch "${post.caption || 'this Spotlight'}" by @${handle} on ECHO 🎬`;
   const caption = `${shareText}\n${url}`;
 
-  /* ─── Try sending the file via navigator.share ──────────── */
   const tryShareFile = async (fallbackAction) => {
     if (sending) return;
     setSending(true);
-
     try {
       if (canShareFiles()) {
         const result = await getShareableFile(post);
@@ -81,7 +85,6 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
             onClose?.();
             return true;
           } catch (err) {
-            // User cancelled — that's fine, don't fall back
             if (err?.name === 'AbortError') {
               setSending(false);
               return true;
@@ -93,20 +96,13 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
     } catch (err) {
       console.warn('[Share] getShareableFile error:', err);
     }
-
-    // Fallback
     setSending(false);
     fallbackAction?.();
     return false;
   };
 
   const handleWhatsApp = async () => {
-    // WhatsApp accepts files via native share only. If files aren't
-    // supported, fall back to opening WhatsApp with the caption+link
-    // (user can attach manually), or to copy-to-clipboard.
     const shared = await tryShareFile(() => {
-      // Fallback: open WhatsApp web with caption (link only).
-      // wa.me accepts text only — no file upload path on desktop.
       window.open(
         `https://wa.me/?text=${encodeURIComponent(caption)}`,
         '_blank',
@@ -155,11 +151,105 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
     await tryShareFile(handleCopy);
   };
 
-  const handleSendToChat = (partnerId) => {
-    navigate(`/chat/${partnerId}`, {
-      state: { prefilledNote: `${shareText}\n${url}` },
-    });
-    onClose?.();
+  /* ─── SEND-TO-CHAT: writes a rich spotlight message into the thread ─── */
+  const handleSendToChat = async (partnerId) => {
+    if (!currentUser?.uid || !partnerId) return;
+    setSendingToId(partnerId);
+
+    try {
+      const cId = [currentUser.uid, partnerId].sort().join('_');
+      const messagesRef = ref(db, `chats/${cId}/messages`);
+      const newMsgRef = push(messagesRef);
+
+      const thumbnail =
+        post.mediaType === 'video'
+          ? post.posterUrl || ''
+          : post.mediaUrl || '';
+
+      const payload = {
+        senderId: currentUser.uid,
+        receiverId: partnerId,
+        type: 'spotlight',
+        timestamp: Date.now(),
+        clientTs: Date.now(),
+        isRead: false,
+        spotlight: {
+          postId: post.id,
+          mediaType: post.mediaType,
+          mediaUrl: post.mediaUrl,
+          posterUrl: post.posterUrl || '',
+          thumbnail,
+          caption: (post.caption || '').slice(0, 140),
+          authorUid: post.uid,
+          authorName: post.authorName || 'User',
+          authorAvatar: post.authorAvatar || '',
+        },
+      };
+
+      await set(newMsgRef, payload);
+
+      /* Update BOTH userChats entries so the chat list reflects it */
+      const now = Date.now();
+      const myName = currentProfile?.name || currentUser.displayName || 'User';
+      const myAvatar = currentProfile?.avatar || '';
+
+      await runTransaction(ref(db, `userChats/${currentUser.uid}/${partnerId}`), (cur) => {
+        const base = cur || { id: partnerId };
+        return {
+          ...base,
+          id: partnerId,
+          partnerName: base.partnerName || 'User',
+          partnerAvatar: base.partnerAvatar || '',
+          lastMessage: '🎬 Spotlight',
+          lastSenderId: currentUser.uid,
+          lastUpdated: now,
+          unreadCount: 0,
+        };
+      });
+
+      await runTransaction(ref(db, `userChats/${partnerId}/${currentUser.uid}`), (cur) => {
+        const base = cur || { id: currentUser.uid };
+        return {
+          ...base,
+          id: currentUser.uid,
+          partnerName: base.partnerName || myName,
+          partnerAvatar: base.partnerAvatar || myAvatar,
+          lastMessage: '🎬 Spotlight',
+          lastSenderId: currentUser.uid,
+          lastUpdated: now,
+          unreadCount: (base.unreadCount || 0) + 1,
+        };
+      });
+
+      window.dispatchEvent(
+        new CustomEvent('chat-list-update', {
+          detail: {
+            partnerId,
+            patch: {
+              lastMessage: '🎬 Spotlight',
+              lastSenderId: currentUser.uid,
+              timestamp: now,
+              unreadCount: 0,
+            },
+          },
+        })
+      );
+
+      onToast?.({ message: 'Sent to chat', type: 'success' });
+      setTimeout(() => onToast?.(null), 1600);
+      onClose?.();
+    } catch (err) {
+      console.error('[Share] send-to-chat failed:', err);
+      onToast?.({ message: 'Could not send', type: 'error' });
+      setTimeout(() => onToast?.(null), 2200);
+      /* Fallback: navigate with a prefilled link so the user isn't stuck */
+      navigate(`/chat/${partnerId}`, {
+        state: { prefilledNote: caption },
+      });
+      onClose?.();
+    } finally {
+      setSendingToId(null);
+    }
   };
 
   return (
@@ -237,6 +327,7 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
                 type="button"
                 className="spotlight-share-chat-row"
                 onClick={() => handleSendToChat(c.id)}
+                disabled={sendingToId === c.id}
               >
                 <span className="spotlight-share-chat-avatar">
                   {c.avatar ? (
@@ -247,7 +338,11 @@ const SpotlightShare = ({ isOpen, post, currentUser, onClose, onToast }) => {
                 </span>
                 <span className="spotlight-share-chat-name">{c.name}</span>
                 <span className="spotlight-share-chat-send">
-                  <i className="fas fa-paper-plane" />
+                  {sendingToId === c.id ? (
+                    <i className="fas fa-spinner fa-spin" />
+                  ) : (
+                    <i className="fas fa-paper-plane" />
+                  )}
                 </span>
               </button>
             ))
