@@ -9,13 +9,15 @@ const UNREAD_ROOT = 'spotlightUnread';
  * Push a notification to `toUid`'s inbox.
  * `actorUid` is the person who performed the action.
  * Never notify yourself.
+ *
+ * type: 'like' | 'comment' | 'reecho' | 'duet' | 'echo' | 'mention' | 'spotlight_share'
  */
 export const pushSpotlightNotification = async ({
   toUid,
   actorUid,
   actorName,
   actorAvatar,
-  type, // 'like' | 'comment' | 'reecho' | 'duet' | 'echo' | 'mention'
+  type,
   postId,
   postThumb,
   text = '',
@@ -50,6 +52,34 @@ export const pushSpotlightNotification = async ({
     console.warn('[Spotlight notif] push failed:', err?.code || err?.message);
     return null;
   }
+};
+
+/**
+ * Fire a "shared with you" notification for a Spotlight sent into a chat.
+ * Reuses pushSpotlightNotification so the unread badge bumps correctly.
+ */
+export const notifySpotlightShare = async ({
+  recipientUid,
+  senderUid,
+  senderName,
+  senderAvatar,
+  postId,
+  postThumbnail,
+  postCaption,
+  // postAuthorName / chatId are accepted for API compatibility but
+  // aren't stored on the notification payload (we don't render them yet).
+}) => {
+  if (!recipientUid || !senderUid || !postId) return null;
+  return pushSpotlightNotification({
+    toUid: recipientUid,
+    actorUid: senderUid,
+    actorName: senderName || 'Someone',
+    actorAvatar: senderAvatar || '',
+    type: 'spotlight_share',
+    postId,
+    postThumb: postThumbnail || '',
+    text: (postCaption || '').slice(0, 140),
+  });
 };
 
 export const listenToSpotlightNotifications = (uid, cb) => {
