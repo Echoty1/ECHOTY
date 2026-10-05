@@ -3,9 +3,28 @@ import {
   ref, push, set, update, remove, get, onValue, runTransaction, serverTimestamp, query, orderByChild, limitToLast,
 } from 'firebase/database';
 import { db } from './firebase';
-import { pushSpotlightNotification } from './spotlightNotifications';
 
 const ROOT = 'spotlight';
+
+/* ─── Hashtag helpers ──────────────────────────────────────── */
+
+export const extractHashtags = (text) => {
+  if (!text) return [];
+  const matches = String(text).match(/#([a-zA-Z0-9_]{1,40})/g) || [];
+  return matches
+    .map((t) => t.slice(1).toLowerCase())
+    .filter((v, i, arr) => arr.indexOf(v) === i);
+};
+
+export const indexPostHashtags = async (postId, caption) => {
+  const tags = extractHashtags(caption);
+  if (tags.length === 0) return;
+  const updates = {};
+  tags.forEach((tag) => {
+    updates[`${ROOT}/hashtags/${tag}/${postId}`] = Date.now();
+  });
+  await update(ref(db), updates).catch(() => {});
+};
 
 /* ─── Real-time feed listener ──────────────────────────────── */
 
@@ -75,6 +94,7 @@ export const publishSpotlightPost = async ({
 
   await set(newRef, payload);
   await set(ref(db, `${ROOT}/users/${uid}/posts/${postId}`), Date.now());
+  await indexPostHashtags(postId, payload.caption);
   console.log('[Spotlight] Published post:', postId);
   return postId;
 };
@@ -86,7 +106,7 @@ export const deleteSpotlightPost = async (uid, postId) => {
   await remove(ref(db, `${ROOT}/users/${uid}/reechoed/${postId}`)).catch(() => {});
 };
 
-/* ─── Soft delete + undo (used by the 5s undo flow) ────────── */
+/* ─── Soft delete + undo ───────────────────────────────────── */
 
 export const softDeleteSpotlightPost = async (postId) => {
   if (!postId) return;
@@ -113,20 +133,15 @@ export const hardDeleteSpotlightPost = async (postId, uid) => {
   }
 };
 
-/* ─── One-shot fetch (still used elsewhere) ────────────────── */
+/* ─── One-shot fetch ───────────────────────────────────────── */
 
 export const fetchSpotlightFeed = async ({ maxCount = 60 } = {}) => {
   try {
     const postsRef = query(ref(db, `${ROOT}/posts`), orderByChild('createdAt'), limitToLast(maxCount));
     const snap = await get(postsRef);
-    if (!snap.exists()) {
-      console.log('[Spotlight] Feed is empty (no /spotlight/posts node)');
-      return [];
-    }
+    if (!snap.exists()) return [];
     const all = Object.entries(snap.val()).map(([id, val]) => ({ id, ...val }));
-    const visible = all.filter((p) => !p.deleted);
-    console.log(`[Spotlight] Feed fetched ${visible.length} posts (${all.length} total)`);
-    return visible;
+    return all.filter((p) => !p.deleted);
   } catch (err) {
     console.error('[Spotlight] fetchSpotlightFeed ERROR:', err?.code || '', err?.message || err);
     throw err;
@@ -167,9 +182,40 @@ export const listenToUserReechoedPosts = (uid, cb) => {
   });
 };
 
+/* ─── Hashtag fetch + follow helpers ───────────────────────── */
+
+export const fetchPostsByHashtag = async (tag, { maxCount = 60 } = {}) => {
+  if (!tag) return [];
+  const clean = String(tag).replace(/^#/, '').toLowerCase();
+  try {
+    const snap = await get(ref(db, `${ROOT}/hashtags/${clean}`));
+    if (!snap.exists()) return [];
+    const ids = Object.keys(snap.val())
+      .sort((a, b) => (snap.val()[b] || 0) - (snap.val()[a] || 0))
+      .slice(0, maxCount);
+    const results = await Promise.all(
+      ids.map(async (id) => {
+        const s = await get(ref(db, `${ROOT}/posts/${id}`));
+        return s.exists() && !s.val().deleted ? { id, ...s.val() } : null;
+      })
+    );
+    return results.filter(Boolean);
+  } catch (err) {
+    console.warn('[Spotlight] fetchPostsByHashtag failed:', err);
+    return [];
+  }
+};
+
+export const listenToMyEchoing = (uid, cb) => {
+  if (!uid) return () => {};
+  return onValue(ref(db, `${ROOT}/echoes/${uid}`), (snap) => {
+    cb(snap.exists() ? Object.keys(snap.val()) : []);
+  });
+};
+
 /* ─── Post likes ───────────────────────────────────────────── */
 
-export const toggleSpotlightLike = async (postId, uid, actorMeta = null, postMeta = null) => {
+export const toggleSpotlightLike = async (postId, uid) => {
   if (!postId || !uid) return false;
   const likeRef = ref(db, `${ROOT}/posts/${postId}/likes/${uid}`);
   const countRef = ref(db, `${ROOT}/posts/${postId}/likeCount`);
@@ -186,19 +232,6 @@ export const toggleSpotlightLike = async (postId, uid, actorMeta = null, postMet
     return next;
   });
 
-  // Notify on like (not unlike)
-  if (nowLiked && postMeta && postMeta.uid && postMeta.uid !== uid) {
-    pushSpotlightNotification({
-      toUid: postMeta.uid,
-      actorUid: uid,
-      actorName: actorMeta?.name || 'Someone',
-      actorAvatar: actorMeta?.avatar || '',
-      type: 'like',
-      postId,
-      postThumb: postMeta.posterUrl || postMeta.mediaUrl || '',
-    }).catch(() => {});
-  }
-
   return nowLiked;
 };
 
@@ -207,7 +240,7 @@ export const listenToSpotlightLike = (postId, uid, cb) => {
   return onValue(ref(db, `${ROOT}/posts/${postId}/likes/${uid}`), (snap) => cb(!!snap.val()));
 };
 
-/* ─── Comment likes (emoji reactions) ──────────────────────── */
+/* ─── Comment likes ────────────────────────────────────────── */
 
 export const toggleCommentLike = async (postId, commentId, uid, emoji) => {
   if (!postId || !commentId || !uid) return false;
@@ -247,7 +280,7 @@ export const listenToCommentLike = (postId, commentId, uid, cb) => {
 
 /* ─── Comments ─────────────────────────────────────────────── */
 
-export const addSpotlightComment = async (postId, uid, authorName, authorAvatar, text, postMeta = null) => {
+export const addSpotlightComment = async (postId, uid, authorName, authorAvatar, text) => {
   if (!postId || !uid || !text?.trim()) return null;
   const commentsRef = ref(db, `${ROOT}/posts/${postId}/comments`);
   const newRef = push(commentsRef);
@@ -262,20 +295,6 @@ export const addSpotlightComment = async (postId, uid, authorName, authorAvatar,
   };
   await set(newRef, payload);
   await runTransaction(ref(db, `${ROOT}/posts/${postId}/commentCount`), (c) => (c || 0) + 1);
-
-  if (postMeta && postMeta.uid && postMeta.uid !== uid) {
-    pushSpotlightNotification({
-      toUid: postMeta.uid,
-      actorUid: uid,
-      actorName: authorName || 'Someone',
-      actorAvatar: authorAvatar || '',
-      type: 'comment',
-      postId,
-      postThumb: postMeta.posterUrl || postMeta.mediaUrl || '',
-      text: payload.text,
-    }).catch(() => {});
-  }
-
   return payload;
 };
 
@@ -295,9 +314,9 @@ export const deleteSpotlightComment = async (postId, commentId) => {
   await runTransaction(ref(db, `${ROOT}/posts/${postId}/commentCount`), (c) => Math.max(0, (c || 0) - 1));
 };
 
-/* ─── Reecho (repost) ──────────────────────────────────────── */
+/* ─── Reecho ──────────────────────────────────────────────── */
 
-export const toggleSpotlightReecho = async (postId, uid, actorMeta = null, postMeta = null) => {
+export const toggleSpotlightReecho = async (postId, uid) => {
   if (!postId || !uid) return false;
   const reechoRef = ref(db, `${ROOT}/posts/${postId}/reechoes/${uid}`);
   const userRef = ref(db, `${ROOT}/users/${uid}/reechoed/${postId}`);
@@ -318,18 +337,6 @@ export const toggleSpotlightReecho = async (postId, uid, actorMeta = null, postM
     return next;
   });
 
-  if (nowReechoed && postMeta && postMeta.uid && postMeta.uid !== uid) {
-    pushSpotlightNotification({
-      toUid: postMeta.uid,
-      actorUid: uid,
-      actorName: actorMeta?.name || 'Someone',
-      actorAvatar: actorMeta?.avatar || '',
-      type: 'reecho',
-      postId,
-      postThumb: postMeta.posterUrl || postMeta.mediaUrl || '',
-    }).catch(() => {});
-  }
-
   return nowReechoed;
 };
 
@@ -338,9 +345,9 @@ export const listenToSpotlightReecho = (postId, uid, cb) => {
   return onValue(ref(db, `${ROOT}/posts/${postId}/reechoes/${uid}`), (snap) => cb(!!snap.val()));
 };
 
-/* ─── Echo (follow author) ─────────────────────────────────── */
+/* ─── Echo (follow) ───────────────────────────────────────── */
 
-export const toggleEchoAuthor = async (authorUid, myUid, actorMeta = null) => {
+export const toggleEchoAuthor = async (authorUid, myUid) => {
   if (!authorUid || !myUid || authorUid === myUid) return false;
   const fwd = ref(db, `${ROOT}/echoes/${myUid}/${authorUid}`);
   const rev = ref(db, `${ROOT}/echoers/${authorUid}/${myUid}`);
@@ -354,18 +361,6 @@ export const toggleEchoAuthor = async (authorUid, myUid, actorMeta = null) => {
 
   if (nowEchoed) await set(rev, Date.now());
   else await remove(rev);
-
-  if (nowEchoed && actorMeta) {
-    pushSpotlightNotification({
-      toUid: authorUid,
-      actorUid: myUid,
-      actorName: actorMeta.name || 'Someone',
-      actorAvatar: actorMeta.avatar || '',
-      type: 'echo',
-      postId: '',
-      postThumb: '',
-    }).catch(() => {});
-  }
 
   return nowEchoed;
 };
