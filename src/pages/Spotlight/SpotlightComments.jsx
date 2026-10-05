@@ -5,6 +5,10 @@ import {
   addSpotlightComment,
   deleteSpotlightComment,
   toggleCommentLike,
+  listenToCommentLike,
+  addCommentReply,
+  listenToCommentReplies,
+  deleteCommentReply,
 } from '../../services/spotlightService';
 
 const QUICK_EMOJIS = ['❤️', '😂', '🔥', '👏', '😮'];
@@ -19,35 +23,24 @@ const timeAgo = (ts) => {
   return new Date(ts).toLocaleDateString();
 };
 
+/* ─── Comment like pill with emoji picker ──────────────────── */
 const CommentLikePill = ({ postId, comment, currentUser }) => {
   const [reaction, setReaction] = useState(null);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [count, setCount] = useState(comment.likeCount || 0);
 
   useEffect(() => {
-    // The current user's reaction to this comment is stored under
-    // spotlight/posts/<postId>/comments/<commentId>/likes/<uid>
-    // value is the emoji string.
-    const { ref: fbRef, onValue: fbOnValue } = require('firebase/database');
-    const { db } = require('../../services/firebase');
-    if (!currentUser?.uid) return () => {};
-    const unsub = fbOnValue(
-      fbRef(db, `spotlight/posts/${postId}/comments/${comment.id}/likes/${currentUser.uid}`),
-      (snap) => setReaction(snap.val() || null)
-    );
-    return () => unsub();
-  }, [postId, comment.id, currentUser?.uid]);
+    if (!postId || !comment?.id || !currentUser?.uid) return () => {};
+    return listenToCommentLike(postId, comment.id, currentUser.uid, setReaction);
+  }, [postId, comment?.id, currentUser?.uid]);
 
   const pick = async (emoji) => {
     setPickerOpen(false);
+    if (!currentUser?.uid) return;
     try {
-      const { ref: fbRef, set: fbSet, remove: fbRemove } = require('firebase/database');
-      const { db } = require('../../services/firebase');
-      const r = fbRef(db, `spotlight/posts/${postId}/comments/${comment.id}/likes/${currentUser.uid}`);
-      if (reaction === emoji) {
-        await fbRemove(r);
-      } else {
-        await fbSet(r, emoji);
-      }
+      const active = await toggleCommentLike(postId, comment.id, currentUser.uid, emoji);
+      setReaction(active ? emoji : null);
+      setCount((c) => Math.max(0, c + (active ? 1 : -1)));
     } catch (_) {}
   };
 
@@ -57,9 +50,11 @@ const CommentLikePill = ({ postId, comment, currentUser }) => {
         type="button"
         className={`spotlight-comment-like-btn ${reaction ? 'active' : ''}`}
         onClick={() => setPickerOpen((v) => !v)}
+        aria-label="React to comment"
       >
-        {reaction ? reaction : <i className="far fa-heart" />}
+        {reaction ? <span className="spotlight-comment-emoji">{reaction}</span> : <i className="far fa-heart" />}
       </button>
+      {count > 0 && <span className="spotlight-comment-like-count">{count}</span>}
       {pickerOpen && (
         <div className="spotlight-comment-like-picker">
           {QUICK_EMOJIS.map((e) => (
@@ -78,6 +73,168 @@ const CommentLikePill = ({ postId, comment, currentUser }) => {
   );
 };
 
+/* ─── Reply thread (renders under a comment) ──────────────── */
+const CommentReplies = ({ postId, comment, currentUser, currentProfile }) => {
+  const [replies, setReplies] = useState([]);
+  const [text, setText] = useState('');
+  const [sending, setSending] = useState(false);
+
+  useEffect(() => {
+    if (!postId || !comment?.id) return () => {};
+    return listenToCommentReplies(postId, comment.id, setReplies);
+  }, [postId, comment?.id]);
+
+  const send = async () => {
+    const t = text.trim();
+    if (!t || !currentUser?.uid || sending) return;
+    setSending(true);
+    try {
+      await addCommentReply(
+        postId,
+        comment.id,
+        currentUser.uid,
+        currentProfile?.name || currentUser.displayName || 'User',
+        currentProfile?.avatar || '',
+        t
+      );
+      setText('');
+    } catch (_) {}
+    setSending(false);
+  };
+
+  return (
+    <div className="spotlight-comment-replies">
+      {replies.map((r) => {
+        const isMine = r.uid === currentUser?.uid;
+        return (
+          <div key={r.id} className="spotlight-comment-row reply">
+            <span className="spotlight-comment-avatar small">
+              {r.authorAvatar ? (
+                <img src={r.authorAvatar} alt="" loading="lazy" />
+              ) : (
+                <span>{(r.authorName || 'U').charAt(0).toUpperCase()}</span>
+              )}
+            </span>
+            <div className="spotlight-comment-body">
+              <div className="spotlight-comment-header">
+                <span className="spotlight-comment-name">{r.authorName || 'User'}</span>
+                <span className="spotlight-comment-time">{timeAgo(r.createdAt)}</span>
+              </div>
+              <p className="spotlight-comment-text">{r.text}</p>
+            </div>
+            {isMine && (
+              <button
+                type="button"
+                className="spotlight-comment-delete"
+                onClick={() => deleteCommentReply(postId, comment.id, r.id).catch(() => {})}
+                aria-label="Delete reply"
+              >
+                <i className="fas fa-trash" />
+              </button>
+            )}
+          </div>
+        );
+      })}
+
+      {currentUser?.uid && (
+        <div className="spotlight-comment-reply-input">
+          <span className="spotlight-comment-avatar small">
+            {currentProfile?.avatar ? (
+              <img src={currentProfile.avatar} alt="" />
+            ) : (
+              <span>{(currentProfile?.name || 'U').charAt(0).toUpperCase()}</span>
+            )}
+          </span>
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            placeholder={`Reply to ${comment.authorName || 'User'}...`}
+            maxLength={500}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); send(); } }}
+          />
+          <button
+            type="button"
+            className="spotlight-comment-reply-send"
+            onClick={send}
+            disabled={!text.trim() || sending}
+            aria-label="Send reply"
+          >
+            {sending ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-paper-plane" />}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ─── Single comment row with reply toggle ───────────────── */
+const CommentRow = ({ postId, comment, post, currentUser, currentProfile }) => {
+  const [showReplies, setShowReplies] = useState(false);
+  const mine = comment.uid === currentUser?.uid;
+  const isAuthor = comment.uid === post?.uid;
+  const replyCount = comment.replyCount || 0;
+
+  return (
+    <div className="spotlight-comment-thread">
+      <div className="spotlight-comment-row">
+        <div className="spotlight-comment-avatar">
+          {comment.authorAvatar ? (
+            <img src={comment.authorAvatar} alt="" loading="lazy" />
+          ) : (
+            <span>{(comment.authorName || 'U').charAt(0).toUpperCase()}</span>
+          )}
+        </div>
+        <div className="spotlight-comment-body">
+          <div className="spotlight-comment-header">
+            <span className="spotlight-comment-name">
+              {comment.authorName || 'User'}
+              {isAuthor && <span className="spotlight-comment-badge">Author</span>}
+            </span>
+            <span className="spotlight-comment-time">{timeAgo(comment.createdAt)}</span>
+          </div>
+          <div className="spotlight-comment-text">{comment.text}</div>
+          <div className="spotlight-comment-meta-row">
+            <button
+              type="button"
+              className="spotlight-comment-reply-toggle"
+              onClick={() => setShowReplies((v) => !v)}
+            >
+              <i className="far fa-comment" />
+              {replyCount > 0 ? `${replyCount} ${replyCount === 1 ? 'reply' : 'replies'}` : 'Reply'}
+            </button>
+          </div>
+        </div>
+        <div className="spotlight-comment-right">
+          {currentUser?.uid && (
+            <CommentLikePill postId={postId} comment={comment} currentUser={currentUser} />
+          )}
+          {mine && (
+            <button
+              type="button"
+              className="spotlight-comment-delete"
+              onClick={() => deleteSpotlightComment(postId, comment.id).catch(() => {})}
+              aria-label="Delete comment"
+            >
+              <i className="fas fa-trash" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      {showReplies && (
+        <CommentReplies
+          postId={postId}
+          comment={comment}
+          currentUser={currentUser}
+          currentProfile={currentProfile}
+        />
+      )}
+    </div>
+  );
+};
+
+/* ─── Main sheet ─────────────────────────────────────────── */
 const SpotlightComments = ({ isOpen, post, currentUser, currentProfile, onClose }) => {
   const [comments, setComments] = useState([]);
   const [text, setText] = useState('');
@@ -135,10 +292,6 @@ const SpotlightComments = ({ isOpen, post, currentUser, currentProfile, onClose 
     }
   };
 
-  const handleDelete = async (commentId) => {
-    try { await deleteSpotlightComment(post.id, commentId); } catch (_) {}
-  };
-
   return (
     <div className="spotlight-comments-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
       <div className="spotlight-comments-sheet" role="dialog" aria-modal="true">
@@ -159,46 +312,16 @@ const SpotlightComments = ({ isOpen, post, currentUser, currentProfile, onClose 
               <p>No comments yet. Be the first.</p>
             </div>
           ) : (
-            comments.map((c) => {
-              const mine = c.uid === currentUser?.uid;
-              const isAuthor = c.uid === post.uid;
-              return (
-                <div key={c.id} className="spotlight-comment-row">
-                  <div className="spotlight-comment-avatar">
-                    {c.authorAvatar ? (
-                      <img src={c.authorAvatar} alt="" loading="lazy" />
-                    ) : (
-                      <span>{(c.authorName || 'U').charAt(0).toUpperCase()}</span>
-                    )}
-                  </div>
-                  <div className="spotlight-comment-body">
-                    <div className="spotlight-comment-header">
-                      <span className="spotlight-comment-name">
-                        {c.authorName || 'User'}
-                        {isAuthor && <span className="spotlight-comment-badge">Author</span>}
-                      </span>
-                      <span className="spotlight-comment-time">{timeAgo(c.createdAt)}</span>
-                    </div>
-                    <div className="spotlight-comment-text">{c.text}</div>
-                  </div>
-                  <div className="spotlight-comment-right">
-                    {currentUser?.uid && (
-                      <CommentLikePill postId={post.id} comment={c} currentUser={currentUser} />
-                    )}
-                    {mine && (
-                      <button
-                        type="button"
-                        className="spotlight-comment-delete"
-                        onClick={() => handleDelete(c.id)}
-                        aria-label="Delete comment"
-                      >
-                        <i className="fas fa-trash" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })
+            comments.map((c) => (
+              <CommentRow
+                key={c.id}
+                postId={post.id}
+                comment={c}
+                post={post}
+                currentUser={currentUser}
+                currentProfile={currentProfile}
+              />
+            ))
           )}
         </div>
 
