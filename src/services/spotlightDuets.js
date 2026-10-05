@@ -1,7 +1,7 @@
 // src/services/spotlightDuets.js
 import { ref, push, set, remove, get, onValue, runTransaction, serverTimestamp } from 'firebase/database';
 import { db } from './firebase';
-import { pushSpotlightNotification } from './spotlightNotifications';
+import { indexPostHashtags } from './spotlightService';
 
 const ROOT = 'spotlight';
 
@@ -66,6 +66,7 @@ export const publishSpotlightDuet = async ({
 
   await set(newRef, payload);
   await set(ref(db, `${ROOT}/users/${uid}/posts/${postId}`), Date.now());
+  await indexPostHashtags(postId, payload.caption);
 
   await runTransaction(
     ref(db, `${ROOT}/posts/${sourcePostId}/duetCount`),
@@ -82,19 +83,6 @@ export const publishSpotlightDuet = async ({
       createdAt: Date.now(),
     }
   ).catch(() => {});
-
-  // Notify the source author
-  if (sourceUid && sourceUid !== uid) {
-    pushSpotlightNotification({
-      toUid: sourceUid,
-      actorUid: uid,
-      actorName: authorName || 'Someone',
-      actorAvatar: authorAvatar || '',
-      type: 'duet',
-      postId,
-      postThumb: posterUrl || mediaUrl || '',
-    }).catch(() => {});
-  }
 
   console.log('[Spotlight] Published duet:', postId, 'on', sourcePostId);
   return postId;
