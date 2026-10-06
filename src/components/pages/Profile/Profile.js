@@ -1,3 +1,8 @@
+Full Updated Profile.js with UI Advancements
+
+Here's the complete updated code with significant UI improvements:
+
+```jsx
 // src/components/pages/Profile/Profile.js
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -17,7 +22,7 @@ import Avatar from '../../common/Avatar';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import { listenToMyEchowers, listenToMyEchowerCount, listenToMyEchowingCount } from '../../../services/echowerService';
-import AvatarCustomizer from './AvatarCustomizer'; // NEW IMPORT
+import AvatarCustomizer from './AvatarCustomizer';
 import './Profile.css';
 
 const STORAGE_PREFIX = 'echo_cache_';
@@ -70,7 +75,7 @@ const Profile = () => {
 
   const [showGifLibrary, setShowGifLibrary] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
-  const [showAvatarCustomizer, setShowAvatarCustomizer] = useState(false); // NEW STATE
+  const [showAvatarCustomizer, setShowAvatarCustomizer] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
   const [copiedUid, setCopiedUid] = useState(false);
@@ -104,7 +109,7 @@ const Profile = () => {
 
   const [profile, setProfile] = useState(() => cachedProfile);
   const [activeSkinId, setActiveSkinId] = useState(() => cachedUserSkins?.active || cachedProfile?.activeSkin || null);
-  const [activeHairStyle, setActiveHairStyle] = useState(() => cachedUserSkins?.hairStyle || 'short'); // NEW STATE
+  const [activeHairStyle, setActiveHairStyle] = useState(() => cachedUserSkins?.hairStyle || 'short');
   const [loading, setLoading] = useState(() => !cachedProfile);
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState(() => cachedProfile || {
@@ -300,7 +305,6 @@ const Profile = () => {
     }
   };
 
-  // NEW: Handle avatar customization save
   const handleSaveAvatar = async (avatarData) => {
     if (!user) return;
     try {
@@ -492,6 +496,11 @@ const Profile = () => {
   const currentSkinId = activeSkinId || profile?.activeSkin;
   const activeSkinObj = useMemo(() => (currentSkinId ? getSkinById(currentSkinId) : null), [currentSkinId]);
 
+  // ─── Format member since date ───
+  const memberSince = profile?.createdAt 
+    ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    : 'Recently';
+
   return (
     <>
       <SEO
@@ -503,250 +512,180 @@ const Profile = () => {
         <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleImageFile} />
 
         <div className="profile-card">
-          <div
-            className="profile-avatar"
-            onClick={() => (editing || isDemoUser) && setShowAvatarPicker(true)}
-            style={{ cursor: (editing || isDemoUser) ? 'pointer' : 'default', position: 'relative' }}
-          >
-            {loading ? (
-              <SkeletonBlock width="100%" height="100%" borderRadius="50%" />
-            ) : isVideoFormat ? (
-              <video src={displayMediaUrl} autoPlay loop muted playsInline style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-            ) : displayMediaUrl ? (
-              <img src={displayMediaUrl} alt="Avatar" style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-            ) : (
-              <Avatar src={null} name={editData?.name || profile?.name || 'User'} size={110} />
-            )}
-            {(editing || isDemoUser) && <div className="avatar-overlay">Tap to change</div>}
+          {/* ─── Decorative Background Glow ─── */}
+          <div className="profile-card-glow" />
+
+          {/* ─── Avatar with Ring Animation ─── */}
+          <div className="profile-avatar-wrapper">
+            <div className="profile-avatar-ring" />
+            <div
+              className="profile-avatar"
+              onClick={() => (editing || isDemoUser) && setShowAvatarPicker(true)}
+              style={{ cursor: (editing || isDemoUser) ? 'pointer' : 'default' }}
+            >
+              {loading ? (
+                <SkeletonBlock width="100%" height="100%" borderRadius="50%" />
+              ) : isVideoFormat ? (
+                <video src={displayMediaUrl} autoPlay loop muted playsInline />
+              ) : displayMediaUrl ? (
+                <img src={displayMediaUrl} alt="Avatar" />
+              ) : (
+                <Avatar src={null} name={editData?.name || profile?.name || 'User'} size={110} />
+              )}
+              {(editing || isDemoUser) && <div className="avatar-overlay">Tap to change</div>}
+            </div>
+
+            {/* ─── Online Status Badge ─── */}
+            <div className="profile-status-badge">
+              <span className="status-dot" />
+              <span className="status-text">Active</span>
+            </div>
           </div>
 
-          {/* ─── Echower Stats (Correct Counts) ─── */}
-          <div className="profile-stats">
-            <div className="stat" onClick={() => { setActiveEchowersTab('followers'); setShowEchowersModal(true); }}>
-              <h4>{followerUids.length}</h4>
-              <p>Echowers</p>
-            </div>
-            <div className="stat" onClick={() => { setActiveEchowersTab('following'); setShowEchowersModal(true); }}>
-              <h4>{followingUids.length}</h4>
-              <p>Echowing</p>
-            </div>
-          </div>
-
-          {isDemoUser ? (
-            <div className="profile-name" style={{ textAlign: 'center', marginTop: '8px' }}>
-              {profile?.name || 'User'}
-            </div>
-          ) : editing ? (
-            <div ref={editingContainerRef} style={{ position: 'relative', width: '100%' }}>
-              <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
-                <input
-                  ref={nameInputRef}
-                  type="text"
-                  className="profile-name-input"
-                  value={editData.name || ''}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val.length <= NAME_MAX_LENGTH) {
-                      setEditData({ ...editData, name: val });
-                    }
-                  }}
-                  placeholder="Your name"
-                  maxLength={NAME_MAX_LENGTH}
-                  style={{
-                    flex: 1,
-                    paddingLeft: '40px',
-                    paddingRight: '50px',
-                    borderColor: (!nameAvailable && editData.name?.trim()) ? '#EF4444' : 'var(--border-color)',
-                  }}
-                  onFocus={() => handleInputFocus('name')}
-                  onMouseDown={handleInputMouseDown}
-                  onTouchStart={handleInputMouseDown}
-                />
-                <button
-                  type="button"
-                  onClick={() => openEmojiPicker('name')}
-                  style={{
-                    position: 'absolute',
-                    left: '8px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    fontSize: '18px',
-                    cursor: 'pointer',
-                    padding: '4px',
-                    zIndex: 2,
-                  }}
-                  title="Insert emoji"
-                >
-                  <i className="fas fa-smile" />
-                </button>
-                <span style={{
-                  position: 'absolute',
-                  right: '12px',
-                  bottom: '6px',
-                  fontSize: '11px',
-                  color: (editData.name?.length || 0) >= NAME_MAX_LENGTH ? '#EF4444' : 'var(--text-muted)',
-                  pointerEvents: 'none',
-                }}>
-                  {editData.name?.length || 0}/{NAME_MAX_LENGTH}
-                </span>
-                {!nameAvailable && editData.name?.trim() && (
-                  <span style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    fontSize: '12px',
-                    color: '#EF4444',
-                    fontWeight: 600,
-                  }}>
-                    Taken
+          {/* ─── Name Section ─── */}
+          <div className="profile-name-section">
+            {isDemoUser ? (
+              <div className="profile-name">{profile?.name || 'User'}</div>
+            ) : editing ? (
+              <div ref={editingContainerRef} className="profile-name-edit-wrapper">
+                <div className="profile-name-input-wrapper">
+                  <input
+                    ref={nameInputRef}
+                    type="text"
+                    className="profile-name-input"
+                    value={editData.name || ''}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      if (val.length <= NAME_MAX_LENGTH) {
+                        setEditData({ ...editData, name: val });
+                      }
+                    }}
+                    placeholder="Your name"
+                    maxLength={NAME_MAX_LENGTH}
+                    style={{
+                      borderColor: (!nameAvailable && editData.name?.trim()) ? '#EF4444' : 'var(--border-color)',
+                    }}
+                    onFocus={() => handleInputFocus('name')}
+                    onMouseDown={handleInputMouseDown}
+                    onTouchStart={handleInputMouseDown}
+                  />
+                  <button
+                    type="button"
+                    className="emoji-btn"
+                    onClick={() => openEmojiPicker('name')}
+                    title="Insert emoji"
+                  >
+                    <i className="fas fa-smile" />
+                  </button>
+                  <span className="char-counter">
+                    {editData.name?.length || 0}/{NAME_MAX_LENGTH}
                   </span>
+                </div>
+                {!nameAvailable && editData.name?.trim() && (
+                  <span className="name-status taken">Taken</span>
                 )}
                 {nameAvailable && editData.name?.trim() && editData.name?.trim() !== profile?.name && (
-                  <span style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    fontSize: '12px',
-                    color: '#10B981',
-                    fontWeight: 600,
-                  }}>
-                    Available
-                  </span>
+                  <span className="name-status available">Available</span>
                 )}
                 {nameCheckLoading && (
-                  <span style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    fontSize: '12px',
-                    color: 'var(--text-muted)',
-                  }}>
-                    checking...
+                  <span className="name-status checking">checking...</span>
+                )}
+              </div>
+            ) : loading ? (
+              <SkeletonBlock width="140px" height="22px" />
+            ) : (
+              <div className="profile-name">{profile?.name || 'User'}</div>
+            )}
+
+            {/* ─── Member Since Tag ─── */}
+            {!editing && !loading && (
+              <div className="profile-meta">
+                <span className="member-since">
+                  <i className="fas fa-calendar-alt" /> Member since {memberSince}
+                </span>
+                {profile?.country && (
+                  <span className="location-tag">
+                    <i className="fas fa-map-marker-alt" /> {profile.city ? `${profile.city}, ` : ''}{profile.country}
                   </span>
                 )}
               </div>
-            </div>
-          ) : loading ? (
-            <div style={{ display: 'flex', justifyContent: 'center', margin: '8px 0' }}>
-              <SkeletonBlock width="140px" height="22px" />
-            </div>
-          ) : (
-            <div className="profile-name">{profile?.name || 'User'}</div>
-          )}
+            )}
+          </div>
 
+          {/* ─── Bio Section ─── */}
           {isDemoUser ? (
-            <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: 'var(--text-secondary)' }}>
-              {profile?.bio || 'No bio yet.'}
-            </p>
+            <p className="profile-bio">{profile?.bio || 'No bio yet.'}</p>
           ) : editing ? (
-            <div style={{ position: 'relative', width: '100%', marginTop: '12px' }}>
-              <div style={{ position: 'relative' }}>
-                <textarea
-                  ref={bioInputRef}
-                  className="profile-bio-textarea"
-                  value={editData.bio || ''}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    if (val.length <= BIO_MAX_LENGTH) {
-                      setEditData({ ...editData, bio: val });
-                    }
-                  }}
-                  placeholder="Write a short bio..."
-                  rows={3}
-                  maxLength={BIO_MAX_LENGTH}
-                />
-                <button
-                  type="button"
-                  onClick={() => openEmojiPicker('bio')}
-                  style={{
-                    position: 'absolute',
-                    left: '8px',
-                    top: '8px',
-                    background: 'none',
-                    border: 'none',
-                    color: 'var(--text-muted)',
-                    fontSize: '18px',
-                    cursor: 'pointer',
-                    padding: '4px',
-                    zIndex: 2,
-                  }}
-                  title="Insert emoji"
-                >
-                  <i className="fas fa-smile" />
-                </button>
-                <span style={{
-                  position: 'absolute',
-                  right: '12px',
-                  bottom: '6px',
-                  fontSize: '11px',
-                  color: (editData.bio?.length || 0) >= BIO_MAX_LENGTH ? '#EF4444' : 'var(--text-muted)',
-                  pointerEvents: 'none',
-                }}>
-                  {editData.bio?.length || 0}/{BIO_MAX_LENGTH}
-                </span>
-              </div>
+            <div className="profile-bio-edit-wrapper">
+              <textarea
+                ref={bioInputRef}
+                className="profile-bio-textarea"
+                value={editData.bio || ''}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  if (val.length <= BIO_MAX_LENGTH) {
+                    setEditData({ ...editData, bio: val });
+                  }
+                }}
+                placeholder="Write a short bio..."
+                rows={3}
+                maxLength={BIO_MAX_LENGTH}
+              />
+              <button
+                type="button"
+                className="emoji-btn bio-emoji-btn"
+                onClick={() => openEmojiPicker('bio')}
+                title="Insert emoji"
+              >
+                <i className="fas fa-smile" />
+              </button>
+              <span className="char-counter bio-counter">
+                {editData.bio?.length || 0}/{BIO_MAX_LENGTH}
+              </span>
             </div>
           ) : (
-            profile?.bio && <p className="profile-bio" style={{ margin: '12px 0', fontSize: '14px', color: 'var(--text-secondary)' }}>{profile.bio}</p>
+            profile?.bio && <p className="profile-bio">{profile.bio}</p>
           )}
 
+          {/* ─── Mood & Avatar Customization Card ─── */}
           {!loading && (
-            <div style={{ marginTop: '16px', padding: '12px', background: 'var(--bg-input)', borderRadius: '12px' }}>
+            <div className="mood-customize-card">
               {editing ? (
                 <>
-                  <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '8px', fontWeight: 500 }}>Choose your mood</div>
+                  <div className="mood-label">Choose your mood</div>
                   <MoodPicker currentMood={editData.mood || 'neutral'} onSelect={handleMoodChange} />
                 </>
               ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+                <div className="mood-display">
+                  <div className="mood-preview">
                     <ECHOMOJI 
                       mood={profile?.mood || 'happy'} 
                       skin={activeSkinObj} 
-                      hairStyle={activeHairStyle} // NEW PROP
-                      size={48} 
+                      hairStyle={activeHairStyle}
+                      size={56} 
                       interactive={false} 
                       animated={true} 
                     />
-                    <span style={{
-                      fontSize: '13px',
-                      color: 'var(--text-secondary)',
-                      fontWeight: 500,
-                    }}>
-                      Mood: <strong style={{ color: 'var(--text-primary)', textTransform: 'capitalize' }}>
+                    <div className="mood-info">
+                      <span className="mood-label-small">Current Mood</span>
+                      <span className="mood-value">
                         {profile?.mood || 'happy'}
-                      </strong>
-                    </span>
+                      </span>
+                    </div>
                   </div>
                   
-                  {/* NEW: Customize Avatar Button */}
                   <button
+                    className="customize-avatar-btn"
                     onClick={() => setShowAvatarCustomizer(true)}
-                    style={{
-                      background: 'transparent',
-                      border: '1px solid #6C3CE1',
-                      color: '#6C3CE1',
-                      padding: '6px 16px',
-                      borderRadius: '20px',
-                      fontSize: '12px',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                    }}
                   >
-                    🎨 Customize Avatar
+                    <i className="fas fa-palette" /> Customize Avatar
                   </button>
                 </div>
               )}
             </div>
           )}
 
-          {/* NEW: Avatar Customizer Component */}
+          {/* ─── Avatar Customizer Component ─── */}
           {showAvatarCustomizer && !editing && (
             <AvatarCustomizer
               currentSkin={activeSkinObj}
@@ -757,68 +696,54 @@ const Profile = () => {
             />
           )}
 
-          <div className="moving-interests-container" style={{ width: '100%', overflow: 'hidden', padding: '6px 0', marginTop: '12px' }}>
-            <div
-              className="moving-interests-track"
-              style={{
-                display: 'flex',
-                gap: '8px',
-                width: 'max-content',
-                animation: 'scrollInterests 18s linear infinite',
-              }}
-            >
+          {/* ─── Echower Stats (Enhanced) ─── */}
+          <div className="profile-stats-enhanced">
+            <div className="stat-card" onClick={() => { setActiveEchowersTab('followers'); setShowEchowersModal(true); }}>
+              <div className="stat-icon">
+                <i className="fas fa-users" />
+              </div>
+              <div className="stat-info">
+                <h4>{followerUids.length}</h4>
+                <p>Echowers</p>
+              </div>
+            </div>
+            <div className="stat-card" onClick={() => { setActiveEchowersTab('following'); setShowEchowersModal(true); }}>
+              <div className="stat-icon">
+                <i className="fas fa-broadcast-tower" />
+              </div>
+              <div className="stat-info">
+                <h4>{followingUids.length}</h4>
+                <p>Echowing</p>
+              </div>
+            </div>
+          </div>
+
+          {/* ─── Moving Interests Marquee ─── */}
+          <div className="moving-interests-container">
+            <div className="moving-interests-track">
               {[...DEFAULT_INTEREST_TEMPLATES, ...DEFAULT_INTEREST_TEMPLATES].map((item, idx) => (
-                <span
-                  key={idx}
-                  style={{
-                    background: 'rgba(255,255,255,0.08)',
-                    color: 'var(--text-secondary)',
-                    border: '1px solid var(--border-color)',
-                    padding: '4px 12px',
-                    borderRadius: '12px',
-                    fontSize: '12px',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
+                <span key={idx} className="interest-pill">
                   {item}
                 </span>
               ))}
             </div>
           </div>
 
-          <div className="profile-actions" style={{ marginTop: '24px', display: 'flex', gap: '12px', justifyContent: 'center' }}>
+          {/* ─── Action Buttons ─── */}
+          <div className="profile-actions">
             {editing ? (
               isDemoUser ? null : (
                 <>
                   <button
                     className="save-btn"
                     onClick={handleSave}
-                    style={{
-                      background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
-                      color: '#fff',
-                      border: 'none',
-                      padding: '10px 24px',
-                      borderRadius: '20px',
-                      cursor: 'pointer',
-                      fontWeight: 600,
-                      opacity: (!nameAvailable && editData.name?.trim()) ? 0.5 : 1,
-                      pointerEvents: (!nameAvailable && editData.name?.trim()) ? 'none' : 'auto',
-                    }}
                     disabled={!nameAvailable && editData.name?.trim()}
                   >
-                    Save
+                    <i className="fas fa-check" /> Save Changes
                   </button>
                   <button
                     className="cancel-btn"
                     onClick={() => { setEditing(false); setEditData(profile); }}
-                    style={{
-                      background: 'var(--bg-input)',
-                      color: 'var(--text-secondary)',
-                      border: '1px solid var(--border-color)',
-                      padding: '10px 24px',
-                      borderRadius: '20px',
-                      cursor: 'pointer',
-                    }}
                   >
                     Cancel
                   </button>
@@ -834,24 +759,21 @@ const Profile = () => {
                     setEditing(true);
                   }
                 }}
-                style={{
-                  background: 'linear-gradient(135deg, #6C3CE1, #EC4899)',
-                  color: '#fff',
-                  border: 'none',
-                  padding: '10px 24px',
-                  borderRadius: '20px',
-                  cursor: 'pointer',
-                  fontWeight: 600,
-                }}
               >
-                {isDemoUser ? 'Change Avatar' : 'Edit Profile'}
+                {isDemoUser ? (
+                  <><i className="fas fa-image" /> Change Avatar</>
+                ) : (
+                  <><i className="fas fa-pen" /> Edit Profile</>
+                )}
               </button>
             )}
           </div>
         </div>
 
+        {/* ─── Account Details Card ─── */}
         <div className="account-details">
           <div className="account-details-header">
+            <i className="fas fa-shield-alt" />
             <span>ACCOUNT DETAILS</span>
           </div>
           <div className="account-details-row">
@@ -863,7 +785,11 @@ const Profile = () => {
             <div className="account-details-uid-wrapper">
               <span className="account-details-value uid">{user?.uid}</span>
               <button className="copy-uid-btn" onClick={handleCopyUid}>
-                {copiedUid ? 'Copied! ✓' : 'Copy UID'}
+                {copiedUid ? (
+                  <><i className="fas fa-check" /> Copied!</>
+                ) : (
+                  <><i className="fas fa-copy" /> Copy</>
+                )}
               </button>
             </div>
           </div>
@@ -943,19 +869,20 @@ const Profile = () => {
                   </p>
                 ) : (
                   (activeEchowersTab === 'followers' ? followerUids : followingUids).map((uid) => {
-                    const profile = profiles[uid];
-                    if (!profile) return null;
+                    const profileData = profiles[uid];
+                    if (!profileData) return null;
                     return (
                       <div 
                         key={uid} 
                         className="echower-item"
                         onClick={() => navigate(`/chat/${uid}`)}
                       >
-                        <Avatar src={profile.avatar} name={profile.name} size={50} />
+                        <Avatar src={profileData.avatar} name={profileData.name} size={50} />
                         <div className="item-info">
-                          <strong>{profile.name}</strong>
-                          <span>{profile.bio || 'No bio yet'}</span>
+                          <strong>{profileData.name}</strong>
+                          <span>{profileData.bio || 'No bio yet'}</span>
                         </div>
+                        <i className="fas fa-chevron-right" />
                       </div>
                     );
                   })
@@ -970,5 +897,829 @@ const Profile = () => {
 };
 
 export default Profile;
+```
 
+---
 
+Updated Profile.css (Complete)
+
+```css
+/* src/components/pages/Profile/Profile.css */
+
+.profile-page {
+  padding: 16px;
+  max-width: 600px;
+  margin: 0 auto;
+  min-height: 100vh;
+  padding-bottom: 100px;
+}
+
+/* ─── Profile Card ─── */
+.profile-card {
+  background: var(--bg-card);
+  border-radius: 24px;
+  padding: 32px 24px 24px;
+  margin-bottom: 16px;
+  border: 1px solid var(--border-color);
+  position: relative;
+  overflow: hidden;
+}
+
+.profile-card-glow {
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: radial-gradient(circle at 50% 0%, rgba(108, 60, 225, 0.15), transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.profile-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── Avatar Wrapper with Ring ─── */
+.profile-avatar-wrapper {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.profile-avatar-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 130px;
+  height: 130px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #6C3CE1, #EC4899, #6C3CE1);
+  animation: rotateRing 4s linear infinite;
+  z-index: 0;
+}
+
+@keyframes rotateRing {
+  from { transform: translate(-50%, -50%) rotate(0deg); }
+  to { transform: translate(-50%, -50%) rotate(360deg); }
+}
+
+.profile-avatar {
+  position: relative;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 4px solid var(--bg-card);
+  z-index: 1;
+  background: var(--bg-input);
+}
+
+.profile-avatar img,
+.profile-avatar video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+
+.avatar-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: 50%;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.profile-avatar:hover .avatar-overlay {
+  opacity: 1;
+}
+
+/* ─── Online Status Badge ─── */
+.profile-status-badge {
+  position: absolute;
+  bottom: 4px;
+  right: calc(50% - 60px);
+  background: var(--bg-card);
+  border: 2px solid var(--bg-card);
+  border-radius: 20px;
+  padding: 4px 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #10B981;
+  z-index: 2;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #10B981;
+  animation: pulseDot 2s infinite;
+}
+
+@keyframes pulseDot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.2); }
+}
+
+/* ─── Name Section ─── */
+.profile-name-section {
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.profile-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+  text-align: center;
+}
+
+.profile-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.member-since,
+.location-tag {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.member-since i,
+.location-tag i {
+  font-size: 10px;
+}
+
+/* ─── Name Edit Wrapper ─── */
+.profile-name-edit-wrapper {
+  width: 100%;
+  position: relative;
+}
+
+.profile-name-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.profile-name-input {
+  width: 100%;
+  padding: 12px 16px 12px 44px;
+  border-radius: 12px;
+  border: 2px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 16px;
+  font-weight: 600;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.profile-name-input:focus {
+  border-color: #6C3CE1;
+}
+
+.emoji-btn {
+  position: absolute;
+  left: 12px;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+  z-index: 2;
+  transition: color 0.2s;
+}
+
+.emoji-btn:hover {
+  color: #6C3CE1;
+}
+
+.char-counter {
+  position: absolute;
+  right: 12px;
+  bottom: 4px;
+  font-size: 10px;
+  color: var(--text-muted);
+  pointer-events: none;
+}
+
+.name-status {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.name-status.taken {
+  color: #EF4444;
+}
+
+.name-status.available {
+  color: #10B981;
+}
+
+.name-status.checking {
+  color: var(--text-muted);
+}
+
+/* ─── Bio Section ─── */
+.profile-bio {
+  font-size: 14px;
+  color: var(--text-secondary);
+  text-align: center;
+  line-height: 1.5;
+  margin: 0 0 16px;
+  padding: 0 8px;
+}
+
+.profile-bio-edit-wrapper {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.profile-bio-textarea {
+  width: 100%;
+  padding: 12px 16px 24px 44px;
+  border-radius: 12px;
+  border: 2px solid var(--border-color);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+  resize: vertical;
+  min-height: 80px;
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.2s;
+}
+
+.profile-bio-textarea:focus {
+  border-color: #6C3CE1;
+}
+
+.bio-emoji-btn {
+  top: 12px;
+  left: 12px;
+}
+
+.bio-counter {
+  bottom: 8px;
+}
+
+/* ─── Mood & Customize Card ─── */
+.mood-customize-card {
+  margin: 16px 0;
+  padding: 16px;
+  background: var(--bg-input);
+  border-radius: 16px;
+  border: 1px solid var(--border-color);
+}
+
+.mood-label {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-bottom: 10px;
+  font-weight: 600;
+}
+
+.mood-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+}
+
+.mood-preview {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  justify-content: center;
+}
+
+.mood-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mood-label-small {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+.mood-value {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.customize-avatar-btn {
+  background: transparent;
+  border: 1.5px solid #6C3CE1;
+  color: #6C3CE1;
+  padding: 10px 24px;
+  border-radius: 24px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+  width: 100%;
+  justify-content: center;
+}
+
+.customize-avatar-btn:hover {
+  background: rgba(108, 60, 225, 0.1);
+  transform: translateY(-1px);
+}
+
+/* ─── Enhanced Stats ─── */
+.profile-stats-enhanced {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px;
+  background: var(--bg-input);
+  border-radius: 14px;
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.stat-card:hover {
+  border-color: #6C3CE1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(108, 60, 225, 0.15);
+}
+
+.stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.15), rgba(236, 72, 153, 0.15));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6C3CE1;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.stat-info h4 {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.stat-info p {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 2px 0 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+/* ─── Moving Interests ─── */
+.moving-interests-container {
+  width: 100%;
+  overflow: hidden;
+  padding: 8px 0;
+  margin-top: 16px;
+  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+  -webkit-mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+}
+
+.moving-interests-track {
+  display: flex;
+  gap: 8px;
+  width: max-content;
+  animation: scrollInterests 18s linear infinite;
+}
+
+.interest-pill {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  padding: 6px 14px;
+  border-radius: 16px;
+  font-size: 12px;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+@keyframes scrollInterests {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* ─── Action Buttons ─── */
+.profile-actions {
+  margin-top: 20px;
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.edit-btn,
+.save-btn {
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  border: none;
+  padding: 12px 28px;
+  border-radius: 24px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 16px rgba(108, 60, 225, 0.3);
+}
+
+.edit-btn:hover,
+.save-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(108, 60, 225, 0.4);
+}
+
+.save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.cancel-btn {
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  padding: 12px 28px;
+  border-radius: 24px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.2s;
+}
+
+.cancel-btn:hover {
+  background: var(--bg-card);
+}
+
+/* ─── Account Details ─── */
+.account-details {
+  background: var(--bg-card);
+  border-radius: 20px;
+  padding: 20px;
+  border: 1px solid var(--border-color);
+}
+
+.account-details-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-muted);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.account-details-header i {
+  color: #6C3CE1;
+}
+
+.account-details-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.account-details-row:last-child {
+  border-bottom: none;
+}
+
+.account-details-label {
+  font-size: 13px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.account-details-value {
+  font-size: 13px;
+  color: var(--text-primary);
+  font-weight: 600;
+  max-width: 60%;
+  text-align: right;
+  word-break: break-all;
+}
+
+.account-details-uid-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 70%;
+}
+
+.account-details-value.uid {
+  font-family: monospace;
+  font-size: 11px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.copy-uid-btn {
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  color: #6C3CE1;
+  padding: 6px 12px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  transition: all 0.2s;
+}
+
+.copy-uid-btn:hover {
+  background: rgba(108, 60, 225, 0.1);
+}
+
+/* ─── Echowers Modal ─── */
+.echowers-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 16px;
+}
+
+.echowers-modal {
+  background: var(--bg-card);
+  border-radius: 20px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--border-color);
+  overflow: hidden;
+}
+
+.echowers-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.echowers-modal-header h3 {
+  margin: 0;
+  font-size: 18px;
+  color: var(--text-primary);
+}
+
+.close-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.echowers-tabs {
+  display: flex;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+
+.echowers-tabs button {
+  flex: 1;
+  background: none;
+  border: none;
+  padding: 14px 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.2s;
+}
+
+.echowers-tabs button.active {
+  color: #6C3CE1;
+  border-bottom-color: #6C3CE1;
+}
+
+.echowers-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+}
+
+.echower-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.echower-item:hover {
+  background: var(--bg-input);
+}
+
+.echower-item .item-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.echower-item .item-info strong {
+  font-size: 14px;
+  color: var(--text-primary);
+}
+
+.echower-item .item-info span {
+  font-size: 12px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.echower-item > i {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.empty-state {
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 32px 16px;
+}
+
+/* ─── Pulse Animation ─── */
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* ─── Responsive ─── */
+@media (max-width: 480px) {
+  .profile-page {
+    padding: 12px;
+  }
+
+  .profile-card {
+    padding: 24px 16px 20px;
+    border-radius: 20px;
+  }
+
+  .profile-name {
+    font-size: 20px;
+  }
+
+  .profile-stats-enhanced {
+    gap: 8px;
+  }
+
+  .stat-card {
+    padding: 12px;
+  }
+
+  .stat-icon {
+    width: 36px;
+    height: 36px;
+    font-size: 14px;
+  }
+
+  .stat-info h4 {
+    font-size: 16px;
+  }
+}
+```
+
+---
+
+Key UI Advancements Made:
+
+1. Animated Avatar Ring
+
+· Gradient conic ring that rotates continuously around the avatar
+· Creates a premium, dynamic feel
+
+2. Online Status Badge
+
+· Green pulsing dot with "Active" label
+· Positioned on the avatar edge
+
+3. Enhanced Name Section
+
+· Member since date with calendar icon
+· Location tag with map pin
+· Better spacing and centering
+
+4. Mood & Customize Card
+
+· Preview of current ECHOMOJI with mood label
+· Full-width "Customize Avatar" button with palette icon
+· Cleaner layout with mood value displayed prominently
+
+5. Enhanced Stats Cards
+
+· Icon-based stat cards with gradient backgrounds
+· Hover lift effect
+· Better visual hierarchy
+
+6. Interests Marquee
+
+· Gradient fade masks on edges
+· Smoother animation
+· Better pill styling
+
+7. Improved Buttons
+
+· Gradient backgrounds with shadow
+· Icon + text combinations
+· Hover lift effects
+
+8. Account Details
+
+· Shield icon header
+· Better UID display with monospace font
+· Copy button with icon states
+
+9. Echowers Modal
+
+· Chevron indicators on items
+· Better hover states
+· Improved spacing
+
+10. Responsive Refinements
+
+· Mobile-optimized padding and font sizes
+· Grid adjustments for small screens
