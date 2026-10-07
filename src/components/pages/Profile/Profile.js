@@ -95,7 +95,6 @@ const Profile = () => {
 
   const isDemoUser = user?.uid === DEMO_UID;
 
-  // Echower states
   const [showEchowersModal, setShowEchowersModal] = useState(false);
   const [followerUids, setFollowerUids] = useState([]);
   const [followingUids, setFollowingUids] = useState([]);
