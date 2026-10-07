@@ -9,6 +9,7 @@ import {
   getSoundEnabled,
   notifyMessage,
 } from '../services/notificationService';
+import { registerFcmToken } from '../services/fcmService';
 
 const STORAGE_KEY = 'echo_last_seen_msg_ts';
 
@@ -31,6 +32,7 @@ const setLastSeenMap = (map) => {
 /**
  * Subscribes to incoming messages across all userChats.
  * Fires a notification banner + sound for anything new.
+ * Also registers this device for FCM push notifications.
  */
 export const useGlobalMessageListener = () => {
   const { user } = useAuth();
@@ -42,6 +44,15 @@ export const useGlobalMessageListener = () => {
     return () => { mountedRef.current = false; };
   }, []);
 
+  // ─── Register FCM token once per login ───
+  useEffect(() => {
+    if (!user?.uid) return;
+    registerFcmToken(user.uid).catch((err) =>
+      console.warn('FCM registration skipped:', err)
+    );
+  }, [user?.uid]);
+
+  // ─── Global message listener ───
   useEffect(() => {
     if (!user?.uid) return;
 
