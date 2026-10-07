@@ -13,7 +13,6 @@ import { registerFcmToken } from '../services/fcmService';
 
 const STORAGE_KEY = 'echo_last_seen_msg_ts';
 
-// A per-chat map of last-seen timestamps to avoid replaying old messages on reload
 const getLastSeenMap = () => {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -29,11 +28,6 @@ const setLastSeenMap = (map) => {
   } catch {}
 };
 
-/**
- * Subscribes to incoming messages across all userChats.
- * Fires a notification banner + sound for anything new.
- * Also registers this device for FCM push notifications.
- */
 export const useGlobalMessageListener = () => {
   const { user } = useAuth();
   const { profiles, fetchProfile } = useProfile();
@@ -52,17 +46,14 @@ export const useGlobalMessageListener = () => {
     );
   }, [user?.uid]);
 
-  // ─── Global message listener ───
   useEffect(() => {
     if (!user?.uid) return;
 
-    // Track which chats we've already booted so the initial fetch doesn't fire notifications
     const bootstrapped = new Set();
     const unsubs = [];
     let cancelled = false;
 
     const attachListeners = async () => {
-      // Import fresh userChats snapshot
       const { ref: dbRef, get } = await import('firebase/database');
       const userChatsRef = dbRef(db, `userChats/${user.uid}`);
       const snap = await get(userChatsRef);
@@ -80,7 +71,6 @@ export const useGlobalMessageListener = () => {
           limitToLast(1)
         );
 
-        // Use onChildAdded — fires for existing + new
         const unsub = onChildAdded(
           msgsRef,
           async (childSnap) => {
@@ -90,21 +80,15 @@ export const useGlobalMessageListener = () => {
             const msgId = childSnap.key;
             const ts = msg.timestamp || msg.clientTs || Date.now();
 
-            // Skip if we're the sender
             if (msg.senderId === user.uid) return;
-
-            // Skip empty/system messages
             if (msg.senderId === 'system' || msg.type === 'system') return;
 
-            // Check if this message has already been seen
             const seenKey = `${cId}:${msgId}`;
             const seenTs = lastSeen[seenKey];
 
-            // First time we see this chat, just record the latest message and skip firing
             const isFirstBoot = !bootstrapped.has(cId);
             bootstrapped.add(cId);
 
-            // Skip old messages (>2 minutes old = probably from reload)
             const age = Date.now() - ts;
             const isStale = age > 120000;
 
@@ -117,17 +101,14 @@ export const useGlobalMessageListener = () => {
             lastSeen[seenKey] = ts;
             setLastSeenMap(lastSeen);
 
-            // Don't notify if the user is already in that chat
             const currentPath = window.location.pathname;
             if (currentPath === `/chat/${partnerId}`) return;
 
-            // Make sure we have the sender profile (avatar + name)
             let profile = profiles[partnerId];
             if (!profile?.name || !profile?.avatar) {
               try { await fetchProfile(partnerId); } catch {}
             }
 
-            // Get fresh profile from the context after fetch
             const { ref: pRef, get: pGet } = await import('firebase/database');
             const pSnap = await pGet(pRef(db, `profiles/${partnerId}`));
             const pData = pSnap.exists() ? pSnap.val() : {};
@@ -147,7 +128,6 @@ export const useGlobalMessageListener = () => {
                 ? '😊 ECHOmoji'
                 : msg.text || 'New message';
 
-            // Fire the receive sound + banner
             if (getSoundEnabled()) playReceivedSound();
 
             notifyMessage({
