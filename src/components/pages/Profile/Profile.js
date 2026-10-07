@@ -1,4 +1,3 @@
-```jsx
 // src/components/pages/Profile/Profile.js
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -17,7 +16,7 @@ import MoodPicker from '../../common/MoodPicker';
 import Avatar from '../../common/Avatar';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
-import { listenToMyEchowers, listenToMyEchowerCount, listenToMyEchowingCount } from '../../../services/echowerService';
+import { listenToMyEchowers, listenToMyEchowerCount } from '../../../services/echowerService';
 import AvatarCustomizer from './AvatarCustomizer';
 import './Profile.css';
 
@@ -56,7 +55,16 @@ const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 const DEFAULT_INTEREST_TEMPLATES = [
-  '🎮 Gaming', '🎵 Music', '💻 Tech', '🍿 Movies', '🎨 Art', '⛩️ Anime', '🏋️ Fitness', '📸 Photography', '✈️ Travel', '🚀 Coding',
+  'Gaming',
+  'Music',
+  'Tech',
+  'Movies',
+  'Art',
+  'Anime',
+  'Fitness',
+  'Photography',
+  'Travel',
+  'Coding',
 ];
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
@@ -87,7 +95,7 @@ const Profile = () => {
 
   const isDemoUser = user?.uid === DEMO_UID;
 
-  // ─── Echower States ───
+  // Echower states
   const [showEchowersModal, setShowEchowersModal] = useState(false);
   const [followerUids, setFollowerUids] = useState([]);
   const [followingUids, setFollowingUids] = useState([]);
@@ -95,56 +103,77 @@ const Profile = () => {
 
   const cachedProfile = useMemo(() => {
     if (!user?.uid) return null;
-    return getFastLocal(`profile_${user.uid}`);
+    return getFastLocal('profile_' + user.uid);
   }, [user?.uid]);
 
   const cachedUserSkins = useMemo(() => {
     if (!user?.uid) return null;
-    return getFastLocal(`echomoji_${user.uid}`);
+    return getFastLocal('echomoji_' + user.uid);
   }, [user?.uid]);
 
   const [profile, setProfile] = useState(() => cachedProfile);
-  const [activeSkinId, setActiveSkinId] = useState(() => cachedUserSkins?.active || cachedProfile?.activeSkin || null);
-  const [activeHairStyle, setActiveHairStyle] = useState(() => cachedUserSkins?.hairStyle || 'short');
+  const [activeSkinId, setActiveSkinId] = useState(
+    () => cachedUserSkins?.active || cachedProfile?.activeSkin || null
+  );
+  const [activeHairStyle, setActiveHairStyle] = useState(
+    () => cachedUserSkins?.hairStyle || 'short'
+  );
   const [loading, setLoading] = useState(() => !cachedProfile);
   const [editing, setEditing] = useState(false);
-  const [editData, setEditData] = useState(() => cachedProfile || {
-    name: '', avatar: '', videoUrl: '', mood: 'happy', activeSkin: null, bio: '', country: '', countryCode: '', city: '',
-  });
+  const [editData, setEditData] = useState(
+    () =>
+      cachedProfile || {
+        name: '',
+        avatar: '',
+        videoUrl: '',
+        mood: 'happy',
+        activeSkin: null,
+        bio: '',
+        country: '',
+        countryCode: '',
+        city: '',
+      }
+  );
   const [unlockedGifs, setUnlockedGifs] = useState([]);
 
   const imageInputRef = useRef(null);
 
-  // ─── Name availability state ──────────────────────────────────
   const [nameAvailable, setNameAvailable] = useState(true);
   const [nameCheckLoading, setNameCheckLoading] = useState(false);
 
-  const checkNameAvailability = useCallback(async (newName) => {
-    const trimmed = newName.trim();
-    if (!trimmed) {
-      setNameAvailable(true);
-      return;
-    }
-    if (profile?.name && trimmed.toLowerCase() === profile.name.toLowerCase()) {
-      setNameAvailable(true);
-      return;
-    }
+  const checkNameAvailability = useCallback(
+    async (newName) => {
+      const trimmed = newName.trim();
+      if (!trimmed) {
+        setNameAvailable(true);
+        return;
+      }
+      if (profile?.name && trimmed.toLowerCase() === profile.name.toLowerCase()) {
+        setNameAvailable(true);
+        return;
+      }
 
-    setNameCheckLoading(true);
-    try {
-      const searchTerm = trimmed.toLowerCase();
-      const profilesRef = ref(db, 'profiles');
-      const q = query(profilesRef, orderByChild('searchName'), equalTo(searchTerm), limitToFirst(1));
-      const snapshot = await get(q);
-      const exists = snapshot.exists();
-      setNameAvailable(!exists);
-    } catch (err) {
-      console.warn('Name check failed:', err);
-      setNameAvailable(true);
-    } finally {
-      setNameCheckLoading(false);
-    }
-  }, [profile]);
+      setNameCheckLoading(true);
+      try {
+        const searchTerm = trimmed.toLowerCase();
+        const profilesRef = ref(db, 'profiles');
+        const q = query(
+          profilesRef,
+          orderByChild('searchName'),
+          equalTo(searchTerm),
+          limitToFirst(1)
+        );
+        const snapshot = await get(q);
+        setNameAvailable(!snapshot.exists());
+      } catch (err) {
+        console.warn('Name check failed:', err);
+        setNameAvailable(true);
+      } finally {
+        setNameCheckLoading(false);
+      }
+    },
+    [profile]
+  );
 
   const debounceTimer = useRef(null);
 
@@ -165,28 +194,31 @@ const Profile = () => {
     };
   }, [editData.name, editing, checkNameAvailability]);
 
-  // ─── Profile & Echower listeners ──────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
 
     let isMounted = true;
-    const profileCacheKey = `profile_${user.uid}`;
-    const skinCacheKey = `echomoji_${user.uid}`;
+    const profileCacheKey = 'profile_' + user.uid;
+    const skinCacheKey = 'echomoji_' + user.uid;
 
-    const skinRef = ref(db, `userSkins/${user.uid}`);
+    const skinRef = ref(db, 'userSkins/' + user.uid);
     const unsubSkin = onValue(skinRef, (snap) => {
       if (!isMounted) return;
       const data = snap.val() || {};
       const newActive = data.activeSkin || data.active || null;
-      const newHair =          data.hairStyle || 'short';
-      await setActiveSkinId(newActive);
- set      setActiveHairStyle(newHair);
+      const newHair = data.hairStyle || 'short';
+      setActiveSkinId(newActive);
+      setActiveHairStyle(newHair);
       setUnlockedGifs(data.unlockedGifs || []);
-      const existingSkinCache = getFastLocal(skin(CacheKey) || {};
-      setFastprofileLocal(skinCacheKey, { ...RefexistingSkinCache, active: newActive, hairStyle: newHair });
+      const existingSkinCache = getFastLocal(skinCacheKey) || {};
+      setFastLocal(skinCacheKey, {
+        ...existingSkinCache,
+        active: newActive,
+        hairStyle: newHair,
+      });
     });
 
-    const profileRef = ref(db, `profiles/${user.uid}`);
+    const profileRef = ref(db, 'profiles/' + user.uid);
     const unsubProfile = onValue(
       profileRef,
       async (snapshot) => {
@@ -196,25 +228,30 @@ const Profile = () => {
           const data = snapshot.val();
           safeData = {
             ...data,
-            name: data.name || data.username || data.displayName || user.displayName || 'User',
+            name:
+              data.name ||
+              data.username ||
+              data.displayName ||
+              user.displayName ||
+              'User',
             avatar: data.avatar || '',
             videoUrl: data.videoUrl || '',
           };
         } else {
           safeData = {
-            name: user.displayName || user.email?.split('@')[0] || 'User',
+            name: user.displayName || (user.email ? user.email.split('@')[0] : 'User'),
             avatar: '',
             videoUrl: '',
             mood: 'happy',
             activeSkin: null,
-            bio: 'New to ECHO! 🌊',
+            bio: 'New to ECHO!',
             country: '',
             countryCode: '',
             city: '',
             lastActive: Date.now(),
             createdAt: Date.now(),
           };
-, safeData);
+          await set(profileRef, safeData);
         }
 
         setProfile(safeData);
@@ -230,12 +267,12 @@ const Profile = () => {
 
     const unsubFollowers = listenToMyEchowerCount(user.uid, (uids) => {
       setFollowerUids(uids);
-      uids.forEach(uid => fetchProfile(uid));
+      uids.forEach((uid) => fetchProfile(uid));
     });
 
     const unsubFollowing = listenToMyEchowers(user.uid, (uids) => {
       setFollowingUids(uids);
-      uids.forEach(uid => fetchProfile(uid));
+      uids.forEach((uid) => fetchProfile(uid));
     });
 
     return () => {
@@ -252,7 +289,10 @@ const Profile = () => {
 
     const name = editData.name?.trim() || '';
     if (name.length > NAME_MAX_LENGTH) {
-      setToast({ message: `Name must be ${NAME_MAX_LENGTH} characters or less.`, type: 'error' });
+      setToast({
+        message: 'Name must be ' + NAME_MAX_LENGTH + ' characters or less.',
+        type: 'error',
+      });
       return;
     }
     if (name.length === 0) {
@@ -265,12 +305,20 @@ const Profile = () => {
     if (profile?.name && trimmedName.toLowerCase() !== profile.name.toLowerCase()) {
       try {
         const profilesRef = ref(db, 'profiles');
-        const q = query(profilesRef, orderByChild('searchName'), equalTo(searchTerm), limitToFirst(1));
+        const q = query(
+          profilesRef,
+          orderByChild('searchName'),
+          equalTo(searchTerm),
+          limitToFirst(1)
+        );
         const snapshot = await get(q);
         if (snapshot.exists()) {
           const foundUid = Object.keys(snapshot.val())[0];
           if (foundUid !== user.uid) {
-            setToast({ message: 'Name already taken. Please choose another.', type: 'error' });
+            setToast({
+              message: 'Name already taken. Please choose another.',
+              type: 'error',
+            });
             return;
           }
         }
@@ -281,13 +329,16 @@ const Profile = () => {
 
     const bio = editData.bio?.trim() || '';
     if (bio.length > BIO_MAX_LENGTH) {
-      setToast({ message: `Bio must be ${BIO_MAX_LENGTH} characters or less.`, type: 'error' });
+      setToast({
+        message: 'Bio must be ' + BIO_MAX_LENGTH + ' characters or less.',
+        type: 'error',
+      });
       return;
     }
 
     try {
-      const cacheKey = `profile_${user.uid}`;
-      const profileRef = ref(db, `profiles/${user.uid}`);
+      const cacheKey = 'profile_' + user.uid;
+      const profileRef = ref(db, 'profiles/' + user.uid);
       const updates = { ...editData, name, bio, searchName: name.toLowerCase() };
       await update(profileRef, updates);
       setFastLocal(cacheKey, updates);
@@ -304,15 +355,15 @@ const Profile = () => {
   const handleSaveAvatar = async (avatarData) => {
     if (!user) return;
     try {
-      const skinRef = ref(db, `userSkins/${user.uid}`);
-      const existingData = getFastLocal(`echomoji_${user.uid}`) || {};
+      const skinRef = ref(db, 'userSkins/' + user.uid);
+      const existingData = getFastLocal('echomoji_' + user.uid) || {};
       const updates = {
         ...existingData,
         activeSkin: avatarData.activeSkin,
         hairStyle: avatarData.hairStyle,
       };
       await update(skinRef, updates);
-      setFastLocal(`echomoji_${user.uid}`, updates);
+      setFastLocal('echomoji_' + user.uid, updates);
       setActiveSkinId(avatarData.activeSkin);
       setActiveHairStyle(avatarData.hairStyle);
       setShowAvatarCustomizer(false);
@@ -331,17 +382,22 @@ const Profile = () => {
   };
 
   const handleUploadImage = async (file) => {
-    if (!}`user) return;
+    if (!user) return;
 
-    if (),file.size > MAX_FILE_SIZE) { {
-      setToast({ message: 'File size mood exceeds 5 MB. Choose a smaller file });
-.', type: 'error' });
+    if (file.size > MAX_FILE_SIZE) {
+      setToast({
+        message: 'File size exceeds 5 MB. Choose a smaller file.',
+        type: 'error',
+      });
       return;
-         }
+    }
 
     const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!validTypes.includes(file.type)) {
-      setToast({ message: 'Please upload a valid image (PNG, JPEG, WEBP).', type: 'error' });
+    if (validTypes.indexOf(file.type) === -1) {
+      setToast({
+        message: 'Please upload a valid image (PNG, JPEG, WEBP).',
+        type: 'error',
+      });
       return;
     }
 
@@ -351,29 +407,36 @@ const Profile = () => {
       formData.append('file', file);
       formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
 
-      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, {
-        method: 'POST',
-        body: formData,
-      });
+      const res = await fetch(
+        'https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/upload',
+        {
+          method: 'POST',
+          body: formData,
+        }
+      );
 
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
+      if (!res.ok) {
+        throw new Error((data.error && data.error.message) || 'Upload failed');
+      }
 
       const downloadUrl = data.secure_url;
-
       const updateData = { avatar: downloadUrl, videoUrl: '', activeSkin: null };
 
       setProfile((prev) => ({ ...prev, ...updateData }));
       setEditData((prev) => ({ ...prev, ...updateData }));
 
-      await update(ref(db, `profiles/${user.uid}`), updateData);
+      await update(ref(db, 'profiles/' + user.uid), updateData);
       await refreshProfile(user.uid);
 
       setToast({ message: 'Image uploaded successfully!', type: 'success' });
       setShowAvatarPicker(false);
     } catch (err) {
       console.error('Upload error:', err);
-      setToast({ message: 'Upload failed. Check Cloudinary preset.', type: 'error' });
+      setToast({
+        message: 'Upload failed. Check Cloudinary preset.',
+        type: 'error',
+      });
     } finally {
       setUploading(false);
     }
@@ -390,7 +453,7 @@ const Profile = () => {
       setProfile((prev) => ({ ...prev, ...updateData }));
       setEditData((prev) => ({ ...prev, ...updateData }));
 
-      await update(ref(db, `profiles/${user.uid}`), updateData);
+      await update(ref(db, 'profiles/' + user.uid), updateData);
       await refreshProfile(user.uid);
       setShowGifLibrary(false);
       setToast({ message: 'Profile GIF updated!', type: 'success' });
@@ -403,7 +466,8 @@ const Profile = () => {
   const handleMoodChange = async (mood) => {
     if (!user) return;
     try {
-      await update(ref(db, `profiles/${user.uid setProfile((prev) => ({ ...prev, mood }));
+      await update(ref(db, 'profiles/' + user.uid), { mood });
+      setProfile((prev) => ({ ...prev, mood }));
       setEditData((prev) => ({ ...prev, mood }));
     } catch (err) {
       console.error('Failed to update mood:', err);
@@ -442,7 +506,10 @@ const Profile = () => {
     const maxLength = field === 'name' ? NAME_MAX_LENGTH : BIO_MAX_LENGTH;
 
     if ((currentValue || '').length + emoji.length > maxLength) {
-      setToast({ message: `Cannot add emoji – ${field} limit reached.`, type: 'error' });
+      setToast({
+        message: 'Cannot add emoji - limit reached.',
+        type: 'error',
+      });
       return;
     }
 
@@ -480,31 +547,45 @@ const Profile = () => {
     }
   };
 
-  const currentMediaUrl = (editing ? editData.videoUrl : profile?.videoUrl) ||
+  const currentMediaUrl =
+    (editing ? editData.videoUrl : profile?.videoUrl) ||
     (editing ? editData.avatar : profile?.avatar);
   const cachedMediaUrl = useCachedImage(currentMediaUrl, null);
   const displayMediaUrl = cachedMediaUrl || currentMediaUrl;
 
-  const isVideoFormat = (editing ? editData.videoUrl : profile?.videoUrl) &&
-    ((editing ? editData.videoUrl : profile?.videoUrl)?.endsWith('.mp4') ||
-     (editing ? editData.videoUrl : profile?.videoUrl)?.endsWith('.webm'));
+  const activeVideoUrl = editing ? editData.videoUrl : profile?.videoUrl;
+  const isVideoFormat =
+    !!activeVideoUrl &&
+    (activeVideoUrl.endsWith('.mp4') || activeVideoUrl.endsWith('.webm'));
 
   const currentSkinId = activeSkinId || profile?.activeSkin;
-  const activeSkinObj = useMemo(() => (currentSkinId ? getSkinById(currentSkinId) : null), [currentSkinId]);
+  const activeSkinObj = useMemo(
+    () => (currentSkinId ? getSkinById(currentSkinId) : null),
+    [currentSkinId]
+  );
 
   const memberSince = profile?.createdAt
-    ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+    ? new Date(profile.createdAt).toLocaleDateString('en-US', {
+        month: 'short',
+        year: 'numeric',
+      })
     : 'Recently';
 
   return (
-    <>
+    <React.Fragment>
       <SEO
-        title="Profile – Your Identity"
+        title="Profile - Your Identity"
         description="Manage your profile, mood, and avatar on ECHO. Show the world who you are with your unique ECHOMOJI."
       />
       <StructuredData />
       <div className="profile-page">
-        <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={handleImageFile} />
+        <input
+          type="file"
+          ref={imageInputRef}
+          accept="image/png, image/jpeg, image/webp"
+          style={{ display: 'none' }}
+          onChange={handleImageFile}
+        />
 
         <div className="profile-card">
           <div className="profile-card-glow" />
@@ -514,7 +595,7 @@ const Profile = () => {
             <div
               className="profile-avatar"
               onClick={() => (editing || isDemoUser) && setShowAvatarPicker(true)}
-              style={{ cursor: (editing || isDemoUser) ? 'pointer' : 'default' }}
+              style={{ cursor: editing || isDemoUser ? 'pointer' : 'default' }}
             >
               {loading ? (
                 <SkeletonBlock width="100%" height="100%" borderRadius="50%" />
@@ -523,9 +604,15 @@ const Profile = () => {
               ) : displayMediaUrl ? (
                 <img src={displayMediaUrl} alt="Avatar" />
               ) : (
-                <Avatar src={null} name={editData?.name || profile?.name || 'User'} size={110} />
+                <Avatar
+                  src={null}
+                  name={editData?.name || profile?.name || 'User'}
+                  size={110}
+                />
               )}
-              {(editing || isDemoUser) && <div className="avatar-overlay">Tap to change</div>}
+              {(editing || isDemoUser) && (
+                <div className="avatar-overlay">Tap to change</div>
+              )}
             </div>
 
             <div className="profile-status-badge">
@@ -554,7 +641,10 @@ const Profile = () => {
                     placeholder="Your name"
                     maxLength={NAME_MAX_LENGTH}
                     style={{
-                      borderColor: (!nameAvailable && editData.name?.trim()) ? '#EF4444' : 'var(--border-color)',
+                      borderColor:
+                        !nameAvailable && editData.name?.trim()
+                          ? '#EF4444'
+                          : 'var(--border-color)',
                     }}
                     onFocus={() => handleInputFocus('name')}
                     onMouseDown={handleInputMouseDown}
@@ -569,15 +659,17 @@ const Profile = () => {
                     <i className="fas fa-smile" />
                   </button>
                   <span className="char-counter">
-                    {editData.name?.length || 0}/{NAME_MAX_LENGTH}
+                    {(editData.name?.length || 0) + '/' + NAME_MAX_LENGTH}
                   </span>
                 </div>
                 {!nameAvailable && editData.name?.trim() && (
                   <span className="name-status taken">Taken</span>
                 )}
-                {nameAvailable && editData.name?.trim() && editData.name?.trim() !== profile?.name && (
-                  <span className="name-status available">Available</span>
-                )}
+                {nameAvailable &&
+                  editData.name?.trim() &&
+                  editData.name?.trim() !== profile?.name && (
+                    <span className="name-status available">Available</span>
+                  )}
                 {nameCheckLoading && (
                   <span className="name-status checking">checking...</span>
                 )}
@@ -595,7 +687,9 @@ const Profile = () => {
                 </span>
                 {profile?.country && (
                   <span className="location-tag">
-                    <i className="fas fa-map-marker-alt" /> {profile.city ? `${profile.city}, ` : ''}{profile.country}
+                    <i className="fas fa-map-marker-alt" />{' '}
+                    {profile.city ? profile.city + ', ' : ''}
+                    {profile.country}
                   </span>
                 )}
               </div>
@@ -629,7 +723,7 @@ const Profile = () => {
                 <i className="fas fa-smile" />
               </button>
               <span className="char-counter bio-counter">
-                {editData.bio?.length || 0}/{BIO_MAX_LENGTH}
+                {(editData.bio?.length || 0) + '/' + BIO_MAX_LENGTH}
               </span>
             </div>
           ) : (
@@ -639,10 +733,13 @@ const Profile = () => {
           {!loading && (
             <div className="mood-customize-card">
               {editing ? (
-                <>
+                <React.Fragment>
                   <div className="mood-label">Choose your mood</div>
-                  <MoodPicker currentMood={editData.mood || 'neutral'} onSelect={handleMoodChange} />
-                </>
+                  <MoodPicker
+                    currentMood={editData.mood || 'neutral'}
+                    onSelect={handleMoodChange}
+                  />
+                </React.Fragment>
               ) : (
                 <div className="mood-display">
                   <div className="mood-preview">
@@ -656,9 +753,7 @@ const Profile = () => {
                     />
                     <div className="mood-info">
                       <span className="mood-label-small">Current Mood</span>
-                      <span className="mood-value">
-                        {profile?.mood || 'happy'}
-                      </span>
+                      <span className="mood-value">{profile?.mood || 'happy'}</span>
                     </div>
                   </div>
 
@@ -684,7 +779,13 @@ const Profile = () => {
           )}
 
           <div className="profile-stats-enhanced">
-            <div className="stat-card" onClick={() => { setActiveEchowersTab('followers'); setShowEchowersModal(true); }}>
+            <div
+              className="stat-card"
+              onClick={() => {
+                setActiveEchowersTab('followers');
+                setShowEchowersModal(true);
+              }}
+            >
               <div className="stat-icon">
                 <i className="fas fa-users" />
               </div>
@@ -693,7 +794,13 @@ const Profile = () => {
                 <p>Echowers</p>
               </div>
             </div>
-            <div className="stat-card" onClick={() => { setActiveEchowersTab('following'); setShowEchowersModal(true); }}>
+            <div
+              className="stat-card"
+              onClick={() => {
+                setActiveEchowersTab('following');
+                setShowEchowersModal(true);
+              }}
+            >
               <div className="stat-icon">
                 <i className="fas fa-broadcast-tower" />
               </div>
@@ -706,18 +813,20 @@ const Profile = () => {
 
           <div className="moving-interests-container">
             <div className="moving-interests-track">
-              {[...DEFAULT_INTEREST_TEMPLATES, ...DEFAULT_INTEREST_TEMPLATES].map((item, idx) => (
-                <span key={idx} className="interest-pill">
-                  {item}
-                </span>
-              ))}
+              {DEFAULT_INTEREST_TEMPLATES.concat(DEFAULT_INTEREST_TEMPLATES).map(
+                (item, idx) => (
+                  <span key={idx} className="interest-pill">
+                    {item}
+                  </span>
+                )
+              )}
             </div>
           </div>
 
           <div className="profile-actions">
             {editing ? (
               isDemoUser ? null : (
-                <>
+                <React.Fragment>
                   <button
                     className="save-btn"
                     onClick={handleSave}
@@ -727,11 +836,14 @@ const Profile = () => {
                   </button>
                   <button
                     className="cancel-btn"
-                    onClick={() => { setEditing(false); setEditData(profile); }}
+                    onClick={() => {
+                      setEditing(false);
+                      setEditData(profile);
+                    }}
                   >
                     Cancel
                   </button>
-                </>
+                </React.Fragment>
               )
             ) : (
               <button
@@ -745,9 +857,13 @@ const Profile = () => {
                 }}
               >
                 {isDemoUser ? (
-                  <><i className="fas fa-image" /> Change Avatar</>
+                  <React.Fragment>
+                    <i className="fas fa-image" /> Change Avatar
+                  </React.Fragment>
                 ) : (
-                  <><i className="fas fa-pen" /> Edit Profile</>
+                  <React.Fragment>
+                    <i className="fas fa-pen" /> Edit Profile
+                  </React.Fragment>
                 )}
               </button>
             )}
@@ -769,9 +885,13 @@ const Profile = () => {
               <span className="account-details-value uid">{user?.uid}</span>
               <button className="copy-uid-btn" onClick={handleCopyUid}>
                 {copiedUid ? (
-                  <><i className="fas fa-check" /> Copied!</>
+                  <React.Fragment>
+                    <i className="fas fa-check" /> Copied!
+                  </React.Fragment>
                 ) : (
-                  <><i className="fas fa-copy" /> Copy</>
+                  <React.Fragment>
+                    <i className="fas fa-copy" /> Copy
+                  </React.Fragment>
                 )}
               </button>
             </div>
@@ -786,7 +906,7 @@ const Profile = () => {
               setToast({ message: 'Demo users cannot upload images.', type: 'error' });
               return;
             }
-            imageInputRef.current?.click();
+            if (imageInputRef.current) imageInputRef.current.click();
           }}
           onChooseLibrary={() => {
             setShowAvatarPicker(false);
@@ -803,7 +923,13 @@ const Profile = () => {
           ownedGifs={unlockedGifs}
           mode="profile"
         />
-        {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+        {toast && (
+          <Toast
+            type={toast.type}
+            message={toast.message}
+            onClose={() => setToast(null)}
+          />
+        )}
 
         {showEmojiPicker && (
           <ChatEmojiPicker
@@ -822,11 +948,22 @@ const Profile = () => {
         )}
 
         {showEchowersModal && (
-          <div className="echowers-modal-overlay" onClick={() => setShowEchowersModal(false)}>
-            <div className="echowers-modal" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="echowers-modal-overlay"
+            onClick={() => setShowEchowersModal(false)}
+          >
+            <div
+              className="echowers-modal"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="echowers-modal-header">
                 <h3>Echowers</h3>
-                <button className="close-btn" onClick={() => setShowEchowersModal(false)}>✕</button>
+                <button
+                  className="close-btn"
+                  onClick={() => setShowEchowersModal(false)}
+                >
+                  X
+                </button>
               </div>
 
               <div className="echowers-tabs">
@@ -845,21 +982,33 @@ const Profile = () => {
               </div>
 
               <div className="echowers-list">
-                {(activeEchowersTab === 'followers' ? followerUids : followingUids).length === 0 ? (
+                {(activeEchowersTab === 'followers'
+                  ? followerUids
+                  : followingUids
+                ).length === 0 ? (
                   <p className="empty-state">
-                    {activeEchowersTab === 'followers' ? 'No one is Echowing you yet.' : 'You are not Echowing anyone yet.'}
+                    {activeEchowersTab === 'followers'
+                      ? 'No one is Echowing you yet.'
+                      : 'You are not Echowing anyone yet.'}
                   </p>
                 ) : (
-                  (activeEchowersTab === 'followers' ? followerUids : followingUids).map((uid) => {
+                  (activeEchowersTab === 'followers'
+                    ? followerUids
+                    : followingUids
+                  ).map((uid) => {
                     const profileData = profiles[uid];
                     if (!profileData) return null;
                     return (
                       <div
                         key={uid}
                         className="echower-item"
-                        onClick={() => navigate(`/chat/${uid}`)}
+                        onClick={() => navigate('/chat/' + uid)}
                       >
-                        <Avatar src={profileData.avatar} name={profileData.name} size={50} />
+                        <Avatar
+                          src={profileData.avatar}
+                          name={profileData.name}
+                          size={50}
+                        />
                         <div className="item-info">
                           <strong>{profileData.name}</strong>
                           <span>{profileData.bio || 'No bio yet'}</span>
@@ -874,9 +1023,8 @@ const Profile = () => {
           </div>
         )}
       </div>
-    </>
+    </React.Fragment>
   );
 };
 
 export default Profile;
-```
