@@ -46,17 +46,21 @@ export { auth };
 export const db = getDatabase(app);
 export const storage = getStorage(app);
 
-// FCM messaging — async (browser may not support it)
+// ─── FCM messaging (async, browser may not support it) ───
 let messagingInstance = null;
+
 export const getFirebaseMessaging = async () => {
   if (messagingInstance) return messagingInstance;
   try {
     const supported = await isSupported();
-    if (!supported) return null;
+    if (!supported) {
+      console.warn('FCM not supported in this browser');
+      return null;
+    }
     messagingInstance = getMessaging(app);
     return messagingInstance;
   } catch (err) {
-    console.warn('FCM not supported in this browser:', err);
+    console.warn('FCM setup error:', err);
     return null;
   }
 };
