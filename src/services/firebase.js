@@ -1,3 +1,4 @@
+// src/services/firebase.js
 import { initializeApp } from 'firebase/app';
 import {
   initializeAuth,
@@ -8,6 +9,7 @@ import {
 } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 import { getStorage } from 'firebase/storage';
+import { getMessaging, isSupported } from 'firebase/messaging';
 
 const firebaseConfig = {
   apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
@@ -43,3 +45,20 @@ try {
 export { auth };
 export const db = getDatabase(app);
 export const storage = getStorage(app);
+
+// FCM messaging — async (browser may not support it)
+let messagingInstance = null;
+export const getFirebaseMessaging = async () => {
+  if (messagingInstance) return messagingInstance;
+  try {
+    const supported = await isSupported();
+    if (!supported) return null;
+    messagingInstance = getMessaging(app);
+    return messagingInstance;
+  } catch (err) {
+    console.warn('FCM not supported in this browser:', err);
+    return null;
+  }
+};
+
+export const firebaseApp = app;
