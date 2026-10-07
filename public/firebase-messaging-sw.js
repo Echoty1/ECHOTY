@@ -4,13 +4,13 @@ importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
 firebase.initializeApp({
-  apiKey: 'PASTE_NEW_API_KEY_HERE',
+  apiKey: 'AIzaSyCpnS3fhJJVI6csN7HoK9D0E_YA1MkChmE',
   authDomain: 'echo-a22c3.firebaseapp.com',
-  projectId: 'echo-a22c3',
   databaseURL: 'https://echo-a22c3-default-rtdb.firebaseio.com',
-  storageBucket: 'echo-a22c3.appspot.com',
-  messagingSenderId: 'PASTE_NEW_SENDER_ID_HERE',
-  appId: 'PASTE_NEW_APP_ID_HERE',
+  projectId: 'echo-a22c3',
+  storageBucket: 'echo-a22c3.firebasestorage.app',
+  messagingSenderId: '405798543827',
+  appId: '1:405798543827:web:5ae9f3624a27bf2e304f26',
 });
 
 const messaging = firebase.messaging();
