@@ -49,6 +49,7 @@ import { useUserPrivacy } from '../../../hooks/useUserPrivacy';
 import { useUserPresence } from '../../../hooks/usePresence';
 import { formatLastSeen } from '../../../utils/formatLastSeen';
 import { isBlocked as checkIsBlocked, unblockUser } from '../../../services/blockService';
+import { sendPushToUser } from '../../../services/fcmService'; // ← NEW
 import './ChatView.css';
 
 // ─── Link preview imports ──────────────────────────────────────
@@ -56,7 +57,7 @@ import LinkPreviewCard from './LinkPreviewCard';
 import { extractFirstUrl, fetchLinkPreview } from '../../../utils/linkPreview';
 // ────────────────────────────────────────────────────────────────
 
-// ─── Spotlight share card (NEW) ────────────────────────────────
+// ─── Spotlight share card ───────────────────────────────────────
 import ChatSpotlightCard from './ChatSpotlightCard';
 // ────────────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ const REACTION_BAR_GAP = 12;
 const REACTION_ARROW_SIZE = 12;
 const REACTION_BAR_HALF_WIDTH = 150;
 
-const GROUP_WINDOW_MS = 2 * 60 * 1000; // 2 minutes
+const GROUP_WINDOW_MS = 2 * 60 * 1000;
 
 const FONT_SIZE_MAP = { sm: '13px', md: '15px', lg: '17px' };
 
@@ -157,7 +158,6 @@ const formatReactionCount = (n) => {
   return String(count);
 };
 
-/* Date helpers */
 const startOfDay = (ts) => {
   const d = new Date(ts);
   d.setHours(0, 0, 0, 0);
@@ -204,7 +204,6 @@ const ChatView = () => {
 
   useVisualViewport();
 
-  /* ─── settings + privacy + presence ───────────────────── */
   const { settings: userSettings } = useUserSettings(user?.uid);
   const partnerPrivacy = useUserPrivacy(userId);
   const partnerPresence = useUserPresence(userId);
@@ -358,7 +357,6 @@ const ChatView = () => {
     };
   }, []);
 
-  // Note-reply prefill
   useEffect(() => {
     const state = location.state;
     if (!state) return;
@@ -521,12 +519,10 @@ const ChatView = () => {
       const msgs = sortMessages(Object.entries(data).map(([key, val]) => ({ id: key, key, ...val })));
       const latest = msgs[msgs.length - 1];
       if (latest) {
-        // ─── spotlight preview (NEW) ───
         if (latest.type === 'media') latestMsg = latest.mediaType === 'video' ? '🎬 Video' : latest.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
         else if (latest.type === 'echomoji') latestMsg = `😤 ECHOMOJI (${latest.mood || 'neutral'})`;
         else if (latest.type === 'spotlight') latestMsg = '🎬 Spotlight';
         else latestMsg = latest.text || '';
-        // ────────────────────────────────
         latestSender = latest.senderId || '';
         latestTimestamp = latest.timestamp || Date.now();
       }
@@ -702,8 +698,7 @@ const ChatView = () => {
       }
     }
   };
-
-  const handleSendText = async (e) => {
+    const handleSendText = async (e) => {
     e?.preventDefault?.();
     const textToSend = (typeof e === 'string' ? e : newMessage).trim();
     if (!textToSend || !user?.uid || !userId) return;
@@ -782,6 +777,21 @@ const ChatView = () => {
       return currentData;
     });
     clearMessageCache(cId);
+
+    // 🔔 Fire push notification to recipient (skip AI)
+    if (userId !== ECHO_AI_ID) {
+      sendPushToUser({
+        recipientUid: userId,
+        title: currentUserProfile?.name || user.displayName || 'ECHO',
+        body: textToSend.slice(0, 120),
+        data: {
+          partnerId: user.uid,
+          title: currentUserProfile?.name || user.displayName || 'ECHO',
+          body: textToSend.slice(0, 120),
+          icon: currentUserProfile?.avatar || '/logo192.png',
+        },
+      }).catch(() => {});
+    }
   };
 
   const sendMediaMessage = async (retryMessageId = null) => {
@@ -847,6 +857,21 @@ const ChatView = () => {
       clearMessageCache(cId);
       setIsUploading(false);
       setUploadProgress(0);
+
+      // 🔔 Fire push notification for media (skip AI)
+      if (userId !== ECHO_AI_ID) {
+        sendPushToUser({
+          recipientUid: userId,
+          title: currentUserProfile?.name || user.displayName || 'ECHO',
+          body: caption ? caption.slice(0, 120) : mediaIcon,
+          data: {
+            partnerId: user.uid,
+            title: currentUserProfile?.name || user.displayName || 'ECHO',
+            body: caption ? caption.slice(0, 120) : mediaIcon,
+            icon: currentUserProfile?.avatar || '/logo192.png',
+          },
+        }).catch(() => {});
+      }
     } catch (err) {
       console.error('Upload failed:', err);
       setIsUploading(false);
@@ -901,6 +926,21 @@ const ChatView = () => {
         return currentData;
       });
       clearMessageCache(cId);
+
+      // 🔔 Fire push notification for voice note (skip AI)
+      if (userId !== ECHO_AI_ID) {
+        sendPushToUser({
+          recipientUid: userId,
+          title: currentUserProfile?.name || user.displayName || 'ECHO',
+          body: '🎤 Voice note',
+          data: {
+            partnerId: user.uid,
+            title: currentUserProfile?.name || user.displayName || 'ECHO',
+            body: '🎤 Voice note',
+            icon: currentUserProfile?.avatar || '/logo192.png',
+          },
+        }).catch(() => {});
+      }
     } catch (err) { console.error('Voice upload failed:', err); setMessages((prev) => prev.map((m) => m.id === tempId ? { ...m, isUploading: false, uploadFailed: true, uploadProgress: 0 } : m)); URL.revokeObjectURL(blobUrl); }
   };
 
@@ -932,12 +972,10 @@ const ChatView = () => {
     const isOwnMsg = String(msg.senderId || '') === String(user?.uid || '');
     const senderName = isOwnMsg ? (currentUserProfile?.name || 'You') : (partnerProfile?.name || location.state?.userName || 'User');
     let textSnippet;
-    // ─── spotlight reply snippet (NEW) ───
     if (msg.type === 'media') textSnippet = msg.mediaType === 'video' ? '🎬 Video' : msg.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
     else if (msg.type === 'echomoji') textSnippet = `😤 ECHOMOJI (${msg.mood || 'neutral'})`;
     else if (msg.type === 'spotlight') textSnippet = '🎬 Spotlight';
     else textSnippet = msg.text || 'Message';
-    // ─────────────────────────────────────
     setReplyTo({ messageId: msg.id, senderName, messageType: msg.type || 'text', textSnippet, originalMessage: msg });
     setNewMessage('');
     setActiveMessageMenuId(null);
@@ -1337,7 +1375,6 @@ const ChatView = () => {
     );
   };
 
-  /* grouping helpers (memoized per render list) */
   const groupedMessages = useMemo(() => {
     const sorted = sortMessages(messages);
     return sorted.map((msg, i, arr) => {
@@ -1458,7 +1495,6 @@ const ChatView = () => {
     };
 
     let content;
-    // ─── spotlight message type (NEW) ───
     if (msg.type === 'spotlight') {
       content = shell(
         <>
@@ -1476,7 +1512,6 @@ const ChatView = () => {
         </>
       );
     } else if (msg.type === 'echomoji') {
-    // ────────────────────────────────────
       const skinObj = msg.skinId ? getSkinById(msg.skinId) : null;
       content = shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}<div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}><ECHOMOJI mood={msg.mood || 'neutral'} skin={skinObj} size={56} interactive={false} animated={true} /></div></>);
     } else if (msg.type === 'media') {
@@ -1598,7 +1633,6 @@ const ChatView = () => {
       });
       setLoadingMessages(false);
 
-      // ─── Auto-save incoming media when user opted in ─────
       if (autoSaveMedia && userId !== ECHO_AI_ID) {
         const incomingMedia = visible.filter(
           (m) =>
@@ -1614,7 +1648,6 @@ const ChatView = () => {
           handleDownloadMedia(newest, true);
         }
       }
-      // ─────────────────────────────────────────────────────
 
       const prevCount = prevMsgCountRef.current;
       const grew = visible.length > prevCount;
@@ -1754,7 +1787,7 @@ const ChatView = () => {
       return pinnedMessage.caption || '📷 Image';
     }
     if (pinnedMessage.type === 'echomoji') return `😤 ECHOMOJI (${pinnedMessage.mood || 'neutral'})`;
-    if (pinnedMessage.type === 'spotlight') return '🎬 Spotlight'; // NEW
+    if (pinnedMessage.type === 'spotlight') return '🎬 Spotlight';
     return pinnedMessage.text || '';
   }, [pinnedMessage]);
 
@@ -2356,7 +2389,6 @@ const ChatView = () => {
   );
 };
 
-/* Date separator component */
 const DateSeparator = ({ label }) => (
   <div className="chat-date-separator"><span>{label}</span></div>
 );
