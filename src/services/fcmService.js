@@ -12,7 +12,6 @@ const SW_SCOPE = '/firebase-cloud-messaging-push-scope';
 
 /**
  * Ensures the FCM service worker is registered and ACTIVE.
- * Resolves once the SW is ready.
  */
 const ensureServiceWorker = async () => {
   if (!('serviceWorker' in navigator)) {
@@ -21,7 +20,6 @@ const ensureServiceWorker = async () => {
 
   console.log('🔧 Ensuring service worker is registered...');
 
-  // Check if it's already registered
   let registration = await navigator.serviceWorker.getRegistration(SW_SCOPE);
 
   if (!registration) {
@@ -29,21 +27,15 @@ const ensureServiceWorker = async () => {
     registration = await navigator.serviceWorker.register(SW_URL, {
       scope: SW_SCOPE,
     });
-    console.log('   ✅ Service worker registered');
-  } else {
-    console.log('   Service worker already registered');
   }
 
-  // Wait for it to be active
   if (registration.installing) {
-    console.log('   Waiting for SW to install...');
     await new Promise((resolve) => {
       registration.installing.addEventListener('statechange', (e) => {
         if (e.target.state === 'activated') resolve();
       });
     });
   } else if (registration.waiting) {
-    console.log('   Waiting for SW to activate...');
     await new Promise((resolve) => {
       registration.waiting.addEventListener('statechange', (e) => {
         if (e.target.state === 'activated') resolve();
@@ -51,7 +43,6 @@ const ensureServiceWorker = async () => {
     });
   }
 
-  // Give the browser a moment to fully activate the SW
   await navigator.serviceWorker.ready;
 
   if (!registration.active) {
@@ -62,7 +53,31 @@ const ensureServiceWorker = async () => {
   return registration;
 };
 
-export const registerFcmToken = async (uid) => {
+/**
+ * Detects the "version 1 vs 2" installations error and nukes the
+ * conflicting IndexedDB records so we can start fresh.
+ */
+const clearInstallationCache = async () => {
+  console.log('🧹 Clearing stale Firebase Installations records...');
+  try {
+    const dbs = await indexedDB.databases();
+    for (const db of dbs) {
+      if (db.name && (db.name.includes('firebase') || db.name.includes('firebase-installations'))) {
+        await new Promise((resolve) => {
+          const req = indexedDB.deleteDatabase(db.name);
+          req.onsuccess = resolve;
+          req.onerror = resolve;
+          req.onblocked = resolve;
+        });
+        console.log('  ✅ Deleted:', db.name);
+      }
+    }
+  } catch (err) {
+    console.warn('  ⚠️ Could not clear IndexedDB:', err);
+  }
+};
+
+export const registerFcmToken = async (uid, _retried = false) => {
   if (!uid) {
     console.warn('❌ registerFcmToken: no uid');
     return null;
@@ -70,7 +85,6 @@ export const registerFcmToken = async (uid) => {
 
   console.log('🔔 registerFcmToken called for uid:', uid);
   console.log('   VAPID_KEY present:', !!VAPID_KEY);
-  console.log('   VAPID_KEY prefix:', VAPID_KEY ? VAPID_KEY.slice(0, 20) : 'MISSING');
 
   if (!VAPID_KEY) {
     console.warn('❌ Missing VAPID key — FCM disabled');
@@ -83,32 +97,29 @@ export const registerFcmToken = async (uid) => {
   }
 
   try {
-    console.log('   Requesting permission...');
     const permission = await Notification.requestPermission();
-    console.log('   Permission result:', permission);
     if (permission !== 'granted') return null;
 
-    // ─── KEY CHANGE: explicitly register SW before getToken ───
     await ensureServiceWorker();
 
-    console.log('   Getting messaging instance...');
     const messaging = await getFirebaseMessaging();
-    console.log('   Messaging instance:', messaging ? '✅' : '❌ null');
     if (!messaging) return null;
+
+    const registration = await navigator.serviceWorker.getRegistration(SW_SCOPE);
 
     console.log('   Calling getToken...');
     const token = await getToken(messaging, {
       vapidKey: VAPID_KEY,
-      serviceWorkerRegistration: await navigator.serviceWorker.getRegistration(SW_SCOPE),
+      serviceWorkerRegistration: registration,
     });
-    console.log('   Token received:', token ? token.slice(0, 30) + '...' : '❌ null');
 
     if (!token) {
       console.warn('❌ No FCM token returned');
       return null;
     }
 
-    console.log('   Saving token to Firebase...');
+    console.log('   Token received:', token.slice(0, 30) + '...');
+
     await set(ref(db, `users/${uid}/fcmTokens/${token}`), {
       token,
       createdAt: serverTimestamp(),
@@ -124,7 +135,23 @@ export const registerFcmToken = async (uid) => {
     console.error('❌ FCM registration failed:');
     console.error('   Code:', err.code);
     console.error('   Message:', err.message);
-    console.error('   Full:', err);
+
+    // Self-heal: "version 1 vs version 2" installations error
+    const isVersionError =
+      err.message?.includes('less than the existing version') ||
+      err.message?.includes('version (1)') ||
+      err.message?.includes('version (2)');
+
+    if (isVersionError && !_retried) {
+      console.log('🔁 Version conflict detected — clearing installation cache and retrying...');
+      await clearInstallationCache();
+
+      // Wait a moment for IndexedDB to settle
+      await new Promise((r) => setTimeout(r, 800));
+
+      return registerFcmToken(uid, true);
+    }
+
     return null;
   }
 };
@@ -164,10 +191,7 @@ export const sendPushToUser = async ({ recipientUid, title, body, data = {} }) =
     if (!tokens.length) return;
 
     const FCM_KEY = process.env.REACT_APP_FIREBASE_API_KEY;
-    if (!FCM_KEY) {
-      console.warn('❌ Missing Firebase API key');
-      return;
-    }
+    if (!FCM_KEY) return;
 
     console.log('🔔 Sending push to', tokens.length, 'token(s) for user', recipientUid);
 
