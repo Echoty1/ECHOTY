@@ -7,6 +7,61 @@ const VAPID_KEY =
   process.env.REACT_APP_FIREBASE_VAPID_KEY ||
   process.env.REACT_APP_VAPID_PUBLIC_KEY;
 
+const SW_URL = '/firebase-messaging-sw.js';
+const SW_SCOPE = '/firebase-cloud-messaging-push-scope';
+
+/**
+ * Ensures the FCM service worker is registered and ACTIVE.
+ * Resolves once the SW is ready.
+ */
+const ensureServiceWorker = async () => {
+  if (!('serviceWorker' in navigator)) {
+    throw new Error('Service workers not supported in this browser');
+  }
+
+  console.log('🔧 Ensuring service worker is registered...');
+
+  // Check if it's already registered
+  let registration = await navigator.serviceWorker.getRegistration(SW_SCOPE);
+
+  if (!registration) {
+    console.log('   Registering service worker at', SW_URL);
+    registration = await navigator.serviceWorker.register(SW_URL, {
+      scope: SW_SCOPE,
+    });
+    console.log('   ✅ Service worker registered');
+  } else {
+    console.log('   Service worker already registered');
+  }
+
+  // Wait for it to be active
+  if (registration.installing) {
+    console.log('   Waiting for SW to install...');
+    await new Promise((resolve) => {
+      registration.installing.addEventListener('statechange', (e) => {
+        if (e.target.state === 'activated') resolve();
+      });
+    });
+  } else if (registration.waiting) {
+    console.log('   Waiting for SW to activate...');
+    await new Promise((resolve) => {
+      registration.waiting.addEventListener('statechange', (e) => {
+        if (e.target.state === 'activated') resolve();
+      });
+    });
+  }
+
+  // Give the browser a moment to fully activate the SW
+  await navigator.serviceWorker.ready;
+
+  if (!registration.active) {
+    throw new Error('Service worker registered but not active');
+  }
+
+  console.log('   ✅ Service worker is active');
+  return registration;
+};
+
 export const registerFcmToken = async (uid) => {
   if (!uid) {
     console.warn('❌ registerFcmToken: no uid');
@@ -33,13 +88,19 @@ export const registerFcmToken = async (uid) => {
     console.log('   Permission result:', permission);
     if (permission !== 'granted') return null;
 
+    // ─── KEY CHANGE: explicitly register SW before getToken ───
+    await ensureServiceWorker();
+
     console.log('   Getting messaging instance...');
     const messaging = await getFirebaseMessaging();
     console.log('   Messaging instance:', messaging ? '✅' : '❌ null');
     if (!messaging) return null;
 
     console.log('   Calling getToken...');
-    const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+    const token = await getToken(messaging, {
+      vapidKey: VAPID_KEY,
+      serviceWorkerRegistration: await navigator.serviceWorker.getRegistration(SW_SCOPE),
+    });
     console.log('   Token received:', token ? token.slice(0, 30) + '...' : '❌ null');
 
     if (!token) {
