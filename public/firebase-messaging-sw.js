@@ -1,11 +1,8 @@
 /* eslint-disable no-undef */
 // public/firebase-messaging-sw.js
-// FCM background message handler — runs even when the app is closed
-
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
 
-// ⚠️ Values must be hard-coded here — service workers can't read .env
 firebase.initializeApp({
   apiKey: 'AIzaSyCMLsv58es_SWlvvm9Ky-cRHJXHTgNNKbc',
   authDomain: 'echoty-fa3ca.firebaseapp.com',
@@ -18,7 +15,6 @@ firebase.initializeApp({
 
 const messaging = firebase.messaging();
 
-// Handle background messages
 messaging.onBackgroundMessage((payload) => {
   const notification = payload.notification || {};
   const data = payload.data || {};
@@ -40,7 +36,6 @@ messaging.onBackgroundMessage((payload) => {
   });
 });
 
-// Notification click — open the chat
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const url = (event.notification.data && event.notification.data.url) || '/';
