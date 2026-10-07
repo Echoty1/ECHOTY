@@ -23,7 +23,7 @@ import Avatar from '../../common/Avatar';
 import ChatMediaMessage from './ChatMediaMessage';
 import AudioPlayer from './AudioPlayer';
 import { saveToEchoArchive, listEchoArchive, removeEchoArchive } from '../../../services/echoArchive';
-import { privateExpiresAt, isTideExpired, tideProgress, formatTideLeft, PRIVATE_TTL_MS } from '../../../utils/echoTides';
+import { privateExpiresAt, isTideExpired, formatTideLeft, PRIVATE_TTL_MS } from '../../../utils/echoTides';
 import ReplyPreview from './ReplyPreview';
 import RepliedMessage from './RepliedMessage';
 import SwipeToReply from './SwipeToReply';
