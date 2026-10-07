@@ -9,8 +9,8 @@ firebase.initializeApp({
   projectId: 'echoty-fa3ca',
   databaseURL: 'https://echoty-fa3ca-default-rtdb.firebaseio.com',
   storageBucket: 'echoty-fa3ca.firebasestorage.app',
-  messagingSenderId: '506340369217',
-  appId: '1:506340369217:android:4f41079ebe3928daaab7c0',
+  messagingSenderId: '405798543827',
+  appId: '1:405798543827:web:5ae9f36a27bf2e304f26',
 });
 
 const messaging = firebase.messaging();
