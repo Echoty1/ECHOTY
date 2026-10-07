@@ -28,19 +28,16 @@ export const registerFcmToken = async (uid) => {
   }
 
   try {
-    // 1. Ask permission
     console.log('   Requesting permission...');
     const permission = await Notification.requestPermission();
     console.log('   Permission result:', permission);
     if (permission !== 'granted') return null;
 
-    // 2. Get messaging instance
     console.log('   Getting messaging instance...');
     const messaging = await getFirebaseMessaging();
     console.log('   Messaging instance:', messaging ? '✅' : '❌ null');
     if (!messaging) return null;
 
-    // 3. Get FCM token
     console.log('   Calling getToken...');
     const token = await getToken(messaging, { vapidKey: VAPID_KEY });
     console.log('   Token received:', token ? token.slice(0, 30) + '...' : '❌ null');
@@ -50,7 +47,6 @@ export const registerFcmToken = async (uid) => {
       return null;
     }
 
-    // 4. Save to Firebase
     console.log('   Saving token to Firebase...');
     await set(ref(db, `users/${uid}/fcmTokens/${token}`), {
       token,
@@ -59,7 +55,6 @@ export const registerFcmToken = async (uid) => {
     });
     console.log('   ✅ Token saved to DB');
 
-    // 5. Cache locally
     try { localStorage.setItem('echo_fcm_token', token); } catch (_) {}
 
     console.log('✅ FCM registration complete');
