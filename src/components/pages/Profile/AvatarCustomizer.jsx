@@ -57,11 +57,11 @@ const AvatarCustomizer = ({
   };
 
   const tabs = [
-    { id: 'skin', label: 'Skin' },
-    { id: 'hair', label: 'Hair' },
-    { id: 'outfit', label: 'Outfit' },
-    { id: 'eyes', label: 'Eyes' },
-    { id: 'face', label: 'Face' },
+    { id: 'skin', label: '🎨 Skin' },
+    { id: 'hair', label: '💇 Hair' },
+    { id: 'outfit', label: '👕 Outfit' },
+    { id: 'eyes', label: '👀 Eyes' },
+    { id: 'face', label: '😊 Face' },
   ];
 
   const SectionTitle = ({ children }) => (
@@ -126,14 +126,14 @@ const AvatarCustomizer = ({
       {/* Live Preview */}
       <div
         style={{
-          background: `radial-gradient(circle at 50% 30%, ${MOOD_THEMES[previewMood]?.glowColor}20, var(--bg-input) 70%)`,
+          background: `radial-gradient(circle at 50% 30%, ${MOOD_THEMES[previewMood]?.glowColor}30, var(--bg-input) 70%)`,
           borderRadius: '16px',
           padding: '24px',
           display: 'flex',
           flexDirection: 'column',
           justifyContent: 'center',
           alignItems: 'center',
-          minHeight: '220px',
+          minHeight: '240px',
           border: '1px solid var(--border-color)',
           gap: '12px',
         }}
@@ -147,7 +147,7 @@ const AvatarCustomizer = ({
           eyebrowStyleId={selectedEyebrowId}
           mouthStyleId={selectedMouthId}
           animation={previewAnimation}
-          size={120}
+          size={140}
           interactive={false}
           animated={true}
         />
@@ -181,7 +181,7 @@ const AvatarCustomizer = ({
         </div>
       </div>
 
-      {/* Randomize + Save row */}
+      {/* Quick Actions */}
       <div style={{ display: 'flex', gap: '8px' }}>
         <button
           onClick={handleRandomize}
@@ -225,6 +225,7 @@ const AvatarCustomizer = ({
           background: 'var(--bg-input)',
           borderRadius: '12px',
           padding: '4px',
+          overflowX: 'auto',
         }}
       >
         {tabs.map((t) => (
@@ -233,7 +234,7 @@ const AvatarCustomizer = ({
             onClick={() => setActiveTab(t.id)}
             style={{
               flex: 1,
-              padding: '8px 4px',
+              padding: '8px 6px',
               borderRadius: '10px',
               border: 'none',
               background: activeTab === t.id ? 'linear-gradient(135deg, #6C3CE1, #EC4899)' : 'transparent',
@@ -242,6 +243,7 @@ const AvatarCustomizer = ({
               fontSize: '11px',
               cursor: 'pointer',
               transition: 'all 0.2s',
+              whiteSpace: 'nowrap',
             }}
           >
             {t.label}
@@ -338,7 +340,7 @@ const AvatarCustomizer = ({
                   title={eye.name}
                   style={{
                     ...swatch(selectedEyeId === eye.id, 40, '50%'),
-                    background: eye.color,
+                    background: `linear-gradient(135deg, ${eye.iris}, ${eye.color})`,
                   }}
                 />
               ))}
