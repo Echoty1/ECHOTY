@@ -1,12 +1,6 @@
 // src/services/firebase.js
 import { initializeApp } from 'firebase/app';
-import {
-  initializeAuth,
-  getAuth,
-  indexedDBLocalPersistence,
-  browserLocalPersistence,
-  browserPopupRedirectResolver,
-} from 'firebase/auth';
+import { getAuth } from 'firebase/auth';
 import { getDatabase } from 'firebase/database';
 import { getStorage } from 'firebase/storage';
 import { getMessaging, isSupported } from 'firebase/messaging';
@@ -32,21 +26,12 @@ if (missingKeys.length > 0) {
 
 const app = initializeApp(firebaseConfig);
 
-let auth;
-try {
-  auth = initializeAuth(app, {
-    persistence: [indexedDBLocalPersistence, browserLocalPersistence],
-    popupRedirectResolver: browserPopupRedirectResolver,
-  });
-} catch (err) {
-  auth = getAuth(app);
-}
-
-export { auth };
+// Use simple getAuth — CRA app doesn't need IndexedDB persistence for auth
+export const auth = getAuth(app);
 export const db = getDatabase(app);
 export const storage = getStorage(app);
 
-// ─── FCM messaging (async, browser may not support it) ───
+// ─── FCM messaging ───
 let messagingInstance = null;
 
 export const getFirebaseMessaging = async () => {
