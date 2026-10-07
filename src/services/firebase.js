@@ -26,7 +26,6 @@ if (missingKeys.length > 0) {
 
 const app = initializeApp(firebaseConfig);
 
-// Use simple getAuth — CRA app doesn't need IndexedDB persistence for auth
 export const auth = getAuth(app);
 export const db = getDatabase(app);
 export const storage = getStorage(app);
