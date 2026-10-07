@@ -10,6 +10,46 @@ import {
   MOUTH_STYLES,
 } from '../../constants/echomoji';
 
+// ─── Inject keyframes once, no global CSS file required ───
+const ECHOMOJI_KEYFRAMES = `
+@keyframes echoRingPulse {
+  0% { transform: scale(0.9); opacity: 0.6; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+@keyframes echomoji-idle {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes echomoji-wave {
+  0%, 100% { transform: rotate(0deg); }
+  25% { transform: rotate(-3deg); }
+  75% { transform: rotate(3deg); }
+}
+@keyframes echomoji-jump {
+  0%, 100% { transform: translateY(0); }
+  30% { transform: translateY(-8px); }
+  50% { transform: translateY(0); }
+  70% { transform: translateY(-4px); }
+}
+@keyframes echomoji-cry {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(2px); }
+}
+@keyframes echomoji-dance {
+  0%, 100% { transform: rotate(0deg) translateY(0); }
+  25% { transform: rotate(-5deg) translateY(-3px); }
+  50% { transform: rotate(0deg) translateY(0); }
+  75% { transform: rotate(5deg) translateY(-3px); }
+}
+`;
+
+if (typeof document !== 'undefined' && !document.getElementById('echomoji-keyframes')) {
+  const styleEl = document.createElement('style');
+  styleEl.id = 'echomoji-keyframes';
+  styleEl.innerHTML = ECHOMOJI_KEYFRAMES;
+  document.head.appendChild(styleEl);
+}
+
 const ECHOMOJI = ({
   mood = 'neutral',
   expression,
@@ -54,7 +94,7 @@ const ECHOMOJI = ({
   const activeMouth = mouthStyleId ? MOUTH_STYLES.find((m) => m.id === mouthStyleId) : null;
   const finalMouth = activeMouth ? activeMouth.path : expr.mouth;
 
-  // Blink loop — natural eye-blink every 3-5 seconds
+  // Blink loop — natural eye blink every 3–5 seconds
   useEffect(() => {
     if (!animated || !interactive) return;
     const scheduleBlink = () => {
@@ -159,19 +199,32 @@ const ECHOMOJI = ({
 
   const arms = getArmPaths();
 
-  // Render eye based on style, with blink override
   const renderEyes = () => {
-    // Blinking overrides normal eye display
     if (isBlinking) {
       return (
         <g>
-          <line x1="12" y1="20" x2="20" y2="20" stroke={finalEyeColor} strokeWidth="2" strokeLinecap="round" />
-          <line x1="28" y1="20" x2="36" y2="20" stroke={finalEyeColor} strokeWidth="2" strokeLinecap="round" />
+          <line
+            x1="12"
+            y1="20"
+            x2="20"
+            y2="20"
+            stroke={finalEyeColor}
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
+          <line
+            x1="28"
+            y1="20"
+            x2="36"
+            y2="20"
+            stroke={finalEyeColor}
+            strokeWidth="2"
+            strokeLinecap="round"
+          />
         </g>
       );
     }
 
-    // Heart eyes
     if (expr.eyeStyle === 'heart') {
       return (
         <g>
@@ -181,19 +234,23 @@ const ECHOMOJI = ({
       );
     }
 
-    // Cool — sunglasses
     if (expr.eyeStyle === 'cool') {
       return (
         <g>
           <rect x="9" y="16" width="13" height="8" rx="3" fill="#1A1A1A" />
           <rect x="26" y="16" width="13" height="8" rx="3" fill="#1A1A1A" />
           <rect x="20" y="19" width="8" height="2" fill="#1A1A1A" />
-          <path d="M 10 17 L 12 16 L 14 18" stroke="#FFF" strokeWidth="1" fill="none" opacity="0.5" />
+          <path
+            d="M 10 17 L 12 16 L 14 18"
+            stroke="#FFF"
+            strokeWidth="1"
+            fill="none"
+            opacity="0.5"
+          />
         </g>
       );
     }
 
-    // Wide eyes (shocked)
     if (expr.eyeStyle === 'wide') {
       return (
         <g>
@@ -205,27 +262,48 @@ const ECHOMOJI = ({
       );
     }
 
-    // Closed eyes (sleepy / excited)
     if (expr.eyeStyle === 'closed') {
       return (
         <g>
-          <path d="M 12 20 Q 16 17 20 20" stroke={finalEyeColor} strokeWidth="2" strokeLinecap="round" fill="none" />
-          <path d="M 28 20 Q 32 17 36 20" stroke={finalEyeColor} strokeWidth="2" strokeLinecap="round" fill="none" />
+          <path
+            d="M 12 20 Q 16 17 20 20"
+            stroke={finalEyeColor}
+            strokeWidth="2"
+            strokeLinecap="round"
+            fill="none"
+          />
+          <path
+            d="M 28 20 Q 32 17 36 20"
+            stroke={finalEyeColor}
+            strokeWidth="2"
+            strokeLinecap="round"
+            fill="none"
+          />
         </g>
       );
     }
 
-    // Happy — curved up eyes
     if (expr.eyeStyle === 'happy') {
       return (
         <g>
-          <path d="M 12 21 Q 16 16 20 21" stroke={finalEyeColor} strokeWidth="2.5" strokeLinecap="round" fill="none" />
-          <path d="M 28 21 Q 32 16 36 21" stroke={finalEyeColor} strokeWidth="2.5" strokeLinecap="round" fill="none" />
+          <path
+            d="M 12 21 Q 16 16 20 21"
+            stroke={finalEyeColor}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            fill="none"
+          />
+          <path
+            d="M 28 21 Q 32 16 36 21"
+            stroke={finalEyeColor}
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            fill="none"
+          />
         </g>
       );
     }
 
-    // Angry — narrow eyes
     if (expr.eyeStyle === 'angry') {
       return (
         <g>
@@ -235,7 +313,6 @@ const ECHOMOJI = ({
       );
     }
 
-    // Default — open eyes
     return (
       <g>
         <path d={expr.leftEye} fill={finalEyeColor} />
@@ -246,7 +323,6 @@ const ECHOMOJI = ({
     );
   };
 
-  // Particles per mood
   const renderParticles = () => {
     if (!expr.particles || !animated) return null;
     const p = expr.particles;
@@ -263,11 +339,31 @@ const ECHOMOJI = ({
     if (p === 'heart') {
       return (
         <g>
-          <path d="M 40 8 C 40 6 42 6 42 8 C 42 10 40 11 40 12 C 40 11 38 10 38 8 C 38 6 40 6 40 8 Z" fill="#EC4899" opacity="0.9">
-            <animateTransform attributeName="transform" type="translate" values="0,0; 0,-3; 0,0" dur="1.5s" repeatCount="indefinite" />
+          <path
+            d="M 40 8 C 40 6 42 6 42 8 C 42 10 40 11 40 12 C 40 11 38 10 38 8 C 38 6 40 6 40 8 Z"
+            fill="#EC4899"
+            opacity="0.9"
+          >
+            <animateTransform
+              attributeName="transform"
+              type="translate"
+              values="0,0; 0,-3; 0,0"
+              dur="1.5s"
+              repeatCount="indefinite"
+            />
           </path>
-          <path d="M 7 5 C 7 3.5 8.5 3.5 8.5 5 C 8.5 6.5 7 7 7 8 C 7 7 5.5 6.5 5.5 5 C 5.5 3.5 7 3.5 7 5 Z" fill="#EC4899" opacity="0.7">
-            <animateTransform attributeName="transform" type="translate" values="0,0; 0,-2; 0,0" dur="2s" repeatCount="indefinite" />
+          <path
+            d="M 7 5 C 7 3.5 8.5 3.5 8.5 5 C 8.5 6.5 7 7 7 8 C 7 7 5.5 6.5 5.5 5 C 5.5 3.5 7 3.5 7 5 Z"
+            fill="#EC4899"
+            opacity="0.7"
+          >
+            <animateTransform
+              attributeName="transform"
+              type="translate"
+              values="0,0; 0,-2; 0,0"
+              dur="2s"
+              repeatCount="indefinite"
+            />
           </path>
         </g>
       );
@@ -275,11 +371,33 @@ const ECHOMOJI = ({
     if (p === 'sparkle') {
       return (
         <g>
-          <path d="M 40 6 L 41 9 L 44 10 L 41 11 L 40 14 L 39 11 L 36 10 L 39 9 Z" fill="#FDE047" opacity="0.9">
-            <animateTransform attributeName="transform" type="scale" values="1;1.3;1" dur="1.2s" repeatCount="indefinite" additive="sum" />
+          <path
+            d="M 40 6 L 41 9 L 44 10 L 41 11 L 40 14 L 39 11 L 36 10 L 39 9 Z"
+            fill="#FDE047"
+            opacity="0.9"
+          >
+            <animateTransform
+              attributeName="transform"
+              type="scale"
+              values="1;1.3;1"
+              dur="1.2s"
+              repeatCount="indefinite"
+              additive="sum"
+            />
           </path>
-          <path d="M 6 8 L 7 10 L 9 11 L 7 12 L 6 14 L 5 12 L 3 11 L 5 10 Z" fill="#FDE047" opacity="0.7">
-            <animateTransform attributeName="transform" type="scale" values="1;1.3;1" dur="1.5s" repeatCount="indefinite" additive="sum" />
+          <path
+            d="M 6 8 L 7 10 L 9 11 L 7 12 L 6 14 L 5 12 L 3 11 L 5 10 Z"
+            fill="#FDE047"
+            opacity="0.7"
+          >
+            <animateTransform
+              attributeName="transform"
+              type="scale"
+              values="1;1.3;1"
+              dur="1.5s"
+              repeatCount="indefinite"
+              additive="sum"
+            />
           </path>
         </g>
       );
@@ -289,11 +407,28 @@ const ECHOMOJI = ({
         <g>
           <ellipse cx="13" cy="26" rx="1.5" ry="2.5" fill="#4A90E2" opacity="0.85">
             <animate attributeName="cy" values="26;34;40" dur="1.8s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.9;0.6;0" dur="1.8s" repeatCount="indefinite" />
+            <animate
+              attributeName="opacity"
+              values="0.9;0.6;0"
+              dur="1.8s"
+              repeatCount="indefinite"
+            />
           </ellipse>
           <ellipse cx="35" cy="26" rx="1.5" ry="2.5" fill="#4A90E2" opacity="0.85">
-            <animate attributeName="cy" values="26;34;40" dur="1.8s" begin="0.4s" repeatCount="indefinite" />
-            <animate attributeName="opacity" values="0.9;0.6;0" dur="1.8s" begin="0.4s" repeatCount="indefinite" />
+            <animate
+              attributeName="cy"
+              values="26;34;40"
+              dur="1.8s"
+              begin="0.4s"
+              repeatCount="indefinite"
+            />
+            <animate
+              attributeName="opacity"
+              values="0.9;0.6;0"
+              dur="1.8s"
+              begin="0.4s"
+              repeatCount="indefinite"
+            />
           </ellipse>
         </g>
       );
@@ -302,10 +437,21 @@ const ECHOMOJI = ({
       return (
         <g>
           <circle cx="10" cy="10" r="1.5" fill="#EF4444" opacity="0.9">
-            <animate attributeName="opacity" values="0.9;0.3;0.9" dur="0.6s" repeatCount="indefinite" />
+            <animate
+              attributeName="opacity"
+              values="0.9;0.3;0.9"
+              dur="0.6s"
+              repeatCount="indefinite"
+            />
           </circle>
           <circle cx="40" cy="10" r="1.5" fill="#EF4444" opacity="0.9">
-            <animate attributeName="opacity" values="0.9;0.3;0.9" dur="0.6s" begin="0.3s" repeatCount="indefinite" />
+            <animate
+              attributeName="opacity"
+              values="0.9;0.3;0.9"
+              dur="0.6s"
+              begin="0.3s"
+              repeatCount="indefinite"
+            />
           </circle>
         </g>
       );
@@ -323,7 +469,6 @@ const ECHOMOJI = ({
     return null;
   };
 
-  // Cheek blush
   const renderCheeks = () => {
     if (!expr.cheeks) return null;
     return (
@@ -344,11 +489,11 @@ const ECHOMOJI = ({
       onDoubleClick={onDoubleClick}
     >
       {animated && animation === 'idle' && (
-        <>
+        <React.Fragment>
           <div style={ringStyle(0, 1.2, 4, 0.5)} />
           <div style={ringStyle(0.5, 1.4, 3, 0.35)} />
           <div style={ringStyle(1.0, 1.6, 2, 0.25)} />
-        </>
+        </React.Fragment>
       )}
 
       {ripples.map((r) => (
@@ -504,7 +649,7 @@ const ECHOMOJI = ({
 
         {/* Mouth */}
         {mood === 'happy' || mood === 'excited' ? (
-          <>
+          <React.Fragment>
             <path d={finalMouth} fill="#4A0E0E" stroke="none" />
             <path d="M 17 31 L 31 31 L 31 33 L 17 33 Z" fill="#FFFFFF" opacity="0.9" />
             <ellipse cx="24" cy="35" rx="4" ry="2" fill="#E74C3C" opacity="0.7" />
@@ -515,7 +660,7 @@ const ECHOMOJI = ({
               strokeLinecap="round"
               fill="none"
             />
-          </>
+          </React.Fragment>
         ) : (
           <path
             d={finalMouth}
