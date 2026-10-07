@@ -3,7 +3,9 @@ import { getToken, onMessage } from 'firebase/messaging';
 import { ref, set, remove, serverTimestamp, get } from 'firebase/database';
 import { db, getFirebaseMessaging } from './firebase';
 
-const VAPID_KEY = process.env.REACT_APP_FIREBASE_VAPID_KEY;
+const VAPID_KEY =
+  process.env.REACT_APP_FIREBASE_VAPID_KEY ||
+  process.env.REACT_APP_VAPID_PUBLIC_KEY;
 
 /**
  * Register this device's FCM token for the user.
@@ -12,7 +14,7 @@ const VAPID_KEY = process.env.REACT_APP_FIREBASE_VAPID_KEY;
 export const registerFcmToken = async (uid) => {
   if (!uid) return null;
   if (!VAPID_KEY) {
-    console.warn('Missing REACT_APP_FIREBASE_VAPID_KEY — FCM disabled');
+    console.warn('Missing VAPID key — FCM disabled');
     return null;
   }
   if (typeof window === 'undefined' || !('Notification' in window)) {
@@ -37,12 +39,14 @@ export const registerFcmToken = async (uid) => {
     }
 
     // Save token to Firebase under the user
-    // Path: /users/{uid}/fcmTokens/{token}
     await set(ref(db, `users/${uid}/fcmTokens/${token}`), {
       token,
       createdAt: serverTimestamp(),
       userAgent: (navigator.userAgent || '').slice(0, 200),
     });
+
+    // Cache token locally for logout cleanup
+    try { localStorage.setItem('echo_fcm_token', token); } catch (_) {}
 
     console.log('✅ FCM token registered:', token.slice(0, 20) + '...');
     return token;
@@ -55,10 +59,14 @@ export const registerFcmToken = async (uid) => {
 /**
  * Remove token on logout.
  */
-export const unregisterFcmToken = async (uid, token) => {
-  if (!uid || !token) return;
+export const unregisterFcmToken = async (uid) => {
+  if (!uid) return;
+  let token = null;
+  try { token = localStorage.getItem('echo_fcm_token'); } catch (_) {}
+  if (!token) return;
   try {
     await remove(ref(db, `users/${uid}/fcmTokens/${token}`));
+    localStorage.removeItem('echo_fcm_token');
   } catch (err) {
     console.warn('FCM unregister failed:', err);
   }
@@ -66,8 +74,6 @@ export const unregisterFcmToken = async (uid, token) => {
 
 /**
  * Foreground message handler.
- * We already show in-app banners via useGlobalMessageListener,
- * so we suppress OS notifications here.
  */
 export const setupForegroundHandler = async () => {
   const messaging = await getFirebaseMessaging();
@@ -81,7 +87,7 @@ export const setupForegroundHandler = async () => {
 };
 
 /**
- * Send push notification to a recipient via FCM.
+ * Send a push notification to a recipient via FCM.
  * Uses Firebase Web API key (public, rate-limited by Google).
  * Free — no Cloud Functions needed.
  */
@@ -100,7 +106,6 @@ export const sendPushToUser = async ({ recipientUid, title, body, data = {} }) =
       return;
     }
 
-    // FCM legacy HTTP endpoint (no server required)
     await fetch('https://fcm.googleapis.com/fcm/send', {
       method: 'POST',
       headers: {
