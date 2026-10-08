@@ -2395,6 +2395,30 @@ const ChatView = () => {
           cursor: pointer;
           font-family: inherit;
         }
+
+        .chat-header-info-btn {
+          width: 36px;
+          height: 36px;
+          border-radius: 50%;
+          border: none;
+          background: var(--bg-input);
+          color: var(--text-secondary);
+          font-size: 15px;
+          cursor: pointer;
+          display: grid;
+          place-items: center;
+          margin-left: 8px;
+          transition: background 0.15s ease, transform 0.15s ease;
+        }
+
+        .chat-header-info-btn:hover {
+          background: var(--border-color);
+          color: #6C3CE1;
+        }
+
+        .chat-header-info-btn:active {
+          transform: scale(0.92);
+        }
       `}</style>
 
       <SEO title={`Chat with ${displayName}`} description={`Chat with ${displayName} on ECHO.`} />
