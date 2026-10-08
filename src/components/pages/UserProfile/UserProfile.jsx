@@ -5,6 +5,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { followUser, unfollowUser, isEchowing, listenToMyEchowerCount } from '../../../services/echowerService';
 import Avatar from '../../common/Avatar';
+import UsernamePill from '../../common/UsernamePill';
 import './UserProfile.css';
 
 const UserProfile = () => {
@@ -25,7 +26,6 @@ const UserProfile = () => {
 
     if (user) {
       isEchowing(user.uid, uid).then(setIsFollowing);
-      // FIX: extract `.length` from the array of UIDs
       unsubEchowers = listenToMyEchowerCount(uid, (uids) => {
         setEchowerCount(Array.isArray(uids) ? uids.length : 0);
       });
@@ -79,6 +79,12 @@ const UserProfile = () => {
         </div>
 
         <h1 className="user-profile-name">{profile.name || 'User'}</h1>
+
+        {profile.username && (
+          <div style={{ display: 'flex', justifyContent: 'center', marginTop: -4, marginBottom: 8 }}>
+            <UsernamePill uid={uid} username={profile.username} size="md" />
+          </div>
+        )}
 
         <div className="user-profile-stats">
           <div className="stat">
