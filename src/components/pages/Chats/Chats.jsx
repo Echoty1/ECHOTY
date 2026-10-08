@@ -5,13 +5,7 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../../../services/firebase';
 import { useDeletedAccountCheck } from '../../../hooks/useDeletedAccountCheck';
 import {
-  ref,
-  onValue,
-  get,
-  query,
-  orderByKey,
-  limitToLast,
-  endAt,
+  ref, onValue, get, query, orderByKey, limitToLast, endAt,
 } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
@@ -24,11 +18,14 @@ import { preloadMedia } from '../../../utils/mediaCache';
 import { fetchLatestMessage } from '../../../services/messageCache';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { getChatList, storeChatList } from '../../../services/indexedDBService';
+import { getMyGroups, subscribeToMyGroups } from '../../../services/groupService';
+import { groupIdToChatId } from '../../../utils/groupId';
 import Avatar from '../../common/Avatar';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import ChatPreviewPopup from './ChatPreviewPopup';
 import NotesStrip from './NotesStrip';
+import NewGroupModal from './NewGroupModal';
 
 const CHAT_CHUNK_SIZE = 20;
 const TYPING_FRESHNESS_MS = 4000;
@@ -89,7 +86,6 @@ const loadPartnerData = async (partnerId) => {
     };
 
     await setProfile(partnerId, fullProfile);
-
     return fullProfile;
   } catch (error) {
     console.warn(`⚠️ Error loading partner data: ${partnerId}`, error);
@@ -110,11 +106,7 @@ const processChatItem = async (chat, user, onlineUsers) => {
       isDeleted = true;
     } else {
       partnerName = sanitizeName(
-        profile?.name ||
-          profile?.displayName ||
-          profile?.username ||
-          chat.partnerName ||
-          chat.name,
+        profile?.name || profile?.displayName || profile?.username || chat.partnerName || chat.name,
         chat.id
       );
     }
@@ -135,9 +127,7 @@ const processChatItem = async (chat, user, onlineUsers) => {
         displayMessage.startsWith('🎬') ||
         displayMessage.startsWith('🎤');
       if (!alreadyPrefixed) {
-        displayMessage = isSender
-          ? `You: ${displayMessage}`
-          : `${partnerName}: ${displayMessage}`;
+        displayMessage = isSender ? `You: ${displayMessage}` : `${partnerName}: ${displayMessage}`;
       }
       if (displayMessage.length > 36) {
         displayMessage = displayMessage.substring(0, 36) + '...';
@@ -170,6 +160,7 @@ const processChatItem = async (chat, user, onlineUsers) => {
       isDeleted,
       online: isOnline,
       ended: chat.ended === true,
+      isGroup: false,
     };
   } catch (err) {
     let unreadCount = chat.unreadCount || 0;
@@ -189,7 +180,74 @@ const processChatItem = async (chat, user, onlineUsers) => {
       isDeleted: false,
       online: !!onlineUsers[chat.id],
       ended: chat.ended === true,
+      isGroup: false,
     };
+  }
+};
+
+// ─── Process a group item ───────────────────────────────────────
+const processGroupItem = async (group, user) => {
+  try {
+    // Fetch fresh group metadata
+    const groupSnap = await get(ref(db, `groups/${group.groupId}`));
+    if (!groupSnap.exists()) return null;
+
+    const groupData = groupSnap.val();
+    const chatId = groupIdToChatId(group.groupId);
+
+    // Fetch last message info from userChats if exists
+    let lastMessage = groupData.lastMessage || 'Group created';
+    let lastSenderId = groupData.lastSenderId || '';
+    let lastUpdated = groupData.lastUpdated || groupData.createdAt || Date.now();
+    let unreadCount = 0;
+
+    const userChatSnap = await get(ref(db, `userChats/${user.uid}/${chatId}`));
+    if (userChatSnap.exists()) {
+      const uc = userChatSnap.val();
+      lastMessage = uc.lastMessage || lastMessage;
+      lastSenderId = uc.lastSenderId || lastSenderId;
+      lastUpdated = uc.lastUpdated || lastUpdated;
+      unreadCount = uc.unreadCount || 0;
+    }
+
+    let displayMessage = lastMessage;
+    const isSender = lastSenderId === user.uid;
+    if (displayMessage && displayMessage !== 'Group created') {
+      const alreadyPrefixed =
+        displayMessage.startsWith('You:') ||
+        displayMessage.startsWith('😊') ||
+        displayMessage.startsWith('📷') ||
+        displayMessage.startsWith('🎬') ||
+        displayMessage.startsWith('🎤');
+      if (!alreadyPrefixed) {
+        displayMessage = isSender
+          ? `You: ${displayMessage}`
+          : `${groupData.name || 'Group'}: ${displayMessage}`;
+      }
+      if (displayMessage.length > 36) {
+        displayMessage = displayMessage.substring(0, 36) + '...';
+      }
+    }
+
+    return {
+      id: chatId,
+      groupId: group.groupId,
+      name: groupData.name || 'Untitled Group',
+      emoji: groupData.emoji || '👥',
+      avatar: null,
+      memberCount: groupData.memberCount || Object.keys(groupData.members || {}).length,
+      lastMessage: displayMessage,
+      timestamp: lastUpdated,
+      lastSenderId,
+      unreadCount,
+      isGroup: true,
+      online: false,
+      isDeleted: false,
+      ended: false,
+    };
+  } catch (err) {
+    console.warn('processGroupItem failed:', err);
+    return null;
   }
 };
 
@@ -202,16 +260,9 @@ const sortNonAIChats = (chats) => {
   return [...onlineSorted, ...offlineSorted];
 };
 
-// ─── Chat Item ─────────────────────────────────────────────────
+// ─── Chat Item (1-1) ───────────────────────────────────────────
 const ChatItem = memo(
-  ({
-    chat,
-    onStartChat,
-    onLongPressStart,
-    onLongPressEnd,
-    onLongPressCancel,
-    partnerIsTyping,
-  }) => {
+  ({ chat, onStartChat, onLongPressStart, onLongPressEnd, onLongPressCancel, partnerIsTyping }) => {
     const { profiles } = useProfile();
     const navigate = useNavigate();
     const profile = profiles[chat.id] || {};
@@ -232,26 +283,17 @@ const ChatItem = memo(
         onTouchEnd={() => onLongPressEnd(chat)}
         onTouchCancel={onLongPressCancel}
         onContextMenu={(e) => e.preventDefault()}
-        style={{
-          userSelect: 'none',
-          WebkitUserSelect: 'none',
-          WebkitTouchCallout: 'none',
-        }}
+        style={{ userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
       >
         <div
           className="chat-avatar"
-          onClick={(e) => {
-            e.stopPropagation();
-            navigate(`/user/${chat.id}`);
-          }}
+          onClick={(e) => { e.stopPropagation(); navigate(`/user/${chat.id}`); }}
         >
           <Avatar key={chat.avatar} src={chat.avatar} name={chat.name} size={48} />
           <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
           {hasUnread && <span className="unread-badge">{chat.unreadCount}</span>}
           {chat.isDeleted && (
-            <span className="archived-badge" title="Account deleted – archived">
-              📁
-            </span>
+            <span className="archived-badge" title="Account deleted – archived">📁</span>
           )}
 
           {partnerIsTyping && (
@@ -269,29 +311,17 @@ const ChatItem = memo(
           <div className="chat-title-row">
             <span className="chat-name">
               {chat.name}
-              {chat.isDeleted && (
-                <span className="archived-label"> (archived)</span>
-              )}
+              {chat.isDeleted && <span className="archived-label"> (archived)</span>}
               {chat.ended && <span className="ended-badge">Ended</span>}
             </span>
           </div>
           <div className="chat-last" style={{ fontWeight: hasUnread ? 700 : 400 }}>
-            {partnerIsTyping ? (
-              <span className="typing-status-text">typing…</span>
-            ) : (
-              chat.lastMessage || 'Start chatting...'
-            )}
+            {partnerIsTyping ? <span className="typing-status-text">typing…</span> : (chat.lastMessage || 'Start chatting...')}
           </div>
         </div>
         <div className="chat-echomoji-middle">
           <div className={`echomoji-holder ${partnerIsTyping ? 'is-typing' : ''}`}>
-            <ECHOMOJI
-              mood={mood}
-              skin={skin}
-              size={38}
-              interactive={false}
-              animated={!partnerIsTyping}
-            />
+            <ECHOMOJI mood={mood} skin={skin} size={38} interactive={false} animated={!partnerIsTyping} />
           </div>
         </div>
         <div className="chat-time">{timeAgo(chat.timestamp)}</div>
@@ -300,66 +330,76 @@ const ChatItem = memo(
   }
 );
 
-// ─── Error Boundary so NotesStrip can't take down the page ─────
+// ─── Group Chat Item ───────────────────────────────────────────
+const GroupChatItem = memo(({ chat, onStartChat }) => {
+  const hasUnread = chat.unreadCount > 0;
+  return (
+    <div className="chat-item group-chat-item" onClick={() => onStartChat(chat)}>
+      <div className="chat-avatar group-avatar">
+        <div className="group-avatar-emoji">{chat.emoji || '👥'}</div>
+        {hasUnread && <span className="unread-badge">{chat.unreadCount}</span>}
+      </div>
+      <div className="chat-info">
+        <div className="chat-title-row">
+          <span className="chat-name">{chat.name}</span>
+          <span className="group-badge">{chat.memberCount || 0}</span>
+        </div>
+        <div className="chat-last" style={{ fontWeight: hasUnread ? 700 : 400 }}>
+          {chat.lastMessage || 'Group created'}
+        </div>
+      </div>
+      <div className="chat-time">{timeAgo(chat.timestamp)}</div>
+    </div>
+  );
+});
+
+// ─── Error Boundary ────────────────────────────────────────────
 class NotesBoundary extends React.Component {
-  constructor(props) {
-    super(props);
-    this.state = { hasError: false };
-  }
-  static getDerivedStateFromError() {
-    return { hasError: true };
-  }
-  componentDidCatch(error, info) {
-    console.error('[NotesStrip Error]', error, info);
-  }
-  render() {
-    if (this.state.hasError) return null;
-    return this.props.children;
-  }
+  constructor(props) { super(props); this.state = { hasError: false }; }
+  static getDerivedStateFromError() { return { hasError: true }; }
+  componentDidCatch(error, info) { console.error('[NotesStrip Error]', error, info); }
+  render() { return this.state.hasError ? null : this.props.children; }
 }
 
-// ─── Main Chats Component ────────────────────────────────────────
+// ─── Main Chats Component ──────────────────────────────────────
 const Chats = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const routerLocation = useLocation();
 
   const initialQuery = () => {
-    if (routerLocation.state?.searchQuery) {
-      return routerLocation.state.searchQuery;
-    }
+    if (routerLocation.state?.searchQuery) return routerLocation.state.searchQuery;
     sessionStorage.removeItem('chats_search_query');
     return '';
   };
 
   const [searchQuery, setSearchQuery] = useState(initialQuery);
   const [results, setResults] = useState([]);
-  const [isSearching, setIsSearching] = useState(
-    () => initialQuery().trim().length > 0
-  );
+  const [isSearching, setIsSearching] = useState(() => initialQuery().trim().length > 0);
   const [onlineUsers, setOnlineUsers] = useState({});
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [loadingChats, setLoadingChats] = useState(true);
+  const [showNewGroup, setShowNewGroup] = useState(false);
 
-  // Chat preview state
   const [previewChat, setPreviewChat] = useState(null);
   const [previewPosition, setPreviewPosition] = useState({ x: 0, y: 0 });
   const longPressTimer = useRef(null);
   const longPressTriggered = useRef(false);
 
-  // Typing map keyed by partner UID → boolean
   const [typingPartners, setTypingPartners] = useState({});
 
   const inputRef = useRef(null);
   const searchTimeout = useRef(null);
   const presenceUnsubRef = useRef(null);
   const userChatsUnsubRef = useRef(null);
+  const groupsUnsubRef = useRef(null);
   const typingUnsubsRef = useRef({});
   const typingCheckIntervalRef = useRef(null);
   const typingRawRef = useRef({});
 
   const cacheKey = `chats_${user?.uid}`;
   const [recentChats, setRecentChats] = useState([]);
+  const [groupChats, setGroupChats] = useState([]);
   const [hasMore, setHasMore] = useState(true);
   const [lastChatKey, setLastChatKey] = useState(null);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -369,9 +409,9 @@ const Chats = () => {
   const isDemoUser = user?.uid === DEMO_UID;
   const isSupportUser = user?.uid === SUPPORT_UID;
 
+  // Cache restore
   useEffect(() => {
     if (!user?.uid) return;
-
     const loadCached = async () => {
       try {
         const cached = await getChatList(user.uid);
@@ -395,35 +435,19 @@ const Chats = () => {
     loadCached();
   }, [user?.uid, isDemoUser, isSupportUser]);
 
+  // Chat-read + unread-cleared + list-update events
   useEffect(() => {
     const handleChatRead = (event) => {
       const { userId } = event.detail;
       sessionStorage.setItem(`chat_read_${userId}`, 'true');
-      setRecentChats((prev) =>
-        prev.map((chat) =>
-          chat.id === userId ? { ...chat, unreadCount: 0 } : chat
-        )
-      );
+      setRecentChats((prev) => prev.map((chat) => chat.id === userId ? { ...chat, unreadCount: 0 } : chat));
+      setGroupChats((prev) => prev.map((chat) => chat.id === userId ? { ...chat, unreadCount: 0 } : chat));
     };
-    window.addEventListener('chat-read', handleChatRead);
-    return () => window.removeEventListener('chat-read', handleChatRead);
-  }, []);
-
-  useEffect(() => {
     const handleUnreadCleared = (event) => {
       const { partnerId } = event.detail;
-      setRecentChats((prev) =>
-        prev.map((chat) =>
-          chat.id === partnerId ? { ...chat, unreadCount: 0 } : chat
-        )
-      );
+      setRecentChats((prev) => prev.map((chat) => chat.id === partnerId ? { ...chat, unreadCount: 0 } : chat));
+      setGroupChats((prev) => prev.map((chat) => chat.id === partnerId ? { ...chat, unreadCount: 0 } : chat));
     };
-    window.addEventListener('chat-unread-cleared', handleUnreadCleared);
-    return () =>
-      window.removeEventListener('chat-unread-cleared', handleUnreadCleared);
-  }, []);
-
-  useEffect(() => {
     const handleListUpdate = (event) => {
       const { partnerId, patch } = event.detail || {};
       if (!partnerId || !patch) return;
@@ -437,20 +461,23 @@ const Chats = () => {
         return next;
       });
     };
+    window.addEventListener('chat-read', handleChatRead);
+    window.addEventListener('chat-unread-cleared', handleUnreadCleared);
     window.addEventListener('chat-list-update', handleListUpdate);
-    return () =>
+    return () => {
+      window.removeEventListener('chat-read', handleChatRead);
+      window.removeEventListener('chat-unread-cleared', handleUnreadCleared);
       window.removeEventListener('chat-list-update', handleListUpdate);
+    };
   }, []);
 
+  // Presence
   useEffect(() => {
     if (!user) return;
     const presenceRef = ref(db, 'presence/online');
     presenceUnsubRef.current = onValue(
       presenceRef,
-      (snapshot) => {
-        const data = snapshot.val() || {};
-        setOnlineUsers(data);
-      },
+      (snapshot) => setOnlineUsers(snapshot.val() || {}),
       (error) => console.error('❌ Presence error:', error)
     );
     return () => {
@@ -461,6 +488,7 @@ const Chats = () => {
     };
   }, [user]);
 
+  // userChats listener
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -478,6 +506,7 @@ const Chats = () => {
 
         let chatList = Object.entries(data)
           .map(([partnerId, chat]) => ({ id: partnerId, ...chat }))
+          .filter((c) => !c.id?.startsWith('group_'))
           .sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
 
         if (isDemoUser) {
@@ -493,9 +522,7 @@ const Chats = () => {
           chatList.map((chat) => processChatItem(chat, user, onlineUsers))
         );
 
-        const nonAIChats = loadedItems.filter(
-          (c) => c.id !== 'echo_ai_assistant'
-        );
+        const nonAIChats = loadedItems.filter((c) => c.id !== 'echo_ai_assistant');
         const sortedNonAI = sortNonAIChats(nonAIChats);
 
         setRecentChats(sortedNonAI);
@@ -517,7 +544,30 @@ const Chats = () => {
     };
   }, [user?.uid, onlineUsers, cacheKey, isDemoUser, isSupportUser]);
 
-  /* ─── TYPING LISTENERS for all visible chats ─── */
+  // Groups listener
+  useEffect(() => {
+    if (!user?.uid) return;
+
+    groupsUnsubRef.current = subscribeToMyGroups(user.uid, async (groups) => {
+      if (!groups || groups.length === 0) {
+        setGroupChats([]);
+        return;
+      }
+      const processed = await Promise.all(
+        groups.map((g) => processGroupItem(g, user))
+      );
+      setGroupChats(processed.filter(Boolean));
+    });
+
+    return () => {
+      if (groupsUnsubRef.current) {
+        try { groupsUnsubRef.current(); } catch {}
+        groupsUnsubRef.current = null;
+      }
+    };
+  }, [user?.uid]);
+
+  // Typing listeners
   useEffect(() => {
     if (!user?.uid || !recentChats.length) return;
 
@@ -525,9 +575,7 @@ const Chats = () => {
 
     Object.keys(typingUnsubsRef.current).forEach((uid) => {
       if (!activeIds.has(uid)) {
-        try {
-          typingUnsubsRef.current[uid]();
-        } catch {}
+        try { typingUnsubsRef.current[uid](); } catch {}
         delete typingUnsubsRef.current[uid];
         delete typingRawRef.current[uid];
       }
@@ -535,6 +583,7 @@ const Chats = () => {
 
     recentChats.forEach((chat) => {
       if (chat.id === 'echo_ai_assistant') return;
+      if (chat.isGroup) return;
       if (typingUnsubsRef.current[chat.id]) return;
 
       const cId = [user.uid, chat.id].sort().join('_');
@@ -545,13 +594,8 @@ const Chats = () => {
         (snap) => {
           const data = snap.val();
           typingRawRef.current[chat.id] = data || null;
-          const fresh =
-            data &&
-            data.isTyping &&
-            Date.now() - (data.timestamp || 0) < TYPING_FRESHNESS_MS;
-          setTypingPartners((prev) =>
-            prev[chat.id] === !!fresh ? prev : { ...prev, [chat.id]: !!fresh }
-          );
+          const fresh = data && data.isTyping && Date.now() - (data.timestamp || 0) < TYPING_FRESHNESS_MS;
+          setTypingPartners((prev) => prev[chat.id] === !!fresh ? prev : { ...prev, [chat.id]: !!fresh });
         },
         () => {}
       );
@@ -560,244 +604,43 @@ const Chats = () => {
     });
   }, [user?.uid, recentChats]);
 
-  /* ─── Periodic freshness sweep so stale typing flags auto-clear ─── */
   useEffect(() => {
-    if (typingCheckIntervalRef.current)
-      clearInterval(typingCheckIntervalRef.current);
+    if (typingCheckIntervalRef.current) clearInterval(typingCheckIntervalRef.current);
     typingCheckIntervalRef.current = setInterval(() => {
       const updates = {};
       let anyChanged = false;
       Object.entries(typingRawRef.current).forEach(([uid, data]) => {
-        const fresh =
-          data &&
-          data.isTyping &&
-          Date.now() - (data.timestamp || 0) < TYPING_FRESHNESS_MS;
+        const fresh = data && data.isTyping && Date.now() - (data.timestamp || 0) < TYPING_FRESHNESS_MS;
         const next = !!fresh;
-        if (typingPartners[uid] !== next) {
-          updates[uid] = next;
-          anyChanged = true;
-        }
+        if (typingPartners[uid] !== next) { updates[uid] = next; anyChanged = true; }
       });
-      if (anyChanged) {
-        setTypingPartners((prev) => ({ ...prev, ...updates }));
-      }
+      if (anyChanged) setTypingPartners((prev) => ({ ...prev, ...updates }));
     }, 2000);
     return () => {
-      if (typingCheckIntervalRef.current)
-        clearInterval(typingCheckIntervalRef.current);
+      if (typingCheckIntervalRef.current) clearInterval(typingCheckIntervalRef.current);
     };
   }, [typingPartners]);
 
-  /* ─── Cleanup all typing listeners on unmount ─── */
   useEffect(() => {
     return () => {
-      Object.values(typingUnsubsRef.current).forEach((u) => {
-        try {
-          u();
-        } catch {}
-      });
+      Object.values(typingUnsubsRef.current).forEach((u) => { try { u(); } catch {} });
       typingUnsubsRef.current = {};
       typingRawRef.current = {};
     };
   }, []);
 
-  const loadChats = useCallback(
-    async (loadMore = false) => {
-      if (!user || isLoadingMore) return;
-      setIsLoadingMore(true);
-      try {
-        const userChatsRef = ref(db, `userChats/${user.uid}`);
-        let q;
-        if (loadMore && lastChatKey) {
-          q = query(
-            userChatsRef,
-            orderByKey(),
-            endAt(lastChatKey),
-            limitToLast(CHAT_CHUNK_SIZE + 1)
-          );
-        } else {
-          q = query(userChatsRef, orderByKey(), limitToLast(CHAT_CHUNK_SIZE));
-        }
-        const snapshot = await get(q);
-        const data = snapshot.val();
-        if (!data) {
-          if (loadMore) setHasMore(false);
-          setLoadingChats(false);
-          setIsLoadingMore(false);
-          return;
-        }
-        let chatList = Object.entries(data)
-          .map(([partnerId, chat]) => ({ id: partnerId, ...chat }))
-          .sort((a, b) => (b.lastUpdated || 0) - (a.lastUpdated || 0));
-
-        if (isDemoUser) {
-          chatList = chatList.filter((c) => c.id === SUPPORT_UID);
-        } else {
-          chatList = chatList.filter((c) => {
-            if (c.id === DEMO_UID && !isSupportUser) return false;
-            return true;
-          });
-        }
-
-        if (chatList.length < CHAT_CHUNK_SIZE) setHasMore(false);
-        if (chatList.length > 0)
-          setLastChatKey(chatList[chatList.length - 1].id);
-
-        const loadedItems = await Promise.all(
-          chatList.map((chat) => processChatItem(chat, user, onlineUsers))
-        );
-        const nonAIChats = loadedItems.filter(
-          (c) => c.id !== 'echo_ai_assistant'
-        );
-        const sortedNonAI = sortNonAIChats(nonAIChats);
-
-        setRecentChats((prev) => {
-          const currentList = Array.isArray(prev) ? prev : [];
-          if (loadMore) {
-            const existingIds = new Set(currentList.map((c) => c.id));
-            const newItems = sortedNonAI.filter(
-              (item) => !existingIds.has(item.id)
-            );
-            const merged = [...currentList, ...newItems];
-            return sortNonAIChats(merged);
-          }
-          return sortedNonAI;
-        });
-        setCache(cacheKey, sortedNonAI);
-      } catch (error) {
-        console.error('Error loading chats:', error);
-      } finally {
-        setLoadingChats(false);
-        setIsLoadingMore(false);
-      }
-    },
-    [
-      user,
-      lastChatKey,
-      isLoadingMore,
-      onlineUsers,
-      cacheKey,
-      isDemoUser,
-      isSupportUser,
-    ]
-  );
-
-  const handleLoadMore = useCallback(async () => {
-    if (hasMore && !isLoadingMore && !loadingChats) {
-      await loadChats(true);
-    }
-  }, [hasMore, isLoadingMore, loadingChats, loadChats]);
-
-  const { containerRef } = useInfiniteScroll(handleLoadMore, 200, [
-    hasMore,
-    isLoadingMore,
-    loadingChats,
-  ]);
-
-  const performSearch = async (queryText) => {
-    const trimmed = queryText.trim().toLowerCase();
-    if (trimmed.length < 1) {
-      setResults([]);
-      setIsSearching(false);
-      return;
-    }
-    setIsSearching(true);
-
-    const localHits = (recentChats || [])
-      .filter((c) => {
-        const n = (c.name || '').toLowerCase();
-        const m = (c.lastMessage || '').toLowerCase();
-        return n.includes(trimmed) || m.includes(trimmed);
-      })
-      .map((c) => ({
-        id: c.id,
-        name: c.name,
-        avatar: c.avatar,
-        mood: c.mood || 'happy',
-        activeSkin: c.activeSkin || 'default',
-        location: c.location || '',
-        isOnline: !!onlineUsers[c.id],
-        fromLocal: true,
-      }));
-    if (localHits.length) {
-      setResults(localHits);
-      setIsSearching(false);
-    }
-
-    try {
-      const searchRes = await searchProfiles(trimmed, user.uid, 50);
-      const rawResults = Array.isArray(searchRes)
-        ? searchRes
-        : Array.isArray(searchRes?.results)
-        ? searchRes.results
-        : [];
-      const remote = rawResults
-        .filter((u) => u && typeof u === 'object' && u.id)
-        .filter((u) => !(u.id === DEMO_UID && !isSupportUser))
-        .map((u) => ({
-          ...u,
-          id: u.id,
-          name: sanitizeName(u.name || u.displayName || u.username, u.id),
-          mood: u.mood || 'happy',
-          activeSkin: u.activeSkin || 'default',
-          location:
-            u.location ||
-            [u.city, u.country].filter(Boolean).join(', ') ||
-            '',
-          isOnline: !!onlineUsers[u.id],
-        }));
-
-      const seen = new Set(localHits.map((x) => x.id));
-      const merged = [...localHits];
-      for (const r of remote) {
-        if (!seen.has(r.id)) {
-          seen.add(r.id);
-          merged.push(r);
-        }
-      }
-      setResults(merged);
-    } catch (err) {
-      console.error('❌ [Search] Search failed:', err);
-      if (!localHits.length) setResults([]);
-    } finally {
-      setIsSearching(false);
-    }
-  };
-
-  useEffect(() => {
-    if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    const queryStr = searchQuery.trim();
-    if (queryStr.length === 0) {
-      sessionStorage.removeItem('chats_search_query');
-      setResults([]);
-      setIsSearching(false);
-      return;
-    }
-    sessionStorage.setItem('chats_search_query', queryStr);
-    searchTimeout.current = setTimeout(() => {
-      performSearch(queryStr);
-    }, 120);
-    return () => {
-      if (searchTimeout.current) clearTimeout(searchTimeout.current);
-    };
-  }, [searchQuery, onlineUsers, isSupportUser, recentChats]);
-
-  // ─── Long-press handlers for chat preview ──────────────
+  // Long-press handlers
   const handleLongPressStart = useCallback((e, chat) => {
     if (chat.id === 'echo_ai_assistant') return;
-
+    if (chat.isGroup) return;
     longPressTriggered.current = false;
-
     const clientX = e.touches?.[0]?.clientX ?? e.clientX ?? 0;
     const clientY = e.touches?.[0]?.clientY ?? e.clientY ?? 0;
-
     if (longPressTimer.current) clearTimeout(longPressTimer.current);
-
     longPressTimer.current = setTimeout(() => {
       longPressTriggered.current = true;
       setPreviewPosition({ x: clientX + 16, y: clientY + 16 });
       setPreviewChat(chat);
-
       if (navigator.vibrate) navigator.vibrate(30);
     }, 500);
   }, []);
@@ -828,6 +671,12 @@ const Chats = () => {
       navigate('/chat/echo_ai_assistant');
       return;
     }
+
+    if (selectedUser.isGroup) {
+      navigate(`/chat/${selectedUser.id}`);
+      return;
+    }
+
     const safeUserName = sanitizeName(selectedUser.name, selectedUser.id);
     navigate(`/chat/${selectedUser.id}`, {
       state: {
@@ -849,50 +698,115 @@ const Chats = () => {
     inputRef.current?.focus();
   };
 
+  // Search
+  const performSearch = async (queryText) => {
+    const trimmed = queryText.trim().toLowerCase();
+    if (trimmed.length < 1) {
+      setResults([]);
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+
+    const localHits = (recentChats || [])
+      .filter((c) => {
+        const n = (c.name || '').toLowerCase();
+        const m = (c.lastMessage || '').toLowerCase();
+        return n.includes(trimmed) || m.includes(trimmed);
+      })
+      .map((c) => ({
+        id: c.id, name: c.name, avatar: c.avatar,
+        mood: c.mood || 'happy', activeSkin: c.activeSkin || 'default',
+        location: c.location || '',
+        isOnline: !!onlineUsers[c.id], fromLocal: true,
+      }));
+    if (localHits.length) { setResults(localHits); setIsSearching(false); }
+
+    try {
+      const searchRes = await searchProfiles(trimmed, user.uid, 50);
+      const rawResults = Array.isArray(searchRes)
+        ? searchRes
+        : Array.isArray(searchRes?.results) ? searchRes.results : [];
+      const remote = rawResults
+        .filter((u) => u && typeof u === 'object' && u.id)
+        .filter((u) => !(u.id === DEMO_UID && !isSupportUser))
+        .map((u) => ({
+          ...u,
+          id: u.id,
+          name: sanitizeName(u.name || u.displayName || u.username, u.id),
+          mood: u.mood || 'happy',
+          activeSkin: u.activeSkin || 'default',
+          location: u.location || [u.city, u.country].filter(Boolean).join(', ') || '',
+          isOnline: !!onlineUsers[u.id],
+        }));
+
+      const seen = new Set(localHits.map((x) => x.id));
+      const merged = [...localHits];
+      for (const r of remote) {
+        if (!seen.has(r.id)) { seen.add(r.id); merged.push(r); }
+      }
+      setResults(merged);
+    } catch (err) {
+      console.error('❌ [Search] Search failed:', err);
+      if (!localHits.length) setResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  useEffect(() => {
+    if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    const queryStr = searchQuery.trim();
+    if (queryStr.length === 0) {
+      sessionStorage.removeItem('chats_search_query');
+      setResults([]);
+      setIsSearching(false);
+      return;
+    }
+    sessionStorage.setItem('chats_search_query', queryStr);
+    searchTimeout.current = setTimeout(() => { performSearch(queryStr); }, 120);
+    return () => {
+      if (searchTimeout.current) clearTimeout(searchTimeout.current);
+    };
+  }, [searchQuery, onlineUsers, isSupportUser, recentChats]);
+
   const safeRecentChats = Array.isArray(recentChats) ? recentChats : [];
+  const safeGroupChats = Array.isArray(groupChats) ? groupChats : [];
   const safeResults = Array.isArray(results) ? results : [];
   const isSearchActive = searchQuery.trim().length > 0;
 
-  // ✨ HERO SEARCH LOGIC: Find best match
+  // Merge groups + 1-1 for the recent list (groups first if recently active)
+  const allChatsSorted = [...safeGroupChats, ...safeRecentChats]
+    .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+  // Hero match
   const trimmedSearch = searchQuery.trim().toLowerCase();
   let topResult = null;
   let otherResults = safeResults;
-
   if (safeResults.length > 0 && trimmedSearch.length > 0) {
     const getCleanName = (p) => (p.name || '').trim().toLowerCase();
     const getCleanUsername = (p) => (p.username || '').trim().toLowerCase();
-
     let bestMatch = safeResults.find(
-      (p) =>
-        getCleanName(p) === trimmedSearch ||
-        getCleanUsername(p) === trimmedSearch
+      (p) => getCleanName(p) === trimmedSearch || getCleanUsername(p) === trimmedSearch
     );
-
     if (!bestMatch) {
       bestMatch = safeResults.find(
-        (p) =>
-          getCleanName(p).includes(trimmedSearch) ||
-          getCleanUsername(p).includes(trimmedSearch)
+        (p) => getCleanName(p).includes(trimmedSearch) || getCleanUsername(p).includes(trimmedSearch)
       );
     }
-
     if (bestMatch) {
       topResult = bestMatch;
       otherResults = safeResults.filter((p) => p.id !== bestMatch.id);
     }
   }
 
-  // UIDs visible to the user (for filtering notes)
   const visibleUids = safeRecentChats.map((c) => c.id);
 
   return (
     <>
-      <SEO
-        title="Chats – Recent Conversations"
-        description="View all your recent conversations on ECHO. Search and connect with friends and new people."
-      />
+      <SEO title="Chats – Recent Conversations" description="View all your recent conversations on ECHO." />
       <StructuredData />
-      <div className="chats-page" ref={containerRef}>
+      <div className="chats-page">
         <div className="search-container">
           <div className="search-input-wrapper">
             <i className="fas fa-search search-icon" />
@@ -905,14 +819,22 @@ const Chats = () => {
               onChange={(e) => setSearchQuery(e.target.value)}
             />
             {searchQuery && (
-              <button className="search-clear" onClick={handleClearSearch}>
-                ✕
-              </button>
+              <button className="search-clear" onClick={handleClearSearch}>✕</button>
             )}
           </div>
+          {!isSearchActive && (
+            <button
+              type="button"
+              className="new-group-btn-top"
+              onClick={() => setShowNewGroup(true)}
+              title="New group"
+            >
+              <i className="fas fa-user-plus" />
+              <span>New Group</span>
+            </button>
+          )}
         </div>
 
-        {/* ─── Notes Strip (only when not searching) ─── */}
         {!isSearchActive && (
           <NotesBoundary>
             <NotesStrip visibleUids={visibleUids} />
@@ -922,46 +844,24 @@ const Chats = () => {
         {isSearchActive ? (
           <div className="recent-chats search-results-section">
             {!isSearching && topResult && (
-              <div
-                className="hero-result-card"
-                onClick={() => startChat(topResult)}
-              >
+              <div className="hero-result-card" onClick={() => startChat(topResult)}>
                 <div className="hero-bg-glow" />
                 <div className="hero-content">
                   <div className="hero-avatar-wrapper">
-                    <Avatar
-                      src={topResult.avatar}
-                      name={topResult.name}
-                      size={90}
-                    />
-                    {!!onlineUsers[topResult.id] && (
-                      <span className="presence-dot online" />
-                    )}
+                    <Avatar src={topResult.avatar} name={topResult.name} size={90} />
+                    {!!onlineUsers[topResult.id] && <span className="presence-dot online" />}
                   </div>
                   <div className="hero-info">
                     <h2 className="hero-name">{topResult.name}</h2>
                     <div className="hero-meta">
-                      <span className="hero-badge">
-                        {onlineUsers[topResult.id] ? '🟢 Online' : '⚫ Offline'}
-                      </span>
-                      {topResult.location && (
-                        <span className="hero-badge">
-                          📍 {topResult.location}
-                        </span>
-                      )}
+                      <span className="hero-badge">{onlineUsers[topResult.id] ? '🟢 Online' : '⚫ Offline'}</span>
+                      {topResult.location && <span className="hero-badge">📍 {topResult.location}</span>}
                     </div>
-                    <p className="hero-bio">
-                      {topResult.bio ||
-                        topResult.status ||
-                        'Available on ECHO'}
-                    </p>
+                    <p className="hero-bio">{topResult.bio || topResult.status || 'Available on ECHO'}</p>
                   </div>
                   <button
                     className="hero-action-btn"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      startChat(topResult);
-                    }}
+                    onClick={(e) => { e.stopPropagation(); startChat(topResult); }}
                   >
                     Join the cheer 🎉
                   </button>
@@ -970,69 +870,34 @@ const Chats = () => {
             )}
 
             <div className="section-header">
-              <span>
-                {topResult ? 'Other Results' : 'Search Results'}{' '}
-                {!isSearching &&
-                  `(${topResult ? otherResults.length : safeResults.length})`}
-              </span>
+              <span>{topResult ? 'Other Results' : 'Search Results'} {!isSearching && `(${topResult ? otherResults.length : safeResults.length})`}</span>
             </div>
+
             {isSearching ? (
               <div className="search-skeleton-wrapper">
-                <SkeletonChatItem />
-                <SkeletonChatItem />
-                <SkeletonChatItem />
+                <SkeletonChatItem /><SkeletonChatItem /><SkeletonChatItem />
               </div>
             ) : otherResults.length > 0 ? (
               otherResults.map((person) => {
                 if (!person) return null;
                 const isOnline = !!onlineUsers[person.id];
                 return (
-                  <div
-                    key={person.id}
-                    className="chat-item regular-chat-item"
-                    onClick={() => startChat(person)}
-                  >
-                    <div
-                      className="chat-avatar"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/user/${person.id}`);
-                      }}
-                    >
-                      <Avatar
-                        src={person.avatar}
-                        name={person.name}
-                        size={48}
-                      />
-                      <span
-                        className={`presence-dot ${
-                          isOnline ? 'online' : 'offline'
-                        }`}
-                      />
+                  <div key={person.id} className="chat-item regular-chat-item" onClick={() => startChat(person)}>
+                    <div className="chat-avatar" onClick={(e) => { e.stopPropagation(); navigate(`/user/${person.id}`); }}>
+                      <Avatar src={person.avatar} name={person.name} size={48} />
+                      <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
                     </div>
                     <div className="chat-info">
                       <div className="chat-title-row">
                         <span className="chat-name">{person.name}</span>
-                        {person.location && (
-                          <span className="chat-location-badge">
-                            📍 {person.location}
-                          </span>
-                        )}
+                        {person.location && <span className="chat-location-badge">📍 {person.location}</span>}
                       </div>
-                      <div className="chat-last">
-                        {person.bio ||
-                          person.status ||
-                          'Available on ECHO'}
-                      </div>
+                      <div className="chat-last">{person.bio || person.status || 'Available on ECHO'}</div>
                     </div>
                     <div className="chat-echomoji-middle">
                       <ECHOMOJI
                         mood={person.mood || 'happy'}
-                        skin={
-                          person.activeSkin
-                            ? getSkinById(person.activeSkin)
-                            : null
-                        }
+                        skin={person.activeSkin ? getSkinById(person.activeSkin) : null}
                         size={38}
                         interactive={false}
                       />
@@ -1043,46 +908,26 @@ const Chats = () => {
             ) : !topResult && safeResults.length === 0 ? (
               isDemoUser ? (
                 <div className="demo-search-empty">
-                  <div className="demo-search-icon">
-                    <i className="fas fa-user-plus" />
-                  </div>
-                  <p className="demo-search-title">
-                    Create an account to connect with others
-                  </p>
-                  <span className="demo-search-subtitle">
-                    Sign up to chat with people around the world
-                  </span>
+                  <div className="demo-search-icon"><i className="fas fa-user-plus" /></div>
+                  <p className="demo-search-title">Create an account to connect with others</p>
+                  <span className="demo-search-subtitle">Sign up to chat with people around the world</span>
                 </div>
               ) : (
                 <div className="no-chats-premium">
-                  <div className="no-chats-icon-wrapper">
-                    <i className="fas fa-user-slash" />
-                  </div>
+                  <div className="no-chats-icon-wrapper"><i className="fas fa-user-slash" /></div>
                   <p className="no-chats-title">No matching users found</p>
-                  <span className="no-chats-subtitle">
-                    Try searching for a different name, username, or location
-                  </span>
+                  <span className="no-chats-subtitle">Try searching for a different name, username, or location</span>
                 </div>
               )
             ) : null}
           </div>
         ) : (
           <div className="recent-chats">
-            <div className="section-header">
-              <span>Recent Conversations</span>
-            </div>
+            <div className="section-header"><span>Recent Conversations</span></div>
 
-            <div
-              className="chat-item ai-item floating-ai-card"
-              onClick={() => startChat(ECHO_AI_USER)}
-            >
+            <div className="chat-item ai-item floating-ai-card" onClick={() => startChat(ECHO_AI_USER)}>
               <div className="chat-avatar">
-                <img
-                  src={ECHO_AI_USER.avatar}
-                  alt="ECHO AI"
-                  className="user-profile-img"
-                  style={{ objectFit: 'cover' }}
-                />
+                <img src={ECHO_AI_USER.avatar} alt="ECHO AI" className="user-profile-img" style={{ objectFit: 'cover' }} />
                 <span className="presence-dot online" />
               </div>
               <div className="chat-info">
@@ -1095,44 +940,31 @@ const Chats = () => {
               <div className="chat-time">Always Active</div>
             </div>
 
-            {loadingChats && safeRecentChats.length === 0 ? (
+            {loadingChats && allChatsSorted.length === 0 ? (
               <SkeletonChatItem />
-            ) : safeRecentChats.length === 0 ? (
+            ) : allChatsSorted.length === 0 ? (
               <div className="no-chats-premium">
-                <div className="no-chats-icon-wrapper">
-                  <i className="fas fa-comments" />
-                </div>
+                <div className="no-chats-icon-wrapper"><i className="fas fa-comments" /></div>
                 <p className="no-chats-title">No conversations yet</p>
-                <span className="no-chats-subtitle">
-                  Search for people above to start a new chat
-                </span>
+                <span className="no-chats-subtitle">Search for people above or create a group to start chatting</span>
               </div>
             ) : (
-              safeRecentChats.map((chat) => (
-                <ChatItem
-                  key={chat.id}
-                  chat={chat}
-                  onStartChat={startChat}
-                  onLongPressStart={handleLongPressStart}
-                  onLongPressEnd={handleLongPressEnd}
-                  onLongPressCancel={handleLongPressCancel}
-                  partnerIsTyping={!!typingPartners[chat.id]}
-                />
-              ))
-            )}
-
-            {isLoadingMore && (
-              <div className="premium-status-pill">
-                <div className="pill-spinner" />
-                <span>Fetching conversations...</span>
-              </div>
-            )}
-
-            {!hasMore && safeRecentChats.length > 0 && (
-              <div className="premium-end-pill">
-                <i className="fas fa-check-circle end-icon" />
-                <span>You're all caught up</span>
-              </div>
+              allChatsSorted.map((chat) => {
+                if (chat.isGroup) {
+                  return <GroupChatItem key={chat.id} chat={chat} onStartChat={startChat} />;
+                }
+                return (
+                  <ChatItem
+                    key={chat.id}
+                    chat={chat}
+                    onStartChat={startChat}
+                    onLongPressStart={handleLongPressStart}
+                    onLongPressEnd={handleLongPressEnd}
+                    onLongPressCancel={handleLongPressCancel}
+                    partnerIsTyping={!!typingPartners[chat.id]}
+                  />
+                );
+              })
             )}
           </div>
         )}
@@ -1145,6 +977,14 @@ const Chats = () => {
             onOpenChat={(chatId) => navigate(`/chat/${chatId}`)}
           />
         )}
+
+        <NewGroupModal
+          isOpen={showNewGroup}
+          onClose={() => setShowNewGroup(false)}
+          onCreated={(groupId) => {
+            navigate(`/chat/group_${groupId}`);
+          }}
+        />
       </div>
     </>
   );
