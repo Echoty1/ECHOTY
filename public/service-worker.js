@@ -1,4 +1,118 @@
 /* eslint-disable no-restricted-globals */
+/* eslint-disable no-undef */
+
+// ─── FCM: Load Firebase compat SDKs ───────────────────────
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
+importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
+
+// ─── FCM: Initialize Firebase ─────────────────────────────
+firebase.initializeApp({
+  apiKey: 'AIzaSyCpnS3fhJJVI6csN7HoK9D0E_YA1MkChmE',
+  authDomain: 'echo-a22c3.firebaseapp.com',
+  databaseURL: 'https://echo-a22c3-default-rtdb.firebaseio.com',
+  projectId: 'echo-a22c3',
+  storageBucket: 'echo-a22c3.firebasestorage.app',
+  messagingSenderId: '405798543827',
+  appId: '1:405798543827:web:5ae9f3624a27bf2e304f26',
+});
+
+let messaging = null;
+try {
+  messaging = firebase.messaging();
+  console.log('[SW] Firebase Messaging initialized');
+} catch (err) {
+  console.warn('[SW] Firebase Messaging not available:', err);
+}
+
+// ─── FCM: Background message handler ──────────────────────
+if (messaging) {
+  messaging.onBackgroundMessage((payload) => {
+    console.log('[SW] Background message received:', payload);
+
+    const notification = payload.notification || {};
+    const data = payload.data || {};
+
+    const title = notification.title || data.title || 'New message';
+    const body = notification.body || data.body || 'You have a new message';
+
+    self.registration.showNotification(title, {
+      body,
+      icon: data.icon || '/logo192.png',
+      badge: '/logo192.png',
+      tag: data.partnerId ? `chat-${data.partnerId}` : 'echo-msg',
+      renotify: true,
+      vibrate: [200, 100, 200],
+      data: {
+        partnerId: data.partnerId || '',
+        url: data.partnerId ? `/chat/${data.partnerId}` : '/',
+      },
+    });
+  });
+}
+
+// ─── FCM: Raw push event handler (fallback if Firebase fails) ───
+self.addEventListener('push', (event) => {
+  if (!event.data) return;
+
+  // If Firebase messaging already handled it (via onBackgroundMessage),
+  // this won't fire because Firebase intercepts the push. But as a fallback:
+  try {
+    let payload;
+    try {
+      payload = event.data.json();
+    } catch {
+      payload = { notification: { title: 'New message', body: event.data.text() } };
+    }
+
+    const notification = payload.notification || {};
+    const data = payload.data || {};
+
+    const title = notification.title || data.title || 'New message';
+    const body = notification.body || data.body || 'You have a new message';
+
+    event.waitUntil(
+      self.registration.showNotification(title, {
+        body,
+        icon: data.icon || '/logo192.png',
+        badge: '/logo192.png',
+        tag: data.partnerId ? `chat-${data.partnerId}` : 'echo-msg',
+        renotify: true,
+        vibrate: [200, 100, 200],
+        data: {
+          partnerId: data.partnerId || '',
+          url: data.partnerId ? `/chat/${data.partnerId}` : '/',
+        },
+      })
+    );
+  } catch (err) {
+    console.warn('[SW] Push handler error:', err);
+  }
+});
+
+// ─── FCM: Notification click handler ──────────────────────
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close();
+  const url = (event.notification.data && event.notification.data.url) || '/';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(url);
+          return client.focus();
+        }
+      }
+      if (clients.openWindow) return clients.openWindow(url);
+    })
+  );
+});
+
+// ─── Notification close handler (badge cleanup) ───────────
+self.addEventListener('notificationclose', (event) => {
+  console.log('[SW] Notification closed:', event.notification.tag);
+});
+
+// ─── Existing caching logic (kept as-is) ──────────────────
 const CACHE_NAME = 'echo-v2-cache-v4';
 
 const PASS_THROUGH = [
