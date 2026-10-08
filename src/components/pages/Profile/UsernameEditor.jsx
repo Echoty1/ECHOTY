@@ -1,8 +1,8 @@
-// src/components/Profile/UsernameEditor.jsx
+// src/components/pages/Profile/UsernameEditor.jsx
 import React, { useState, useEffect, useRef } from 'react';
-import { hapticLight, hapticSuccess, hapticError } from '../../utils/haptics';
-import { useClaimUsername, useUsernameAvailability } from '../../hooks/useUsername';
-import { suggestAlternates } from '../../utils/usernameValidation';
+import { hapticLight, hapticSuccess, hapticError } from '../../../utils/haptics';
+import { useClaimUsername, useUsernameAvailability } from '../../../hooks/useUsername';
+import { suggestAlternates } from '../../../utils/usernameValidation';
 import './UsernameEditor.css';
 
 const UsernameEditor = ({ uid, currentUsername, isOpen, onClose }) => {
