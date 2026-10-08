@@ -1,0 +1,262 @@
+/* src/components/Profile/UsernameEditor.css */
+
+.username-editor-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9000;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: usernameOverlayIn 0.22s ease both;
+}
+
+@keyframes usernameOverlayIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.username-editor-sheet {
+  width: 100%;
+  max-width: 480px;
+  background: var(--bg-card, #16121e);
+  border-radius: 28px 28px 0 0;
+  padding: 8px 24px 32px;
+  box-shadow: 0 -20px 60px rgba(0, 0, 0, 0.5);
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  border-bottom: none;
+  animation: usernameSheetIn 0.32s cubic-bezier(0.2, 1.15, 0.4, 1) both;
+  position: relative;
+}
+
+@keyframes usernameSheetIn {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
+}
+
+.username-editor-handle {
+  width: 40px;
+  height: 4px;
+  background: var(--border-color, rgba(255,255,255,0.15));
+  border-radius: 999px;
+  margin: 8px auto 20px;
+}
+
+.username-editor-header h2 {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text-primary, #fff);
+  margin: 0 0 6px;
+  letter-spacing: -0.3px;
+}
+
+.username-editor-header p {
+  font-size: 14px;
+  color: var(--text-secondary, rgba(255,255,255,0.6));
+  margin: 0 0 24px;
+  line-height: 1.5;
+}
+
+.username-editor-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--bg-input, rgba(255,255,255,0.04));
+  border: 2px solid var(--border-color, rgba(255,255,255,0.1));
+  border-radius: 16px;
+  padding: 4px 16px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.username-editor-input-wrap:focus-within {
+  border-color: #6C3CE1;
+  box-shadow: 0 0 0 4px rgba(108, 60, 225, 0.15);
+}
+
+.username-editor-prefix {
+  font-size: 20px;
+  font-weight: 700;
+  color: #6C3CE1;
+  margin-right: 4px;
+}
+
+.username-editor-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  color: var(--text-primary, #fff);
+  font-size: 18px;
+  font-weight: 600;
+  padding: 14px 0;
+  letter-spacing: 0.3px;
+}
+
+.username-editor-input::placeholder {
+  color: var(--text-muted, rgba(255,255,255,0.3));
+  font-weight: 500;
+}
+
+.username-editor-length {
+  font-size: 11px;
+  color: var(--text-muted, rgba(255,255,255,0.4));
+  font-weight: 600;
+}
+
+.username-editor-status {
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  display: inline-block;
+}
+
+.username-editor-status.checking {
+  color: var(--text-secondary, rgba(255,255,255,0.6));
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.username-editor-status.available {
+  color: #10B981;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.username-editor-status.taken,
+.username-editor-status.invalid {
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.username-editor-status.idle {
+  color: var(--text-muted, rgba(255,255,255,0.5));
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.username-editor-suggestions {
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-color, rgba(255,255,255,0.06));
+}
+
+.username-editor-suggestions-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--text-muted, rgba(255,255,255,0.5));
+  margin-bottom: 10px;
+}
+
+.username-editor-suggestions-list {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.username-editor-suggestion {
+  background: var(--bg-input, rgba(255,255,255,0.04));
+  border: 1px solid var(--border-color, rgba(255,255,255,0.1));
+  color: var(--text-primary, #fff);
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.username-editor-suggestion:hover {
+  border-color: #6C3CE1;
+  background: rgba(108, 60, 225, 0.1);
+  transform: translateY(-1px);
+}
+
+.username-editor-rules {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  margin-top: 18px;
+  padding: 12px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--text-muted, rgba(255,255,255,0.5));
+  font-weight: 500;
+}
+
+.username-editor-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.username-editor-btn {
+  flex: 1;
+  padding: 14px;
+  border-radius: 14px;
+  border: none;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.username-editor-btn.cancel {
+  background: var(--bg-input, rgba(255,255,255,0.04));
+  color: var(--text-secondary, rgba(255,255,255,0.6));
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+}
+
+.username-editor-btn.cancel:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.username-editor-btn.primary {
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  box-shadow: 0 8px 24px rgba(108, 60, 225, 0.35);
+}
+
+.username-editor-btn.primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 28px rgba(108, 60, 225, 0.45);
+}
+
+.username-editor-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* Light mode */
+html.theme-light .username-editor-sheet {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.08);
+}
+
+html.theme-light .username-editor-header h2 { color: #111; }
+html.theme-light .username-editor-header p { color: rgba(0, 0, 0, 0.6); }
+html.theme-light .username-editor-input-wrap {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+html.theme-light .username-editor-input { color: #111; }
+html.theme-light .username-editor-suggestion {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: #111;
+}
+html.theme-light .username-editor-rules {
+  background: rgba(0, 0, 0, 0.03);
+  color: rgba(0, 0, 0, 0.6);
+}
+html.theme-light .username-editor-btn.cancel {
+  background: rgba(0, 0, 0, 0.05);
+  color: rgba(0, 0, 0, 0.6);
+  border-color: rgba(0, 0, 0, 0.08);
+}
