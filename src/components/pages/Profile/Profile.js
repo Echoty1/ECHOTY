@@ -18,6 +18,8 @@ import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import { listenToMyEchowers, listenToMyEchowerCount } from '../../../services/echowerService';
 import AvatarCustomizer from './AvatarCustomizer';
+import UsernameEditor from '../../Profile/UsernameEditor';
+import UsernamePill from '../../common/UsernamePill';
 import './Profile.css';
 
 const STORAGE_PREFIX = 'echo_cache_';
@@ -55,16 +57,7 @@ const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 const DEFAULT_INTEREST_TEMPLATES = [
-  'Gaming',
-  'Music',
-  'Tech',
-  'Movies',
-  'Art',
-  'Anime',
-  'Fitness',
-  'Photography',
-  'Travel',
-  'Coding',
+  'Gaming', 'Music', 'Tech', 'Movies', 'Art', 'Anime', 'Fitness', 'Photography', 'Travel', 'Coding',
 ];
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
@@ -80,6 +73,7 @@ const Profile = () => {
   const [showGifLibrary, setShowGifLibrary] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [showAvatarCustomizer, setShowAvatarCustomizer] = useState(false);
+  const [showUsernameEditor, setShowUsernameEditor] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
   const [copiedUid, setCopiedUid] = useState(false);
@@ -679,6 +673,12 @@ const Profile = () => {
               <div className="profile-name">{profile?.name || 'User'}</div>
             )}
 
+            {!editing && !loading && profile?.username && (
+              <div style={{ marginTop: 4, marginBottom: 6, display: 'flex', justifyContent: 'center' }}>
+                <UsernamePill uid={user?.uid} username={profile.username} size="md" />
+              </div>
+            )}
+
             {!editing && !loading && (
               <div className="profile-meta">
                 <span className="member-since">
@@ -845,26 +845,40 @@ const Profile = () => {
                 </React.Fragment>
               )
             ) : (
-              <button
-                className="edit-btn"
-                onClick={() => {
-                  if (isDemoUser) {
-                    setShowAvatarPicker(true);
-                  } else {
-                    setEditing(true);
-                  }
-                }}
-              >
-                {isDemoUser ? (
-                  <React.Fragment>
-                    <i className="fas fa-image" /> Change Avatar
-                  </React.Fragment>
-                ) : (
-                  <React.Fragment>
-                    <i className="fas fa-pen" /> Edit Profile
-                  </React.Fragment>
-                )}
-              </button>
+              <React.Fragment>
+                <button
+                  type="button"
+                  className="edit-btn"
+                  onClick={() => setShowUsernameEditor(true)}
+                  style={{
+                    background: 'transparent',
+                    border: '1.5px solid #6C3CE1',
+                    color: '#6C3CE1',
+                  }}
+                >
+                  <i className="fas fa-at" /> {profile?.username ? 'Change @handle' : 'Set @handle'}
+                </button>
+                <button
+                  className="edit-btn"
+                  onClick={() => {
+                    if (isDemoUser) {
+                      setShowAvatarPicker(true);
+                    } else {
+                      setEditing(true);
+                    }
+                  }}
+                >
+                  {isDemoUser ? (
+                    <React.Fragment>
+                      <i className="fas fa-image" /> Change Avatar
+                    </React.Fragment>
+                  ) : (
+                    <React.Fragment>
+                      <i className="fas fa-pen" /> Edit Profile
+                    </React.Fragment>
+                  )}
+                </button>
+              </React.Fragment>
             )}
           </div>
         </div>
@@ -922,6 +936,14 @@ const Profile = () => {
           ownedGifs={unlockedGifs}
           mode="profile"
         />
+
+        <UsernameEditor
+          uid={user?.uid}
+          currentUsername={profile?.username}
+          isOpen={showUsernameEditor}
+          onClose={() => setShowUsernameEditor(false)}
+        />
+
         {toast && (
           <Toast
             type={toast.type}
