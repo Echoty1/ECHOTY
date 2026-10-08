@@ -14,6 +14,7 @@ import NotificationModal from '../common/NotificationModal';
 import ConfirmModal from '../common/ConfirmModal';
 import { useUserPresence } from '../../hooks/usePresence';
 import { formatLastSeen } from '../../utils/formatLastSeen';
+import { isGroupChatId, chatIdToGroupId } from '../../utils/groupId';
 
 const ECHO_AI_GIF = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
 
@@ -72,6 +73,23 @@ const Navbar = memo(() => {
   const isEchoAiRoute = targetUserId === 'echo_ai_assistant';
   const isCommunityRoute = location.pathname.startsWith('/community/');
   const communityId = isCommunityRoute ? pathParts[2] : null;
+
+  // ─── Group detection ────────────────────────────────────────
+  const isGroupChat = isChatRoute && isGroupChatId(targetUserId);
+  const groupId = isGroupChat ? chatIdToGroupId(targetUserId) : null;
+  const [groupData, setGroupData] = useState(null);
+
+  useEffect(() => {
+    if (!isGroupChat || !groupId) {
+      setGroupData(null);
+      return;
+    }
+    const groupRef = ref(db, `groups/${groupId}`);
+    const unsub = onValue(groupRef, (snap) => {
+      setGroupData(snap.exists() ? { id: groupId, ...snap.val() } : null);
+    });
+    return () => unsub();
+  }, [isGroupChat, groupId]);
 
   // ─── Pages that need a back button ──────────────────────────
   const isProfileRoute = location.pathname === '/profile';
@@ -258,58 +276,69 @@ const Navbar = memo(() => {
   }, [user?.uid, fetchProfile]);
 
   useEffect(() => {
-    if (isChatRoute && targetUserId && !isEchoAiRoute) {
+    // Only fetch partner profile for 1-1 chats, not groups
+    if (isChatRoute && targetUserId && !isEchoAiRoute && !isGroupChat) {
       const cleanup = fetchProfile(targetUserId);
       return () => {
         if (typeof cleanup === 'function') cleanup();
       };
     }
-  }, [isChatRoute, targetUserId, isEchoAiRoute, fetchProfile]);
+  }, [isChatRoute, targetUserId, isEchoAiRoute, isGroupChat, fetchProfile]);
 
-  const targetProfile = isChatRoute && targetUserId && !isEchoAiRoute
+  const targetProfile = isChatRoute && targetUserId && !isEchoAiRoute && !isGroupChat
     ? getProfile(targetUserId)
     : null;
 
   const ownProfile = user?.uid ? getProfile(user.uid) : null;
 
-  const chatAvatar = isEchoAiRoute
-    ? ECHO_AI_GIF
-    : location.state?.userAvatar || targetProfile?.avatar || '';
+  // ─── Header display data ─────────────────────────────────────
+  let chatAvatar = '';
+  let chatName = 'User';
+  let statusText = '';
+  let statusColor = '#6B7280';
+  let partnerMood = 'happy';
+  let partnerSkin = null;
 
-  const chatName = isEchoAiRoute
-    ? 'ECHO AI'
-    : sanitizeName(location.state?.userName || targetProfile?.name, targetUserId);
+  if (isEchoAiRoute) {
+    chatAvatar = ECHO_AI_GIF;
+    chatName = 'ECHO AI';
+    statusText = 'AI Assistant';
+    statusColor = '#a78bfa';
+  } else if (isGroupChat) {
+    chatAvatar = groupData?.emoji || '';
+    chatName = groupData?.name || 'Group';
+    const memberCount = groupData?.members ? Object.keys(groupData.members).length : 0;
+    statusText = `${memberCount} member${memberCount !== 1 ? 's' : ''}`;
+    statusColor = '#A78BFA';
+  } else {
+    chatAvatar = location.state?.userAvatar || targetProfile?.avatar || '';
+    chatName = sanitizeName(location.state?.userName || targetProfile?.name, targetUserId);
+    partnerMood = targetProfile?.mood || 'happy';
+    const partnerSkinId = targetProfile?.activeSkin || null;
+    partnerSkin = partnerSkinId ? getSkinById(partnerSkinId) : null;
+  }
 
   useEffect(() => {
-    if (chatAvatar) {
+    if (chatAvatar && chatAvatar.startsWith('http')) {
       preloadMedia(chatAvatar);
     }
   }, [chatAvatar]);
 
-  // ─── Live presence (falls back to ProfileContext online flag) ────
+  // ─── Live presence (1-1 only) ────────────────────────────────
   const partnerPresence = useUserPresence(
-    isChatRoute && targetUserId && !isEchoAiRoute ? targetUserId : null
+    isChatRoute && targetUserId && !isEchoAiRoute && !isGroupChat ? targetUserId : null
   );
 
   const isTargetOnline = isEchoAiRoute
     ? true
     : (partnerPresence?.online === true) || (targetUserId ? isOnline(targetUserId) : false);
 
-  const statusText = isEchoAiRoute
-    ? 'AI Assistant'
-    : (partnerPresence
-        ? formatLastSeen(partnerPresence)
-        : (isTargetOnline ? 'Online' : 'Offline'));
-
-  const statusColor = isEchoAiRoute
-    ? '#a78bfa'
-    : isTargetOnline
-    ? '#10B981'
-    : '#6B7280';
-
-  const partnerMood = targetProfile?.mood || 'happy';
-  const partnerSkinId = targetProfile?.activeSkin || null;
-  const partnerSkin = partnerSkinId ? getSkinById(partnerSkinId) : null;
+  if (!isEchoAiRoute && !isGroupChat) {
+    statusText = partnerPresence
+      ? formatLastSeen(partnerPresence)
+      : (isTargetOnline ? 'Online' : 'Offline');
+    statusColor = isTargetOnline ? '#10B981' : '#6B7280';
+  }
 
   const ownSkin = ownProfile?.activeSkin ? getSkinById(ownProfile.activeSkin) : null;
   const ownName = sanitizeName(ownProfile?.name || ownProfile?.displayName || 'User', user?.uid);
@@ -320,9 +349,13 @@ const Navbar = memo(() => {
     }
   };
 
-  // ─── Open the partner's profile ─────────────────────────────────
+  // ─── Open the partner's profile OR group info ───────────────
   const openPartnerProfile = () => {
     if (!isChatRoute || !targetUserId || isEchoAiRoute) return;
+    if (isGroupChat) {
+      navigate(`/group/${targetUserId}/info`);
+      return;
+    }
     navigate(`/user/${targetUserId}`);
   };
 
@@ -461,7 +494,13 @@ const Navbar = memo(() => {
           <div
             role={isEchoAiRoute ? undefined : 'button'}
             tabIndex={isEchoAiRoute ? -1 : 0}
-            aria-label={isEchoAiRoute ? undefined : `Open ${chatName}'s profile`}
+            aria-label={
+              isEchoAiRoute
+                ? undefined
+                : isGroupChat
+                  ? `Open ${chatName} info`
+                  : `Open ${chatName}'s profile`
+            }
             onClick={isEchoAiRoute ? undefined : openPartnerProfile}
             onKeyDown={(e) => {
               if (isEchoAiRoute) return;
@@ -515,10 +554,15 @@ const Navbar = memo(() => {
                 border: '1px solid var(--border-color)',
                 flexShrink: 0,
                 position: 'relative',
+                background: isGroupChat ? 'linear-gradient(135deg, rgba(108,60,225,0.28), rgba(236,72,153,0.24))' : 'transparent',
               }}
             >
-              <Avatar src={chatAvatar} name={chatName} size={32} />
-              {partnerSkin && (
+              {isGroupChat ? (
+                <span style={{ fontSize: '18px', lineHeight: 1 }}>{chatAvatar || '👥'}</span>
+              ) : (
+                <Avatar src={chatAvatar} name={chatName} size={32} />
+              )}
+              {partnerSkin && !isGroupChat && (
                 <div
                   style={{
                     position: 'absolute',
@@ -561,13 +605,15 @@ const Navbar = memo(() => {
                 >
                   {chatName}
                 </span>
-                <ECHOMOJI
-                  mood={partnerMood}
-                  skin={partnerSkin}
-                  size={16}
-                  interactive={false}
-                  animated={false}
-                />
+                {!isGroupChat && (
+                  <ECHOMOJI
+                    mood={partnerMood}
+                    skin={partnerSkin}
+                    size={16}
+                    interactive={false}
+                    animated={false}
+                  />
+                )}
               </div>
               <span
                 style={{
@@ -665,7 +711,40 @@ const Navbar = memo(() => {
         marginLeft: 0,
         marginTop: 0,
       }}>
-        {isChatRoute && targetUserId && !isEchoAiRoute && isTargetOnline && (
+        {/* Group info button (only for group chats) */}
+        {isChatRoute && isGroupChat && !isEchoAiRoute && (
+          <button
+            onClick={() => navigate(`/group/${targetUserId}/info`)}
+            title="Group info"
+            aria-label="Group info"
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-secondary)',
+              fontSize: '18px',
+              cursor: 'pointer',
+              padding: '4px 8px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              borderRadius: '6px',
+              transition: 'background 0.2s, color 0.2s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+              e.currentTarget.style.color = '#6C3CE1';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'none';
+              e.currentTarget.style.color = 'var(--text-secondary)';
+            }}
+          >
+            <i className="fas fa-info-circle" />
+          </button>
+        )}
+
+        {/* Video call button – only for 1-1 chats, not groups */}
+        {isChatRoute && targetUserId && !isEchoAiRoute && !isGroupChat && isTargetOnline && (
           <button
             onClick={() => startVideoCall(targetUserId, chatName, chatAvatar)}
             style={{
@@ -986,6 +1065,5 @@ const Navbar = memo(() => {
     </nav>
   );
 });
-
 
 export default Navbar;
