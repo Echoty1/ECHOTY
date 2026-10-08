@@ -50,7 +50,8 @@ import { useUserPresence } from '../../../hooks/usePresence';
 import { formatLastSeen } from '../../../utils/formatLastSeen';
 import { isBlocked as checkIsBlocked, unblockUser } from '../../../services/blockService';
 import { sendPushToUser } from '../../../services/fcmService';
-import { hapticSend, hapticLight } from '../../../utils/haptics'; // ← NEW
+import { hapticSend, hapticLight } from '../../../utils/haptics';
+import { isGroupChatId, chatIdToGroupId } from '../../../utils/groupId';
 import './ChatView.css';
 
 // ─── Link preview imports ──────────────────────────────────────
@@ -310,6 +311,32 @@ const ChatView = () => {
   const sendButtonRef = useRef(null);
   const noteReplyContext = useRef(null);
 
+  // ─── Group detection ─────────────────────────────────────────
+  const isGroupChat = isGroupChatId(userId);
+  const groupIdFromChat = isGroupChat ? chatIdToGroupId(userId) : null;
+  const [groupData, setGroupData] = useState(null);
+
+  useEffect(() => {
+    if (isGroupChat && groupIdFromChat) {
+      const groupRef = ref(db, `groups/${groupIdFromChat}`);
+      const unsub = onValue(groupRef, (snap) => {
+        setGroupData(snap.exists() ? { id: groupIdFromChat, ...snap.val() } : null);
+      });
+      return () => unsub();
+    }
+    // Regular 1-1 chat path
+    if (!userId) return;
+    const cached = getProfile(userId);
+    if (cached) setPartnerProfile(cached);
+    else fetchProfile(userId);
+    const pRef = ref(db, `profiles/${userId}`);
+    const unsub = onValue(pRef, (snap) => { if (snap.exists()) setPartnerProfile(snap.val()); });
+    return () => unsub();
+  }, [userId, getProfile, fetchProfile, isGroupChat, groupIdFromChat]);
+
+  // ─── Group messages come from /groups/{groupId}/messages ─────
+  // For 1-1 chats, messages come from /chats/{chatId}/messages
+
   useEffect(() => {
     const t = setTimeout(() => setLoadingMessages(false), 1200);
     return () => clearTimeout(t);
@@ -397,8 +424,9 @@ const ChatView = () => {
 
   useEffect(() => () => { noteReplyContext.current = null; }, [userId]);
 
+  // ─── Typing indicator (1-1 only) ─────────────────────────────
   useEffect(() => {
-    if (!user?.uid || !userId) return;
+    if (!user?.uid || !userId || isGroupChat) return;
     const cId = [user.uid, userId].sort().join('_');
     const typingRef = ref(db, `chats/${cId}/typing/${userId}`);
     const checkTyping = (data) => {
@@ -411,39 +439,41 @@ const ChatView = () => {
       get(typingRef).then((snap) => checkTyping(snap.val())).catch(() => {});
     }, 2000);
     return () => { unsub(); clearInterval(interval); };
-  }, [user?.uid, userId]);
+  }, [user?.uid, userId, isGroupChat]);
 
+  // ─── Wallpaper (1-1 only) ────────────────────────────────────
   useEffect(() => {
-    if (!user?.uid || !userId) return;
+    if (!user?.uid || !userId || isGroupChat) return;
     const cId = [user.uid, userId].sort().join('_');
     const wpRef = ref(db, `chats/${cId}/wallpaper`);
     const cwRef = ref(db, `chats/${cId}/customWallpaper`);
     const unsubWp = onValue(wpRef, (snap) => setWallpaperId(snap.val() || 'default'));
     const unsubCw = onValue(cwRef, (snap) => setCustomWallpaper(snap.val() || null));
     return () => { unsubWp(); unsubCw(); };
-  }, [user?.uid, userId]);
+  }, [user?.uid, userId, isGroupChat]);
 
+  // ─── Pinned message ──────────────────────────────────────────
   useEffect(() => {
     if (!user?.uid || !userId) return;
-    const cId = [user.uid, userId].sort().join('_');
+    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
     const pinRef = ref(db, `chats/${cId}/pinnedMessageId`);
     const unsub = onValue(pinRef, (snap) => setPinnedMessageId(snap.val() || null));
     return () => unsub();
-  }, [user?.uid, userId]);
+  }, [user?.uid, userId, isGroupChat]);
 
   useEffect(() => {
-    if (!user?.uid || !userId) return undefined;
+    if (!user?.uid || !userId || isGroupChat) return undefined;
     let mounted = true;
     checkIsBlocked(user.uid, userId)
       .then((v) => { if (mounted) setBlockedByMe(!!v); })
       .catch(() => {});
     return () => { mounted = false; };
-  }, [user?.uid, userId]);
+  }, [user?.uid, userId, isGroupChat]);
 
   const handleWallpaperSelect = async (id) => {
     setWallpaperId(id);
     try {
-      const cId = [user.uid, userId].sort().join('_');
+      const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
       await update(ref(db, `chats/${cId}`), { wallpaper: id });
     } catch (err) { console.error('Failed to save wallpaper', err); }
   };
@@ -452,7 +482,7 @@ const ChatView = () => {
     setCustomWallpaper(url);
     setWallpaperId('__custom__');
     try {
-      const cId = [user.uid, userId].sort().join('_');
+      const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
       await update(ref(db, `chats/${cId}`), { wallpaper: '__custom__', customWallpaper: url });
     } catch (err) { console.error('Failed to save custom wallpaper', err); }
   };
@@ -467,13 +497,14 @@ const ChatView = () => {
     });
     if (gone.length && cId) {
       const updates = {};
+      const prefix = isGroupChat ? `groups/${groupIdFromChat}` : `chats/${cId}`;
       gone.forEach((m) => {
         if (m.id && !String(m.id).startsWith('temp_')) {
-          updates[`chats/${cId}/messages/${m.id}`] = null;
+          updates[`${prefix}/messages/${m.id}`] = null;
           deleteMessageFromCache(cId, m.id).catch(() => {});
         }
       });
-      if (keep.length === 0 && user?.uid && userId) {
+      if (keep.length === 0 && user?.uid && userId && !isGroupChat) {
         updates[`userChats/${user.uid}/${userId}/lastMessage`] = 'Start chatting...';
         updates[`userChats/${userId}/${user.uid}/lastMessage`] = 'Start chatting...';
       }
@@ -490,7 +521,7 @@ const ChatView = () => {
   };
 
   const patchMyUserChat = async (partnerId, fields) => {
-    if (!user?.uid || !partnerId) return;
+    if (!user?.uid || !partnerId || isGroupChat) return;
     await update(ref(db, `userChats/${user.uid}/${partnerId}`), { id: partnerId, ...fields });
   };
 
@@ -505,9 +536,10 @@ const ChatView = () => {
   const markMessagesAsRead = async () => {
     if (!user?.uid || !userId) return;
     if (!sendReadReceipts) return;
-    const cId = [user.uid, userId].sort().join('_');
+    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
+    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${cId}/messages`;
     try {
-      const messagesRef = ref(db, `chats/${cId}/messages`);
+      const messagesRef = ref(db, msgRoot);
       const snapshot = await get(messagesRef);
       if (!snapshot.exists()) return;
       const data = snapshot.val();
@@ -528,17 +560,27 @@ const ChatView = () => {
         latestTimestamp = latest.timestamp || Date.now();
       }
 
-      msgs.forEach((msg) => {
-        if (msg.receiverId === user.uid && msg.isRead === false) {
-          updates[`chats/${cId}/messages/${msg.key}/isRead`] = true;
-          updates[`chats/${cId}/messages/${msg.key}/readAt`] = Date.now();
-          updates[`chats/${cId}/messages/${msg.key}/expiresAt`] = privateExpiresAt(Date.now(), tideTTL);
-          hasUnread = true;
-        }
-      });
-      if (!hasUnread) return;
-      await update(ref(db), updates);
-      await patchMyUserChat(userId, { partnerName: partnerProfile?.name || location.state?.userName || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: latestMsg, lastSenderId: latestSender, lastUpdated: latestTimestamp, unreadCount: 0 });
+      if (isGroupChat) {
+        // For groups, we only update userChats read count (no per-message read)
+        await update(ref(db, `userChats/${user.uid}/${userId}`), {
+          lastMessage: latestMsg,
+          lastSenderId: latestSender,
+          lastUpdated: latestTimestamp,
+          unreadCount: 0,
+        }).catch(() => {});
+      } else {
+        msgs.forEach((msg) => {
+          if (msg.receiverId === user.uid && msg.isRead === false) {
+            updates[`chats/${cId}/messages/${msg.key}/isRead`] = true;
+            updates[`chats/${cId}/messages/${msg.key}/readAt`] = Date.now();
+            updates[`chats/${cId}/messages/${msg.key}/expiresAt`] = privateExpiresAt(Date.now(), tideTTL);
+            hasUnread = true;
+          }
+        });
+        if (!hasUnread) return;
+        await update(ref(db), updates);
+        await patchMyUserChat(userId, { partnerName: partnerProfile?.name || location.state?.userName || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: latestMsg, lastSenderId: latestSender, lastUpdated: latestTimestamp, unreadCount: 0 });
+      }
       window.dispatchEvent(new CustomEvent('chat-unread-cleared', { detail: { partnerId: userId } }));
       clearMessageCache(cId);
     } catch (err) { console.warn('⚠️ [Unread] markMessagesAsRead error:', err.message); }
@@ -576,6 +618,7 @@ const ChatView = () => {
   const handleTyping = useCallback(() => {
     if (!user?.uid || !userId) return;
     if (!showTyping) return;
+    if (isGroupChat) return; // no typing for groups yet
     const cId = [user.uid, userId].sort().join('_');
     const typingRef = ref(db, `chats/${cId}/typing/${user.uid}`);
     set(typingRef, { isTyping: true, timestamp: Date.now() }).catch(() => {});
@@ -583,14 +626,15 @@ const ChatView = () => {
     typingTimeoutRef.current = setTimeout(() => {
       set(typingRef, { isTyping: false, timestamp: Date.now() }).catch(() => {});
     }, 2500);
-  }, [user?.uid, userId, showTyping]);
+  }, [user?.uid, userId, showTyping, isGroupChat]);
 
   const clearMyTyping = useCallback(() => {
     if (!user?.uid || !userId) return;
+    if (isGroupChat) return;
     const cId = [user.uid, userId].sort().join('_');
     const typingRef = ref(db, `chats/${cId}/typing/${user.uid}`);
     set(typingRef, { isTyping: false, timestamp: Date.now() }).catch(() => {});
-  }, [user?.uid, userId]);
+  }, [user?.uid, userId, isGroupChat]);
 
   useEffect(() => () => { clearMyTyping(); }, [clearMyTyping]);
 
@@ -699,12 +743,13 @@ const ChatView = () => {
       }
     }
   };
-    const handleSendText = async (e) => {
+
+  const handleSendText = async (e) => {
     e?.preventDefault?.();
     const textToSend = (typeof e === 'string' ? e : newMessage).trim();
     if (!textToSend || !user?.uid || !userId) return;
 
-    hapticSend(); // ← NEW
+    hapticSend();
     setHaloActive(false);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     clearMyTyping();
@@ -715,22 +760,47 @@ const ChatView = () => {
     setReplyTo(null);
     setReplyToNote(null);
 
-    if (ended) {
-      try { await remove(ref(db, `chats/${[user.uid, userId].sort().join('_')}/ended`)); setEnded(false); } catch (_) {}
+    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
+    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${cId}/messages`;
+    const userChatKey = isGroupChat ? `${user.uid}/${userId}` : null;
+
+    if (!isGroupChat && ended) {
+      try { await remove(ref(db, `chats/${cId}/ended`)); setEnded(false); } catch (_) {}
     }
 
-    const cId = [user.uid, userId].sort().join('_');
     const tempId = `temp_${Date.now()}`;
-    const optimisticMsg = { id: tempId, senderId: user.uid, receiverId: userId, type: 'text', text: textToSend, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(Date.now(), tideTTL), pending: true };
+    const optimisticMsg = {
+      id: tempId,
+      senderId: user.uid,
+      receiverId: isGroupChat ? null : userId,
+      type: 'text',
+      text: textToSend,
+      timestamp: Date.now(),
+      isRead: false,
+      expiresAt: privateExpiresAt(Date.now(), tideTTL),
+      pending: true,
+      senderName: currentUserProfile?.name || user.displayName || 'User',
+      senderAvatar: currentUserProfile?.avatar || '',
+    };
     if (replyToSave) optimisticMsg.replyTo = { messageId: replyToSave.messageId, senderName: replyToSave.senderName, messageType: replyToSave.messageType, textSnippet: replyToSave.textSnippet };
     if (currentNoteReply) optimisticMsg.replyToNote = { ...currentNoteReply };
     setMessages((prev) => sortMessages([...prev, optimisticMsg]));
     prevMsgCountRef.current += 1;
     if (isNearBottomRef.current) requestAnimationFrame(() => scrollToBottom(true));
 
-    const messagesRef = ref(db, `chats/${cId}/messages`);
-    const newMsgRef = push(messagesRef);
-    const msgData = { senderId: user.uid, receiverId: userId, type: 'text', text: textToSend, timestamp: Date.now(), clientTs: Date.now(), isRead: false, expiresAt: privateExpiresAt(Date.now(), tideTTL) };
+    const newMsgRef = push(ref(db, msgRoot));
+    const msgData = {
+      senderId: user.uid,
+      receiverId: isGroupChat ? null : userId,
+      type: 'text',
+      text: textToSend,
+      timestamp: Date.now(),
+      clientTs: Date.now(),
+      isRead: false,
+      expiresAt: privateExpiresAt(Date.now(), tideTTL),
+      senderName: currentUserProfile?.name || user.displayName || 'User',
+      senderAvatar: currentUserProfile?.avatar || '',
+    };
     if (replyToSave) msgData.replyTo = { messageId: replyToSave.messageId, senderName: replyToSave.senderName, messageType: replyToSave.messageType, textSnippet: replyToSave.textSnippet };
     if (currentNoteReply) msgData.replyToNote = { ...currentNoteReply };
 
@@ -741,7 +811,7 @@ const ChatView = () => {
       fetchLinkPreview(detectedUrl)
         .then((preview) => {
           if (!preview) return;
-          update(ref(db, `chats/${cId}/messages/${newMsgRef.key}`), { linkPreview: preview }).catch(() => {});
+          update(ref(db, `${msgRoot}/${newMsgRef.key}`), { linkPreview: preview }).catch(() => {});
         })
         .catch(() => {});
     }
@@ -751,49 +821,92 @@ const ChatView = () => {
     flashSent(newMsgRef.key);
     if (getSoundEnabled()) playSentSound();
 
-    if (userId === ECHO_AI_ID) {
-      setIsAILoading(true);
-      try {
-        const token = await auth.currentUser?.getIdToken?.();
-        const headers = { 'Content-Type': 'application/json' };
-        if (token) headers.Authorization = `Bearer ${token}`;
-        const response = await fetch(apiUrl('/api/chat'), { method: 'POST', headers, body: JSON.stringify({ message: textToSend, userId: user.uid }) });
-        if (!response.ok) throw new Error('AI request failed');
-        const data = await response.json();
-        if (data.reply) setMessages((prev) => sortMessages(prev.concat({ id: `ai_${Date.now()}`, senderId: ECHO_AI_ID, text: data.reply, timestamp: Date.now(), type: 'text' })));
-      } catch (err) {
-        setMessages((prev) => sortMessages(prev.concat({ id: `ai_err_${Date.now()}`, senderId: ECHO_AI_ID, text: 'ECHO AI could not reply. Check that the backend is running.', timestamp: Date.now(), type: 'text' })));
-      } finally { setIsAILoading(false); }
-    }
+    // Update userChats (for both 1-1 and group)
+    if (isGroupChat) {
+      // Update group metadata
+      update(ref(db, `groups/${groupIdFromChat}`), {
+        lastMessage: textToSend,
+        lastSenderId: user.uid,
+        lastUpdated: Date.now(),
+      }).catch(() => {});
 
-    await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: textToSend, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
-    notifyChatListUpdate(userId, { lastMessage: `You: ${textToSend}`.slice(0, 40), lastSenderId: user.uid, timestamp: Date.now(), unreadCount: 0 });
+      // Bump unread count for all members except the sender
+      if (groupData?.members) {
+        const memberUids = Object.keys(groupData.members);
+        const updates = {};
+        memberUids.forEach((uid) => {
+          if (uid !== user.uid) {
+            const userChatPath = `userChats/${uid}/${userId}`;
+            // Increment unread via transaction per member
+            runTransaction(ref(db, userChatPath), (currentData) => {
+              if (currentData === null) {
+                return {
+                  id: userId,
+                  groupId: groupIdFromChat,
+                  isGroup: true,
+                  partnerName: groupData.name || 'Group',
+                  partnerAvatar: groupData.emoji || '👥',
+                  lastMessage: `${currentUserProfile?.name || 'User'}: ${textToSend}`,
+                  lastSenderId: user.uid,
+                  lastUpdated: Date.now(),
+                  unreadCount: 1,
+                };
+              }
+              currentData.unreadCount = (currentData.unreadCount || 0) + 1;
+              currentData.lastMessage = `${currentUserProfile?.name || 'User'}: ${textToSend}`;
+              currentData.lastSenderId = user.uid;
+              currentData.lastUpdated = Date.now();
+              return currentData;
+            }).catch(() => {});
+          }
+        });
+      }
+    } else {
+      // 1-1 chat
+      if (userId === ECHO_AI_ID) {
+        setIsAILoading(true);
+        try {
+          const token = await auth.currentUser?.getIdToken?.();
+          const headers = { 'Content-Type': 'application/json' };
+          if (token) headers.Authorization = `Bearer ${token}`;
+          const response = await fetch(apiUrl('/api/chat'), { method: 'POST', headers, body: JSON.stringify({ message: textToSend, userId: user.uid }) });
+          if (!response.ok) throw new Error('AI request failed');
+          const data = await response.json();
+          if (data.reply) setMessages((prev) => sortMessages(prev.concat({ id: `ai_${Date.now()}`, senderId: ECHO_AI_ID, text: data.reply, timestamp: Date.now(), type: 'text' })));
+        } catch (err) {
+          setMessages((prev) => sortMessages(prev.concat({ id: `ai_err_${Date.now()}`, senderId: ECHO_AI_ID, text: 'ECHO AI could not reply. Check that the backend is running.', timestamp: Date.now(), type: 'text' })));
+        } finally { setIsAILoading(false); }
+      }
 
-    const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
-    await runTransaction(recipientChatRef, (currentData) => {
-      if (currentData === null) return { id: user.uid, partnerName: currentUserProfile?.name || 'User', partnerAvatar: currentUserProfile?.avatar || '', lastMessage: textToSend, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 1 };
-      currentData.unreadCount = (currentData.unreadCount || 0) + 1;
-      currentData.lastMessage = textToSend;
-      currentData.lastSenderId = user.uid;
-      currentData.lastUpdated = Date.now();
-      return currentData;
-    });
-    clearMessageCache(cId);
+      await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: textToSend, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
+      notifyChatListUpdate(userId, { lastMessage: `You: ${textToSend}`.slice(0, 40), lastSenderId: user.uid, timestamp: Date.now(), unreadCount: 0 });
 
-    // 🔔 Fire push notification to recipient (skip AI)
-    if (userId !== ECHO_AI_ID) {
-      sendPushToUser({
-        recipientUid: userId,
-        title: currentUserProfile?.name || user.displayName || 'ECHO',
-        body: textToSend.slice(0, 120),
-        data: {
-          partnerId: user.uid,
+      const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+      await runTransaction(recipientChatRef, (currentData) => {
+        if (currentData === null) return { id: user.uid, partnerName: currentUserProfile?.name || 'User', partnerAvatar: currentUserProfile?.avatar || '', lastMessage: textToSend, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 1 };
+        currentData.unreadCount = (currentData.unreadCount || 0) + 1;
+        currentData.lastMessage = textToSend;
+        currentData.lastSenderId = user.uid;
+        currentData.lastUpdated = Date.now();
+        return currentData;
+      });
+
+      // Push notification (1-1 only)
+      if (userId !== ECHO_AI_ID) {
+        sendPushToUser({
+          recipientUid: userId,
           title: currentUserProfile?.name || user.displayName || 'ECHO',
           body: textToSend.slice(0, 120),
-          icon: currentUserProfile?.avatar || '/logo192.png',
-        },
-      }).catch(() => {});
+          data: {
+            partnerId: user.uid,
+            title: currentUserProfile?.name || user.displayName || 'ECHO',
+            body: textToSend.slice(0, 120),
+            icon: currentUserProfile?.avatar || '/logo192.png',
+          },
+        }).catch(() => {});
+      }
     }
+    clearMessageCache(cId);
   };
 
   const sendMediaMessage = async (retryMessageId = null) => {
@@ -814,14 +927,34 @@ const ChatView = () => {
 
     setIsUploading(true);
     setUploadProgress(0);
-    const cId = [user.uid, userId].sort().join('_');
+    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
+    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${cId}/messages`;
     const tempId = `temp_${Date.now()}`;
     const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
     const mediaIcon = mediaType === 'video' ? '🎬 Video' : '📷 Image';
     const blobUrl = URL.createObjectURL(file);
     const currentReply = reply || replyTo;
 
-    const optimisticMsg = { id: tempId, senderId: user.uid, receiverId: userId, type: 'media', mediaType, mediaUrl: blobUrl, realUrl: null, caption, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(Date.now(), tideTTL), isUploading: true, uploadProgress: 0, isMediaReady: true, uploadFailed: false, _file: file };
+    const optimisticMsg = {
+      id: tempId,
+      senderId: user.uid,
+      receiverId: isGroupChat ? null : userId,
+      type: 'media',
+      mediaType,
+      mediaUrl: blobUrl,
+      realUrl: null,
+      caption,
+      timestamp: Date.now(),
+      isRead: false,
+      expiresAt: privateExpiresAt(Date.now(), tideTTL),
+      isUploading: true,
+      uploadProgress: 0,
+      isMediaReady: true,
+      uploadFailed: false,
+      _file: file,
+      senderName: currentUserProfile?.name || user.displayName || 'User',
+      senderAvatar: currentUserProfile?.avatar || '',
+    };
     if (currentReply) { optimisticMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet }; setReplyTo(null); }
     if (noteReply) { optimisticMsg.replyToNote = { ...noteReply }; setReplyToNote(null); }
 
@@ -832,9 +965,20 @@ const ChatView = () => {
 
     try {
       const downloadURL = await uploadToCloudinary(file, (progress) => { setUploadProgress(progress); setMessages((prev) => prev.map((m) => m.id === tempId ? { ...m, uploadProgress: progress } : m)); });
-      const messagesRef = ref(db, `chats/${cId}/messages`);
-      const newMsgRef = push(messagesRef);
-      const realMsg = { senderId: user.uid, receiverId: userId, type: 'media', mediaType, mediaUrl: downloadURL, caption, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(Date.now(), tideTTL) };
+      const newMsgRef = push(ref(db, msgRoot));
+      const realMsg = {
+        senderId: user.uid,
+        receiverId: isGroupChat ? null : userId,
+        type: 'media',
+        mediaType,
+        mediaUrl: downloadURL,
+        caption,
+        timestamp: Date.now(),
+        isRead: false,
+        expiresAt: privateExpiresAt(Date.now(), tideTTL),
+        senderName: currentUserProfile?.name || user.displayName || 'User',
+        senderAvatar: currentUserProfile?.avatar || '',
+      };
       if (currentReply) realMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet };
       if (noteReply) realMsg.replyToNote = { ...noteReply };
       await set(newMsgRef, realMsg);
@@ -846,34 +990,67 @@ const ChatView = () => {
       flashSent(newMsgRef.key);
       if (getSoundEnabled()) playSentSound();
 
-      await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: mediaIcon, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
-      const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
-      await runTransaction(recipientChatRef, (currentData) => {
-        if (currentData === null) return { id: user.uid, partnerName: currentUserProfile?.name || 'User', partnerAvatar: currentUserProfile?.avatar || '', lastMessage: mediaIcon, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 1 };
-        currentData.unreadCount = (currentData.unreadCount || 0) + 1;
-        currentData.lastMessage = mediaIcon;
-        currentData.lastSenderId = user.uid;
-        currentData.lastUpdated = Date.now();
-        return currentData;
-      });
+      if (isGroupChat) {
+        update(ref(db, `groups/${groupIdFromChat}`), {
+          lastMessage: mediaIcon,
+          lastSenderId: user.uid,
+          lastUpdated: Date.now(),
+        }).catch(() => {});
+
+        if (groupData?.members) {
+          Object.keys(groupData.members).forEach((uid) => {
+            if (uid === user.uid) return;
+            runTransaction(ref(db, `userChats/${uid}/${userId}`), (currentData) => {
+              if (currentData === null) {
+                return {
+                  id: userId,
+                  groupId: groupIdFromChat,
+                  isGroup: true,
+                  partnerName: groupData.name || 'Group',
+                  partnerAvatar: groupData.emoji || '👥',
+                  lastMessage: `${currentUserProfile?.name || 'User'}: ${mediaIcon}`,
+                  lastSenderId: user.uid,
+                  lastUpdated: Date.now(),
+                  unreadCount: 1,
+                };
+              }
+              currentData.unreadCount = (currentData.unreadCount || 0) + 1;
+              currentData.lastMessage = `${currentUserProfile?.name || 'User'}: ${mediaIcon}`;
+              currentData.lastSenderId = user.uid;
+              currentData.lastUpdated = Date.now();
+              return currentData;
+            }).catch(() => {});
+          });
+        }
+      } else {
+        await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: mediaIcon, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
+        const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+        await runTransaction(recipientChatRef, (currentData) => {
+          if (currentData === null) return { id: user.uid, partnerName: currentUserProfile?.name || 'User', partnerAvatar: currentUserProfile?.avatar || '', lastMessage: mediaIcon, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 1 };
+          currentData.unreadCount = (currentData.unreadCount || 0) + 1;
+          currentData.lastMessage = mediaIcon;
+          currentData.lastSenderId = user.uid;
+          currentData.lastUpdated = Date.now();
+          return currentData;
+        });
+
+        if (userId !== ECHO_AI_ID) {
+          sendPushToUser({
+            recipientUid: userId,
+            title: currentUserProfile?.name || user.displayName || 'ECHO',
+            body: caption ? caption.slice(0, 120) : mediaIcon,
+            data: {
+              partnerId: user.uid,
+              title: currentUserProfile?.name || user.displayName || 'ECHO',
+              body: caption ? caption.slice(0, 120) : mediaIcon,
+              icon: currentUserProfile?.avatar || '/logo192.png',
+            },
+          }).catch(() => {});
+        }
+      }
       clearMessageCache(cId);
       setIsUploading(false);
       setUploadProgress(0);
-
-      // 🔔 Fire push notification for media (skip AI)
-      if (userId !== ECHO_AI_ID) {
-        sendPushToUser({
-          recipientUid: userId,
-          title: currentUserProfile?.name || user.displayName || 'ECHO',
-          body: caption ? caption.slice(0, 120) : mediaIcon,
-          data: {
-            partnerId: user.uid,
-            title: currentUserProfile?.name || user.displayName || 'ECHO',
-            body: caption ? caption.slice(0, 120) : mediaIcon,
-            icon: currentUserProfile?.avatar || '/logo192.png',
-          },
-        }).catch(() => {});
-      }
     } catch (err) {
       console.error('Upload failed:', err);
       setIsUploading(false);
@@ -883,14 +1060,33 @@ const ChatView = () => {
   };
 
   const handleVoiceSend = async (audioBlob, duration) => {
-    if (ended) { try { const cId = [user.uid, userId].sort().join('_'); await remove(ref(db, `chats/${cId}/ended`)); setEnded(false); } catch (_) {} }
+    if (!isGroupChat && ended) { try { const cId = [user.uid, userId].sort().join('_'); await remove(ref(db, `chats/${cId}/ended`)); setEnded(false); } catch (_) {} }
     setShowVoiceRecorder(false);
-    const cId = [user.uid, userId].sort().join('_');
+    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
+    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${cId}/messages`;
     const tempId = `temp_${Date.now()}`;
     const blobUrl = URL.createObjectURL(audioBlob);
     const currentReply = replyTo;
     const noteReply = replyToNote;
-    const optimisticMsg = { id: tempId, senderId: user.uid, receiverId: userId, type: 'media', mediaType: 'audio', mediaUrl: blobUrl, duration, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(Date.now(), tideTTL), isUploading: true, uploadProgress: 0, isMediaReady: false, uploadFailed: false, _file: audioBlob };
+    const optimisticMsg = {
+      id: tempId,
+      senderId: user.uid,
+      receiverId: isGroupChat ? null : userId,
+      type: 'media',
+      mediaType: 'audio',
+      mediaUrl: blobUrl,
+      duration,
+      timestamp: Date.now(),
+      isRead: false,
+      expiresAt: privateExpiresAt(Date.now(), tideTTL),
+      isUploading: true,
+      uploadProgress: 0,
+      isMediaReady: false,
+      uploadFailed: false,
+      _file: audioBlob,
+      senderName: currentUserProfile?.name || user.displayName || 'User',
+      senderAvatar: currentUserProfile?.avatar || '',
+    };
     if (currentReply) { optimisticMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet }; setReplyTo(null); }
     if (noteReply) { optimisticMsg.replyToNote = { ...noteReply }; setReplyToNote(null); }
     setMessages((prev) => sortMessages([...prev, optimisticMsg]));
@@ -905,9 +1101,20 @@ const ChatView = () => {
       const uploadPromise = new Promise((resolve, reject) => { xhr.onload = () => { if (xhr.status === 200) { try { resolve(JSON.parse(xhr.responseText).secure_url); } catch (e) { reject(e); } } else reject(new Error('Upload failed')); }; xhr.onerror = () => reject(new Error('Network error')); });
       xhr.send(formData);
       const downloadURL = await uploadPromise;
-      const messagesRef = ref(db, `chats/${cId}/messages`);
-      const newMsgRef = push(messagesRef);
-      const realMsg = { senderId: user.uid, receiverId: userId, type: 'media', mediaType: 'audio', mediaUrl: downloadURL, duration, timestamp: Date.now(), isRead: false, expiresAt: privateExpiresAt(Date.now(), tideTTL) };
+      const newMsgRef = push(ref(db, msgRoot));
+      const realMsg = {
+        senderId: user.uid,
+        receiverId: isGroupChat ? null : userId,
+        type: 'media',
+        mediaType: 'audio',
+        mediaUrl: downloadURL,
+        duration,
+        timestamp: Date.now(),
+        isRead: false,
+        expiresAt: privateExpiresAt(Date.now(), tideTTL),
+        senderName: currentUserProfile?.name || user.displayName || 'User',
+        senderAvatar: currentUserProfile?.avatar || '',
+      };
       if (currentReply) realMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet };
       if (noteReply) realMsg.replyToNote = { ...noteReply };
       await set(newMsgRef, realMsg);
@@ -917,32 +1124,66 @@ const ChatView = () => {
       triggerSendRipple();
       flashSent(newMsgRef.key);
       if (getSoundEnabled()) playSentSound();
-      await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: '🎤 Voice note', lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
-      const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
-      await runTransaction(recipientChatRef, (currentData) => {
-        if (currentData === null) return { id: user.uid, partnerName: currentUserProfile?.name || 'User', partnerAvatar: currentUserProfile?.avatar || '', lastMessage: '🎤 Voice note', lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 1 };
-        currentData.unreadCount = (currentData.unreadCount || 0) + 1;
-        currentData.lastMessage = '🎤 Voice note';
-        currentData.lastSenderId = user.uid;
-        currentData.lastUpdated = Date.now();
-        return currentData;
-      });
-      clearMessageCache(cId);
 
-      // 🔔 Fire push notification for voice note (skip AI)
-      if (userId !== ECHO_AI_ID) {
-        sendPushToUser({
-          recipientUid: userId,
-          title: currentUserProfile?.name || user.displayName || 'ECHO',
-          body: '🎤 Voice note',
-          data: {
-            partnerId: user.uid,
+      if (isGroupChat) {
+        update(ref(db, `groups/${groupIdFromChat}`), {
+          lastMessage: '🎤 Voice note',
+          lastSenderId: user.uid,
+          lastUpdated: Date.now(),
+        }).catch(() => {});
+
+        if (groupData?.members) {
+          Object.keys(groupData.members).forEach((uid) => {
+            if (uid === user.uid) return;
+            runTransaction(ref(db, `userChats/${uid}/${userId}`), (currentData) => {
+              if (currentData === null) {
+                return {
+                  id: userId,
+                  groupId: groupIdFromChat,
+                  isGroup: true,
+                  partnerName: groupData.name || 'Group',
+                  partnerAvatar: groupData.emoji || '👥',
+                  lastMessage: `${currentUserProfile?.name || 'User'}: 🎤 Voice note`,
+                  lastSenderId: user.uid,
+                  lastUpdated: Date.now(),
+                  unreadCount: 1,
+                };
+              }
+              currentData.unreadCount = (currentData.unreadCount || 0) + 1;
+              currentData.lastMessage = `${currentUserProfile?.name || 'User'}: 🎤 Voice note`;
+              currentData.lastSenderId = user.uid;
+              currentData.lastUpdated = Date.now();
+              return currentData;
+            }).catch(() => {});
+          });
+        }
+      } else {
+        await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: '🎤 Voice note', lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
+        const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+        await runTransaction(recipientChatRef, (currentData) => {
+          if (currentData === null) return { id: user.uid, partnerName: currentUserProfile?.name || 'User', partnerAvatar: currentUserProfile?.avatar || '', lastMessage: '🎤 Voice note', lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 1 };
+          currentData.unreadCount = (currentData.unreadCount || 0) + 1;
+          currentData.lastMessage = '🎤 Voice note';
+          currentData.lastSenderId = user.uid;
+          currentData.lastUpdated = Date.now();
+          return currentData;
+        });
+
+        if (userId !== ECHO_AI_ID) {
+          sendPushToUser({
+            recipientUid: userId,
             title: currentUserProfile?.name || user.displayName || 'ECHO',
             body: '🎤 Voice note',
-            icon: currentUserProfile?.avatar || '/logo192.png',
-          },
-        }).catch(() => {});
+            data: {
+              partnerId: user.uid,
+              title: currentUserProfile?.name || user.displayName || 'ECHO',
+              body: '🎤 Voice note',
+              icon: currentUserProfile?.avatar || '/logo192.png',
+            },
+          }).catch(() => {});
+        }
       }
+      clearMessageCache(cId);
     } catch (err) { console.error('Voice upload failed:', err); setMessages((prev) => prev.map((m) => m.id === tempId ? { ...m, isUploading: false, uploadFailed: true, uploadProgress: 0 } : m)); URL.revokeObjectURL(blobUrl); }
   };
 
@@ -972,7 +1213,11 @@ const ChatView = () => {
 
   const handleReply = useCallback((msg) => {
     const isOwnMsg = String(msg.senderId || '') === String(user?.uid || '');
-    const senderName = isOwnMsg ? (currentUserProfile?.name || 'You') : (partnerProfile?.name || location.state?.userName || 'User');
+    let senderName;
+    if (isOwnMsg) senderName = currentUserProfile?.name || 'You';
+    else if (isGroupChat) senderName = msg.senderName || 'Member';
+    else senderName = partnerProfile?.name || location.state?.userName || 'User';
+
     let textSnippet;
     if (msg.type === 'media') textSnippet = msg.mediaType === 'video' ? '🎬 Video' : msg.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
     else if (msg.type === 'echomoji') textSnippet = `😤 ECHOMOJI (${msg.mood || 'neutral'})`;
@@ -982,7 +1227,7 @@ const ChatView = () => {
     setNewMessage('');
     setActiveMessageMenuId(null);
     setTimeout(() => inputRef.current?.focus(), 100);
-  }, [user, partnerProfile, currentUserProfile, location.state?.userName]);
+  }, [user, partnerProfile, currentUserProfile, location.state?.userName, isGroupChat]);
 
   const handleReact = useCallback((messageId) => {
     setActiveMessageMenuId(null);
@@ -1006,15 +1251,15 @@ const ChatView = () => {
   }, []);
 
   const handleReactionSelect = async (emojiKey, msgIdOverride = null) => {
-    hapticLight(); // ← NEW
+    hapticLight();
     setTappedEmoji(emojiKey);
     setTimeout(() => setTappedEmoji(null), 220);
     setShowReactionPicker(false);
     setReactionPickerAnchor(null);
     const targetId = msgIdOverride || reactingMessageId;
     if (!targetId || !user?.uid || !userId) return;
-    const cId = [user.uid, userId].sort().join('_');
-    const reactionRef = ref(db, `chats/${cId}/messages/${targetId}/reactions/${user.uid}`);
+    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
+    const reactionRef = ref(db, `${msgRoot}/${targetId}/reactions/${user.uid}`);
     try {
       const currentMsg = messages.find((m) => m.id === targetId);
       const currentReaction = currentMsg?.reactions?.[user.uid];
@@ -1084,24 +1329,24 @@ const ChatView = () => {
 
   const saveEditedMessage = async (newText) => {
     if (!editingMessage || !user?.uid || !userId) return;
-    const cId = [user.uid, userId].sort().join('_');
+    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
     const messageId = editingMessage.id;
     try {
-      await update(ref(db, `chats/${cId}/messages/${messageId}`), { text: newText, isEdited: true, lastEditedAt: serverTimestamp() });
+      await update(ref(db, `${msgRoot}/${messageId}`), { text: newText, isEdited: true, lastEditedAt: serverTimestamp() });
       setEditingMessage(null);
-      clearMessageCache(cId);
+      clearMessageCache(isGroupChat ? userId : [user.uid, userId].sort().join('_'));
       setToast({ message: 'Message updated successfully', type: 'success' });
     } catch (err) { console.error('Edit failed:', err); setToast({ message: 'Failed to edit message', type: 'error' }); }
   };
 
   const saveEditedMediaCaption = async (newCaption) => {
     if (!editingMediaMessage || !user?.uid || !userId) return;
-    const cId = [user.uid, userId].sort().join('_');
+    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
     const messageId = editingMediaMessage.id;
     try {
-      await update(ref(db, `chats/${cId}/messages/${messageId}`), { caption: newCaption, isEdited: true, lastEditedAt: serverTimestamp() });
+      await update(ref(db, `${msgRoot}/${messageId}`), { caption: newCaption, isEdited: true, lastEditedAt: serverTimestamp() });
       setEditingMediaMessage(null);
-      clearMessageCache(cId);
+      clearMessageCache(isGroupChat ? userId : [user.uid, userId].sort().join('_'));
       setToast({ message: 'Caption updated successfully', type: 'success' });
     } catch (err) { console.error('Edit caption failed:', err); setToast({ message: 'Failed to edit caption', type: 'error' }); }
   };
@@ -1114,12 +1359,12 @@ const ChatView = () => {
 
   const confirmDeleteMessage = async (msgId) => {
     if (!user?.uid || !userId) return;
-    const cId = [user.uid, userId].sort().join('_');
+    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
     try {
-      await remove(ref(db, `chats/${cId}/messages/${msgId}`));
-      deleteMessageFromCache(cId, msgId).catch(() => {});
+      await remove(ref(db, `${msgRoot}/${msgId}`));
+      deleteMessageFromCache(isGroupChat ? userId : [user.uid, userId].sort().join('_'), msgId).catch(() => {});
       setDeletingMessageId(null);
-      clearMessageCache(cId);
+      clearMessageCache(isGroupChat ? userId : [user.uid, userId].sort().join('_'));
       setToast({ message: 'Message deleted successfully', type: 'success' });
     } catch (err) { console.error('Delete failed:', err); setToast({ message: 'Failed to delete message', type: 'error' }); }
   };
@@ -1133,44 +1378,17 @@ const ChatView = () => {
 
   const handlePinMessage = async (msg) => {
     if (!user?.uid || !userId) return;
-    const cId = [user.uid, userId].sort().join('_');
+    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
     setActiveMessageMenuId(null);
     try {
       const currentlyPinned = pinnedMessageId === msg.id;
       await set(ref(db, `chats/${cId}/pinnedMessageId`), currentlyPinned ? null : msg.id);
-      await update(ref(db, `chats/${cId}/messages/${msg.id}`), { pinned: !currentlyPinned });
+      await update(ref(db, `${isGroupChat ? `groups/${groupIdFromChat}` : `chats/${cId}`}/messages/${msg.id}`), { pinned: !currentlyPinned });
       setToast({ message: currentlyPinned ? 'Message unpinned' : 'Message pinned', type: 'success' });
     } catch (err) {
       console.error('Pin failed:', err);
       setToast({ message: 'Failed to pin message', type: 'error' });
     }
-  };
-
-  const handleEndEcho = () => {
-    setShowMoreOptions(false);
-    openConfirmModal({
-      title: 'End ECHO',
-      message: `Are you sure you want to end this ECHO with ${partnerProfile?.name || 'User'}?`,
-      confirmText: 'End ECHO',
-      cancelText: 'Cancel',
-      onConfirm: async () => {
-        closeConfirmModal();
-        if (!user?.uid || !userId) return;
-        const cId = [user.uid, userId].sort().join('_');
-        const myName = currentUserProfile?.name || user.displayName || 'User';
-        try {
-          await set(ref(db, `chats/${cId}/ended`), { by: user.uid, byName: myName, at: Date.now() });
-          const messagesRef = ref(db, `chats/${cId}/messages`);
-          const newMsgRef = push(messagesRef);
-          await set(newMsgRef, { senderId: 'system', type: 'system', text: `${myName} ended this ECHO.`, timestamp: Date.now(), clientTs: Date.now(), endedBy: user.uid });
-          await update(ref(db, `userChats/${user.uid}/${userId}`), { ended: true, lastMessage: `${myName} ended this ECHO.`, lastSenderId: 'system', lastUpdated: Date.now() });
-          await update(ref(db, `userChats/${userId}/${user.uid}`), { ended: true, lastMessage: `${myName} ended this ECHO.`, lastSenderId: 'system', lastUpdated: Date.now() });
-          setEnded(true);
-          setEndedByName(myName);
-          setToast({ message: 'ECHO ended successfully', type: 'success' });
-        } catch (err) { console.error('Failed to end ECHO:', err); setToast({ message: 'Failed to end ECHO. Please try again.', type: 'error' }); }
-      },
-    });
   };
 
   const jumpToMessage = (messageId) => {
@@ -1225,15 +1443,9 @@ const ChatView = () => {
     return (
       <div className="media-preview-overlay" onClick={(e) => { if (e.target === e.currentTarget) cancelMediaPreview(); }}>
         <div className="media-preview-content" onClick={(e) => e.stopPropagation()}>
-          <button
-            type="button"
-            className="media-preview-close"
-            onClick={cancelMediaPreview}
-            aria-label="Close preview"
-          >
+          <button type="button" className="media-preview-close" onClick={cancelMediaPreview} aria-label="Close preview">
             <i className="fas fa-times" />
           </button>
-
           <div className="media-preview-media">
             {selectedFile?.type.startsWith('video/') ? (
               <video src={previewUrl} controls autoPlay loop muted playsInline className="media-preview-video" />
@@ -1241,7 +1453,6 @@ const ChatView = () => {
               <img src={previewUrl} alt="Preview" className="media-preview-image" />
             )}
           </div>
-
           <div className="media-preview-caption-row" ref={captionPreviewRef}>
             <textarea
               ref={captionInputRef}
@@ -1257,16 +1468,10 @@ const ChatView = () => {
               }}
               onFocus={() => { focusedField.current = 'caption'; }}
             />
-            <button
-              type="button"
-              className="media-preview-emoji-btn"
-              onClick={() => setShowCaptionEmoji(!showCaptionEmoji)}
-              aria-label="Emojis"
-            >
+            <button type="button" className="media-preview-emoji-btn" onClick={() => setShowCaptionEmoji(!showCaptionEmoji)} aria-label="Emojis">
               <i className="fas fa-smile" />
             </button>
           </div>
-
           {showCaptionEmoji && (
             <ChatEmojiPicker
               onClose={() => setShowCaptionEmoji(false)}
@@ -1274,13 +1479,7 @@ const ChatView = () => {
               excludeRefs={[captionPreviewRef]}
             />
           )}
-
-          <button
-            type="button"
-            className="media-preview-send"
-            onClick={() => sendMediaMessage()}
-            disabled={isUploading}
-          >
+          <button type="button" className="media-preview-send" onClick={() => sendMediaMessage()} disabled={isUploading}>
             {isUploading ? `Uploading ${Math.round(uploadProgress)}%` : 'Send Media'}
           </button>
         </div>
@@ -1294,13 +1493,13 @@ const ChatView = () => {
   }, [user?.uid]);
 
   const saveMessageToArchive = async (msg) => {
-    const cId = [user.uid, userId].sort().join('_');
+    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
     try {
-      if (bookmarkedIds[msg.id]) { await removeEchoArchive(bookmarkedIds[msg.id]); await update(ref(db, `chats/${cId}/messages/${msg.id}`), { pinned: null }).catch(() => {}); setBookmarkedIds((prev) => { const n = { ...prev }; delete n[msg.id]; return n; }); return; }
-      const senderName = msg.senderId === user.uid ? (currentUserProfile?.name || 'You') : (partnerProfile?.name || getProfile?.(msg.senderId)?.name || 'User');
-      const senderAvatar = msg.senderId === user.uid ? (currentUserProfile?.avatar || '') : (partnerProfile?.avatar || getProfile?.(msg.senderId)?.avatar || '');
+      if (bookmarkedIds[msg.id]) { await removeEchoArchive(bookmarkedIds[msg.id]); await update(ref(db, `${isGroupChat ? `groups/${groupIdFromChat}` : `chats/${cId}`}/messages/${msg.id}`), { pinned: null }).catch(() => {}); setBookmarkedIds((prev) => { const n = { ...prev }; delete n[msg.id]; return n; }); return; }
+      const senderName = msg.senderId === user.uid ? (currentUserProfile?.name || 'You') : (msg.senderName || partnerProfile?.name || getProfile?.(msg.senderId)?.name || 'User');
+      const senderAvatar = msg.senderId === user.uid ? (currentUserProfile?.avatar || '') : (msg.senderAvatar || partnerProfile?.avatar || getProfile?.(msg.senderId)?.avatar || '');
       const result = await saveToEchoArchive(user.uid, { ...msg, senderName, senderAvatar }, { chatId: cId, source: 'chat', partnerId: userId, senderName, senderAvatar });
-      if (result?.ok) { await update(ref(db, `chats/${cId}/messages/${msg.id}`), { pinned: true }).catch(() => {}); const rows = await listEchoArchive(user.uid); const map = {}; rows.forEach((row) => { if (row.message?.id) map[row.message.id] = row.archiveId; }); setBookmarkedIds(map); }
+      if (result?.ok) { await update(ref(db, `${isGroupChat ? `groups/${groupIdFromChat}` : `chats/${cId}`}/messages/${msg.id}`), { pinned: true }).catch(() => {}); const rows = await listEchoArchive(user.uid); const map = {}; rows.forEach((row) => { if (row.message?.id) map[row.message.id] = row.archiveId; }); setBookmarkedIds(map); }
     } catch (_) {}
   };
 
@@ -1440,6 +1639,9 @@ const ChatView = () => {
     const isPinned = pinnedMessageId === msg.id;
     const saveState = savingIds[msg.id];
 
+    // In group chats, show sender name above bubble for partner messages
+    const showSenderName = isGroupChat && !isOwn && groupTop && !isSystem;
+
     const shell = (inner) => {
       const row = (
         <div
@@ -1475,6 +1677,11 @@ const ChatView = () => {
             </div>
           )}
           <div className={`message-stack ${isOwn ? 'own' : 'partner'}`} style={{ position: 'relative', marginBottom: msg.reactions && Object.keys(msg.reactions).length > 0 ? '14px' : 0 }}>
+            {showSenderName && (
+              <div className="group-sender-name" style={{ color: senderColor(msg.senderId) }}>
+                {msg.senderName || 'Member'}
+              </div>
+            )}
             <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${msg.pending ? 'pending' : ''} ${isPinned ? 'pinned' : ''}`}>
               {isPinned && (
                 <span className="message-pin-badge" title="Pinned">
@@ -1600,11 +1807,14 @@ const ChatView = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, userId, sendReadReceipts]);
 
+  // ─── Main message listener (works for both 1-1 and group) ────
   useEffect(() => {
     if (!user?.uid || !userId) { setLoadingMessages(false); return; }
     isMounted.current = true;
-    const cId = [user.uid, userId].sort().join('_');
+    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
     chatId.current = cId;
+
+    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${cId}/messages`;
 
     loadMessagesFromCache(cId).then((cachedMessages) => {
       if (isMounted.current && cachedMessages.length > 0) {
@@ -1617,7 +1827,7 @@ const ChatView = () => {
       }
     });
 
-    const messagesRef = ref(db, `chats/${cId}/messages`);
+    const messagesRef = ref(db, msgRoot);
     const unsubscribe = onValue(messagesRef, async (snapshot) => {
       if (!isMounted.current) return;
       const data = snapshot.val();
@@ -1671,11 +1881,16 @@ const ChatView = () => {
         try { for (const msg of visible) { await upsertMessageInCache(cId, msg); if (msg.type === 'media' && msg.mediaUrl && msg.mediaUrl.startsWith('http')) cacheMedia(msg.mediaUrl); } await saveMessagesToCache(cId, visible); } catch (_) {}
       });
       clearMessageCache(cId);
-      const hasUnread = newMessages.some((msg) => msg.receiverId === user.uid && msg.isRead === false);
-      if (hasUnread && isMounted.current) {
-        clearUnreadInstantly();
-        if (markReadTimeout.current) clearTimeout(markReadTimeout.current);
-        markReadTimeout.current = setTimeout(() => { if (isMounted.current) markMessagesAsRead(); }, 300);
+      if (!isGroupChat) {
+        const hasUnread = newMessages.some((msg) => msg.receiverId === user.uid && msg.isRead === false);
+        if (hasUnread && isMounted.current) {
+          clearUnreadInstantly();
+          if (markReadTimeout.current) clearTimeout(markReadTimeout.current);
+          markReadTimeout.current = setTimeout(() => { if (isMounted.current) markMessagesAsRead(); }, 300);
+        }
+      } else {
+        // Group: mark userChats unread to 0
+        update(ref(db, `userChats/${user.uid}/${userId}`), { unreadCount: 0 }).catch(() => {});
       }
     }, (error) => {
       console.error('🔥 [ChatView] Firebase listener error:', error);
@@ -1684,17 +1899,7 @@ const ChatView = () => {
     });
 
     return () => { isMounted.current = false; if (markReadTimeout.current) clearTimeout(markReadTimeout.current); unsubscribe(); };
-  }, [user?.uid, userId]);
-
-  useEffect(() => {
-    if (!userId) return;
-    const cached = getProfile(userId);
-    if (cached) setPartnerProfile(cached);
-    else fetchProfile(userId);
-    const pRef = ref(db, `profiles/${userId}`);
-    const unsub = onValue(pRef, (snap) => { if (snap.exists()) setPartnerProfile(snap.val()); });
-    return () => unsub();
-  }, [userId, getProfile, fetchProfile]);
+  }, [user?.uid, userId, isGroupChat, groupIdFromChat]);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -1738,22 +1943,26 @@ const ChatView = () => {
 
   useEffect(() => {
     if (!user?.uid || !userId) { setEnded(false); return; }
+    if (isGroupChat) { setEnded(false); return; }
     const cId = [user.uid, userId].sort().join('_');
     const endedRef = ref(db, `chats/${cId}/ended`);
     const unsub = onValue(endedRef, (snap) => { const val = snap.val(); if (val === true || (val && (val.by || val === true))) { setEnded(true); setEndedByName((val && val.byName) || ''); } else { setEnded(false); setEndedByName(''); } });
     return () => unsub();
-  }, [user?.uid, userId]);
+  }, [user?.uid, userId, isGroupChat]);
 
   useEffect(() => {
     if (!user?.uid || !userId) { setClearedAt(0); return; }
+    if (isGroupChat) { setClearedAt(0); return; }
     const clearedRef = ref(db, `userChats/${user.uid}/${userId}/clearedAt`);
     const unsub = onValue(clearedRef, (snap) => { const val = typeof snap.val() === 'number' ? snap.val() : 0; clearedAtRef.current = val; setClearedAt(val); if (val) setMessages((prev) => prev.filter((m) => { if (m.pending) return true; const ts = typeof m.timestamp === 'number' ? m.timestamp : 0; return !ts || ts >= val; })); });
     const onLocalClear = (e) => { if (e.detail?.partnerId === userId) { const now = Date.now(); clearedAtRef.current = now; setClearedAt(now); setMessages([]); } };
     window.addEventListener('chat-history-cleared', onLocalClear);
     return () => { unsub(); window.removeEventListener('chat-history-cleared', onLocalClear); };
-  }, [user?.uid, userId]);
+  }, [user?.uid, userId, isGroupChat]);
 
-  const displayName = sanitizeName(location.state?.userName || partnerProfile?.name, userId);
+  const displayName = isGroupChat
+    ? (groupData?.name || 'Group')
+    : sanitizeName(location.state?.userName || partnerProfile?.name, userId);
 
   const handleInputPointerDown = () => {
     if (userId === ECHO_AI_ID) return;
@@ -1821,11 +2030,12 @@ const ChatView = () => {
       onConfirm: async () => {
         closeConfirmModal();
         if (!user?.uid || !userId) return;
-        const cId = [user.uid, userId].sort().join('_');
+        const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
         const updates = {};
-        selectedIds.forEach((id) => { updates[`chats/${cId}/messages/${id}`] = null; });
+        selectedIds.forEach((id) => { updates[`${msgRoot}/${id}`] = null; });
         try {
           await update(ref(db), updates);
+          const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
           selectedIds.forEach((id) => deleteMessageFromCache(cId, id).catch(() => {}));
           clearMessageCache(cId);
           setToast({ message: 'Messages deleted', type: 'success' });
@@ -1896,6 +2106,15 @@ const ChatView = () => {
         .message-action-btn svg { width: 18px; height: 18px; fill: currentColor; }
         .message-action-btn:hover { background: var(--bg-hover, #eaeaea); color: var(--text-primary, #333); transform: scale(1.15) translateY(-1px); }
         .message-action-btn.danger:hover { background: #fde8e8; color: #d32f2f; }
+
+        .group-sender-name {
+          font-size: 11.5px;
+          font-weight: 700;
+          letter-spacing: 0.2px;
+          padding: 0 4px;
+          margin-bottom: 3px;
+          text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        }
 
         .message-row.own .message-bubble, .message-row.partner .message-bubble {
           animation: echoBubbleIn 0.3s cubic-bezier(0.2, 0.9, 0.25, 1.05) both;
@@ -2218,7 +2437,7 @@ const ChatView = () => {
               groupedMessages.map((entry) => renderMessage(entry))
             )}
             {isAILoading && (<div className="message-bubble partner"><div className="typing-indicator"><span></span><span></span><span></span></div></div>)}
-            {partnerIsTyping && (
+            {partnerIsTyping && !isGroupChat && (
               <div className="typing-indicator-container">
                 <div className="typing-echomoji-wrapper">
                   <ECHOMOJI mood={partnerProfile?.mood || 'happy'} skin={partnerProfile?.activeSkin ? getSkinById(partnerProfile.activeSkin) : null} size={44} interactive={false} animated={false} />
@@ -2277,7 +2496,7 @@ const ChatView = () => {
           </div>
         )}
 
-        {!selectMode && blockedByMe && (
+        {!selectMode && !isGroupChat && blockedByMe && (
           <div className="blocked-composer-bar">
             <span>You blocked this user.</span>
             <button
@@ -2298,7 +2517,7 @@ const ChatView = () => {
           </div>
         )}
 
-        {!selectMode && !blockedByMe && (
+        {!selectMode && (isGroupChat || !blockedByMe) && (
           <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
             {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
             {replyToNote && (
@@ -2323,7 +2542,9 @@ const ChatView = () => {
                   <div className="chat-more-options-popup" onClick={(e) => e.stopPropagation()}>
                     <button type="button" className="chat-more-option" onClick={() => { fileInputRef.current?.click(); setShowMoreOptions(false); }}><i className="fas fa-paperclip" /><span>Attach</span></button>
                     <button type="button" className="chat-more-option" onClick={() => { setShowWallpaperPicker(true); setShowMoreOptions(false); }}><i className="fas fa-image" /><span>Wallpaper</span></button>
-                    <button type="button" className="chat-more-option danger" onClick={() => { setShowMoreOptions(false); handleEndEcho(); }} disabled={ended} style={ended ? { opacity: 0.4, pointerEvents: 'none' } : undefined}><i className="fas fa-stop-circle" /><span>End ECHO</span></button>
+                    {!isGroupChat && (
+                      <button type="button" className="chat-more-option danger" onClick={() => { setShowMoreOptions(false); handleEndEcho(); }} disabled={ended} style={ended ? { opacity: 0.4, pointerEvents: 'none' } : undefined}><i className="fas fa-stop-circle" /><span>End ECHO</span></button>
+                    )}
                   </div>
                 )}
               </div>
