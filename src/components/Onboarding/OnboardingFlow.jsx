@@ -1,8 +1,12 @@
 // src/components/Onboarding/OnboardingFlow.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ref, update } from 'firebase/database';
+import { db } from '../../services/firebase';
+import { useAuth } from '../../hooks/useAuth';
 import ECHOMOJI from '../UI/ECHOMOJI';
 import { hapticLight, hapticSuccess } from '../../utils/haptics';
+import WhoToEcho from './WhoToEcho';
 import './OnboardingFlow.css';
 
 const SLIDES = [
@@ -38,8 +42,11 @@ const SLIDES = [
 
 const OnboardingFlow = ({ onComplete, onCustomizeAvatar }) => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [index, setIndex] = useState(0);
   const [transitioning, setTransitioning] = useState(false);
+  const [showWhoToEcho, setShowWhoToEcho] = useState(false);
+  const [finishing, setFinishing] = useState(false);
 
   const slide = SLIDES[index];
   const isLast = index === SLIDES.length - 1;
@@ -48,13 +55,13 @@ const OnboardingFlow = ({ onComplete, onCustomizeAvatar }) => {
     hapticLight();
     if (isLast) {
       hapticSuccess();
-      onComplete?.();
+      // Instead of finishing, move to the WhoToEcho step
+      setShowWhoToEcho(true);
       return;
     }
     // Special: slide 2 → jump into customizer
     if (slide.id === 'avatar' && onCustomizeAvatar) {
       onCustomizeAvatar();
-      // Don't advance — user may come back
     }
     setTransitioning(true);
     setTimeout(() => {
@@ -65,22 +72,56 @@ const OnboardingFlow = ({ onComplete, onCustomizeAvatar }) => {
 
   const skip = () => {
     hapticLight();
-    onComplete?.();
+    // Skipping intro jumps straight to WhoToEcho (still want them to pick people)
+    setShowWhoToEcho(true);
   };
 
+  const markOnboardingComplete = async () => {
+    if (!user?.uid || finishing) return;
+    setFinishing(true);
+    try {
+      await update(ref(db, `profiles/${user.uid}`), {
+        onboardingCompleted: true,
+        onboardingCompletedAt: Date.now(),
+        whoToEchoSeen: true,
+      });
+    } catch (err) {
+      console.warn('Failed to mark onboarding complete', err);
+    } finally {
+      setFinishing(false);
+      onComplete?.();
+    }
+  };
+
+  const handleWhoToEchoContinue = async (_followedUids) => {
+    // follows already saved inside WhoToEcho
+    await markOnboardingComplete();
+  };
+
+  const handleWhoToEchoSkip = async () => {
+    await markOnboardingComplete();
+  };
+
+  // ─── Step 2: WhoToEcho ───────────────────────────────────────
+  if (showWhoToEcho) {
+    return (
+      <WhoToEcho
+        onContinue={handleWhoToEchoContinue}
+        onSkip={handleWhoToEchoSkip}
+      />
+    );
+  }
+
+  // ─── Step 1: Intro slides ────────────────────────────────────
   return (
     <div className="onboarding-root">
-      {/* Skip button */}
       <button type="button" className="onboarding-skip" onClick={skip}>
         Skip
       </button>
 
-      {/* Ambient background glow */}
       <div className="onboarding-glow" aria-hidden="true" />
 
-      {/* Content */}
       <div className={`onboarding-content ${transitioning ? 'fading' : ''}`}>
-        {/* Visual */}
         <div className="onboarding-visual">
           {slide.emoji ? (
             <ECHOMOJI
@@ -101,12 +142,10 @@ const OnboardingFlow = ({ onComplete, onCustomizeAvatar }) => {
           )}
         </div>
 
-        {/* Text */}
         <h1 className="onboarding-title">{slide.title}</h1>
         <p className="onboarding-subtitle">{slide.subtitle}</p>
       </div>
 
-      {/* Footer: dots + CTA */}
       <div className="onboarding-footer">
         <div className="onboarding-dots">
           {SLIDES.map((_, i) => (
@@ -117,11 +156,7 @@ const OnboardingFlow = ({ onComplete, onCustomizeAvatar }) => {
           ))}
         </div>
 
-        <button
-          type="button"
-          className="onboarding-cta"
-          onClick={goNext}
-        >
+        <button type="button" className="onboarding-cta" onClick={goNext} disabled={finishing}>
           {slide.cta}
         </button>
       </div>
