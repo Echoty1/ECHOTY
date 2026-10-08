@@ -43,6 +43,12 @@ import MessageNotifier from './components/common/MessageNotifier';
 import { useGlobalMessageListener } from './hooks/useGlobalMessageListener';
 import { unlockAudio } from './services/notificationService';
 
+// ─── Onboarding + App Badge ────────────────────────────────
+import OnboardingFlow from './components/Onboarding/OnboardingFlow';
+import { useOnboarding } from './hooks/useOnboarding';
+import { useAppBadge } from './hooks/useAppBadge';
+// ────────────────────────────────────────────────────────────
+
 // ─── Spotlight ─────────────────────────────────────────────
 import SpotlightFeed from './pages/Spotlight/SpotlightFeed';
 import SpotlightUpload from './pages/Spotlight/SpotlightUpload';
@@ -129,6 +135,11 @@ function AppContent() {
   const { fetchProfile } = useProfile();
 
   useGlobalMessageListener();
+
+  // ─── Onboarding + App badge ─────────────────────────────
+  const { done: onboardingDone, completeOnboarding } = useOnboarding();
+  useAppBadge();
+  // ────────────────────────────────────────────────────────
 
   const [minTimePassed, setMinTimePassed] = useState(false);
   const [showUpdatePopup, setShowUpdatePopup] = useState(false);
@@ -335,6 +346,12 @@ function AppContent() {
   if (user.emailVerified === false) {
     return <VerifyEmailScreen />;
   }
+
+  // ─── Show onboarding on first launch (after login) ──────
+  if (!onboardingDone) {
+    return <OnboardingFlow onComplete={completeOnboarding} />;
+  }
+  // ────────────────────────────────────────────────────────
 
   return (
     <>
