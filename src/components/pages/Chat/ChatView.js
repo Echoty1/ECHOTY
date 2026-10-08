@@ -49,7 +49,8 @@ import { useUserPrivacy } from '../../../hooks/useUserPrivacy';
 import { useUserPresence } from '../../../hooks/usePresence';
 import { formatLastSeen } from '../../../utils/formatLastSeen';
 import { isBlocked as checkIsBlocked, unblockUser } from '../../../services/blockService';
-import { sendPushToUser } from '../../../services/fcmService'; // ← NEW
+import { sendPushToUser } from '../../../services/fcmService';
+import { hapticSend, hapticLight } from '../../../utils/haptics'; // ← NEW
 import './ChatView.css';
 
 // ─── Link preview imports ──────────────────────────────────────
@@ -703,6 +704,7 @@ const ChatView = () => {
     const textToSend = (typeof e === 'string' ? e : newMessage).trim();
     if (!textToSend || !user?.uid || !userId) return;
 
+    hapticSend(); // ← NEW
     setHaloActive(false);
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     clearMyTyping();
@@ -1004,6 +1006,7 @@ const ChatView = () => {
   }, []);
 
   const handleReactionSelect = async (emojiKey, msgIdOverride = null) => {
+    hapticLight(); // ← NEW
     setTappedEmoji(emojiKey);
     setTimeout(() => setTappedEmoji(null), 220);
     setShowReactionPicker(false);
