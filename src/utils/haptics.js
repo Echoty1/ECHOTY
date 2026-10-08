@@ -13,7 +13,6 @@ export const setHapticsEnabled = (enabled) => {
 
 export const isHapticsEnabled = () => hapticsEnabled;
 
-// Load from storage on module init
 try {
   const saved = localStorage.getItem('echo_haptics');
   if (saved === '0') hapticsEnabled = false;
