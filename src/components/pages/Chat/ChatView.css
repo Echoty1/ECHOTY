@@ -3186,3 +3186,26 @@ body.light .link-preview-skeleton-line {
 .link-preview-skeleton-line.w70 { width: 70%; }
 .link-preview-skeleton-line.w90 { width: 90%; }
 .link-preview-skeleton-line.w50 { width: 50%; }
+.chat-header-info-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 15px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  margin-left: auto;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.chat-header-info-btn:hover {
+  background: var(--border-color);
+  color: #6C3CE1;
+}
+
+.chat-header-info-btn:active {
+  transform: scale(0.92);
+}
