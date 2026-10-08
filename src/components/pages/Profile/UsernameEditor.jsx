@@ -13,7 +13,6 @@ const UsernameEditor = ({ uid, currentUsername, isOpen, onClose }) => {
   const { status, loading: checking, error: checkError } = useUsernameAvailability(input);
   const { claim, claiming, result } = useClaimUsername(uid);
 
-  // Reset on open
   useEffect(() => {
     if (isOpen) {
       setInput(currentUsername || '');
@@ -23,7 +22,6 @@ const UsernameEditor = ({ uid, currentUsername, isOpen, onClose }) => {
     }
   }, [isOpen, currentUsername]);
 
-  // Show suggestions when taken
   useEffect(() => {
     if (status === 'taken' && input) {
       setSuggestions(suggestAlternates(input));
