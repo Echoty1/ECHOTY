@@ -18,7 +18,7 @@ import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import { listenToMyEchowers, listenToMyEchowerCount } from '../../../services/echowerService';
 import AvatarCustomizer from './AvatarCustomizer';
-import UsernameEditor from '../../Profile/UsernameEditor';
+import UsernameEditor from './UsernameEditor';
 import UsernamePill from '../../common/UsernamePill';
 import './Profile.css';
 
