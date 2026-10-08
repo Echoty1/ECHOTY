@@ -3807,3 +3807,66 @@ html.theme-light .nrs-detail-btn-ghost:hover {
   .lg-tab,
   .lg-tab-icon { transition-duration: 0.01ms !important; }
 }
+/* ═════════════════════════════════════════════
+   GROUP CHAT UI + NEW GROUP BUTTON
+   ═════════════════════════════════════════════ */
+
+.new-group-btn-top {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 10px;
+  padding: 12px 18px;
+  border-radius: 14px;
+  border: 1.5px dashed rgba(108, 60, 225, 0.4);
+  background: rgba(108, 60, 225, 0.06);
+  color: #A78BFA;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.new-group-btn-top:hover {
+  background: rgba(108, 60, 225, 0.14);
+  border-color: rgba(108, 60, 225, 0.7);
+  transform: translateY(-1px);
+}
+
+.new-group-btn-top:active { transform: scale(0.98); }
+
+.new-group-btn-top i { font-size: 15px; }
+
+/* Group avatar */
+.group-chat-item .chat-avatar.group-avatar {
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.28), rgba(236, 72, 153, 0.24));
+  border: 2px solid rgba(108, 60, 225, 0.35);
+}
+
+.group-avatar-emoji {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.group-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 20px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  background: rgba(108, 60, 225, 0.22);
+  color: #C4B5FD;
+  border: 1px solid rgba(108, 60, 225, 0.4);
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+}
