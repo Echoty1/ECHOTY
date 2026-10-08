@@ -57,7 +57,16 @@ const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
 
 const DEFAULT_INTEREST_TEMPLATES = [
-  'Gaming', 'Music', 'Tech', 'Movies', 'Art', 'Anime', 'Fitness', 'Photography', 'Travel', 'Coding',
+  'Gaming',
+  'Music',
+  'Tech',
+  'Movies',
+  'Art',
+  'Anime',
+  'Fitness',
+  'Photography',
+  'Travel',
+  'Coding',
 ];
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
@@ -674,7 +683,14 @@ const Profile = () => {
             )}
 
             {!editing && !loading && profile?.username && (
-              <div style={{ marginTop: 4, marginBottom: 6, display: 'flex', justifyContent: 'center' }}>
+              <div
+                style={{
+                  marginTop: 4,
+                  marginBottom: 6,
+                  display: 'flex',
+                  justifyContent: 'center',
+                }}
+              >
                 <UsernamePill uid={user?.uid} username={profile.username} size="md" />
               </div>
             )}
@@ -856,7 +872,8 @@ const Profile = () => {
                     color: '#6C3CE1',
                   }}
                 >
-                  <i className="fas fa-at" /> {profile?.username ? 'Change @handle' : 'Set @handle'}
+                  <i className="fas fa-at" />{' '}
+                  {profile?.username ? 'Change @handle' : 'Set @handle'}
                 </button>
                 <button
                   className="edit-btn"
