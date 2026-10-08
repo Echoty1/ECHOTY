@@ -143,4 +143,38 @@ const AddMembersModal = ({ groupId, currentMembers, onClose, onAdd }) => {
                     {f.username && <span>@{f.username}</span>}
                   </div>
                   <div className={`am-check ${isSel ? 'checked' : ''}`}>
-                    {
+                    {isSel && (
+                      <svg viewBox="0 0 24 24" width="14" height="14">
+                        <path
+                          d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z"
+                          fill="currentColor"
+                        />
+                      </svg>
+                    )}
+                  </div>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        <div className="am-actions">
+          <button className="am-btn cancel" onClick={onClose}>
+            Cancel
+          </button>
+          <button
+            className="am-btn primary"
+            onClick={handleAdd}
+            disabled={selected.size === 0 || adding}
+          >
+            {adding
+              ? 'Adding...'
+              : `Add${selected.size > 0 ? ` (${selected.size})` : ''}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default AddMembersModal;
