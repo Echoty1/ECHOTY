@@ -1,79 +1,80 @@
 // src/services/suggestedUsersService.js
-import { ref, get, query, orderByChild, limitToLast } from 'firebase/database';
+import { ref, get } from 'firebase/database';
 import { db } from './firebase';
 
+const ECHO_AI_ID = 'echo_ai_assistant';
+
 /**
- * Fetch suggested users for a brand-new account.
+ * Suggest accounts for a brand-new user.
  *
  * Priority:
- *   1. Verified / creator accounts (isCreator, verified, or badge === 'creator')
- *   2. Friends-of-friends (people followed by people I follow)
- *   3. Most-followed fallback
+ *   1. Verified / creator accounts
+ *   2. Friends-of-friends (people echowed by people I echow)
+ *   3. Most-echowered users (fallback)
  *
- * Excludes:
- *   - myself
- *   - ECHO AI assistant
- *   - users I already follow
- *   - users already followed in this session
+ * Excludes: myself, ECHO AI, anyone I already echow.
  *
  * @param {string} myUid
  * @param {number} limit  default 20
- * @returns {Promise<Array<{uid, name, username, avatar, bio, followers, isVerified, isCreator}>>}
  */
 export async function getSuggestedUsers(myUid, limit = 20) {
   if (!myUid) return [];
 
-  const exclude = new Set([myUid, 'echo_ai_assistant']);
+  const exclude = new Set([myUid, ECHO_AI_ID]);
   const suggestedMap = new Map();
 
-  // ─── 1. Load who I already follow (usually empty for new users) ───
+  // ─── 1. Who I already echow (usually empty for new users) ─────
+  const myEchowing = new Set();
   try {
-    const followingSnap = await get(ref(db, `following/${myUid}`));
-    if (followingSnap.exists()) {
-      Object.keys(followingSnap.val()).forEach((uid) => exclude.add(uid));
-    }
-  } catch (_) {}
-
-  // ─── 2. Creators / verified accounts ───────────────────────────
-  try {
-    const profilesSnap = await get(ref(db, 'profiles'));
-    if (profilesSnap.exists()) {
-      const profiles = profilesSnap.val();
-      Object.entries(profiles).forEach(([uid, p]) => {
-        if (!p || exclude.has(uid)) return;
-        const isCreator =
-          p.isCreator === true ||
-          p.verified === true ||
-          p.badge === 'creator' ||
-          p.role === 'creator';
-        if (isCreator) {
-          suggestedMap.set(uid, {
-            uid,
-            name: p.name || p.displayName || 'User',
-            username: p.username || '',
-            avatar: p.avatar || '',
-            bio: p.bio || '',
-            followers: Number(p.followersCount || 0),
-            isVerified: p.verified === true,
-            isCreator: true,
-          });
-        }
+    const snap = await get(ref(db, `echowers/${myUid}`));
+    if (snap.exists()) {
+      Object.keys(snap.val()).forEach((uid) => {
+        exclude.add(uid);
+        myEchowing.add(uid);
       });
     }
   } catch (_) {}
 
-  // ─── 3. Friends-of-friends ─────────────────────────────────────
+  // ─── 2. Load all profiles once (single read for perf) ─────────
+  let allProfiles = {};
   try {
-    const myFollowingSnap = await get(ref(db, `following/${myUid}`));
-    const myFollowing = myFollowingSnap.exists() ? Object.keys(myFollowingSnap.val()) : [];
+    const snap = await get(ref(db, 'profiles'));
+    if (snap.exists()) allProfiles = snap.val() || {};
+  } catch (_) {}
 
+  // ─── 3. Creators / verified first ─────────────────────────────
+  Object.entries(allProfiles).forEach(([uid, p]) => {
+    if (!p || exclude.has(uid)) return;
+    const isCreator =
+      p.isCreator === true ||
+      p.verified === true ||
+      p.badge === 'creator' ||
+      p.role === 'creator';
+    if (isCreator) {
+      suggestedMap.set(uid, {
+        uid,
+        name: p.name || p.displayName || 'User',
+        username: p.username || '',
+        avatar: p.avatar || '',
+        bio: p.bio || '',
+        echowerCount: Number(p.echowerCount || 0),
+        isVerified: p.verified === true,
+        isCreator: true,
+      });
+    }
+  });
+
+  // ─── 4. Friends-of-friends ────────────────────────────────────
+  if (myEchowing.size > 0 && suggestedMap.size < limit) {
     const fofCounts = new Map();
+    const myEchowingArr = [...myEchowing].slice(0, 30);
+
     await Promise.all(
-      myFollowing.slice(0, 30).map(async (friendUid) => {
+      myEchowingArr.map(async (friendUid) => {
         try {
-          const theirFollowingSnap = await get(ref(db, `following/${friendUid}`));
-          if (!theirFollowingSnap.exists()) return;
-          Object.keys(theirFollowingSnap.val()).forEach((candidateUid) => {
+          const snap = await get(ref(db, `echowers/${friendUid}`));
+          if (!snap.exists()) return;
+          Object.keys(snap.val()).forEach((candidateUid) => {
             if (exclude.has(candidateUid)) return;
             if (suggestedMap.has(candidateUid)) return;
             fofCounts.set(candidateUid, (fofCounts.get(candidateUid) || 0) + 1);
@@ -82,62 +83,52 @@ export async function getSuggestedUsers(myUid, limit = 20) {
       })
     );
 
-    // Pick top FOF by mutual count
     const topFof = [...fofCounts.entries()]
       .sort((a, b) => b[1] - a[1])
-      .slice(0, 8)
+      .slice(0, limit - suggestedMap.size)
       .map(([uid]) => uid);
 
-    for (const uid of topFof) {
-      if (suggestedMap.has(uid)) continue;
-      try {
-        const snap = await get(ref(db, `profiles/${uid}`));
-        if (!snap.exists()) continue;
-        const p = snap.val();
-        suggestedMap.set(uid, {
-          uid,
-          name: p.name || p.displayName || 'User',
-          username: p.username || '',
-          avatar: p.avatar || '',
-          bio: p.bio || '',
-          followers: Number(p.followersCount || 0),
-          isVerified: p.verified === true,
-          isCreator: false,
-        });
-      } catch (_) {}
-    }
-  } catch (_) {}
-
-  // ─── 4. Fill remaining slots with most-followed users ──────────
-  if (suggestedMap.size < limit) {
-    try {
-      const profilesSnap = await get(ref(db, 'profiles'));
-      if (profilesSnap.exists()) {
-        const all = Object.entries(profilesSnap.val())
-          .filter(([uid, p]) => p && !exclude.has(uid) && !suggestedMap.has(uid))
-          .map(([uid, p]) => ({
-            uid,
-            name: p.name || p.displayName || 'User',
-            username: p.username || '',
-            avatar: p.avatar || '',
-            bio: p.bio || '',
-            followers: Number(p.followersCount || 0),
-            isVerified: p.verified === true,
-            isCreator: false,
-          }))
-          .sort((a, b) => b.followers - a.followers)
-          .slice(0, limit - suggestedMap.size);
-
-        all.forEach((u) => suggestedMap.set(u.uid, u));
-      }
-    } catch (_) {}
+    topFof.forEach((uid) => {
+      const p = allProfiles[uid];
+      if (!p || suggestedMap.has(uid)) return;
+      suggestedMap.set(uid, {
+        uid,
+        name: p.name || p.displayName || 'User',
+        username: p.username || '',
+        avatar: p.avatar || '',
+        bio: p.bio || '',
+        echowerCount: Number(p.echowerCount || 0),
+        isVerified: p.verified === true,
+        isCreator: false,
+      });
+    });
   }
 
-  // ─── 5. Final sort: creators first, then by followers ──────────
-  const list = [...suggestedMap.values()].sort((a, b) => {
-    if (a.isCreator !== b.isCreator) return a.isCreator ? -1 : 1;
-    return b.followers - a.followers;
-  });
+  // ─── 5. Fallback: most-echowered users ────────────────────────
+  if (suggestedMap.size < limit) {
+    const pool = Object.entries(allProfiles)
+      .filter(([uid, p]) => p && !exclude.has(uid) && !suggestedMap.has(uid))
+      .map(([uid, p]) => ({
+        uid,
+        name: p.name || p.displayName || 'User',
+        username: p.username || '',
+        avatar: p.avatar || '',
+        bio: p.bio || '',
+        echowerCount: Number(p.echowerCount || 0),
+        isVerified: p.verified === true,
+        isCreator: false,
+      }))
+      .sort((a, b) => b.echowerCount - a.echowerCount)
+      .slice(0, limit - suggestedMap.size);
 
-  return list.slice(0, limit);
+    pool.forEach((u) => suggestedMap.set(u.uid, u));
+  }
+
+  // ─── 6. Final sort: creators first, then by echowerCount ──────
+  return [...suggestedMap.values()]
+    .sort((a, b) => {
+      if (a.isCreator !== b.isCreator) return a.isCreator ? -1 : 1;
+      return b.echowerCount - a.echowerCount;
+    })
+    .slice(0, limit);
 }
