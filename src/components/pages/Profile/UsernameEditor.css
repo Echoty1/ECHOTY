@@ -233,7 +233,6 @@
   transform: none;
 }
 
-/* Light mode */
 html.theme-light .username-editor-sheet {
   background: #ffffff;
   border-color: rgba(0, 0, 0, 0.08);
