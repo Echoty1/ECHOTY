@@ -79,6 +79,7 @@ const WhoToEcho = ({ onContinue, onSkip }) => {
     }
   }, [user?.uid, followedIds, pendingIds]);
 
+  // ─── Continue is ALWAYS allowed (after loading) ───
   const handleContinue = () => {
     hapticSuccess();
     onContinue?.(Array.from(followedIds));
@@ -91,6 +92,18 @@ const WhoToEcho = ({ onContinue, onSkip }) => {
 
   return (
     <div className="wte-page">
+      {/* Top-right Skip — always reachable */}
+      <div className="wte-topbar">
+        <button
+          type="button"
+          className="wte-topbar-skip"
+          onClick={handleSkip}
+          aria-label="Skip"
+        >
+          Skip
+        </button>
+      </div>
+
       <div className="wte-header">
         <h1 className="wte-title">Who to Echo</h1>
         <p className="wte-subtitle">
