@@ -1,17 +1,15 @@
 // src/components/Onboarding/WhoToEcho.jsx
 import React, { useEffect, useState, useCallback } from 'react';
 import { useAuth } from '../../hooks/useAuth';
-import { useProfile } from '../../contexts/ProfileContext';
 import Avatar from '../common/Avatar';
 import Toast from '../Toast/Toast';
 import { hapticLight, hapticSuccess, hapticError } from '../../utils/haptics';
 import { getSuggestedUsers } from '../../services/suggestedUsersService';
-import { followUser, unfollowUser } from '../../services/followService';
+import { followUser, unfollowUser } from '../../services/echowerService';
 import './WhoToEcho.css';
 
 const WhoToEcho = ({ onContinue, onSkip }) => {
   const { user } = useAuth();
-  const { getProfile } = useProfile();
 
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -64,8 +62,7 @@ const WhoToEcho = ({ onContinue, onSkip }) => {
           return next;
         });
       } else {
-        const res = await followUser(user.uid, targetUid);
-        if (!res?.ok) throw new Error('follow failed');
+        await followUser(user.uid, targetUid);
         hapticSuccess();
         setFollowedIds((prev) => new Set(prev).add(targetUid));
       }
