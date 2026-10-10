@@ -3209,3 +3209,54 @@ body.light .link-preview-skeleton-line {
 .chat-header-info-btn:active {
   transform: scale(0.92);
 }
+/* ═══════════════════════════════════════════════════════════════
+   ★ Batch 6 Additions — Mute button + @mentions
+   ═══════════════════════════════════════════════════════════════ */
+
+.chat-header-mute-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  font-size: 14px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: all 0.15s ease;
+}
+
+.chat-header-mute-btn.muted {
+  color: #EF4444;
+  background: rgba(239, 68, 68, 0.12);
+}
+
+.chat-header-mute-btn:hover { background: var(--border-color); }
+.chat-header-mute-btn:active { transform: scale(0.92); }
+
+/* @mention highlighting inside message bubbles */
+.mention {
+  background: rgba(108, 60, 225, 0.22);
+  color: #A78BFA;
+  padding: 1px 6px;
+  border-radius: 6px;
+  font-weight: 700;
+  border: 1px solid rgba(108, 60, 225, 0.4);
+  display: inline-block;
+  line-height: 1.3;
+}
+
+.mention-everyone {
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.28), rgba(236, 72, 153, 0.28));
+  color: #F0ABFC;
+  border-color: rgba(236, 72, 153, 0.5);
+}
+
+/* Optional wrapper used by the mention autocomplete positioning */
+.chat-input-wrapper {
+  position: relative;
+  flex: 1;
+  display: flex;
+  align-items: center;
+}
