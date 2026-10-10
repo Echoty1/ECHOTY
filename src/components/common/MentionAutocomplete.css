@@ -1,0 +1,101 @@
+/* src/components/common/MentionAutocomplete.css */
+
+.mention-ac {
+  position: absolute;
+  z-index: 200;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  animation: macIn 0.15s ease both;
+}
+
+@keyframes macIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.mention-ac-above {
+  bottom: calc(100% + 8px);
+  left: 0;
+}
+
+.mention-ac-below {
+  top: calc(100% + 8px);
+  left: 0;
+}
+
+.mention-ac-header {
+  padding: 8px 12px 6px;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.mention-ac-list {
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 4px;
+}
+
+.mention-ac-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  background: transparent;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  transition: background 0.1s ease;
+}
+
+.mention-ac-item.active,
+.mention-ac-item:hover {
+  background: rgba(108, 60, 225, 0.16);
+}
+
+.mention-ac-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.mention-ac-info strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mention-ac-info span {
+  font-size: 11.5px;
+  color: #A78BFA;
+  font-weight: 600;
+}
+
+.mention-ac-everyone {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 800;
+}
