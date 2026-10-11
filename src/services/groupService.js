@@ -11,16 +11,28 @@ import {
   MAX_GROUP_MEMBERS,
 } from '../utils/groupId';
 
+// ─── Role helpers ────────────────────────────────────────────
+const isOwnerRole = (role) => role === 'owner';
+const isAdminRole = (role) => role === 'admin' || role === 'owner';
+const hasAdminPowers = (group, uid) => {
+  if (!group || !uid) return false;
+  const role = group.members?.[uid]?.role;
+  if (isAdminRole(role)) return true;
+  // Fallback: creator always has admin powers, even if role is missing/stale
+  if (group.createdBy === uid) return true;
+  return false;
+};
+
 // ─── Create a new group ──────────────────────────────────────
 /**
  * Creates a group with the given name and initial members.
- * The creator is automatically added as admin.
+ * The creator is automatically added as owner.
  *
  * @param {string} creatorUid   - UID of the creator
  * @param {string} name         - Group name (1-40 chars)
  * @param {string} emoji        - Group emoji (optional, default '👥')
  * @param {string[]} memberUids - Array of other member UIDs (must include at least 1 other)
- * @returns {Promise<{ ok: boolean, groupId?: string, error?: string }>}
+ * @returns {Promise<{ ok: boolean, groupId?: string, chatId?: string, error?: string }>}
  */
 export const createGroup = async (creatorUid, name, emoji, memberUids) => {
   if (!creatorUid) return { ok: false, error: 'Not logged in' };
@@ -42,24 +54,22 @@ export const createGroup = async (creatorUid, name, emoji, memberUids) => {
   const now = Date.now();
 
   try {
-    // Fetch creator profile for default name/avatar
     const creatorSnap = await get(ref(db, `profiles/${creatorUid}`));
     const creatorData = creatorSnap.exists() ? creatorSnap.val() : {};
 
-    // Build members map
     const membersMap = {};
     allMembers.forEach((uid) => {
       membersMap[uid] = {
-        role: uid === creatorUid ? 'admin' : 'member',
+        role: uid === creatorUid ? 'owner' : 'member',
         joinedAt: now,
       };
     });
 
-    // Group metadata
     const groupData = {
       name: validation.normalized,
       emoji: emoji || '👥',
       createdBy: creatorUid,
+      ownerId: creatorUid,
       createdAt: now,
       members: membersMap,
       memberCount: allMembers.length,
@@ -68,24 +78,19 @@ export const createGroup = async (creatorUid, name, emoji, memberUids) => {
       lastUpdated: now,
     };
 
-    // Write group
     await set(ref(db, `groups/${groupId}`), groupData);
-
-    // Initialize empty messages node (so listeners attach cleanly)
     await set(ref(db, `groups/${groupId}/messages`), null);
 
-    // Add to each member's groups list
     const updates = {};
     allMembers.forEach((uid) => {
       updates[`userGroups/${uid}/${groupId}`] = {
         groupId,
         joinedAt: now,
-        role: uid === creatorUid ? 'admin' : 'member',
+        role: uid === creatorUid ? 'owner' : 'member',
       };
     });
     await update(ref(db), updates);
 
-    // Write a system message
     const sysMsgRef = push(ref(db, `groups/${groupId}/messages`));
     await set(sysMsgRef, {
       senderId: 'system',
@@ -95,7 +100,6 @@ export const createGroup = async (creatorUid, name, emoji, memberUids) => {
       clientTs: now,
     });
 
-    // Also create the chat node used by ChatView (uses same shape as 1-1 chats)
     const chatId = groupIdToChatId(groupId);
     await set(ref(db, `chats/${chatId}`), {
       isGroup: true,
@@ -111,9 +115,6 @@ export const createGroup = async (creatorUid, name, emoji, memberUids) => {
 };
 
 // ─── Fetch group metadata ────────────────────────────────────
-/**
- * Fetches group data once (no live updates).
- */
 export const getGroup = async (groupId) => {
   if (!groupId) return null;
   try {
@@ -126,9 +127,6 @@ export const getGroup = async (groupId) => {
 };
 
 // ─── Add members ────────────────────────────────────────────
-/**
- * Adds new members to a group. Only admins can add.
- */
 export const addGroupMembers = async (groupId, actorUid, uidsToAdd) => {
   if (!groupId || !actorUid) return { ok: false, error: 'Missing params' };
 
@@ -145,7 +143,7 @@ export const addGroupMembers = async (groupId, actorUid, uidsToAdd) => {
     if (!members[actorUid]) {
       return { ok: false, error: 'You are not a member of this group' };
     }
-    if (members[actorUid].role !== 'admin') {
+    if (!hasAdminPowers(group, actorUid)) {
       return { ok: false, error: 'Only admins can add members' };
     }
 
@@ -161,7 +159,6 @@ export const addGroupMembers = async (groupId, actorUid, uidsToAdd) => {
     const now = Date.now();
     const updates = {};
 
-    // Update group members
     fresh.forEach((uid) => {
       updates[`groups/${groupId}/members/${uid}`] = {
         role: 'member',
@@ -173,7 +170,6 @@ export const addGroupMembers = async (groupId, actorUid, uidsToAdd) => {
     updates[`groups/${groupId}/memberCount`] = existing.size + fresh.length;
     updates[`groups/${groupId}/lastUpdated`] = now;
 
-    // Update each new member's userGroups list
     fresh.forEach((uid) => {
       updates[`userGroups/${uid}/${groupId}`] = {
         groupId,
@@ -184,7 +180,6 @@ export const addGroupMembers = async (groupId, actorUid, uidsToAdd) => {
 
     await update(ref(db), updates);
 
-    // System message
     const actorSnap = await get(ref(db, `profiles/${actorUid}`));
     const actorName = actorSnap.exists() ? (actorSnap.val().name || 'Someone') : 'Someone';
     const sysRef = push(ref(db, `groups/${groupId}/messages`));
@@ -204,10 +199,6 @@ export const addGroupMembers = async (groupId, actorUid, uidsToAdd) => {
 };
 
 // ─── Remove a member ────────────────────────────────────────
-/**
- * Removes a member from the group. Admins can remove others.
- * Members can remove themselves (leave group).
- */
 export const removeGroupMember = async (groupId, actorUid, targetUid) => {
   if (!groupId || !actorUid || !targetUid) return { ok: false, error: 'Missing params' };
 
@@ -222,10 +213,14 @@ export const removeGroupMember = async (groupId, actorUid, targetUid) => {
     if (!members[targetUid]) return { ok: false, error: 'User is not in this group' };
 
     const isSelf = actorUid === targetUid;
-    const isAdmin = members[actorUid].role === 'admin';
+    const actorCanRemove = hasAdminPowers(group, actorUid);
+    const targetIsOwner = isOwnerRole(members[targetUid]?.role) || group.createdBy === targetUid;
 
-    if (!isSelf && !isAdmin) {
+    if (!isSelf && !actorCanRemove) {
       return { ok: false, error: 'Only admins can remove members' };
+    }
+    if (!isSelf && targetIsOwner) {
+      return { ok: false, error: 'Cannot remove the group owner' };
     }
 
     const now = Date.now();
@@ -234,13 +229,10 @@ export const removeGroupMember = async (groupId, actorUid, targetUid) => {
     updates[`groups/${groupId}/members/${targetUid}`] = null;
     updates[`groups/${groupId}/memberCount`] = Math.max(0, (group.memberCount || 1) - 1);
     updates[`groups/${groupId}/lastUpdated`] = now;
-
-    // Remove from their userGroups list
     updates[`userGroups/${targetUid}/${groupId}`] = null;
 
     await update(ref(db), updates);
 
-    // System message
     const actorSnap = await get(ref(db, `profiles/${actorUid}`));
     const targetSnap = await get(ref(db, `profiles/${targetUid}`));
     const actorName = actorSnap.exists() ? (actorSnap.val().name || 'Someone') : 'Someone';
@@ -265,7 +257,7 @@ export const removeGroupMember = async (groupId, actorUid, targetUid) => {
 // ─── Leave group (convenience) ──────────────────────────────
 export const leaveGroup = (groupId, uid) => removeGroupMember(groupId, uid, uid);
 
-// ─── Update group name/emoji ────────────────────────────────
+// ─── Update group name / emoji / description / avatar ───────
 export const updateGroupInfo = async (groupId, actorUid, patch) => {
   if (!groupId || !actorUid) return { ok: false, error: 'Missing params' };
 
@@ -274,21 +266,40 @@ export const updateGroupInfo = async (groupId, actorUid, patch) => {
     if (!groupSnap.exists()) return { ok: false, error: 'Group not found' };
 
     const group = groupSnap.val();
-    if (group.members?.[actorUid]?.role !== 'admin') {
+    if (!hasAdminPowers(group, actorUid)) {
       return { ok: false, error: 'Only admins can change group info' };
     }
 
     const updates = {};
+
     if (patch.name !== undefined) {
       const v = validateGroupName(patch.name);
       if (!v.valid) return { ok: false, error: v.error };
       updates.name = v.normalized;
     }
-    if (patch.emoji !== undefined) {
-      updates.emoji = patch.emoji;
-    }
-    updates.lastUpdated = Date.now();
 
+    if (patch.emoji !== undefined) {
+      updates.emoji = String(patch.emoji).slice(0, 8);
+    }
+
+    if (patch.description !== undefined) {
+      const desc = String(patch.description || '').trim().slice(0, 200);
+      updates.description = desc;
+    }
+
+    if (patch.avatar !== undefined) {
+      if (patch.avatar === null || patch.avatar === '') {
+        updates.avatar = null;
+      } else {
+        updates.avatar = String(patch.avatar).slice(0, 500);
+      }
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return { ok: true };
+    }
+
+    updates.lastUpdated = Date.now();
     await update(ref(db, `groups/${groupId}`), updates);
     return { ok: true };
   } catch (err) {
@@ -297,26 +308,49 @@ export const updateGroupInfo = async (groupId, actorUid, patch) => {
   }
 };
 
-// ─── Promote / demote admin ─────────────────────────────────
+// ─── Promote / demote / transfer ownership ──────────────────
 export const setMemberRole = async (groupId, actorUid, targetUid, role) => {
   if (!groupId || !actorUid || !targetUid) return { ok: false, error: 'Missing params' };
-  if (role !== 'admin' && role !== 'member') return { ok: false, error: 'Invalid role' };
+  if (!['owner', 'admin', 'moderator', 'member'].includes(role)) {
+    return { ok: false, error: 'Invalid role' };
+  }
 
   try {
     const groupSnap = await get(ref(db, `groups/${groupId}`));
     if (!groupSnap.exists()) return { ok: false, error: 'Group not found' };
 
     const group = groupSnap.val();
-    if (group.members?.[actorUid]?.role !== 'admin') {
+    const actorRole = group.members?.[actorUid]?.role;
+    const actorIsCreator = group.createdBy === actorUid;
+
+    if (!isAdminRole(actorRole) && !actorIsCreator) {
       return { ok: false, error: 'Only admins can change roles' };
     }
     if (!group.members?.[targetUid]) {
       return { ok: false, error: 'User is not in this group' };
     }
+    if (role === 'owner' && !actorIsCreator) {
+      return { ok: false, error: 'Only the owner can transfer ownership' };
+    }
 
-    await update(ref(db, `groups/${groupId}/members/${targetUid}`), { role });
-    await update(ref(db, `userGroups/${targetUid}/${groupId}`), { role });
+    const updates = {
+      [`groups/${groupId}/members/${targetUid}/role`]: role,
+      [`userGroups/${targetUid}/${groupId}/role`]: role,
+    };
 
+    // If transferring ownership, demote the previous owner to admin
+    if (role === 'owner') {
+      const previousOwner = Object.entries(group.members).find(
+        ([uid, m]) => isOwnerRole(m?.role) && uid !== targetUid
+      );
+      if (previousOwner) {
+        updates[`groups/${groupId}/members/${previousOwner[0]}/role`] = 'admin';
+        updates[`userGroups/${previousOwner[0]}/${groupId}/role`] = 'admin';
+      }
+      updates[`groups/${groupId}/ownerId`] = targetUid;
+    }
+
+    await update(ref(db), updates);
     return { ok: true };
   } catch (err) {
     console.error('setMemberRole failed:', err);
@@ -324,7 +358,7 @@ export const setMemberRole = async (groupId, actorUid, targetUid, role) => {
   }
 };
 
-// ─── Delete group (admin only) ──────────────────────────────
+// ─── Delete group (owner or creator only) ───────────────────
 export const deleteGroup = async (groupId, actorUid) => {
   if (!groupId || !actorUid) return { ok: false, error: 'Missing params' };
 
@@ -333,8 +367,11 @@ export const deleteGroup = async (groupId, actorUid) => {
     if (!groupSnap.exists()) return { ok: false, error: 'Group not found' };
 
     const group = groupSnap.val();
-    if (group.createdBy !== actorUid) {
-      return { ok: false, error: 'Only the group creator can delete it' };
+    const isCreator = group.createdBy === actorUid;
+    const actorRole = group.members?.[actorUid]?.role;
+
+    if (!isCreator && !isOwnerRole(actorRole)) {
+      return { ok: false, error: 'Only the group owner can delete it' };
     }
 
     const memberUids = Object.keys(group.members || {});
@@ -356,9 +393,6 @@ export const deleteGroup = async (groupId, actorUid) => {
 };
 
 // ─── Live subscriptions ─────────────────────────────────────
-/**
- * Subscribes to a group's metadata. Returns unsubscribe fn.
- */
 export const subscribeToGroup = (groupId, callback) => {
   if (!groupId) return () => {};
   const groupRef = ref(db, `groups/${groupId}`);
@@ -367,9 +401,6 @@ export const subscribeToGroup = (groupId, callback) => {
   });
 };
 
-/**
- * Subscribes to a user's group list. Returns unsubscribe fn.
- */
 export const subscribeToMyGroups = (uid, callback) => {
   if (!uid) return () => {};
   const listRef = ref(db, `userGroups/${uid}`);
@@ -387,9 +418,6 @@ export const subscribeToMyGroups = (uid, callback) => {
   });
 };
 
-/**
- * Fetch all groups a user is a member of (once).
- */
 export const getMyGroups = async (uid) => {
   if (!uid) return [];
   try {
