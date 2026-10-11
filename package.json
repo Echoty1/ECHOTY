@@ -2,15 +2,6 @@
   "name": "echo-v2",
   "version": "0.1.0",
   "private": true,
-  {
-  "name": "echo-v2",
-  "version": "0.1.0",
-  "private": true,
-  "overrides": {
-    "ajv": "^8.17.1",
-    "ajv-keywords": "^5.1.0"
-  },
-  "dependencies": {
   "overrides": {
     "ajv": "^8.17.1",
     "ajv-keywords": "^5.1.0"
