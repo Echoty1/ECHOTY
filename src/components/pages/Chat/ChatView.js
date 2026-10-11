@@ -54,6 +54,18 @@ import { hapticSend, hapticLight } from '../../../utils/haptics';
 import { isGroupChatId, chatIdToGroupId } from '../../../utils/groupId';
 import './ChatView.css';
 
+// ─── Batch 6: Mentions + Group roles ─────────────────────────
+import MentionAutocomplete from '../../common/MentionAutocomplete';
+import {
+  parseMentions,
+  extractMentions,
+  mentionsEveryone,
+  getActiveMentionQuery,
+  insertMention,
+} from '../../../utils/mentionParser';
+import { ROLE_LABELS } from '../../../utils/groupRoles';
+// ────────────────────────────────────────────────────────────
+
 // ─── Link preview imports ──────────────────────────────────────
 import LinkPreviewCard from './LinkPreviewCard';
 import { extractFirstUrl, fetchLinkPreview } from '../../../utils/linkPreview';
@@ -246,6 +258,14 @@ const ChatView = () => {
   const [activeMessageMenuId, setActiveMessageMenuId] = useState(null);
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
 
+  // ─── Batch 6: Mentions + Mute state ──────────────────────────
+  const [mentionQuery, setMentionQuery] = useState(null);
+  const [mentionSuggestions, setMentionSuggestions] = useState([]);
+  const [mentionIndex, setMentionIndex] = useState(0);
+  const [mentionStartIndex, setMentionStartIndex] = useState(-1);
+  const [isMuted, setIsMuted] = useState(false);
+  // ─────────────────────────────────────────────────────────────
+
   const [replyToNote, setReplyToNote] = useState(null);
 
   const [wallpaperId, setWallpaperId] = useState('default');
@@ -333,9 +353,6 @@ const ChatView = () => {
     const unsub = onValue(pRef, (snap) => { if (snap.exists()) setPartnerProfile(snap.val()); });
     return () => unsub();
   }, [userId, getProfile, fetchProfile, isGroupChat, groupIdFromChat]);
-
-  // ─── Group messages come from /groups/{groupId}/messages ─────
-  // For 1-1 chats, messages come from /chats/{chatId}/messages
 
   useEffect(() => {
     const t = setTimeout(() => setLoadingMessages(false), 1200);
@@ -461,6 +478,17 @@ const ChatView = () => {
     return () => unsub();
   }, [user?.uid, userId, isGroupChat]);
 
+  // ─── Batch 6: Group mute listener ────────────────────────────
+  useEffect(() => {
+    if (!user?.uid || !userId || !isGroupChat) return;
+    const muteRef = ref(db, `userChats/${user.uid}/${userId}/muted`);
+    const unsub = onValue(muteRef, (snap) => {
+      setIsMuted(!!snap.val());
+    });
+    return () => unsub();
+  }, [user?.uid, userId, isGroupChat]);
+  // ─────────────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!user?.uid || !userId || isGroupChat) return undefined;
     let mounted = true;
@@ -486,6 +514,24 @@ const ChatView = () => {
       await update(ref(db, `chats/${cId}`), { wallpaper: '__custom__', customWallpaper: url });
     } catch (err) { console.error('Failed to save custom wallpaper', err); }
   };
+
+  // ─── Batch 6: Mute toggle handler ────────────────────────────
+  const handleToggleMute = async () => {
+    if (!user?.uid || !userId || !isGroupChat) return;
+    hapticLight();
+    const newMuted = !isMuted;
+    try {
+      await update(ref(db, `userChats/${user.uid}/${userId}`), { muted: newMuted });
+      setIsMuted(newMuted);
+      setToast({ message: newMuted ? 'Group muted' : 'Group unmuted', type: 'success' });
+      setTimeout(() => setToast(null), 2000);
+    } catch (err) {
+      console.error('Mute toggle failed:', err);
+      setToast({ message: 'Failed to update mute', type: 'error' });
+      setTimeout(() => setToast(null), 2000);
+    }
+  };
+  // ─────────────────────────────────────────────────────────────
 
   const pruneExpired = async (list, cId) => {
     if (userId === ECHO_AI_ID) return list;
@@ -561,7 +607,6 @@ const ChatView = () => {
       }
 
       if (isGroupChat) {
-        // For groups, we only update userChats read count (no per-message read)
         await update(ref(db, `userChats/${user.uid}/${userId}`), {
           lastMessage: latestMsg,
           lastSenderId: latestSender,
@@ -618,7 +663,7 @@ const ChatView = () => {
   const handleTyping = useCallback(() => {
     if (!user?.uid || !userId) return;
     if (!showTyping) return;
-    if (isGroupChat) return; // no typing for groups yet
+    if (isGroupChat) return;
     const cId = [user.uid, userId].sort().join('_');
     const typingRef = ref(db, `chats/${cId}/typing/${user.uid}`);
     set(typingRef, { isTyping: true, timestamp: Date.now() }).catch(() => {});
@@ -762,7 +807,6 @@ const ChatView = () => {
 
     const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
     const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${cId}/messages`;
-    const userChatKey = isGroupChat ? `${user.uid}/${userId}` : null;
 
     if (!isGroupChat && ended) {
       try { await remove(ref(db, `chats/${cId}/ended`)); setEnded(false); } catch (_) {}
@@ -821,23 +865,55 @@ const ChatView = () => {
     flashSent(newMsgRef.key);
     if (getSoundEnabled()) playSentSound();
 
+    // ─── Batch 6: Notify @mentioned users (group only) ───
+    if (isGroupChat && groupData?.members) {
+      const mentioned = extractMentions(textToSend);
+      const everyone = mentionsEveryone(textToSend);
+      const memberUids = Object.keys(groupData.members);
+
+      const toNotify = new Set();
+      if (everyone) {
+        memberUids.forEach((uid) => {
+          if (uid !== user.uid) toNotify.add(uid);
+        });
+      } else {
+        mentioned.forEach((handle) => {
+          const match = memberUids.find((uid) => {
+            const p = getProfile(uid);
+            return p?.username?.toLowerCase() === handle;
+          });
+          if (match && match !== user.uid) toNotify.add(match);
+        });
+      }
+
+      toNotify.forEach((uid) => {
+        sendPushToUser({
+          recipientUid: uid,
+          title: `${currentUserProfile?.name || 'Someone'} mentioned you`,
+          body: textToSend.slice(0, 120),
+          data: {
+            partnerId: user.uid,
+            groupId: groupIdFromChat,
+            type: 'mention',
+          },
+        }).catch(() => {});
+      });
+    }
+    // ─────────────────────────────────────────────────────
+
     // Update userChats (for both 1-1 and group)
     if (isGroupChat) {
-      // Update group metadata
       update(ref(db, `groups/${groupIdFromChat}`), {
         lastMessage: textToSend,
         lastSenderId: user.uid,
         lastUpdated: Date.now(),
       }).catch(() => {});
 
-      // Bump unread count for all members except the sender
       if (groupData?.members) {
         const memberUids = Object.keys(groupData.members);
-        const updates = {};
         memberUids.forEach((uid) => {
           if (uid !== user.uid) {
             const userChatPath = `userChats/${uid}/${userId}`;
-            // Increment unread via transaction per member
             runTransaction(ref(db, userChatPath), (currentData) => {
               if (currentData === null) {
                 return {
@@ -862,7 +938,6 @@ const ChatView = () => {
         });
       }
     } else {
-      // 1-1 chat
       if (userId === ECHO_AI_ID) {
         setIsAILoading(true);
         try {
@@ -891,7 +966,6 @@ const ChatView = () => {
         return currentData;
       });
 
-      // Push notification (1-1 only)
       if (userId !== ECHO_AI_ID) {
         sendPushToUser({
           recipientUid: userId,
@@ -908,8 +982,7 @@ const ChatView = () => {
     }
     clearMessageCache(cId);
   };
-
-  const sendMediaMessage = async (retryMessageId = null) => {
+    const sendMediaMessage = async (retryMessageId = null) => {
     let file = selectedFile;
     let caption = captionText.trim();
     let reply = replyTo;
@@ -1427,7 +1500,44 @@ const ChatView = () => {
     } else { setNewMessage((prev) => prev + emoji); setTimeout(() => inputRef.current?.focus(), 0); }
   };
 
+  // ─── Batch 6: Mention-aware keydown ──────────────────────────
   const handleKeyDown = (e) => {
+    if (mentionQuery && mentionSuggestions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setMentionIndex((i) => (i + 1) % mentionSuggestions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setMentionIndex((i) => (i - 1 + mentionSuggestions.length) % mentionSuggestions.length);
+        return;
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault();
+        const chosen = mentionSuggestions[mentionIndex];
+        if (chosen) {
+          const cursor = inputRef.current?.selectionStart || newMessage.length;
+          const result = insertMention(newMessage, mentionStartIndex, cursor, chosen.handle);
+          setNewMessage(result.text);
+          setMentionQuery(null);
+          setMentionSuggestions([]);
+          setTimeout(() => {
+            if (inputRef.current) {
+              inputRef.current.setSelectionRange(result.cursor, result.cursor);
+              inputRef.current.focus();
+            }
+          }, 0);
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        setMentionQuery(null);
+        setMentionSuggestions([]);
+        return;
+      }
+    }
+
     if (e.key !== 'Enter') return;
     if (enterToSend && !e.shiftKey) {
       e.preventDefault();
@@ -1437,6 +1547,7 @@ const ChatView = () => {
       handleSendText(e);
     }
   };
+  // ─────────────────────────────────────────────────────────────
 
   const renderPreviewOverlay = () => {
     if (!previewUrl) return null;
@@ -1639,7 +1750,6 @@ const ChatView = () => {
     const isPinned = pinnedMessageId === msg.id;
     const saveState = savingIds[msg.id];
 
-    // In group chats, show sender name above bubble for partner messages
     const showSenderName = isGroupChat && !isOwn && groupTop && !isSystem;
 
     const shell = (inner) => {
@@ -1764,11 +1874,26 @@ const ChatView = () => {
       }
       content = shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}{inner}</>);
     } else {
+      // ─── Batch 6: Mention-highlighted text (group chats) ───
       content = shell(<>
         {replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}
         {noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}
         <div className="message-text" style={{ whiteSpace: userId === ECHO_AI_ID && !isOwn ? 'normal' : 'pre-wrap' }}>
-          {userId === ECHO_AI_ID && !isOwn ? <AiRichText text={msg.text} onFollowup={(q) => handleSendText(q)} /> : msg.text}
+          {userId === ECHO_AI_ID && !isOwn ? (
+            <AiRichText text={msg.text} onFollowup={(q) => handleSendText(q)} />
+          ) : isGroupChat ? (
+            parseMentions(msg.text).map((part, i) => {
+              if (part.isEveryone) {
+                return <span key={i} className="mention mention-everyone">{part.text}</span>;
+              }
+              if (part.isMention) {
+                return <span key={i} className="mention">{part.text}</span>;
+              }
+              return <span key={i}>{part.text}</span>;
+            })
+          ) : (
+            msg.text
+          )}
           {msg.isEdited && <span className="message-edited-badge">(edited)</span>}
         </div>
         {msg.linkPreview && <LinkPreviewCard preview={msg.linkPreview} />}
@@ -1889,7 +2014,6 @@ const ChatView = () => {
           markReadTimeout.current = setTimeout(() => { if (isMounted.current) markMessagesAsRead(); }, 300);
         }
       } else {
-        // Group: mark userChats unread to 0
         update(ref(db, `userChats/${user.uid}/${userId}`), { unreadCount: 0 }).catch(() => {});
       }
     }, (error) => {
@@ -2044,601 +2168,12 @@ const ChatView = () => {
       },
     });
   };
-
-  return (
-    <>
-      <style>{`
-        .echo-reaction-backdrop { position: fixed; inset: 0; z-index: 998; background: transparent; }
-        .echo-reaction-bar { position: fixed; z-index: 1000; display: flex; align-items: center; gap: 2px; background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 999px; padding: 6px 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); transform: translateX(-50%); transform-origin: bottom center; animation: snapReactionPop 0.22s cubic-bezier(0.2, 1.3, 0.4, 1) both; }
-        html[data-theme="light"] .echo-reaction-bar, html.theme-light .echo-reaction-bar { background: #ffffff; border-color: rgba(0, 0, 0, 0.08); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
-        @keyframes snapReactionPop { 0% { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.85); } 100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
-        .echo-reaction-emoji { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: transparent; border: none; border-radius: 50%; cursor: pointer; transition: transform 0.15s cubic-bezier(0.2, 1.3, 0.4, 1), background 0.15s ease; -webkit-tap-highlight-color: transparent; }
-        .echo-reaction-emoji .rx-svg { width: 32px; height: 32px; display: block; overflow: visible; animation: rxIdleBounce 3.2s ease-in-out infinite; }
-        .echo-reaction-emoji:nth-child(1) .rx-svg { animation-delay: 0s; }
-        .echo-reaction-emoji:nth-child(2) .rx-svg { animation-delay: 0.15s; }
-        .echo-reaction-emoji:nth-child(3) .rx-svg { animation-delay: 0.30s; }
-        .echo-reaction-emoji:nth-child(4) .rx-svg { animation-delay: 0.45s; }
-        .echo-reaction-emoji:nth-child(5) .rx-svg { animation-delay: 0.60s; }
-        .echo-reaction-emoji:nth-child(6) .rx-svg { animation-delay: 0.75s; }
-        @keyframes rxIdleBounce { 0%, 75%, 100% { transform: translateY(0) scale(1); } 82% { transform: translateY(-3px) scale(1.08); } 90% { transform: translateY(0) scale(1); } }
-        .echo-reaction-emoji:hover { background: rgba(255, 255, 255, 0.08); transform: scale(1.15); }
-        html[data-theme="light"] .echo-reaction-emoji:hover, html.theme-light .echo-reaction-emoji:hover { background: rgba(0, 0, 0, 0.05); }
-        .echo-reaction-emoji:hover .rx-svg { animation: rxHoverBounce 0.5s cubic-bezier(0.2, 1.5, 0.4, 1); }
-        @keyframes rxHoverBounce { 0% { transform: scale(1) rotate(0deg); } 35% { transform: scale(1.35) rotate(-8deg); } 65% { transform: scale(1.15) rotate(6deg); } 100% { transform: scale(1.15) rotate(0deg); } }
-        .echo-reaction-emoji.tapped .rx-svg { animation: rxTapPop 0.42s cubic-bezier(0.2, 1.6, 0.4, 1); }
-        @keyframes rxTapPop { 0% { transform: scale(1); } 40% { transform: scale(1.55) rotate(0deg); } 70% { transform: scale(1.3) rotate(-4deg); } 100% { transform: scale(1) rotate(0deg); } }
-        .rx-heart-path { transform-origin: 20px 24px; animation: rxHeartBeat 1.6s ease-in-out infinite; }
-        @keyframes rxHeartBeat { 0%, 100% { transform: scale(1); } 15% { transform: scale(1.10); } 30% { transform: scale(0.98); } 45% { transform: scale(1.06); } 60% { transform: scale(1); } }
-        .rx-heart-shine { animation: rxHeartShine 1.6s ease-in-out infinite; }
-        @keyframes rxHeartShine { 0%, 100% { opacity: 0.55; transform: scale(1); } 15% { opacity: 0.85; transform: scale(1.2); } 30% { opacity: 0.55; transform: scale(1); } }
-        .rx-laugh-eye-left, .rx-laugh-eye-right { transform-origin: center; animation: rxLaughSquint 2s ease-in-out infinite; }
-        .rx-laugh-eye-right { animation-delay: 0.05s; }
-        @keyframes rxLaughSquint { 0%, 80%, 100% { transform: scaleY(1); } 88% { transform: scaleY(0.4); } }
-        .rx-laugh-tear { animation: rxLaughTear 2s ease-in-out infinite; }
-        @keyframes rxLaughTear { 0%, 40%, 100% { opacity: 0; transform: translateY(0) scale(0); } 55% { opacity: 1; transform: translateY(0) scale(1); } 90% { opacity: 0; transform: translateY(4px) scale(0.6); } }
-        .rx-wow-eye-left, .rx-wow-eye-right { transform-origin: center; animation: rxWowEyes 1.6s ease-in-out infinite; }
-        @keyframes rxWowEyes { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.15); } }
-        .rx-wow-mouth { transform-origin: 20px 26px; animation: rxWowMouth 1.2s ease-in-out infinite; }
-        @keyframes rxWowMouth { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.18); } }
-        .rx-sad-tear { animation: rxSadTear 2.4s ease-in-out infinite; transform-origin: 17px 20px; }
-        @keyframes rxSadTear { 0%, 40%, 100% { opacity: 0; transform: translateY(0) scale(0.4); } 55% { opacity: 1; transform: translateY(0) scale(1); } 90% { opacity: 0; transform: translateY(6px) scale(0.7); } }
-        .rx-pray-left { transform-origin: 20px 34px; animation: rxPrayLeft 2.4s ease-in-out infinite; }
-        .rx-pray-right { transform-origin: 20px 34px; animation: rxPrayRight 2.4s ease-in-out infinite; }
-        @keyframes rxPrayLeft { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(3deg); } }
-        @keyframes rxPrayRight { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-3deg); } }
-        .rx-pray-sparkle { transform-origin: 32px 12px; animation: rxPraySparkle 2.4s ease-in-out infinite; }
-        @keyframes rxPraySparkle { 0%, 100% { opacity: 0.4; transform: scale(1) rotate(0deg); } 50% { opacity: 1; transform: scale(1.35) rotate(180deg); } }
-        .rx-fire-outer { transform-origin: 20px 34px; animation: rxFireFlicker 0.9s ease-in-out infinite; }
-        @keyframes rxFireFlicker { 0%, 100% { transform: scale(1) skewX(0deg); } 25% { transform: scale(1.03) skewX(2deg); } 50% { transform: scale(0.98) skewX(-2deg); } 75% { transform: scale(1.05) skewX(1deg); } }
-        .rx-fire-inner { transform-origin: 20px 30px; animation: rxFireInner 0.7s ease-in-out infinite; }
-        @keyframes rxFireInner { 0%, 100% { transform: scale(1); opacity: 0.95; } 50% { transform: scale(0.85); opacity: 1; } }
-        @media (prefers-reduced-motion: reduce) { .echo-reaction-emoji .rx-svg, .echo-reaction-emoji:hover .rx-svg, .echo-reaction-emoji.tapped .rx-svg, .rx-heart-path, .rx-heart-shine, .rx-laugh-eye-left, .rx-laugh-eye-right, .rx-laugh-tear, .rx-wow-eye-left, .rx-wow-eye-right, .rx-wow-mouth, .rx-sad-tear, .rx-pray-left, .rx-pray-right, .rx-pray-sparkle, .rx-fire-outer, .rx-fire-inner { animation: none !important; } }
-        .echo-reaction-bar-arrow { display: none; }
-
-        .highlight-flash { animation: highlightFlash 1.6s ease; }
-        @keyframes highlightFlash { 0%, 100% { background: transparent; } 20% { background: rgba(255, 215, 0, 0.3); } }
-        .message-inline-menu-wrapper { display: flex; width: 100%; margin-top: 8px; z-index: 10; }
-        .message-inline-actions.own { justify-content: flex-end; }
-        .message-inline-actions.partner { justify-content: flex-start; }
-        .message-inline-actions { display: flex; align-items: center; gap: 4px; background: var(--bg-primary, #ffffff); border: 1px solid rgba(0,0,0,0.08); padding: 3px; border-radius: 20px; box-shadow: 0 6px 16px rgba(0,0,0,0.08); animation: menuFadeIn 0.24s cubic-bezier(0.2, 1.2, 0.4, 1); flex-wrap: wrap; }
-        @keyframes menuFadeIn { 0% { opacity: 0; transform: translateY(-6px) scale(0.92); } 70% { opacity: 1; transform: translateY(1px) scale(1.02); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
-        .message-action-btn { background: transparent; border: none; cursor: pointer; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--text-secondary, #555); transition: all 0.15s ease; }
-        .message-action-btn svg { width: 18px; height: 18px; fill: currentColor; }
-        .message-action-btn:hover { background: var(--bg-hover, #eaeaea); color: var(--text-primary, #333); transform: scale(1.15) translateY(-1px); }
-        .message-action-btn.danger:hover { background: #fde8e8; color: #d32f2f; }
-
-        .group-sender-name {
-          font-size: 11.5px;
-          font-weight: 700;
-          letter-spacing: 0.2px;
-          padding: 0 4px;
-          margin-bottom: 3px;
-          text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-        }
-
-        .message-row.own .message-bubble, .message-row.partner .message-bubble {
-          animation: echoBubbleIn 0.3s cubic-bezier(0.2, 0.9, 0.25, 1.05) both;
-          transform-origin: bottom;
-          will-change: transform, opacity;
-          transition: transform 0.2s cubic-bezier(0.2, 0.9, 0.25, 1.05), box-shadow 0.25s ease;
-        }
-        .message-row.own .message-bubble { transform-origin: bottom right; }
-        .message-row.partner .message-bubble { transform-origin: bottom left; }
-        @keyframes echoBubbleIn { 0% { opacity: 0; transform: translateY(10px) scale(0.84); } 60% { opacity: 1; transform: translateY(-1px) scale(1.03); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
-        @media (hover: hover) { .message-row:hover .message-bubble { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(0,0,0,0.18); } }
-        .message-row.pressed .message-bubble { transform: scale(0.94); transition: transform 0.15s ease; }
-        .message-row .message-bubble.pending { animation: echoSendingPulse 1.4s ease-in-out infinite; }
-        @keyframes echoSendingPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(108, 60, 225, 0.0); } 50% { box-shadow: 0 0 0 4px rgba(108, 60, 225, 0.15); } }
-
-        .message-receipt { transition: color 0.25s ease, transform 0.25s ease; display: inline-block; }
-        .message-receipt.sent { color: rgba(255, 255, 255, 0.55); }
-        .message-receipt.delivered { color: rgba(255, 255, 255, 0.8); animation: receiptDeliveredPop 0.32s cubic-bezier(0.2, 1.4, 0.4, 1) both; }
-        .message-receipt.read { color: #60A5FA; animation: receiptReadPop 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) both; }
-        @keyframes receiptDeliveredPop { 0% { transform: scale(0.7); opacity: 0.4; } 60% { transform: scale(1.18); opacity: 1; } 100% { transform: scale(1); opacity: 1; } }
-        @keyframes receiptReadPop { 0% { transform: scale(0.7); opacity: 0.4; color: rgba(255,255,255,0.6); } 40% { transform: scale(1.25); opacity: 1; color: #60A5FA; } 100% { transform: scale(1); opacity: 1; color: #60A5FA; } }
-
-        .chat-send-btn { position: relative; overflow: visible; transition: transform 0.12s ease, background 0.2s ease, box-shadow 0.2s ease; }
-        .chat-send-btn:not(:disabled):active { transform: scale(0.88); }
-        .chat-send-btn:not(:disabled):hover { transform: scale(1.06); box-shadow: 0 6px 18px rgba(108, 60, 225, 0.45); }
-        .chat-send-btn.rippling::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid rgba(108, 60, 225, 0.55); animation: sendRipple 0.6s cubic-bezier(0.2, 0.8, 0.4, 1) forwards; pointer-events: none; }
-        @keyframes sendRipple { 0% { transform: scale(0.9); opacity: 0.85; } 100% { transform: scale(2.4); opacity: 0; } }
-
-        .message-row.own.just-sent .message-bubble { animation: sentGlow 0.75s ease-out both; }
-        @keyframes sentGlow { 0% { box-shadow: 0 0 0 0 rgba(108, 60, 225, 0.55), 0 4px 14px rgba(108,60,225,0.35); } 100% { box-shadow: 0 0 0 14px rgba(108, 60, 225, 0), 0 4px 14px rgba(108,60,225,0.35); } }
-        .message-row.partner.just-arrived .message-bubble { animation: arrivedPulse 0.6s ease-out both; }
-        @keyframes arrivedPulse { 0% { box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.4); } 100% { box-shadow: 0 0 0 12px rgba(236, 72, 153, 0); } }
-
-        .typing-indicator-container { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-radius: 22px 22px 22px 4px; align-self: flex-start; max-width: 260px; margin: 6px 0 10px 12px; background: rgba(20, 15, 35, 0.85); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255, 255, 255, 0.15); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(108, 60, 225, 0.35), 0 0 24px rgba(108, 60, 225, 0.25); animation: typingContainerIn 0.28s cubic-bezier(0.2, 1.3, 0.4, 1); }
-        html.theme-light .typing-indicator-container { background: rgba(255, 255, 255, 0.94); border: 1px solid rgba(0, 0, 0, 0.08); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15), 0 0 0 1px rgba(108, 60, 225, 0.35), 0 0 24px rgba(108, 60, 225, 0.15); }
-        .typing-echomoji-wrapper { display: flex; align-items: center; justify-content: center; width: 44px; height: 44px; border-radius: 50%; overflow: hidden; background: linear-gradient(135deg, rgba(108, 60, 225, 0.25), rgba(236, 72, 153, 0.2)); box-shadow: 0 0 0 2px rgba(108, 60, 225, 0.5), 0 0 12px rgba(108, 60, 225, 0.4); animation: typingEchoBob 1.4s ease-in-out infinite; flex-shrink: 0; }
-        @keyframes typingEchoBob { 0%, 100% { transform: translateY(0) rotate(0deg); } 25% { transform: translateY(-2px) rotate(-2deg); } 75% { transform: translateY(-2px) rotate(2deg); } }
-        .typing-dots-row { display: inline-flex; align-items: center; gap: 5px; }
-        .typing-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: linear-gradient(135deg, #A78BFA, #F472B6); box-shadow: 0 0 8px rgba(167, 139, 250, 0.65); animation: typingBounce 1.4s infinite ease-in-out; }
-        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
-        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0) scale(1); opacity: 0.55; } 30% { transform: translateY(-5px) scale(1.15); opacity: 1; } }
-        @keyframes typingContainerIn { 0% { opacity: 0; transform: translateY(6px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
-
-        .chat-date-separator {
-          position: sticky;
-          top: 8px;
-          z-index: 5;
-          display: flex;
-          justify-content: center;
-          margin: 10px 0 6px;
-          pointer-events: none;
-        }
-        .chat-date-separator > span {
-          pointer-events: auto;
-          background: rgba(20, 15, 35, 0.78);
-          backdrop-filter: blur(12px);
-          -webkit-backdrop-filter: blur(12px);
-          color: #fff;
-          font-size: 11.5px;
-          font-weight: 600;
-          letter-spacing: 0.02em;
-          padding: 4px 12px;
-          border-radius: 999px;
-          box-shadow: 0 2px 8px rgba(0,0,0,0.25);
-          border: 1px solid rgba(255,255,255,0.06);
-        }
-        html.theme-light .chat-date-separator > span {
-          background: rgba(255,255,255,0.92);
-          color: #111;
-          border: 1px solid rgba(0,0,0,0.06);
-          box-shadow: 0 2px 8px rgba(0,0,0,0.12);
-        }
-
-        .message-row.group-mid { margin-top: 1px; }
-        .message-row.group-top { margin-top: 8px; }
-        .message-row.group-mid .message-bubble,
-        .message-row.group-bottom .message-bubble { border-radius: 18px; }
-        .message-row.own.group-top .message-bubble { border-bottom-right-radius: 18px; }
-        .message-row.own.group-mid .message-bubble { border-bottom-right-radius: 4px; border-top-right-radius: 4px; }
-        .message-row.own.group-bottom .message-bubble { border-top-right-radius: 4px; }
-        .message-row.partner.group-top .message-bubble { border-bottom-left-radius: 18px; }
-        .message-row.partner.group-mid .message-bubble { border-bottom-left-radius: 4px; border-top-left-radius: 4px; }
-        .message-row.partner.group-bottom .message-bubble { border-top-left-radius: 4px; }
-
-        .message-row.group-mid:not(.group-bottom) .message-meta-time { opacity: 0.55; }
-
-        .message-row.group-mid .message-bubble,
-        .message-row.group-bottom:not(.group-top) .message-bubble {
-          animation: none;
-        }
-
-        .chat-scroll-fab {
-          position: absolute;
-          right: 16px;
-          bottom: 96px;
-          z-index: 20;
-          display: inline-flex;
-          align-items: center;
-          gap: 8px;
-          padding: 8px 14px 8px 12px;
-          border-radius: 999px;
-          background: linear-gradient(135deg, #6C3CE1, #EC4899);
-          color: #fff;
-          font-size: 13px;
-          font-weight: 600;
-          border: none;
-          cursor: pointer;
-          box-shadow: 0 8px 24px rgba(108,60,225,0.4);
-          animation: fabIn 0.25s cubic-bezier(0.2, 1.3, 0.4, 1) both;
-        }
-        .chat-scroll-fab:hover { transform: translateY(-2px); box-shadow: 0 10px 28px rgba(108,60,225,0.5); }
-        .chat-scroll-fab svg { width: 16px; height: 16px; fill: currentColor; }
-        @keyframes fabIn { 0% { opacity: 0; transform: translateY(10px) scale(0.9); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
-
-        .message-bubble.pinned { box-shadow: inset 0 0 0 1.5px rgba(255, 193, 7, 0.5); }
-        .message-pin-badge {
-          position: absolute;
-          top: -6px;
-          right: 8px;
-          display: inline-flex;
-          align-items: center;
-          justify-content: center;
-          width: 18px;
-          height: 18px;
-          border-radius: 50%;
-          background: #FFC107;
-          color: #111;
-          box-shadow: 0 2px 6px rgba(0,0,0,0.25);
-        }
-        .message-row.partner .message-pin-badge { right: auto; left: 8px; }
-
-        .pinned-banner {
-          position: sticky;
-          top: 0;
-          z-index: 9;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 8px 12px;
-          background: rgba(20, 15, 35, 0.92);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-          border-bottom: 1px solid rgba(255,255,255,0.08);
-          color: #fff;
-          cursor: pointer;
-          animation: pinnedIn 0.25s cubic-bezier(0.2, 1.3, 0.4, 1) both;
-        }
-        html.theme-light .pinned-banner { background: rgba(255,255,255,0.96); border-bottom: 1px solid rgba(0,0,0,0.08); color: #111; }
-        .pinned-banner:hover { background: rgba(30, 20, 50, 0.96); }
-        html.theme-light .pinned-banner:hover { background: rgba(250, 250, 250, 1); }
-        .pinned-banner-icon {
-          width: 28px; height: 28px;
-          display: inline-flex; align-items: center; justify-content: center;
-          border-radius: 50%;
-          background: linear-gradient(135deg, #FFC107, #FF9800);
-          color: #111;
-          flex-shrink: 0;
-        }
-        .pinned-banner-body { flex: 1; min-width: 0; }
-        .pinned-banner-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.75; margin-bottom: 1px; }
-        .pinned-banner-text { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .pinned-banner-close { background: none; border: none; color: inherit; padding: 4px; cursor: pointer; opacity: 0.75; display: flex; align-items: center; justify-content: center; }
-        .pinned-banner-close:hover { opacity: 1; }
-        @keyframes pinnedIn { 0% { opacity: 0; transform: translateY(-10px); } 100% { opacity: 1; transform: translateY(0); } }
-
-        .message-row.select-mode { cursor: pointer; padding-left: 34px; padding-right: 34px; transition: background 0.15s ease; }
-        .message-row.select-mode.selected { background: rgba(108, 60, 225, 0.14); }
-        html.theme-light .message-row.select-mode.selected { background: rgba(108, 60, 225, 0.08); }
-        .select-checkbox {
-          position: absolute;
-          top: 50%;
-          left: 8px;
-          transform: translateY(-50%);
-          width: 22px; height: 22px;
-          border-radius: 50%;
-          border: 2px solid rgba(255,255,255,0.5);
-          display: flex; align-items: center; justify-content: center;
-          background: transparent;
-          color: transparent;
-          transition: all 0.15s ease;
-          z-index: 4;
-        }
-        .message-row.own .select-checkbox { left: auto; right: 8px; }
-        html.theme-light .select-checkbox { border-color: rgba(0,0,0,0.35); }
-        .select-checkbox.checked {
-          background: linear-gradient(135deg, #6C3CE1, #EC4899);
-          border-color: transparent;
-          color: #fff;
-          animation: checkboxPop 0.22s cubic-bezier(0.2, 1.4, 0.4, 1);
-        }
-        @keyframes checkboxPop { 0% { transform: translateY(-50%) scale(0.6); } 60% { transform: translateY(-50%) scale(1.15); } 100% { transform: translateY(-50%) scale(1); } }
-
-        .select-top-bar {
-          position: absolute;
-          top: 0; left: 0; right: 0;
-          z-index: 30;
-          display: flex;
-          align-items: center;
-          gap: 10px;
-          padding: 10px 14px;
-          background: rgba(20, 15, 35, 0.95);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-          border-bottom: 1px solid rgba(255,255,255,0.1);
-          color: #fff;
-          animation: selectTopIn 0.22s ease both;
-        }
-        html.theme-light .select-top-bar { background: rgba(255,255,255,0.98); color: #111; border-bottom: 1px solid rgba(0,0,0,0.08); }
-        @keyframes selectTopIn { 0% { transform: translateY(-100%); } 100% { transform: translateY(0); } }
-        .select-top-title { flex: 1; font-size: 15px; font-weight: 700; }
-        .select-top-btn { background: none; border: none; color: inherit; cursor: pointer; padding: 6px 10px; border-radius: 8px; font-size: 14px; font-weight: 600; }
-        .select-top-btn:hover { background: rgba(255,255,255,0.1); }
-        html.theme-light .select-top-btn:hover { background: rgba(0,0,0,0.06); }
-
-        .select-bottom-bar {
-          position: absolute;
-          bottom: 0; left: 0; right: 0;
-          z-index: 30;
-          display: flex;
-          align-items: center;
-          justify-content: space-around;
-          gap: 4px;
-          padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px));
-          background: rgba(20, 15, 35, 0.95);
-          backdrop-filter: blur(14px);
-          -webkit-backdrop-filter: blur(14px);
-          border-top: 1px solid rgba(255,255,255,0.1);
-          animation: selectBottomIn 0.22s ease both;
-        }
-        html.theme-light .select-bottom-bar { background: rgba(255,255,255,0.98); border-top: 1px solid rgba(0,0,0,0.08); }
-        @keyframes selectBottomIn { 0% { transform: translateY(100%); } 100% { transform: translateY(0); } }
-        .select-action {
-          flex: 1;
-          display: flex;
-          flex-direction: column;
-          align-items: center;
-          gap: 3px;
-          background: none;
-          border: none;
-          color: #fff;
-          cursor: pointer;
-          padding: 6px 4px;
-          border-radius: 10px;
-          transition: background 0.15s ease;
-          font-size: 11px;
-          font-weight: 600;
-        }
-        html.theme-light .select-action { color: #111; }
-        .select-action:hover:not(:disabled) { background: rgba(255,255,255,0.1); }
-        html.theme-light .select-action:hover:not(:disabled) { background: rgba(0,0,0,0.06); }
-        .select-action:disabled { opacity: 0.35; cursor: not-allowed; }
-        .select-action svg { width: 20px; height: 20px; fill: currentColor; }
-        .select-action.danger { color: #ff6b6b; }
-
-        .messages-container.has-pinned { padding-top: 0; }
-
-        .messages-container .message-text { font-size: var(--msg-font-size, 15px); }
-
-        .blocked-composer-bar {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          gap: 12px;
-          padding: 14px 16px;
-          background: var(--bg-input);
-          border-top: 1px solid var(--border-color);
-          color: var(--text-secondary);
-          font-size: 14px;
-        }
-        .blocked-composer-unblock {
-          padding: 8px 18px;
-          border-radius: 20px;
-          border: none;
-          background: linear-gradient(135deg, #6C3CE1, #EC4899);
-          color: #fff;
-          font-weight: 600;
-          cursor: pointer;
-          font-family: inherit;
-        }
-
-        .chat-header-info-btn {
-          width: 36px;
-          height: 36px;
-          border-radius: 50%;
-          border: none;
-          background: var(--bg-input);
-          color: var(--text-secondary);
-          font-size: 15px;
-          cursor: pointer;
-          display: grid;
-          place-items: center;
-          margin-left: 8px;
-          transition: background 0.15s ease, transform 0.15s ease;
-        }
-
-        .chat-header-info-btn:hover {
-          background: var(--border-color);
-          color: #6C3CE1;
-        }
-
-        .chat-header-info-btn:active {
-          transform: scale(0.92);
-        }
-      `}</style>
-
-      <SEO title={`Chat with ${displayName}`} description={`Chat with ${displayName} on ECHO.`} />
-      <StructuredData />
-      <div className="chat-view">
-        <VideoAudioProvider>
-          {chatBgEnabled && (<div className="echo-rings-bg is-active" aria-hidden="true"><span className="echo-bg-ring r1" /><span className="echo-bg-ring r2" /><span className="echo-bg-ring r3" /></div>)}
-
-          {selectMode && (
-            <div className="select-top-bar">
-              <button type="button" className="select-top-btn" onClick={exitSelectMode} aria-label="Cancel select">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-              </button>
-              <span className="select-top-title">{selectedIds.size} selected</span>
-              <button type="button" className="select-top-btn" onClick={() => { if (selectedIds.size === messages.length) setSelectedIds(new Set()); else setSelectedIds(new Set(messages.map(m => m.id))); }}>{selectedIds.size === messages.length ? 'Clear' : 'All'}</button>
-            </div>
-          )}
-
-          {!selectMode && pinnedMessage && (
-            <div className="pinned-banner" onClick={() => jumpToMessage(pinnedMessage.id)} role="button" tabIndex={0}>
-              <span className="pinned-banner-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="14" height="14"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" fill="currentColor"/></svg>
-              </span>
-              <div className="pinned-banner-body">
-                <span className="pinned-banner-label">Pinned Message</span>
-                <span className="pinned-banner-text">{pinnedPreview || 'Message'}</span>
-              </div>
-              <button type="button" className="pinned-banner-close" onClick={(e) => { e.stopPropagation(); handlePinMessage(pinnedMessage); }} aria-label="Unpin">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-              </button>
-            </div>
-          )}
-
-          <div className={`messages-container ${pinnedMessage && !selectMode ? 'has-pinned' : ''}`} ref={messagesContainerRef} onScroll={handleScroll} style={wallpaperStyle}>
-            {loadingMessages && messages.length === 0 ? (
-              <div className="chat-skeleton-list"><SkeletonMessage /><SkeletonMessage /><SkeletonMessage /></div>
-            ) : messages.length === 0 ? (
-              <div className="empty-chat-state"><i className="fas fa-paper-plane empty-icon" /><p>No messages yet. Say hello!</p></div>
-            ) : (
-              groupedMessages.map((entry) => renderMessage(entry))
-            )}
-            {isAILoading && (<div className="message-bubble partner"><div className="typing-indicator"><span></span><span></span><span></span></div></div>)}
-            {partnerIsTyping && !isGroupChat && (
-              <div className="typing-indicator-container">
-                <div className="typing-echomoji-wrapper">
-                  <ECHOMOJI mood={partnerProfile?.mood || 'happy'} skin={partnerProfile?.activeSkin ? getSkinById(partnerProfile.activeSkin) : null} size={44} interactive={false} animated={false} />
-                </div>
-                <div className="typing-dots-row">
-                  <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
-                </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-        </VideoAudioProvider>
-
-        {!isNearBottom && !selectMode && (
-          <button type="button" className="chat-scroll-fab" onClick={() => scrollToBottom(true)} aria-label="Scroll to latest">
-            <svg viewBox="0 0 24 24"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>
-            {unreadWhileScrolled > 0 ? `${unreadWhileScrolled} new` : ''}
-          </button>
-        )}
-
-        {showEmojiPicker && (<ChatEmojiPicker onClose={() => setShowEmojiPicker(false)} onSelect={handleEmojiSelect} excludeRefs={[inputContainerRef, captionPreviewRef]} />)}
-
-        {showReactionPicker && reactionPickerAnchor && (
-          <>
-            <div className="echo-reaction-backdrop" onClick={closeReactionPicker} />
-            <div className="echo-reaction-bar" style={{ top: reactionPickerAnchor.top, left: reactionPickerAnchor.left }} onClick={(e) => e.stopPropagation()}>
-              {REACTION_EMOJIS.map(({ key, Component }) => (
-                <button key={key} type="button" className={`echo-reaction-emoji${tappedEmoji === key ? ' tapped' : ''}`} onClick={() => handleReactionSelect(key)} aria-label={key}>
-                  <Component />
-                </button>
-              ))}
-            </div>
-          </>
-        )}
-
-        {reactionViewer && (
-          <div className="reaction-viewer-modal" onClick={() => setReactionViewer(null)}>
-            <div className="reaction-viewer-content" onClick={(e) => e.stopPropagation()}>
-              <h3>{REACTION_LABELS[reactionViewer.emoji] || reactionViewer.emoji} Reactions</h3>
-              <div className="reaction-viewer-list">
-                {reactionViewer.userIds.map((uid) => (
-                  <div
-                    key={uid}
-                    className="reaction-viewer-item"
-                    onClick={() => { setReactionViewer(null); navigate(`/user/${uid}`); }}
-                    role="button"
-                    tabIndex={0}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <Avatar uid={uid} size="small" />
-                    <span>{getProfile(uid)?.name || 'User'}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {!selectMode && !isGroupChat && blockedByMe && (
-          <div className="blocked-composer-bar">
-            <span>You blocked this user.</span>
-            <button
-              type="button"
-              className="blocked-composer-unblock"
-              onClick={async () => {
-                try {
-                  await unblockUser(user.uid, userId);
-                  setBlockedByMe(false);
-                  setToast({ message: 'User unblocked', type: 'success' });
-                  setTimeout(() => setToast(null), 2500);
-                } catch (_) {
-                  setToast({ message: 'Failed to unblock', type: 'error' });
-                  setTimeout(() => setToast(null), 2500);
-                }
-              }}
-            >Unblock</button>
-          </div>
-        )}
-
-        {!selectMode && (isGroupChat || !blockedByMe) && (
-          <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
-            {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
-            {replyToNote && (
-              <div className="note-reply-preview-banner">
-                <div className="note-reply-preview-banner-content">
-                  <span className="note-reply-preview-banner-label">Replying to {replyToNote.authorName}'s note</span>
-                  {replyToNote.song?.title ? (
-                    <span className="note-reply-preview-banner-text">🎵 {replyToNote.song.title}{replyToNote.song.artist ? ` · ${replyToNote.song.artist}` : ''}</span>
-                  ) : (
-                    <span className="note-reply-preview-banner-text">{replyToNote.text}</span>
-                  )}
-                </div>
-                <button type="button" className="note-reply-preview-banner-close" onClick={() => setReplyToNote(null)} aria-label="Cancel note reply">✕</button>
-              </div>
-            )}
-            <div className="chat-input-row">
-              <button type="button" className="chat-emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)} title="Emojis"><i className="fas fa-smile" /></button>
-              <button type="button" className="chat-voice-btn" onClick={() => { if (userId === ECHO_AI_ID) { setToast({ message: 'Voice notes are not available in ECHO AI chat right now.', type: 'info' }); setTimeout(() => setToast(null), 2800); return; } setShowVoiceRecorder(true); }} title="Voice note"><i className="fas fa-microphone" /></button>
-              <div className="chat-more-wrapper" ref={moreOptionsRef}>
-                <button type="button" className="chat-more-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowMoreOptions((v) => !v); }} title="More options"><i className="fas fa-ellipsis-h" /></button>
-                {showMoreOptions && (
-                  <div className="chat-more-options-popup" onClick={(e) => e.stopPropagation()}>
-                    <button type="button" className="chat-more-option" onClick={() => { fileInputRef.current?.click(); setShowMoreOptions(false); }}><i className="fas fa-paperclip" /><span>Attach</span></button>
-                    <button type="button" className="chat-more-option" onClick={() => { setShowWallpaperPicker(true); setShowMoreOptions(false); }}><i className="fas fa-image" /><span>Wallpaper</span></button>
-                    {!isGroupChat && (
-                      <button type="button" className="chat-more-option danger" onClick={() => { setShowMoreOptions(false); handleEndEcho(); }} disabled={ended} style={ended ? { opacity: 0.4, pointerEvents: 'none' } : undefined}><i className="fas fa-stop-circle" /><span>End ECHO</span></button>
-                    )}
-                  </div>
-                )}
-              </div>
-              <input type="file" ref={fileInputRef} accept="image/*,video/*" style={{ display: 'none' }} onChange={handleFileSelect} />
-              <textarea
-                ref={inputRef}
-                className={`chat-input ${haloActive ? 'halo-active' : ''}`}
-                placeholder={`Message ${displayName}...`}
-                value={newMessage}
-                onChange={(e) => { setNewMessage(e.target.value); handleTyping(); }}
-                onBlur={clearMyTyping}
-                onKeyDown={handleKeyDown}
-                onPaste={handlePaste}
-                onPointerDown={handleInputPointerDown}
-                onPointerUp={handleInputPointerUp}
-                onPointerLeave={handleInputPointerLeave}
-                rows={1}
-                style={{ resize: 'none', overflow: 'hidden', minHeight: '44px', maxHeight: '120px', lineHeight: '1.4', fontFamily: 'inherit', flex: 1, padding: '10px 16px', borderRadius: '24px', border: '1px solid var(--border-color)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
-                onFocus={() => { focusedField.current = 'main'; }}
-              />
-              <button ref={sendButtonRef} type="submit" className="chat-send-btn" disabled={!newMessage.trim()}><i className="fas fa-paper-plane" /></button>
-            </div>
-          </form>
-        )}
-
-        {selectMode && (
-          <div className="select-bottom-bar">
-            <button type="button" className="select-action" onClick={bulkCopy} disabled={selectedIds.size === 0}>
-              <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-              Copy
-            </button>
-            <button type="button" className="select-action" onClick={bulkSave} disabled={selectedIds.size === 0}>
-              <svg viewBox="0 0 24 24"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
-              Save
-            </button>
-            <button type="button" className="select-action danger" onClick={bulkDelete} disabled={selectedIds.size === 0}>
-              <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-              Delete
-            </button>
-          </div>
-        )}
-
-        {showVoiceRecorder && (<VoiceRecorder onSend={handleVoiceSend} onCancel={() => setShowVoiceRecorder(false)} />)}
-        {renderPreviewOverlay()}
-        <EditMessageModal isOpen={!!editingMessage} onClose={() => setEditingMessage(null)} messageText={editingMessage?.text || ''} onSave={saveEditedMessage} />
-        <EditMediaCaptionModal isOpen={!!editingMediaMessage} onClose={() => setEditingMediaMessage(null)} currentCaption={editingMediaMessage?.caption || ''} mediaType={editingMediaMessage?.mediaType} onSave={saveEditedMediaCaption} />
-
-        {mediaPreview && (<MediaPreview src={mediaPreview.src} type={mediaPreview.type} alt={mediaPreview.alt} onClose={() => setMediaPreview(null)} />)}
-        {videoPreview && (
-          <CustomVideoPlayer
-            src={videoPreview.src}
-            autoFullscreen={videoFullscreenDefault}
-            onClose={() => setVideoPreview(null)}
-          />
-        )}
-
-        {showWallpaperPicker && (
-          <WallpaperPicker current={wallpaperId} currentCustom={customWallpaper} onSelect={handleWallpaperSelect} onSelectCustom={handleCustomWallpaperSelect} onClose={() => setShowWallpaperPicker(false)} />
-        )}
-
-        <ConfirmModal isOpen={confirmModal.isOpen} onClose={closeConfirmModal} onConfirm={confirmModal.onConfirm} title={confirmModal.title} message={confirmModal.message} confirmText={confirmModal.confirmText} cancelText={confirmModal.cancelText} />
-        <Modal isOpen={fileSizeError} onClose={() => setFileSizeError(false)} title="File Too Large" message="The file you tried to upload exceeds the 20 MB limit. Please choose a smaller file." type="error" />
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
-      </div>
-    </>
-  );
-};
-
-const DateSeparator = ({ label }) => (
-  <div className="chat-date-separator"><span>{label}</span></div>
-);
-
-export default ChatView;
+{isGroupChat && (
+  <button
+    className={`chat-header-mute-btn ${isMuted ? 'muted' : ''}`}
+    onClick={handleToggleMute}
+    title={isMuted ? 'Unmute' : 'Mute'}
+  >
+    <i className={`fas ${isMuted ? 'fa-bell-slash' : 'fa-bell'}`} />
+  </button>
+)}
