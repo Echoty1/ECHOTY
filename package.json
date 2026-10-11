@@ -2,11 +2,6 @@
   "name": "echo-v2",
   "version": "0.1.0",
   "private": true,
-  "overrides": {
-    "ajv": "^8.17.1",
-    "ajv-keywords": "^5.1.0",
-    "schema-utils": "3.3.0"
-  },
   "dependencies": {
     "@capacitor-firebase/authentication": "^8.4.0",
     "@capacitor/android": "^8.5.0",
@@ -32,13 +27,16 @@
     "remark-gfm": "^4.0.1",
     "remark-math": "^6.0.0",
     "socket.io-client": "^4.8.3",
-    "uuid": "^14.0.2"
+    "uuid": "^14.0.2",
+    "ajv": "^8.17.1",
+    "ajv-keywords": "^5.1.0"
   },
   "scripts": {
     "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
-    "eject": "react-scripts eject"
+    "eject": "react-scripts eject",
+    "postinstall": "node scripts/fix-ajv.js"
   },
   "devDependencies": {
     "@capacitor/cli": "^8.5.0",
