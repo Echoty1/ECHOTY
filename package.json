@@ -5,16 +5,7 @@
   "overrides": {
     "ajv": "^8.17.1",
     "ajv-keywords": "^5.1.0",
-    "schema-utils": "^4.3.0",
-    "terser-webpack-plugin": {
-      "schema-utils": "^4.3.0"
-    },
-    "fork-ts-checker-webpack-plugin": {
-      "schema-utils": "^4.3.0"
-    },
-    "webpack": {
-      "schema-utils": "^4.3.0"
-    }
+    "schema-utils": "^4.3.0"
   },
   "dependencies": {
     "@capacitor-firebase/authentication": "^8.4.0",
