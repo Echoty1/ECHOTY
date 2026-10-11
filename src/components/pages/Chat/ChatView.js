@@ -2177,3 +2177,389 @@ const ChatView = () => {
     <i className={`fas ${isMuted ? 'fa-bell-slash' : 'fa-bell'}`} />
   </button>
 )}
+
+  return (
+    <>
+      <style>{`
+        .echo-reaction-backdrop { position: fixed; inset: 0; z-index: 998; background: transparent; }
+        .echo-reaction-bar { position: fixed; z-index: 1000; display: flex; align-items: center; gap: 2px; background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 999px; padding: 6px 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); transform: translateX(-50%); transform-origin: bottom center; animation: snapReactionPop 0.22s cubic-bezier(0.2, 1.3, 0.4, 1) both; }
+        html[data-theme="light"] .echo-reaction-bar, html.theme-light .echo-reaction-bar { background: #ffffff; border-color: rgba(0, 0, 0, 0.08); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
+        @keyframes snapReactionPop { 0% { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.85); } 100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
+        .echo-reaction-emoji { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: transparent; border: none; border-radius: 50%; cursor: pointer; transition: transform 0.15s cubic-bezier(0.2, 1.3, 0.4, 1), background 0.15s ease; -webkit-tap-highlight-color: transparent; }
+        .echo-reaction-emoji .rx-svg { width: 32px; height: 32px; display: block; overflow: visible; animation: rxIdleBounce 3.2s ease-in-out infinite; }
+        .echo-reaction-emoji:hover { background: rgba(255, 255, 255, 0.08); transform: scale(1.15); }
+        .echo-reaction-emoji.tapped .rx-svg { animation: rxTapPop 0.42s cubic-bezier(0.2, 1.6, 0.4, 1); }
+        @keyframes rxTapPop { 0% { transform: scale(1); } 40% { transform: scale(1.55); } 100% { transform: scale(1); } }
+        @keyframes rxIdleBounce { 0%, 75%, 100% { transform: translateY(0) scale(1); } 82% { transform: translateY(-3px) scale(1.08); } 90% { transform: translateY(0) scale(1); } }
+        .echo-reaction-bar-arrow { display: none; }
+
+        .highlight-flash { animation: highlightFlash 1.6s ease; }
+        @keyframes highlightFlash { 0%, 100% { background: transparent; } 20% { background: rgba(255, 215, 0, 0.3); } }
+        .message-inline-menu-wrapper { display: flex; width: 100%; margin-top: 8px; z-index: 10; }
+        .message-inline-actions.own { justify-content: flex-end; }
+        .message-inline-actions.partner { justify-content: flex-start; }
+        .message-inline-actions { display: flex; align-items: center; gap: 4px; background: var(--bg-primary, #ffffff); border: 1px solid rgba(0,0,0,0.08); padding: 3px; border-radius: 20px; box-shadow: 0 6px 16px rgba(0,0,0,0.08); animation: menuFadeIn 0.24s cubic-bezier(0.2, 1.2, 0.4, 1); flex-wrap: wrap; }
+        @keyframes menuFadeIn { 0% { opacity: 0; transform: translateY(-6px) scale(0.92); } 70% { opacity: 1; transform: translateY(1px) scale(1.02); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+        .message-action-btn { background: transparent; border: none; cursor: pointer; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--text-secondary, #555); transition: all 0.15s ease; }
+        .message-action-btn svg { width: 18px; height: 18px; fill: currentColor; }
+        .message-action-btn:hover { background: var(--bg-hover, #eaeaea); color: var(--text-primary, #333); transform: scale(1.15) translateY(-1px); }
+        .message-action-btn.danger:hover { background: #fde8e8; color: #d32f2f; }
+
+        .group-sender-name { font-size: 11.5px; font-weight: 700; letter-spacing: 0.2px; padding: 0 4px; margin-bottom: 3px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+
+        .message-row.own .message-bubble, .message-row.partner .message-bubble { animation: echoBubbleIn 0.3s cubic-bezier(0.2, 0.9, 0.25, 1.05) both; transform-origin: bottom; will-change: transform, opacity; }
+        @keyframes echoBubbleIn { 0% { opacity: 0; transform: translateY(10px) scale(0.84); } 60% { opacity: 1; transform: translateY(-1px) scale(1.03); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+        .message-row .message-bubble.pending { animation: echoSendingPulse 1.4s ease-in-out infinite; }
+        @keyframes echoSendingPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(108, 60, 225, 0.0); } 50% { box-shadow: 0 0 0 4px rgba(108, 60, 225, 0.15); } }
+
+        .message-receipt { display: inline-block; }
+        .message-receipt.sent { color: rgba(255, 255, 255, 0.55); }
+        .message-receipt.delivered { color: rgba(255, 255, 255, 0.8); }
+        .message-receipt.read { color: #60A5FA; }
+
+        .chat-send-btn { position: relative; overflow: visible; transition: transform 0.12s ease; }
+        .chat-send-btn:not(:disabled):active { transform: scale(0.88); }
+        .chat-send-btn.rippling::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid rgba(108, 60, 225, 0.55); animation: sendRipple 0.6s cubic-bezier(0.2, 0.8, 0.4, 1) forwards; pointer-events: none; }
+        @keyframes sendRipple { 0% { transform: scale(0.9); opacity: 0.85; } 100% { transform: scale(2.4); opacity: 0; } }
+
+        .typing-indicator-container { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-radius: 22px 22px 22px 4px; align-self: flex-start; max-width: 260px; margin: 6px 0 10px 12px; background: rgba(20, 15, 35, 0.85); border: 1px solid rgba(255, 255, 255, 0.15); }
+        .typing-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: linear-gradient(135deg, #A78BFA, #F472B6); animation: typingBounce 1.4s infinite ease-in-out; }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0) scale(1); opacity: 0.55; } 30% { transform: translateY(-5px) scale(1.15); opacity: 1; } }
+
+        .chat-date-separator { position: sticky; top: 8px; z-index: 5; display: flex; justify-content: center; margin: 10px 0 6px; pointer-events: none; }
+        .chat-date-separator > span { background: rgba(20, 15, 35, 0.78); color: #fff; font-size: 11.5px; font-weight: 600; padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.06); }
+        html.theme-light .chat-date-separator > span { background: rgba(255,255,255,0.92); color: #111; border: 1px solid rgba(0,0,0,0.06); }
+
+        .message-row.group-mid { margin-top: 1px; }
+        .message-row.group-top { margin-top: 8px; }
+
+        .chat-scroll-fab { position: absolute; right: 16px; bottom: 96px; z-index: 20; display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px 8px 12px; border-radius: 999px; background: linear-gradient(135deg, #6C3CE1, #EC4899); color: #fff; font-size: 13px; font-weight: 600; border: none; cursor: pointer; box-shadow: 0 8px 24px rgba(108,60,225,0.4); }
+        .chat-scroll-fab svg { width: 16px; height: 16px; fill: currentColor; }
+
+        .message-bubble.pinned { box-shadow: inset 0 0 0 1.5px rgba(255, 193, 7, 0.5); }
+        .message-pin-badge { position: absolute; top: -6px; right: 8px; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #FFC107; color: #111; }
+        .message-row.partner .message-pin-badge { right: auto; left: 8px; }
+
+        .pinned-banner { position: sticky; top: 0; z-index: 9; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: rgba(20, 15, 35, 0.92); border-bottom: 1px solid rgba(255,255,255,0.08); color: #fff; cursor: pointer; }
+        html.theme-light .pinned-banner { background: rgba(255,255,255,0.96); border-bottom: 1px solid rgba(0,0,0,0.08); color: #111; }
+        .pinned-banner-icon { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: linear-gradient(135deg, #FFC107, #FF9800); color: #111; flex-shrink: 0; }
+        .pinned-banner-body { flex: 1; min-width: 0; }
+        .pinned-banner-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.75; margin-bottom: 1px; }
+        .pinned-banner-text { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        .pinned-banner-close { background: none; border: none; color: inherit; padding: 4px; cursor: pointer; opacity: 0.75; }
+
+        .message-row.select-mode { cursor: pointer; padding-left: 34px; padding-right: 34px; }
+        .message-row.select-mode.selected { background: rgba(108, 60, 225, 0.14); }
+        .select-checkbox { position: absolute; top: 50%; left: 8px; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); display: flex; align-items: center; justify-content: center; background: transparent; color: transparent; z-index: 4; }
+        .message-row.own .select-checkbox { left: auto; right: 8px; }
+        .select-checkbox.checked { background: linear-gradient(135deg, #6C3CE1, #EC4899); border-color: transparent; color: #fff; }
+
+        .select-top-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(20, 15, 35, 0.95); border-bottom: 1px solid rgba(255,255,255,0.1); color: #fff; }
+        html.theme-light .select-top-bar { background: rgba(255,255,255,0.98); color: #111; }
+        .select-top-title { flex: 1; font-size: 15px; font-weight: 700; }
+        .select-top-btn { background: none; border: none; color: inherit; cursor: pointer; padding: 6px 10px; border-radius: 8px; font-size: 14px; font-weight: 600; }
+
+        .select-bottom-bar { position: absolute; bottom: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; justify-content: space-around; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); background: rgba(20, 15, 35, 0.95); border-top: 1px solid rgba(255,255,255,0.1); }
+        html.theme-light .select-bottom-bar { background: rgba(255,255,255,0.98); border-top: 1px solid rgba(0,0,0,0.08); }
+        .select-action { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; background: none; border: none; color: #fff; cursor: pointer; padding: 6px 4px; font-size: 11px; font-weight: 600; }
+        html.theme-light .select-action { color: #111; }
+        .select-action:disabled { opacity: 0.35; cursor: not-allowed; }
+        .select-action svg { width: 20px; height: 20px; fill: currentColor; }
+        .select-action.danger { color: #ff6b6b; }
+
+        .messages-container.has-pinned { padding-top: 0; }
+        .messages-container .message-text { font-size: var(--msg-font-size, 15px); }
+
+        .blocked-composer-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: var(--bg-input); border-top: 1px solid var(--border-color); color: var(--text-secondary); font-size: 14px; }
+        .blocked-composer-unblock { padding: 8px 18px; border-radius: 20px; border: none; background: linear-gradient(135deg, #6C3CE1, #EC4899); color: #fff; font-weight: 600; cursor: pointer; }
+
+        .chat-header-info-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--bg-input); color: var(--text-secondary); font-size: 15px; cursor: pointer; display: grid; place-items: center; margin-left: 8px; }
+        .chat-header-info-btn:hover { background: var(--border-color); color: #6C3CE1; }
+
+        .chat-header-mute-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--bg-input); color: var(--text-secondary); font-size: 14px; cursor: pointer; display: grid; place-items: center; }
+        .chat-header-mute-btn.muted { color: #EF4444; background: rgba(239, 68, 68, 0.12); }
+
+        .mention { background: rgba(108, 60, 225, 0.22); color: #A78BFA; padding: 1px 6px; border-radius: 6px; font-weight: 700; border: 1px solid rgba(108, 60, 225, 0.4); display: inline-block; line-height: 1.3; }
+        .mention-everyone { background: linear-gradient(135deg, rgba(108, 60, 225, 0.28), rgba(236, 72, 153, 0.28)); color: #F0ABFC; border-color: rgba(236, 72, 153, 0.5); }
+        .chat-input-wrapper { position: relative; flex: 1; display: flex; align-items: center; }
+      `}</style>
+
+      <SEO title={`Chat with ${displayName}`} description={`Chat with ${displayName} on ECHO.`} />
+      <StructuredData />
+      <div className="chat-view">
+        <VideoAudioProvider>
+          {chatBgEnabled && (<div className="echo-rings-bg is-active" aria-hidden="true"><span className="echo-bg-ring r1" /><span className="echo-bg-ring r2" /><span className="echo-bg-ring r3" /></div>)}
+
+          {selectMode && (
+            <div className="select-top-bar">
+              <button type="button" className="select-top-btn" onClick={exitSelectMode} aria-label="Cancel select">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+              </button>
+              <span className="select-top-title">{selectedIds.size} selected</span>
+              <button type="button" className="select-top-btn" onClick={() => { if (selectedIds.size === messages.length) setSelectedIds(new Set()); else setSelectedIds(new Set(messages.map(m => m.id))); }}>{selectedIds.size === messages.length ? 'Clear' : 'All'}</button>
+            </div>
+          )}
+
+          {!selectMode && pinnedMessage && (
+            <div className="pinned-banner" onClick={() => jumpToMessage(pinnedMessage.id)} role="button" tabIndex={0}>
+              <span className="pinned-banner-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" width="14" height="14"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" fill="currentColor"/></svg>
+              </span>
+              <div className="pinned-banner-body">
+                <span className="pinned-banner-label">Pinned Message</span>
+                <span className="pinned-banner-text">{pinnedPreview || 'Message'}</span>
+              </div>
+              <button type="button" className="pinned-banner-close" onClick={(e) => { e.stopPropagation(); handlePinMessage(pinnedMessage); }} aria-label="Unpin">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+              </button>
+            </div>
+          )}
+
+          <div className={`messages-container ${pinnedMessage && !selectMode ? 'has-pinned' : ''}`} ref={messagesContainerRef} onScroll={handleScroll} style={wallpaperStyle}>
+            {loadingMessages && messages.length === 0 ? (
+              <div className="chat-skeleton-list"><SkeletonMessage /><SkeletonMessage /><SkeletonMessage /></div>
+            ) : messages.length === 0 ? (
+              <div className="empty-chat-state"><i className="fas fa-paper-plane empty-icon" /><p>No messages yet. Say hello!</p></div>
+            ) : (
+              groupedMessages.map((entry) => renderMessage(entry))
+            )}
+            {isAILoading && (<div className="message-bubble partner"><div className="typing-indicator"><span></span><span></span><span></span></div></div>)}
+            {partnerIsTyping && !isGroupChat && (
+              <div className="typing-indicator-container">
+                <div className="typing-echomoji-wrapper">
+                  <ECHOMOJI mood={partnerProfile?.mood || 'happy'} skin={partnerProfile?.activeSkin ? getSkinById(partnerProfile.activeSkin) : null} size={44} interactive={false} animated={false} />
+                </div>
+                <div className="typing-dots-row">
+                  <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
+                </div>
+              </div>
+            )}
+            <div ref={messagesEndRef} />
+          </div>
+        </VideoAudioProvider>
+
+        {!isNearBottom && !selectMode && (
+          <button type="button" className="chat-scroll-fab" onClick={() => scrollToBottom(true)} aria-label="Scroll to latest">
+            <svg viewBox="0 0 24 24"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>
+            {unreadWhileScrolled > 0 ? `${unreadWhileScrolled} new` : ''}
+          </button>
+        )}
+
+        {showEmojiPicker && (<ChatEmojiPicker onClose={() => setShowEmojiPicker(false)} onSelect={handleEmojiSelect} excludeRefs={[inputContainerRef, captionPreviewRef]} />)}
+
+        {showReactionPicker && reactionPickerAnchor && (
+          <>
+            <div className="echo-reaction-backdrop" onClick={closeReactionPicker} />
+            <div className="echo-reaction-bar" style={{ top: reactionPickerAnchor.top, left: reactionPickerAnchor.left }} onClick={(e) => e.stopPropagation()}>
+              {REACTION_EMOJIS.map(({ key, Component }) => (
+                <button key={key} type="button" className={`echo-reaction-emoji${tappedEmoji === key ? ' tapped' : ''}`} onClick={() => handleReactionSelect(key)} aria-label={key}>
+                  <Component />
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        {reactionViewer && (
+          <div className="reaction-viewer-modal" onClick={() => setReactionViewer(null)}>
+            <div className="reaction-viewer-content" onClick={(e) => e.stopPropagation()}>
+              <h3>{REACTION_LABELS[reactionViewer.emoji] || reactionViewer.emoji} Reactions</h3>
+              <div className="reaction-viewer-list">
+                {reactionViewer.userIds.map((uid) => (
+                  <div
+                    key={uid}
+                    className="reaction-viewer-item"
+                    onClick={() => { setReactionViewer(null); navigate(`/user/${uid}`); }}
+                    role="button"
+                    tabIndex={0}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <Avatar uid={uid} size="small" />
+                    <span>{getProfile(uid)?.name || 'User'}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {!selectMode && !isGroupChat && blockedByMe && (
+          <div className="blocked-composer-bar">
+            <span>You blocked this user.</span>
+            <button
+              type="button"
+              className="blocked-composer-unblock"
+              onClick={async () => {
+                try {
+                  await unblockUser(user.uid, userId);
+                  setBlockedByMe(false);
+                  setToast({ message: 'User unblocked', type: 'success' });
+                  setTimeout(() => setToast(null), 2500);
+                } catch (_) {
+                  setToast({ message: 'Failed to unblock', type: 'error' });
+                  setTimeout(() => setToast(null), 2500);
+                }
+              }}
+            >Unblock</button>
+          </div>
+        )}
+
+        {!selectMode && (isGroupChat || !blockedByMe) && (
+          <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
+            {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
+            {replyToNote && (
+              <div className="note-reply-preview-banner">
+                <div className="note-reply-preview-banner-content">
+                  <span className="note-reply-preview-banner-label">Replying to {replyToNote.authorName}'s note</span>
+                  {replyToNote.song?.title ? (
+                    <span className="note-reply-preview-banner-text">🎵 {replyToNote.song.title}{replyToNote.song.artist ? ` · ${replyToNote.song.artist}` : ''}</span>
+                  ) : (
+                    <span className="note-reply-preview-banner-text">{replyToNote.text}</span>
+                  )}
+                </div>
+                <button type="button" className="note-reply-preview-banner-close" onClick={() => setReplyToNote(null)} aria-label="Cancel note reply">✕</button>
+              </div>
+            )}
+            <div className="chat-input-row">
+              <button type="button" className="chat-emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)} title="Emojis"><i className="fas fa-smile" /></button>
+              <button type="button" className="chat-voice-btn" onClick={() => { if (userId === ECHO_AI_ID) { setToast({ message: 'Voice notes are not available in ECHO AI chat right now.', type: 'info' }); setTimeout(() => setToast(null), 2800); return; } setShowVoiceRecorder(true); }} title="Voice note"><i className="fas fa-microphone" /></button>
+              <div className="chat-more-wrapper" ref={moreOptionsRef}>
+                <button type="button" className="chat-more-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowMoreOptions((v) => !v); }} title="More options"><i className="fas fa-ellipsis-h" /></button>
+                {showMoreOptions && (
+                  <div className="chat-more-options-popup" onClick={(e) => e.stopPropagation()}>
+                    <button type="button" className="chat-more-option" onClick={() => { fileInputRef.current?.click(); setShowMoreOptions(false); }}><i className="fas fa-paperclip" /><span>Attach</span></button>
+                    <button type="button" className="chat-more-option" onClick={() => { setShowWallpaperPicker(true); setShowMoreOptions(false); }}><i className="fas fa-image" /><span>Wallpaper</span></button>
+                    {!isGroupChat && (
+                      <button type="button" className="chat-more-option danger" onClick={() => { setShowMoreOptions(false); }} disabled={ended} style={ended ? { opacity: 0.4, pointerEvents: 'none' } : undefined}><i className="fas fa-stop-circle" /><span>End ECHO</span></button>
+                    )}
+                  </div>
+                )}
+              </div>
+              <input type="file" ref={fileInputRef} accept="image/*,video/*" style={{ display: 'none' }} onChange={handleFileSelect} />
+              <div className="chat-input-wrapper" style={{ position: 'relative', flex: 1 }}>
+                <MentionAutocomplete
+                  visible={!!mentionQuery && mentionSuggestions.length > 0}
+                  suggestions={mentionSuggestions}
+                  activeIndex={mentionIndex}
+                  onSelect={(s) => {
+                    const cursor = inputRef.current?.selectionStart || newMessage.length;
+                    const result = insertMention(newMessage, mentionStartIndex, cursor, s.handle);
+                    setNewMessage(result.text);
+                    setMentionQuery(null);
+                    setMentionSuggestions([]);
+                    setTimeout(() => {
+                      if (inputRef.current) {
+                        inputRef.current.setSelectionRange(result.cursor, result.cursor);
+                        inputRef.current.focus();
+                      }
+                    }, 0);
+                  }}
+                  onHover={(i) => setMentionIndex(i)}
+                  position="above"
+                />
+                <textarea
+                  ref={inputRef}
+                  className={`chat-input ${haloActive ? 'halo-active' : ''}`}
+                  placeholder={`Message ${displayName}...`}
+                  value={newMessage}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setNewMessage(val);
+                    handleTyping();
+                    const cursor = e.target.selectionStart;
+                    const active = getActiveMentionQuery(val, cursor);
+                    if (active && isGroupChat && groupData?.members) {
+                      const query = active.query.toLowerCase();
+                      const memberUids = Object.keys(groupData.members);
+                      const suggestions = [];
+                      const myRole = groupData.members[user.uid]?.role;
+                      if (myRole === 'owner' || myRole === 'admin') {
+                        if (!query || 'everyone'.includes(query)) {
+                          suggestions.push({ uid: 'everyone', handle: 'everyone', name: 'everyone', isEveryone: true });
+                        }
+                      }
+                      memberUids.forEach((uid) => {
+                        if (uid === user.uid) return;
+                        const p = getProfile(uid) || {};
+                        const handle = (p.username || '').toLowerCase();
+                        const name = (p.name || '').toLowerCase();
+                        if (!query || handle.startsWith(query) || name.startsWith(query)) {
+                          suggestions.push({ uid, handle: p.username || p.name || uid, name: p.name || 'User', username: p.username || '', avatar: p.avatar || '' });
+                        }
+                      });
+                      setMentionSuggestions(suggestions.slice(0, 8));
+                      setMentionQuery(active);
+                      setMentionStartIndex(active.startIndex);
+                      setMentionIndex(0);
+                    } else {
+                      setMentionQuery(null);
+                      setMentionSuggestions([]);
+                      setMentionStartIndex(-1);
+                    }
+                  }}
+                  onBlur={clearMyTyping}
+                  onKeyDown={handleKeyDown}
+                  onPaste={handlePaste}
+                  onPointerDown={handleInputPointerDown}
+                  onPointerUp={handleInputPointerUp}
+                  onPointerLeave={handleInputPointerLeave}
+                  rows={1}
+                  style={{ resize: 'none', overflow: 'hidden', minHeight: '44px', maxHeight: '120px', lineHeight: '1.4', fontFamily: 'inherit', width: '100%', padding: '10px 16px', borderRadius: '24px', border: '1px solid var(--border-color)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
+                  onFocus={() => { focusedField.current = 'main'; }}
+                />
+              </div>
+              <button ref={sendButtonRef} type="submit" className="chat-send-btn" disabled={!newMessage.trim()}><i className="fas fa-paper-plane" /></button>
+            </div>
+          </form>
+        )}
+
+        {selectMode && (
+          <div className="select-bottom-bar">
+            <button type="button" className="select-action" onClick={bulkCopy} disabled={selectedIds.size === 0}>
+              <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+              Copy
+            </button>
+            <button type="button" className="select-action" onClick={bulkSave} disabled={selectedIds.size === 0}>
+              <svg viewBox="0 0 24 24"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
+              Save
+            </button>
+            <button type="button" className="select-action danger" onClick={bulkDelete} disabled={selectedIds.size === 0}>
+              <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
+              Delete
+            </button>
+          </div>
+        )}
+
+        {showVoiceRecorder && (<VoiceRecorder onSend={handleVoiceSend} onCancel={() => setShowVoiceRecorder(false)} />)}
+        {renderPreviewOverlay()}
+        <EditMessageModal isOpen={!!editingMessage} onClose={() => setEditingMessage(null)} messageText={editingMessage?.text || ''} onSave={saveEditedMessage} />
+        <EditMediaCaptionModal isOpen={!!editingMediaMessage} onClose={() => setEditingMediaMessage(null)} currentCaption={editingMediaMessage?.caption || ''} mediaType={editingMediaMessage?.mediaType} onSave={saveEditedMediaCaption} />
+
+        {mediaPreview && (<MediaPreview src={mediaPreview.src} type={mediaPreview.type} alt={mediaPreview.alt} onClose={() => setMediaPreview(null)} />)}
+        {videoPreview && (
+          <CustomVideoPlayer
+            src={videoPreview.src}
+            autoFullscreen={videoFullscreenDefault}
+            onClose={() => setVideoPreview(null)}
+          />
+        )}
+
+        {showWallpaperPicker && (
+          <WallpaperPicker current={wallpaperId} currentCustom={customWallpaper} onSelect={handleWallpaperSelect} onSelectCustom={handleCustomWallpaperSelect} onClose={() => setShowWallpaperPicker(false)} />
+        )}
+
+        <ConfirmModal isOpen={confirmModal.isOpen} onClose={closeConfirmModal} onConfirm={confirmModal.onConfirm} title={confirmModal.title} message={confirmModal.message} confirmText={confirmModal.confirmText} cancelText={confirmModal.cancelText} />
+        <Modal isOpen={fileSizeError} onClose={() => setFileSizeError(false)} title="File Too Large" message="The file you tried to upload exceeds the 20 MB limit. Please choose a smaller file." type="error" />
+        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+      </div>
+    </>
+  );
+};
+
+const DateSeparator = ({ label }) => (
+  <div className="chat-date-separator"><span>{label}</span></div>
+);
+
+export default ChatView;
