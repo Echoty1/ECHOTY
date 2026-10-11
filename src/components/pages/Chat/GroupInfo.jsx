@@ -1,5 +1,5 @@
 // src/components/pages/Chat/GroupInfo.jsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { ref, get, onValue, update, remove } from 'firebase/database';
 import { db } from '../../../services/firebase';
@@ -24,6 +24,12 @@ import AddMembersModal from './AddMembersModal';
 import GroupInviteModal from './GroupInviteModal';
 import './GroupInfo.css';
 
+const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
+const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
+const MAX_AVATAR_SIZE = 5 * 1024 * 1024;
+const MAX_DESC_LENGTH = 200;
+const ALLOWED_AVATAR_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
+
 const GroupInfo = () => {
   const { chatId } = useParams();
   const navigate = useNavigate();
@@ -36,15 +42,26 @@ const GroupInfo = () => {
   const [loading, setLoading] = useState(true);
   const [memberProfiles, setMemberProfiles] = useState({});
   const [pendingProfiles, setPendingProfiles] = useState({});
+
+  // Editing state
   const [editingName, setEditingName] = useState(false);
   const [editName, setEditName] = useState('');
-  const [editDescription, setEditDescription] = useState('');
+
   const [editingDescription, setEditingDescription] = useState(false);
+  const [editDescription, setEditDescription] = useState('');
+
   const [editingEmoji, setEditingEmoji] = useState(false);
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  // Modals
   const [showAddMembers, setShowAddMembers] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [activeInvites, setActiveInvites] = useState(0);
+
+  // Member menu (single open at a time)
+  const [openMemberMenuUid, setOpenMemberMenuUid] = useState(null);
+  const memberMenuRef = useRef(null);
+
   const [toast, setToast] = useState(null);
   const [confirm, setConfirm] = useState({
     isOpen: false,
@@ -53,12 +70,12 @@ const GroupInfo = () => {
     confirmText: 'Confirm',
     cancelText: 'Cancel',
     onConfirm: null,
-    extraAction: null,
   });
 
-  const fileInputRef = React.useRef(null);
+  const fileInputRef = useRef(null);
+  const descInputRef = useRef(null);
 
-  // Live subscribe to group
+  // ─── Live subscribe to group ──────────────────────────────
   useEffect(() => {
     if (!groupId) return;
     const groupRef = ref(db, `groups/${groupId}`);
@@ -76,7 +93,7 @@ const GroupInfo = () => {
     return () => unsub();
   }, [groupId]);
 
-  // Fetch member profiles
+  // ─── Fetch member profiles ────────────────────────────────
   useEffect(() => {
     if (!group?.members) return;
     const uids = Object.keys(group.members);
@@ -85,12 +102,13 @@ const GroupInfo = () => {
       const map = {};
       for (const uid of uids) {
         const cached = profiles[uid];
-        if (cached?.name) map[uid] = cached;
-        else {
+        if (cached?.name) {
+          map[uid] = cached;
+        } else {
           try {
             const snap = await get(ref(db, `profiles/${uid}`));
             if (snap.exists()) map[uid] = snap.val();
-          } catch {}
+          } catch (_) {}
         }
       }
       if (!cancelled) setMemberProfiles(map);
@@ -98,7 +116,7 @@ const GroupInfo = () => {
     return () => { cancelled = true; };
   }, [group?.members, profiles]);
 
-  // Fetch pending request profiles
+  // ─── Fetch pending request profiles ───────────────────────
   useEffect(() => {
     if (!group?.pendingRequests) {
       setPendingProfiles({});
@@ -110,12 +128,13 @@ const GroupInfo = () => {
       const map = {};
       for (const uid of uids) {
         const cached = profiles[uid];
-        if (cached?.name) map[uid] = cached;
-        else {
+        if (cached?.name) {
+          map[uid] = cached;
+        } else {
           try {
             const snap = await get(ref(db, `profiles/${uid}`));
             if (snap.exists()) map[uid] = snap.val();
-          } catch {}
+          } catch (_) {}
         }
       }
       if (!cancelled) setPendingProfiles(map);
@@ -123,21 +142,47 @@ const GroupInfo = () => {
     return () => { cancelled = true; };
   }, [group?.pendingRequests, profiles]);
 
-  // Fetch invite count
+  // ─── Invite count ─────────────────────────────────────────
   useEffect(() => {
     if (!groupId) return;
+    let cancelled = false;
     (async () => {
-      const list = await listGroupInvites(groupId);
-      setActiveInvites(list.length);
+      try {
+        const list = await listGroupInvites(groupId);
+        if (!cancelled) setActiveInvites(list.length);
+      } catch (_) {}
     })();
+    return () => { cancelled = true; };
   }, [groupId, showInviteModal]);
 
+  // ─── Close member menu on outside click ───────────────────
+  useEffect(() => {
+    if (!openMemberMenuUid) return;
+    const onDocClick = (e) => {
+      if (memberMenuRef.current && !memberMenuRef.current.contains(e.target)) {
+        setOpenMemberMenuUid(null);
+      }
+    };
+    const t = setTimeout(() => {
+      document.addEventListener('mousedown', onDocClick);
+      document.addEventListener('touchstart', onDocClick);
+    }, 10);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('touchstart', onDocClick);
+    };
+  }, [openMemberMenuUid]);
+
+  // ─── Derived role ─────────────────────────────────────────
   const myRole = useMemo(() => {
     if (!user?.uid || !group?.members) return ROLES.MEMBER;
+    if (group.createdBy === user.uid && !group.members[user.uid]?.role) return ROLES.OWNER;
     return group.members[user.uid]?.role || ROLES.MEMBER;
-  }, [user?.uid, group?.members]);
+  }, [user?.uid, group]);
 
   const isOwner = myRole === ROLES.OWNER || group?.createdBy === user?.uid;
+  const isAdminPlus = isAtLeast(myRole, ROLES.ADMIN);
 
   const memberUids = useMemo(() => {
     if (!group?.members) return [];
@@ -155,6 +200,7 @@ const GroupInfo = () => {
     return Object.keys(group.pendingRequests);
   }, [group?.pendingRequests]);
 
+  // ─── Toast helpers ────────────────────────────────────────
   const showToast = (message, type = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 2500);
@@ -163,11 +209,12 @@ const GroupInfo = () => {
   const closeConfirm = () => setConfirm((prev) => ({ ...prev, isOpen: false }));
   const openConfirm = (config) => setConfirm({ isOpen: true, ...config });
 
-  // ─── Save name ───
+  // ─── Save name ────────────────────────────────────────────
   const handleSaveName = async () => {
     const trimmed = editName.trim();
     if (!trimmed || trimmed === group.name) {
       setEditingName(false);
+      setEditName(group.name || '');
       return;
     }
     hapticLight();
@@ -178,13 +225,13 @@ const GroupInfo = () => {
       showToast('Group name updated');
     } else {
       hapticError();
-      showToast(res.error || 'Failed', 'error');
+      showToast(res.error || 'Failed to update name', 'error');
     }
   };
 
-  // ─── Save description ───
+  // ─── Save description ─────────────────────────────────────
   const handleSaveDescription = async () => {
-    const trimmed = editDescription.trim();
+    const trimmed = editDescription.trim().slice(0, MAX_DESC_LENGTH);
     if (trimmed === (group.description || '')) {
       setEditingDescription(false);
       return;
@@ -197,11 +244,19 @@ const GroupInfo = () => {
       showToast('Description updated');
     } else {
       hapticError();
-      showToast(res.error || 'Failed', 'error');
+      showToast(res.error || 'Failed to update description', 'error');
     }
   };
 
-  // ─── Change emoji ───
+  const startEditingDescription = () => {
+    if (!isAdminPlus) return;
+    hapticLight();
+    setEditDescription(group.description || '');
+    setEditingDescription(true);
+    setTimeout(() => descInputRef.current?.focus(), 80);
+  };
+
+  // ─── Change emoji ─────────────────────────────────────────
   const handleSelectEmoji = async (emoji) => {
     hapticLight();
     const res = await updateGroupInfo(groupId, user.uid, { emoji });
@@ -211,22 +266,21 @@ const GroupInfo = () => {
       showToast('Emoji updated');
     } else {
       hapticError();
-      showToast(res.error || 'Failed', 'error');
+      showToast(res.error || 'Failed to update emoji', 'error');
     }
   };
 
-  // ─── Upload custom avatar ───
+  // ─── Upload avatar ────────────────────────────────────────
   const handleAvatarFile = async (file) => {
     if (!file) return;
-    if (file.size > 5 * 1024 * 1024) {
+    if (file.size > MAX_AVATAR_SIZE) {
       hapticError();
       showToast('Image must be under 5 MB', 'error');
       return;
     }
-    const validTypes = ['image/jpeg', 'image/png', 'image/webp'];
-    if (!validTypes.includes(file.type)) {
+    if (!ALLOWED_AVATAR_TYPES.includes(file.type)) {
       hapticError();
-      showToast('Only JPG, PNG, or WEBP', 'error');
+      showToast('Only JPG, PNG, or WEBP images', 'error');
       return;
     }
 
@@ -234,42 +288,63 @@ const GroupInfo = () => {
     try {
       const formData = new FormData();
       formData.append('file', file);
-      formData.append('upload_preset', 'echo_uploads');
+      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
 
       const res = await fetch(
-        'https://api.cloudinary.com/v1_1/rjlscgan/upload',
+        `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`,
         { method: 'POST', body: formData }
       );
       const data = await res.json();
       if (!res.ok) throw new Error(data.error?.message || 'Upload failed');
 
       const downloadUrl = data.secure_url;
-      const res2 = await updateGroupInfo(groupId, user.uid, { avatar: downloadUrl });
-      if (res2.ok) {
+      const saveRes = await updateGroupInfo(groupId, user.uid, { avatar: downloadUrl });
+      if (saveRes.ok) {
         hapticSuccess();
-        showToast('Group avatar updated');
+        showToast('Group photo updated');
       } else {
         hapticError();
-        showToast(res2.error || 'Failed', 'error');
+        showToast(saveRes.error || 'Failed to save photo', 'error');
       }
     } catch (err) {
-      console.error(err);
+      console.error('Avatar upload failed:', err);
       hapticError();
-      showToast('Upload failed', 'error');
+      showToast('Upload failed. Please try again.', 'error');
     } finally {
       setUploadingAvatar(false);
     }
   };
 
-  // ─── Promote / demote ───
+  const handleRemoveAvatar = () => {
+    openConfirm({
+      title: 'Remove group photo?',
+      message: 'The group will fall back to using the emoji.',
+      confirmText: 'Remove',
+      onConfirm: async () => {
+        closeConfirm();
+        hapticLight();
+        const res = await updateGroupInfo(groupId, user.uid, { avatar: null });
+        if (res.ok) {
+          hapticSuccess();
+          showToast('Photo removed');
+        } else {
+          hapticError();
+          showToast(res.error || 'Failed to remove photo', 'error');
+        }
+      },
+    });
+  };
+
+  // ─── Member actions ───────────────────────────────────────
   const handlePromote = (uid, role) => {
     const m = memberProfiles[uid] || {};
     openConfirm({
       title: `Make ${ROLE_LABELS[role]}?`,
-      message: `Give ${m.name || 'this member'} ${ROLE_LABELS[role]} powers.`,
+      message: `${m.name || 'This member'} will get ${ROLE_LABELS[role]} powers.`,
       confirmText: 'Confirm',
       onConfirm: async () => {
         closeConfirm();
+        setOpenMemberMenuUid(null);
         hapticLight();
         const res = await setMemberRole(groupId, user.uid, uid, role);
         if (res.ok) {
@@ -291,6 +366,7 @@ const GroupInfo = () => {
       confirmText: 'Remove',
       onConfirm: async () => {
         closeConfirm();
+        setOpenMemberMenuUid(null);
         hapticLight();
         const res = await removeGroupMember(groupId, user.uid, uid);
         if (res.ok) {
@@ -332,7 +408,7 @@ const GroupInfo = () => {
   const handleDelete = () => {
     openConfirm({
       title: 'Delete group?',
-      message: 'This will permanently delete the group and all its messages for everyone.',
+      message: 'This will permanently delete the group and all its messages for everyone. This cannot be undone.',
       confirmText: 'Delete',
       onConfirm: async () => {
         closeConfirm();
@@ -388,15 +464,40 @@ const GroupInfo = () => {
     }
   };
 
+  // ─── Loading / not-found ──────────────────────────────────
   if (loading) {
-    return <div className="group-info-page"><div className="gi-loading">Loading...</div></div>;
+    return (
+      <div className="group-info-page">
+        <div className="gi-loading">Loading group info…</div>
+      </div>
+    );
   }
   if (!group) {
-    return <div className="group-info-page"><div className="gi-loading">Group not found.</div></div>;
+    return (
+      <div className="group-info-page">
+        <div className="gi-top-bar">
+          <button className="gi-back-btn" onClick={() => navigate(-1)} aria-label="Back">
+            <i className="fas fa-arrow-left" />
+          </button>
+          <h1>Group Info</h1>
+          <div style={{ width: 36 }} />
+        </div>
+        <div className="gi-loading">Group not found.</div>
+      </div>
+    );
   }
+
+  const descLength = editDescription.length;
+  const descCounterClass =
+    descLength > MAX_DESC_LENGTH - 20
+      ? 'danger'
+      : descLength > MAX_DESC_LENGTH - 50
+      ? 'warn'
+      : '';
 
   return (
     <div className="group-info-page">
+      {/* ─── Top bar ─────────────────────────────────────── */}
       <div className="gi-top-bar">
         <button className="gi-back-btn" onClick={() => navigate(-1)} aria-label="Back">
           <i className="fas fa-arrow-left" />
@@ -405,56 +506,58 @@ const GroupInfo = () => {
         <div style={{ width: 36 }} />
       </div>
 
-      {/* Hero */}
+      {/* ─── Hero ────────────────────────────────────────── */}
       <div className="gi-hero">
         <div className="gi-avatar-wrap">
           {group.avatar ? (
             <img
               src={group.avatar}
-              alt={group.name}
-              className="gi-avatar-img"
-              onClick={() => isAtLeast(myRole, ROLES.ADMIN) && fileInputRef.current?.click()}
+              alt={group.name || 'Group'}
+              className={`gi-avatar-img${uploadingAvatar ? ' uploading' : ''}`}
+              onClick={() => isAdminPlus && !uploadingAvatar && fileInputRef.current?.click()}
             />
           ) : (
             <button
               type="button"
               className="gi-emoji-btn"
-              onClick={() => isAtLeast(myRole, ROLES.ADMIN) && setEditingEmoji(true)}
-              disabled={!isAtLeast(myRole, ROLES.ADMIN)}
+              onClick={() => isAdminPlus && setEditingEmoji(true)}
+              disabled={!isAdminPlus}
+              aria-label="Change group emoji"
             >
               <span className="gi-emoji">{group.emoji || '👥'}</span>
             </button>
           )}
 
-          {isAtLeast(myRole, ROLES.ADMIN) && (
+          {uploadingAvatar && <span className="gi-upload-ring" aria-hidden="true" />}
+
+          {isAdminPlus && !uploadingAvatar && (
             <div className="gi-avatar-menu">
               <button
+                type="button"
                 className="gi-avatar-menu-btn"
                 onClick={() => setEditingEmoji(true)}
                 title="Change emoji"
+                aria-label="Change emoji"
               >
                 <i className="fas fa-smile" />
               </button>
               <button
+                type="button"
                 className="gi-avatar-menu-btn"
                 onClick={() => fileInputRef.current?.click()}
-                title="Upload image"
+                title="Upload photo"
+                aria-label="Upload photo"
                 disabled={uploadingAvatar}
               >
-                <i className={`fas ${uploadingAvatar ? 'fa-spinner fa-spin' : 'fa-image'}`} />
+                <i className="fas fa-image" />
               </button>
               {group.avatar && (
                 <button
+                  type="button"
                   className="gi-avatar-menu-btn danger"
-                  onClick={async () => {
-                    hapticLight();
-                    const res = await updateGroupInfo(groupId, user.uid, { avatar: null });
-                    if (res.ok) {
-                      hapticSuccess();
-                      showToast('Avatar removed');
-                    }
-                  }}
-                  title="Remove image"
+                  onClick={handleRemoveAvatar}
+                  title="Remove photo"
+                  aria-label="Remove photo"
                 >
                   <i className="fas fa-trash" />
                 </button>
@@ -469,7 +572,8 @@ const GroupInfo = () => {
           accept="image/jpeg,image/png,image/webp"
           style={{ display: 'none' }}
           onChange={(e) => {
-            if (e.target.files?.[0]) handleAvatarFile(e.target.files[0]);
+            const f = e.target.files?.[0];
+            if (f) handleAvatarFile(f);
             e.target.value = '';
           }}
         />
@@ -487,63 +591,67 @@ const GroupInfo = () => {
                 if (e.key === 'Enter') handleSaveName();
                 if (e.key === 'Escape') {
                   setEditingName(false);
-                  setEditName(group.name);
+                  setEditName(group.name || '');
                 }
               }}
             />
-            <button className="gi-name-save" onClick={handleSaveName}>
+            <button className="gi-name-save" onClick={handleSaveName} aria-label="Save name">
               <i className="fas fa-check" />
             </button>
             <button
               className="gi-name-cancel"
               onClick={() => {
                 setEditingName(false);
-                setEditName(group.name);
+                setEditName(group.name || '');
               }}
+              aria-label="Cancel"
             >
               <i className="fas fa-times" />
             </button>
           </div>
         ) : (
           <div
-            className={`gi-name ${isAtLeast(myRole, ROLES.ADMIN) ? 'editable' : ''}`}
-            onClick={() => isAtLeast(myRole, ROLES.ADMIN) && setEditingName(true)}
+            className={`gi-name${isAdminPlus ? ' editable' : ''}`}
+            onClick={() => isAdminPlus && setEditingName(true)}
+            role={isAdminPlus ? 'button' : undefined}
+            tabIndex={isAdminPlus ? 0 : undefined}
           >
             <span>{group.name || 'Group'}</span>
-            {isAtLeast(myRole, ROLES.ADMIN) && (
-              <i className="fas fa-pencil-alt gi-name-pencil" />
-            )}
+            {isAdminPlus && <i className="fas fa-pencil-alt gi-name-pencil" />}
           </div>
         )}
 
         <div className="gi-meta">
           {memberUids.length} member{memberUids.length !== 1 ? 's' : ''}
+          {isOwner && <span> · 👑 You own this group</span>}
         </div>
       </div>
 
-      {/* Description */}
+      {/* ─── Description ─────────────────────────────────── */}
       <div className="gi-section">
         <div className="gi-section-header">
           <span>Description</span>
-          {isAtLeast(myRole, ROLES.ADMIN) && !editingDescription && (
+          {isAdminPlus && !editingDescription && (
             <button
               className="gi-edit-btn"
-              onClick={() => { hapticLight(); setEditingDescription(true); }}
+              onClick={startEditingDescription}
+              aria-label={group.description ? 'Edit description' : 'Add description'}
             >
               <i className="fas fa-pen" /> {group.description ? 'Edit' : 'Add'}
             </button>
           )}
         </div>
+
         {editingDescription ? (
           <div className="gi-desc-edit">
             <textarea
+              ref={descInputRef}
               className="gi-desc-textarea"
               value={editDescription}
-              onChange={(e) => setEditDescription(e.target.value.slice(0, 500))}
+              onChange={(e) => setEditDescription(e.target.value.slice(0, MAX_DESC_LENGTH))}
               placeholder="What's this group about?"
               rows={3}
-              maxLength={500}
-              autoFocus
+              maxLength={MAX_DESC_LENGTH}
             />
             <div className="gi-desc-actions">
               <button
@@ -559,17 +667,26 @@ const GroupInfo = () => {
                 Save
               </button>
             </div>
-            <div className="gi-desc-counter">{editDescription.length}/500</div>
+            <div className={`gi-desc-counter ${descCounterClass}`}>
+              {descLength}/{MAX_DESC_LENGTH}
+            </div>
           </div>
         ) : group.description ? (
           <div className="gi-desc-text">{group.description}</div>
         ) : (
-          <div className="gi-desc-empty">No description yet.</div>
+          <div
+            className={`gi-desc-empty${isAdminPlus ? ' clickable' : ''}`}
+            onClick={isAdminPlus ? startEditingDescription : undefined}
+            role={isAdminPlus ? 'button' : undefined}
+            tabIndex={isAdminPlus ? 0 : undefined}
+          >
+            {isAdminPlus ? 'Tap to add a description' : 'No description yet.'}
+          </div>
         )}
       </div>
 
-      {/* Pending requests */}
-      {isAtLeast(myRole, ROLES.ADMIN) && pendingUids.length > 0 && (
+      {/* ─── Pending requests ────────────────────────────── */}
+      {isAdminPlus && pendingUids.length > 0 && (
         <div className="gi-section">
           <div className="gi-section-header">
             <span>Pending Requests ({pendingUids.length})</span>
@@ -589,6 +706,7 @@ const GroupInfo = () => {
                       className="gi-pending-btn approve"
                       onClick={() => handleApprove(uid)}
                       title="Approve"
+                      aria-label="Approve request"
                     >
                       <i className="fas fa-check" />
                     </button>
@@ -596,6 +714,7 @@ const GroupInfo = () => {
                       className="gi-pending-btn reject"
                       onClick={() => handleReject(uid)}
                       title="Reject"
+                      aria-label="Reject request"
                     >
                       <i className="fas fa-times" />
                     </button>
@@ -607,72 +726,128 @@ const GroupInfo = () => {
         </div>
       )}
 
-      {/* Members */}
+      {/* ─── Members ─────────────────────────────────────── */}
       <div className="gi-section">
         <div className="gi-section-header">
           <span>Members ({memberUids.length})</span>
-          {isAtLeast(myRole, ROLES.ADMIN) && (
+          {isAdminPlus && (
             <button
               className="gi-add-btn"
-              onClick={() => { hapticLight(); setShowAddMembers(true); }}
+              onClick={() => {
+                hapticLight();
+                setShowAddMembers(true);
+              }}
             >
               <i className="fas fa-user-plus" /> Add
             </button>
           )}
         </div>
+
         <div className="gi-member-list">
           {memberUids.map((uid) => {
             const m = memberProfiles[uid] || {};
             const role = group.members[uid]?.role || 'member';
             const isMe = uid === user?.uid;
+            const canActOnThis =
+              isAdminPlus &&
+              !isMe &&
+              !(role === 'owner') &&
+              !(role === 'admin' && !isOwner);
 
             return (
               <div key={uid} className="gi-member-row">
                 <Avatar src={m.avatar} name={m.name || 'User'} size={46} />
                 <div className="gi-member-info">
                   <div className="gi-member-name">
-                    {m.name || 'User'}
-                    {isMe && <span className="gi-you"> (You)</span>}
-                    {role !== 'member' && (
-                      <span
-                        className="gi-role-badge"
-                        style={{
-                          background: `${ROLE_COLORS[role]}22`,
-                          color: ROLE_COLORS[role],
-                          borderColor: `${ROLE_COLORS[role]}55`,
-                        }}
-                      >
-                        {ROLE_LABELS[role]}
+                    <span>{m.name || 'User'}</span>
+                    {isMe && <span className="gi-you">(You)</span>}
+                    {role === 'owner' && (
+                      <span className="gi-role-badge owner" title="Owner">
+                        👑 Owner
+                      </span>
+                    )}
+                    {role === 'admin' && (
+                      <span className="gi-role-badge admin" title="Admin">
+                        🛡 Admin
+                      </span>
+                    )}
+                    {role === 'moderator' && (
+                      <span className="gi-role-badge moderator" title="Moderator">
+                        Mod
                       </span>
                     )}
                   </div>
-                  {m.username && (
-                    <span className="gi-member-handle">@{m.username}</span>
-                  )}
+                  {m.username && <span className="gi-member-handle">@{m.username}</span>}
                 </div>
 
-                {isAtLeast(myRole, ROLES.ADMIN) && !isMe && (
+                {canActOnThis && (
                   <button
                     className="gi-member-menu-btn"
                     onClick={() => {
                       hapticLight();
-                      const options = [];
-                      if (isAtLeast(myRole, ROLES.ADMIN)) {
-                        if (role === 'member') options.push({ label: 'Make Moderator', role: 'moderator' });
-                        if (role === 'moderator' || role === 'member') options.push({ label: 'Make Admin', role: 'admin' });
-                        if (role === 'admin' || role === 'moderator') options.push({ label: 'Demote to Member', role: 'member' });
-                      }
-                      // Use confirm modal for simplicity
-                      if (role !== 'member') {
-                        handlePromote(uid, 'member');
-                      } else {
-                        handlePromote(uid, 'admin');
-                      }
+                      setOpenMemberMenuUid(openMemberMenuUid === uid ? null : uid);
                     }}
                     aria-label="Member options"
                   >
                     <i className="fas fa-ellipsis-v" />
                   </button>
+                )}
+
+                {canActOnThis && openMemberMenuUid === uid && (
+                  <div
+                    ref={memberMenuRef}
+                    style={{
+                      position: 'absolute',
+                      right: '16px',
+                      marginTop: '8px',
+                      background: 'var(--bg-card)',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '12px',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                      minWidth: '180px',
+                      zIndex: 20,
+                      overflow: 'hidden',
+                    }}
+                  >
+                    {role === 'member' && (
+                      <button
+                        className="gi-action-btn"
+                        onClick={() => handlePromote(uid, 'admin')}
+                        style={{ padding: '12px 14px', fontSize: '13px' }}
+                      >
+                        <i className="fas fa-shield-alt" />
+                        <span>Make Admin</span>
+                      </button>
+                    )}
+                    {role === 'admin' && isOwner && (
+                      <button
+                        className="gi-action-btn"
+                        onClick={() => handlePromote(uid, 'member')}
+                        style={{ padding: '12px 14px', fontSize: '13px' }}
+                      >
+                        <i className="fas fa-user" />
+                        <span>Demote to Member</span>
+                      </button>
+                    )}
+                    {isOwner && role === 'admin' && (
+                      <button
+                        className="gi-action-btn"
+                        onClick={() => handlePromote(uid, 'owner')}
+                        style={{ padding: '12px 14px', fontSize: '13px' }}
+                      >
+                        <i className="fas fa-crown" />
+                        <span>Transfer Ownership</span>
+                      </button>
+                    )}
+                    <button
+                      className="gi-action-btn danger"
+                      onClick={() => handleRemoveMember(uid)}
+                      style={{ padding: '12px 14px', fontSize: '13px' }}
+                    >
+                      <i className="fas fa-user-minus" />
+                      <span>Remove from group</span>
+                    </button>
+                  </div>
                 )}
               </div>
             );
@@ -680,27 +855,32 @@ const GroupInfo = () => {
         </div>
       </div>
 
-      {/* Invite links (admin only) */}
-      {isAtLeast(myRole, ROLES.ADMIN) && (
+      {/* ─── Invite links (admin only) ───────────────────── */}
+      {isAdminPlus && (
         <div className="gi-section">
           <div className="gi-section-header">
             <span>Invite Links</span>
           </div>
           <button
             className="gi-invite-action"
-            onClick={() => { hapticLight(); setShowInviteModal(true); }}
+            onClick={() => {
+              hapticLight();
+              setShowInviteModal(true);
+            }}
           >
             <i className="fas fa-link" />
             <div className="gi-invite-action-info">
               <strong>Manage invite links</strong>
-              <span>{activeInvites} active link{activeInvites !== 1 ? 's' : ''}</span>
+              <span>
+                {activeInvites} active link{activeInvites !== 1 ? 's' : ''}
+              </span>
             </div>
             <i className="fas fa-chevron-right" />
           </button>
         </div>
       )}
 
-      {/* Actions */}
+      {/* ─── Actions ─────────────────────────────────────── */}
       <div className="gi-section">
         <div className="gi-actions">
           {!isOwner && (
@@ -718,21 +898,23 @@ const GroupInfo = () => {
         </div>
       </div>
 
-      {/* Modals */}
+      {/* ─── Emoji picker sheet ──────────────────────────── */}
       {editingEmoji && (
         <div
           className="gi-emoji-overlay"
-          onClick={(e) => { if (e.target === e.currentTarget) setEditingEmoji(false); }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setEditingEmoji(false);
+          }}
         >
           <div className="gi-emoji-sheet">
             <div className="gi-emoji-sheet-handle" />
-            <h3>Choose emoji</h3>
+            <h3>Choose an emoji</h3>
             <div className="gi-emoji-grid">
               {GROUP_EMOJIS.map((emoji) => (
                 <button
                   key={emoji}
                   type="button"
-                  className={`gi-emoji-option ${group.emoji === emoji ? 'selected' : ''}`}
+                  className={`gi-emoji-option${group.emoji === emoji ? ' selected' : ''}`}
                   onClick={() => handleSelectEmoji(emoji)}
                 >
                   {emoji}
@@ -743,6 +925,7 @@ const GroupInfo = () => {
         </div>
       )}
 
+      {/* ─── Modals ──────────────────────────────────────── */}
       {showAddMembers && (
         <AddMembersModal
           groupId={groupId}
