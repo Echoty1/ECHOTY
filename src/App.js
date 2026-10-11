@@ -13,6 +13,7 @@ import Home from './components/pages/Home/Home';
 import Chats from './components/pages/Chats/Chats';
 import ChatView from './components/pages/Chat/ChatView';
 import GroupInfoPage from './components/pages/Chat/GroupInfo';
+import GroupInvitePage from './components/pages/Chat/GroupInvitePage';
 import Profile from './components/pages/Profile/Profile';
 import UserProfile from './components/pages/UserProfile/UserProfile';
 import Other from './components/pages/Other/Other';
@@ -380,6 +381,7 @@ function AppContent() {
           <Route path="/chats" element={<Chats />} />
           <Route path="/chat/:userId" element={<ChatView />} />
           <Route path="/group/:chatId/info" element={<GroupInfoPage />} />
+          <Route path="/join/:code" element={<GroupInvitePage />} />
           <Route path="/profile" element={<Profile />} />
           <Route path="/user/:uid" element={<UserProfile />} />
           <Route path="/other" element={<Other />} />
