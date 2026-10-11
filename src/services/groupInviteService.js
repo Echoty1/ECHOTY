@@ -1,6 +1,6 @@
 // src/services/groupInviteService.js
 import {
-  ref, set, get, remove, serverTimestamp, runTransaction,
+  ref, set, get, remove, runTransaction,
 } from 'firebase/database';
 import { db } from './firebase';
 
@@ -22,9 +22,9 @@ export const generateInviteCode = () => {
 
 /**
  * Creates a new invite link for a group.
- * Only admins can create invites.
- *
- * Returns { ok, code, error }.
+ * Writes to both:
+ *   - groupInvites/{groupId}/{code}   (managed by admins)
+ *   - groupInviteCodes/{code}         (reverse lookup for /join/:code)
  */
 export const createInviteLink = async (groupId, actorUid, options = {}) => {
   if (!groupId || !actorUid) return { ok: false, error: 'Missing params' };
@@ -34,7 +34,7 @@ export const createInviteLink = async (groupId, actorUid, options = {}) => {
   const requiresApproval = !!options.requiresApproval;
 
   try {
-    // Verify actor is admin
+    // Verify actor is admin or owner
     const memberSnap = await get(ref(db, `groups/${groupId}/members/${actorUid}`));
     if (!memberSnap.exists()) return { ok: false, error: 'Not a member' };
 
@@ -43,12 +43,12 @@ export const createInviteLink = async (groupId, actorUid, options = {}) => {
       return { ok: false, error: 'Only admins can create invite links' };
     }
 
-    // Generate a unique code
+    // Generate a unique code (retry up to 5 times)
     let code = null;
     let attempts = 0;
     while (attempts < 5) {
       const candidate = generateInviteCode();
-      const existingSnap = await get(ref(db, `invites/${candidate}`));
+      const existingSnap = await get(ref(db, `groupInviteCodes/${candidate}`));
       if (!existingSnap.exists()) {
         code = candidate;
         break;
@@ -74,16 +74,11 @@ export const createInviteLink = async (groupId, actorUid, options = {}) => {
       revoked: false,
     };
 
-    await set(ref(db, `invites/${code}`), inviteData);
+    // Write reverse lookup
+    await set(ref(db, `groupInviteCodes/${code}`), inviteData);
 
-    // Also add to group's invite list for management
-    await set(ref(db, `groups/${groupId}/inviteCodes/${code}`), {
-      createdBy: actorUid,
-      createdAt: Date.now(),
-      expiresAt,
-      maxUses,
-      uses: 0,
-    });
+    // Write managed list
+    await set(ref(db, `groupInvites/${groupId}/${code}`), inviteData);
 
     return { ok: true, code, invite: inviteData };
   } catch (err) {
@@ -98,7 +93,7 @@ export const createInviteLink = async (groupId, actorUid, options = {}) => {
 export const getInviteByCode = async (code) => {
   if (!code) return null;
   try {
-    const snap = await get(ref(db, `invites/${code}`));
+    const snap = await get(ref(db, `groupInviteCodes/${code}`));
     if (!snap.exists()) return null;
     return { code, ...snap.val() };
   } catch (err) {
@@ -116,7 +111,7 @@ export const isInviteValid = (invite) => {
   if (invite.expiresAt && Date.now() > invite.expiresAt) {
     return { valid: false, reason: 'expired' };
   }
-  if (invite.uses >= invite.maxUses) {
+  if (invite.maxUses && invite.uses >= invite.maxUses) {
     return { valid: false, reason: 'used_up' };
   }
   return { valid: true };
@@ -144,46 +139,48 @@ export const redeemInvite = async (code, uid) => {
       return { ok: false, error: msg };
     }
 
-    // Check if user is already a member
+    // Already a member?
     const memberSnap = await get(ref(db, `groups/${invite.groupId}/members/${uid}`));
     if (memberSnap.exists()) {
-      // Already a member — don't increment uses
       return { ok: true, groupId: invite.groupId, alreadyMember: true };
     }
 
-    // If requires approval, add to pendingRequests
+    // Requires approval?
     if (invite.requiresApproval) {
-      await set(ref(db, `groups/${invite.groupId}/pendingRequests/${uid}`), {
+      await set(ref(db, `groupPendingRequests/${invite.groupId}/${uid}`), {
+        uid,
         requestedAt: Date.now(),
         inviteCode: code,
       });
       return { ok: true, groupId: invite.groupId, pendingApproval: true };
     }
 
-    // Add member + increment usage atomically
+    // Add member
     const groupSnap = await get(ref(db, `groups/${invite.groupId}`));
     if (!groupSnap.exists()) return { ok: false, error: 'Group no longer exists' };
 
     const groupData = groupSnap.val();
-    const memberCount = (groupData.memberCount || 0) + 1;
+    const now = Date.now();
 
     await set(ref(db, `groups/${invite.groupId}/members/${uid}`), {
       role: 'member',
-      joinedAt: Date.now(),
+      joinedAt: now,
       joinedVia: code,
     });
 
-    await set(ref(db, `groups/${invite.groupId}/memberCount`), memberCount);
+    const newCount = (groupData.memberCount || 0) + 1;
+    await set(ref(db, `groups/${invite.groupId}/memberCount`), newCount);
+    await set(ref(db, `groups/${invite.groupId}/lastUpdated`), now);
 
-    // Add to user's groups
     await set(ref(db, `userGroups/${uid}/${invite.groupId}`), {
       groupId: invite.groupId,
-      joinedAt: Date.now(),
+      joinedAt: now,
       role: 'member',
     });
 
     // Increment uses
-    await runTransaction(ref(db, `invites/${code}/uses`), (n) => (n || 0) + 1);
+    await runTransaction(ref(db, `groupInviteCodes/${code}/uses`), (n) => (n || 0) + 1);
+    await runTransaction(ref(db, `groupInvites/${invite.groupId}/${code}/uses`), (n) => (n || 0) + 1);
 
     return { ok: true, groupId: invite.groupId };
   } catch (err) {
@@ -191,6 +188,11 @@ export const redeemInvite = async (code, uid) => {
     return { ok: false, error: err.message };
   }
 };
+
+/**
+ * Convenience wrapper — matches the call signature used by GroupInvitePage.
+ */
+export const joinGroupByCode = (uid, code) => redeemInvite(code, uid);
 
 /**
  * Revokes an invite. Only admins can revoke.
@@ -203,15 +205,14 @@ export const revokeInvite = async (code, actorUid) => {
 
     const memberSnap = await get(ref(db, `groups/${invite.groupId}/members/${actorUid}`));
     if (!memberSnap.exists()) return { ok: false, error: 'Not a member' };
+
     const role = memberSnap.val().role;
     if (role !== 'owner' && role !== 'admin') {
       return { ok: false, error: 'Only admins can revoke invites' };
     }
 
-    await remove(ref(db, `groups/${invite.groupId}/inviteCodes/${code}`));
-    await set(ref(db, `invites/${code}/revoked`), true);
-    await set(ref(db, `invites/${code}/revokedBy`), actorUid);
-    await set(ref(db, `invites/${code}/revokedAt`), Date.now());
+    await remove(ref(db, `groupInvites/${invite.groupId}/${code}`));
+    await remove(ref(db, `groupInviteCodes/${code}`));
 
     return { ok: true };
   } catch (err) {
@@ -226,7 +227,7 @@ export const revokeInvite = async (code, actorUid) => {
 export const listGroupInvites = async (groupId) => {
   if (!groupId) return [];
   try {
-    const snap = await get(ref(db, `groups/${groupId}/inviteCodes`));
+    const snap = await get(ref(db, `groupInvites/${groupId}`));
     if (!snap.exists()) return [];
     const invites = Object.entries(snap.val()).map(([code, data]) => ({
       code,
@@ -243,32 +244,37 @@ export const listGroupInvites = async (groupId) => {
  * Approves a pending join request. Admins only.
  */
 export const approvePendingRequest = async (groupId, actorUid, requesterUid) => {
-  if (!groupId || !actorUid || !requesterUid) return { ok: false, error: 'Missing params' };
+  if (!groupId || !actorUid || !requesterUid) {
+    return { ok: false, error: 'Missing params' };
+  }
   try {
     const actorSnap = await get(ref(db, `groups/${groupId}/members/${actorUid}`));
     if (!actorSnap.exists()) return { ok: false, error: 'Not a member' };
+
     const role = actorSnap.val().role;
     if (role !== 'owner' && role !== 'admin') {
       return { ok: false, error: 'Only admins can approve' };
     }
 
-    // Move from pending to members
+    const now = Date.now();
+
     await set(ref(db, `groups/${groupId}/members/${requesterUid}`), {
       role: 'member',
-      joinedAt: Date.now(),
+      joinedAt: now,
     });
 
-    const groupSnap = await get(ref(db, `groups/${groupId}/memberCount`));
-    const currentCount = groupSnap.exists() ? groupSnap.val() : 0;
+    const countSnap = await get(ref(db, `groups/${groupId}/memberCount`));
+    const currentCount = countSnap.exists() ? countSnap.val() : 0;
     await set(ref(db, `groups/${groupId}/memberCount`), currentCount + 1);
+    await set(ref(db, `groups/${groupId}/lastUpdated`), now);
 
     await set(ref(db, `userGroups/${requesterUid}/${groupId}`), {
       groupId,
-      joinedAt: Date.now(),
+      joinedAt: now,
       role: 'member',
     });
 
-    await remove(ref(db, `groups/${groupId}/pendingRequests/${requesterUid}`));
+    await remove(ref(db, `groupPendingRequests/${groupId}/${requesterUid}`));
 
     return { ok: true };
   } catch (err) {
@@ -281,16 +287,19 @@ export const approvePendingRequest = async (groupId, actorUid, requesterUid) => 
  * Rejects a pending join request. Admins only.
  */
 export const rejectPendingRequest = async (groupId, actorUid, requesterUid) => {
-  if (!groupId || !actorUid || !requesterUid) return { ok: false, error: 'Missing params' };
+  if (!groupId || !actorUid || !requesterUid) {
+    return { ok: false, error: 'Missing params' };
+  }
   try {
     const actorSnap = await get(ref(db, `groups/${groupId}/members/${actorUid}`));
     if (!actorSnap.exists()) return { ok: false, error: 'Not a member' };
+
     const role = actorSnap.val().role;
     if (role !== 'owner' && role !== 'admin') {
       return { ok: false, error: 'Only admins can reject' };
     }
 
-    await remove(ref(db, `groups/${groupId}/pendingRequests/${requesterUid}`));
+    await remove(ref(db, `groupPendingRequests/${groupId}/${requesterUid}`));
     return { ok: true };
   } catch (err) {
     console.error('rejectPendingRequest failed:', err);
