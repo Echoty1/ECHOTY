@@ -16,7 +16,7 @@ import { useAuth } from '../../../hooks/useAuth';
 import { sortMessages } from '../../../utils/sortMessages';
 import { SkeletonMessage } from '../../common/SkeletonLoader';
 import { getCache, setCache } from '../../../services/cacheService';
-import { clearMessageCache, storeMessageInCache } from '../../../services/messageCache';
+import { clearMessageCache } from '../../../services/messageCache';
 import ChatMediaMessage from './ChatMediaMessage';
 import AudioPlayer from './AudioPlayer';
 import MessageMenu from './MessageMenu';
@@ -43,11 +43,19 @@ import Toast from '../../Toast/Toast';
 import { apiUrl } from '../../../utils/api';
 import './ChatView.css';
 import './ChatThinking.css';
+import './EchoAI.css';
 
 const ECHO_AI_AVATAR = '/videos/library/Artificial Intelligence Ai GIF by Abdi Slick.gif';
 const ECHO_AI_ID = 'echo_ai_assistant';
 
-const postChat = async (payload) => {
+const SUGGESTIONS = [
+  { icon: 'fa-lightbulb', text: 'Tell me about ECHO' },
+  { icon: 'fa-pen-fancy', text: 'Help me write something' },
+  { icon: 'fa-code', text: 'Explain a code concept' },
+  { icon: 'fa-face-smile', text: 'Tell me a joke' },
+];
+
+const postChat = async (payload, signal) => {
   const token = await auth.currentUser?.getIdToken?.();
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
@@ -55,6 +63,7 @@ const postChat = async (payload) => {
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
+    signal,
   });
 };
 
@@ -62,8 +71,8 @@ const EchoAI = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
   const userId = ECHO_AI_ID;
-  const [deletingMessageId, setDeletingMessageId] = useState(null);
 
+  const [deletingMessageId, setDeletingMessageId] = useState(null);
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [partnerProfile, setPartnerProfile] = useState(null);
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
@@ -74,6 +83,9 @@ const EchoAI = () => {
   const [isAILoading, setIsAILoading] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [toast, setToast] = useState(null);
+  const [pendingRetryText, setPendingRetryText] = useState(null);
+
+  const abortRef = useRef(null);
 
   const streamingRef = useRef({
     active: false,
@@ -87,17 +99,27 @@ const EchoAI = () => {
   const messagesContainerRef = useRef(null);
   const chatId = useRef(null);
   const hasLoadedFromCache = useRef(false);
-
   const cacheKey = `messages_${user?.uid}_${userId}`;
   const isMounted = useRef(true);
   const [replyTo, setReplyTo] = useState(null);
   const messageRefs = useRef({});
   const markReadTimeout = useRef(null);
 
-  const [minLoadingTimePassed, setMinLoadingTimePassed] = useState(false);
-  const loadingTimerRef = useRef(null);
-
   const scrollCooldownRef = useRef(false);
+
+  const inputRef = useRef(null);
+  const inputContainerRef = useRef(null);
+  const captionPreviewRef = useRef(null);
+  const captionInputRef = useRef(null);
+  const focusedField = useRef('main');
+  const [captionText, setCaptionText] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const fileInputRef = useRef(null);
+  const [editingMessage, setEditingMessage] = useState(null);
+  const [editingMediaMessage, setEditingMediaMessage] = useState(null);
 
   const showToast = (message, type = 'info') => {
     setToast({ message, type });
@@ -109,7 +131,6 @@ const EchoAI = () => {
     if (!conversationId) return;
     try {
       await remove(ref(db, `aiConversations/${conversationId}`));
-      console.log(`🧹 Cleared AI memory for conversation: ${conversationId}`);
     } catch (err) {
       console.warn('Failed to clear AI memory:', err);
     }
@@ -128,7 +149,6 @@ const EchoAI = () => {
       await remove(ref(db, `chats/${cId}/messages/${aiMessageId}`));
       await deleteMessageFromCache(cId, aiMessageId);
     }
-
     if (conversationId) {
       await clearAIMemory(conversationId);
     }
@@ -145,7 +165,12 @@ const EchoAI = () => {
       const latest = msgs[msgs.length - 1];
       if (latest) {
         if (latest.type === 'media') {
-          latestMsg = latest.mediaType === 'video' ? '🎬 Video' : latest.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
+          latestMsg =
+            latest.mediaType === 'video'
+              ? '🎬 Video'
+              : latest.mediaType === 'audio'
+              ? '🎤 Voice note'
+              : '📷 Image';
         } else if (latest.type === 'echomoji') {
           latestMsg = `😊 ECHOMOJI (${latest.mood || 'neutral'})`;
         } else {
@@ -156,8 +181,7 @@ const EchoAI = () => {
       }
     }
 
-    const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-    await set(myChatRef, {
+    await set(ref(db, `userChats/${user.uid}/${userId}`), {
       id: userId,
       partnerName: 'ECHO AI',
       partnerAvatar: ECHO_AI_AVATAR,
@@ -175,7 +199,6 @@ const EchoAI = () => {
   const handleDeleteMessage = async (messageId) => {
     if (!user?.uid) return;
     const cId = [user.uid, userId].sort().join('_');
-
     setDeletingMessageId(messageId);
     await new Promise((resolve) => setTimeout(resolve, 300));
 
@@ -192,7 +215,6 @@ const EchoAI = () => {
         );
         await deleteAIConversation(messageId, aiResponse?.id, currentConversationId);
       }
-
       setDeletingMessageId(null);
     } catch (err) {
       console.warn('Delete failed:', err.message);
@@ -203,14 +225,14 @@ const EchoAI = () => {
   // ─── Edit message (restricted to last user message) ──────────
   const handleEditMessage = (msg) => {
     if (msg.senderId !== user?.uid) return;
-    
-    const userMessages = messages.filter(m => m.senderId === user.uid);
+
+    const userMessages = messages.filter((m) => m.senderId === user.uid);
     const lastUserMsg = userMessages[userMessages.length - 1];
     if (lastUserMsg && lastUserMsg.id !== msg.id) {
-      alert('You can only edit the last message you sent in this chat.');
+      showToast('You can only edit the last message you sent.', 'info');
       return;
     }
-    
+
     if (msg.type === 'media' && msg.mediaType === 'audio') return;
     if (msg.type === 'media') {
       setEditingMediaMessage(msg);
@@ -218,9 +240,6 @@ const EchoAI = () => {
     }
     setEditingMessage(msg);
   };
-
-  const [editingMessage, setEditingMessage] = useState(null);
-  const [editingMediaMessage, setEditingMediaMessage] = useState(null);
 
   const saveEditedMessage = async (newText) => {
     if (!editingMessage || !user?.uid) return;
@@ -231,22 +250,18 @@ const EchoAI = () => {
       const aiResponse = messages.find(
         (m) => m.senderId === ECHO_AI_ID && m.replyTo === messageId
       );
-
       if (aiResponse) {
         await remove(ref(db, `chats/${cId}/messages/${aiResponse.id}`));
         await deleteMessageFromCache(cId, aiResponse.id);
       }
-
       if (currentConversationId) {
         await clearAIMemory(currentConversationId);
       }
-
       await update(ref(db, `chats/${cId}/messages/${messageId}`), {
         text: newText,
         isEdited: true,
         lastEditedAt: serverTimestamp(),
       });
-
       const updatedMsg = { ...editingMessage, text: newText, isEdited: true };
       await upsertMessageInCache(cId, updatedMsg);
 
@@ -257,15 +272,9 @@ const EchoAI = () => {
         isEdit: true,
         editMessageId: messageId,
       });
-
       const result = await response.json();
-      if (!response.ok) {
-        throw new Error(result.error || 'AI request failed');
-      }
-
-      if (result.conversationId) {
-        setCurrentConversationId(result.conversationId);
-      }
+      if (!response.ok) throw new Error(result.error || 'AI request failed');
+      if (result.conversationId) setCurrentConversationId(result.conversationId);
 
       clearMessageCache(cId);
       setEditingMessage(null);
@@ -278,7 +287,7 @@ const EchoAI = () => {
       }
     } catch (err) {
       console.error('Failed to edit message:', err);
-      alert('Failed to edit message. Please try again.');
+      showToast('Failed to edit message. Please try again.', 'error');
     }
   };
 
@@ -286,7 +295,6 @@ const EchoAI = () => {
     if (!editingMediaMessage || !user?.uid) return;
     const cId = [user.uid, userId].sort().join('_');
     const messageId = editingMediaMessage.id;
-
     try {
       await update(ref(db, `chats/${cId}/messages/${messageId}`), {
         caption: newCaption,
@@ -299,7 +307,7 @@ const EchoAI = () => {
       setEditingMediaMessage(null);
     } catch (err) {
       console.error('Failed to edit media caption:', err);
-      alert('Failed to edit caption. Please try again.');
+      showToast('Failed to edit caption. Please try again.', 'error');
     }
   };
 
@@ -313,11 +321,12 @@ const EchoAI = () => {
     const container = messagesContainerRef.current;
     if (!container) return;
     const threshold = 15;
-    const isNear = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
+    const isNear =
+      container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
     setIsNearBottom(isNear);
   };
 
-  // ─── Word‑by‑word streaming ──────────────────────────────────
+  // ─── Adaptive word-by-word streaming ─────────────────────────
   const startStreaming = (messageId, fullText) => {
     if (streamingRef.current.interval) {
       clearInterval(streamingRef.current.interval);
@@ -337,21 +346,23 @@ const EchoAI = () => {
       )
     );
 
+    // Adaptive speed: aim for ~2.5s total regardless of length
+    const len = Math.max(1, fullText.length);
+    const stepSize = Math.max(1, Math.ceil(len / 100)); // ~100 ticks
+    const tickMs = 25;
+
     const interval = setInterval(() => {
       if (!isMounted.current) {
         clearInterval(interval);
         return;
       }
-
-      const { currentIndex, fullText, messageId: streamMsgId } = streamingRef.current;
-      const nextIndex = currentIndex + 1;
-      const newText = fullText.slice(0, nextIndex);
+      const { currentIndex, fullText: full, messageId: streamMsgId } = streamingRef.current;
+      const nextIndex = Math.min(full.length, currentIndex + stepSize);
+      const newText = full.slice(0, nextIndex);
 
       setMessages((prev) =>
         prev.map((msg) =>
-          msg.id === streamMsgId
-            ? { ...msg, _streamingText: newText, _isStreaming: true }
-            : msg
+          msg.id === streamMsgId ? { ...msg, _streamingText: newText, _isStreaming: true } : msg
         )
       );
 
@@ -362,10 +373,9 @@ const EchoAI = () => {
         }, 500);
         setTimeout(() => scrollToBottom(true), 50);
       }
-
       streamingRef.current.currentIndex = nextIndex;
 
-      if (nextIndex >= fullText.length) {
+      if (nextIndex >= full.length) {
         clearInterval(interval);
         streamingRef.current.interval = null;
         streamingRef.current.active = false;
@@ -373,38 +383,60 @@ const EchoAI = () => {
         setMessages((prev) =>
           prev.map((msg) =>
             msg.id === streamMsgId
-              ? { ...msg, _streamingText: fullText, _isStreaming: false }
+              ? { ...msg, _streamingText: full, _isStreaming: false }
               : msg
           )
         );
-
-        if (isNearBottom) {
-          setTimeout(() => scrollToBottom(true), 50);
-        }
+        if (isNearBottom) setTimeout(() => scrollToBottom(true), 50);
       }
-    }, 25);
+    }, tickMs);
 
     streamingRef.current.interval = interval;
   };
 
-  // ─── Real‑time listener ──────────────────────────────────────
+  const stopStreaming = () => {
+    if (streamingRef.current.interval) {
+      clearInterval(streamingRef.current.interval);
+      streamingRef.current.interval = null;
+    }
+    streamingRef.current.active = false;
+    if (streamingRef.current.messageId) {
+      const id = streamingRef.current.messageId;
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === id
+            ? {
+                ...msg,
+                _streamingText: streamingRef.current.fullText,
+                _isStreaming: false,
+              }
+            : msg
+        )
+      );
+    }
+    if (abortRef.current) {
+      try {
+        abortRef.current.abort();
+      } catch (_) {}
+      abortRef.current = null;
+    }
+    setIsAILoading(false);
+  };
+
+  // ─── Real-time listener ──────────────────────────────────────
   useEffect(() => {
     if (!user?.uid) {
       setLoadingMessages(false);
       return;
     }
     isMounted.current = true;
-
     const cId = [user.uid, userId].sort().join('_');
     chatId.current = cId;
 
-    // ─── Load from cache first ──────────────────────────────────
     loadMessagesFromCache(cId).then((cachedMessages) => {
       if (isMounted.current) {
         hasLoadedFromCache.current = true;
-        if (cachedMessages.length > 0) {
-          setMessages(cachedMessages);
-        }
+        if (cachedMessages.length > 0) setMessages(cachedMessages);
         setLoadingMessages(false);
         if (cachedMessages.length > 0) {
           setTimeout(() => scrollToBottom(false), 50);
@@ -413,46 +445,44 @@ const EchoAI = () => {
     });
 
     const messagesRef = ref(db, `chats/${cId}/messages`);
-
     const unsubscribe = onValue(
       messagesRef,
       async (snapshot) => {
         if (!isMounted.current) return;
         const data = snapshot.val();
-
-        // ─── If Firebase has no data, keep whatever we have ──
         if (!data) {
-          // Do NOT clear messages – keep cached ones
           setLoadingMessages(false);
           return;
         }
-
         const newMessages = Object.entries(data)
           .map(([id, val]) => ({ id, ...val }))
           .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-        // Update messages, preserving streaming state
         setMessages((prev) => {
-          const prevMap = new Map(prev.map(m => [m.id, m]));
-          return newMessages.map(msg => {
+          const prevMap = new Map(prev.map((m) => [m.id, m]));
+          return newMessages.map((msg) => {
             const existing = prevMap.get(msg.id);
             if (existing && existing._isStreaming) {
-              return { ...msg, _streamingText: existing._streamingText, _isStreaming: true, _fullText: existing._fullText };
+              return {
+                ...msg,
+                _streamingText: existing._streamingText,
+                _isStreaming: true,
+                _fullText: existing._fullText,
+              };
             }
             return { ...msg, _streamingText: msg.text || '', _isStreaming: false };
           });
         });
-
         setLoadingMessages(false);
 
-        // Check for new AI messages to stream
         const prevMessages = messages;
         const newAIMessages = newMessages.filter(
-          (msg) => msg.senderId === ECHO_AI_ID && !prevMessages.some((p) => p.id === msg.id)
+          (msg) =>
+            msg.senderId === ECHO_AI_ID && !prevMessages.some((p) => p.id === msg.id)
         );
-
         if (newAIMessages.length > 0) {
           setIsAILoading(false);
+          setPendingRetryText(null);
           newAIMessages.forEach((aiMsg) => {
             if (aiMsg.text && !streamingRef.current.active) {
               if (streamingRef.current.interval) {
@@ -472,20 +502,14 @@ const EchoAI = () => {
           setTimeout(() => scrollToBottom(true), 100);
         }
 
-        // ─── Update caches ──────────────────────────────────────
-        // Clear both individual and full list caches
         await clearMessageCache(cId);
-        // Re‑add all messages to both caches
         for (const msg of newMessages) {
           await upsertMessageInCache(cId, msg);
           if (msg.type === 'media' && msg.mediaUrl && msg.mediaUrl.startsWith('http')) {
             cacheMedia(msg.mediaUrl);
           }
         }
-        // ─── Update full list cache ──────────────────────────────
         await saveMessagesToCache(cId, newMessages);
-
-        // Also update generic cache (optional)
         setCache(cacheKey, newMessages).catch(() => {});
       },
       (error) => {
@@ -493,14 +517,16 @@ const EchoAI = () => {
         setLoadingMessages(false);
         setIsAILoading(false);
         if (messages.length === 0) {
-          setMessages([{
-            id: 'error',
-            senderId: 'system',
-            text: '⚠️ Could not load messages. Please check your connection.',
-            timestamp: Date.now(),
-            type: 'text',
-            isRead: true,
-          }]);
+          setMessages([
+            {
+              id: 'error',
+              senderId: 'system',
+              text: '⚠️ Could not load messages. Please check your connection.',
+              timestamp: Date.now(),
+              type: 'text',
+              isRead: true,
+            },
+          ]);
         }
       }
     );
@@ -516,7 +542,6 @@ const EchoAI = () => {
     };
   }, [user?.uid, cacheKey, isNearBottom]);
 
-  // ─── Partner profile ──────────────────────────────────────────
   useEffect(() => {
     setPartnerProfile({
       name: 'ECHO AI',
@@ -526,7 +551,6 @@ const EchoAI = () => {
     });
   }, []);
 
-  // ─── Current user profile ────────────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
     const myProfileRef = ref(db, `profiles/${user.uid}`);
@@ -537,32 +561,33 @@ const EchoAI = () => {
       .catch(console.error);
   }, [user?.uid]);
 
-  // ─── Disabled attach/voice handlers ──────────────────────────
   const handleAttachClick = () => {
-    showToast('📎 Images and videos are not supported in AI chat yet. Coming soon!', 'info');
+    showToast('📎 Images and videos are not supported in AI chat yet.', 'info');
   };
-
   const handleVoiceClick = () => {
-    showToast('🎤 Voice notes are not supported in AI chat yet. Coming soon!', 'info');
+    showToast('🎤 Voice notes are not supported in AI chat yet.', 'info');
   };
 
   // ─── Send text message ──────────────────────────────────────
-  const handleSendText = async (e) => {
-    e.preventDefault();
-    const textToSend = newMessage.trim();
+  const handleSendText = async (e, overrideText = null) => {
+    e?.preventDefault?.();
+    const rawText = overrideText != null ? overrideText : newMessage;
+    const textToSend = String(rawText).trim();
     if (!textToSend || !user?.uid) return;
 
     let userMessageText = textToSend;
-    let currentReply = replyTo;
+    const currentReply = replyTo;
     if (currentReply && currentReply.originalMessage) {
-      const originalText = currentReply.originalMessage.text ||
-                        (currentReply.originalMessage.type === 'media' ? '📎 Media' : '');
+      const originalText =
+        currentReply.originalMessage.text ||
+        (currentReply.originalMessage.type === 'media' ? '📎 Media' : '');
       userMessageText = `In reply to: "${originalText}"\n\n${textToSend}`;
     }
 
     setNewMessage('');
     const replyToSave = currentReply;
     setReplyTo(null);
+    setPendingRetryText(null);
 
     const cId = [user.uid, userId].sort().join('_');
     const messagesRef = ref(db, `chats/${cId}/messages`);
@@ -585,8 +610,7 @@ const EchoAI = () => {
     }
     await set(newMsgRef, msgData);
 
-    const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
-    await set(myChatRef, {
+    await set(ref(db, `userChats/${user.uid}/${userId}`), {
       id: userId,
       partnerName: 'ECHO AI',
       partnerAvatar: ECHO_AI_AVATAR,
@@ -605,54 +629,96 @@ const EchoAI = () => {
       setTimeout(() => scrollToBottom(true), 50);
     }
 
+    // Set up abort controller so user can cancel
+    const controller = new AbortController();
+    abortRef.current = controller;
+
     try {
-      const response = await postChat({
-        message: userMessageText,
-        userId: user.uid,
-        conversationId: currentConversationId,
-      });
+      const response = await postChat(
+        {
+          message: userMessageText,
+          userId: user.uid,
+          conversationId: currentConversationId,
+        },
+        controller.signal
+      );
 
       const contentType = response.headers.get('content-type');
       if (!contentType || !contentType.includes('application/json')) {
         const text = await response.text();
-        throw new Error(`Server returned non‑JSON response (${response.status}): ${text.substring(0, 100)}`);
+        throw new Error(
+          `Server returned non-JSON response (${response.status}): ${text.substring(0, 100)}`
+        );
       }
 
       const result = await response.json();
       if (!response.ok) {
         throw new Error(result.error || 'AI request failed');
       }
-
-      if (result.conversationId) {
-        setCurrentConversationId(result.conversationId);
-      }
+      if (result.conversationId) setCurrentConversationId(result.conversationId);
+      setIsAILoading(false);
     } catch (err) {
+      if (err.name === 'AbortError') {
+        setIsAILoading(false);
+        return;
+      }
       console.error('AI error:', err);
       setIsAILoading(false);
+      setPendingRetryText(textToSend);
+
       const errorMsg = {
         id: `error_${Date.now()}`,
         senderId: ECHO_AI_ID,
-        text: `⚠️ AI is currently unavailable. Please try again later.`,
+        text: '',
+        error: true,
+        errorMessage:
+          'ECHO AI could not reply right now. Check your connection and try again.',
         timestamp: Date.now(),
         type: 'text',
       };
       setMessages((prev) => [...prev, errorMsg]);
+    } finally {
+      abortRef.current = null;
+    }
+  };
+
+  const handleRetry = () => {
+    if (!pendingRetryText) return;
+    // Remove the error bubble
+    setMessages((prev) => prev.filter((m) => !m.error));
+    handleSendText(null, pendingRetryText);
+  };
+
+  const handleRegenerate = (aiMsgId) => {
+    // Find the user message that this AI replied to
+    const aiMsg = messages.find((m) => m.id === aiMsgId);
+    if (!aiMsg) return;
+    const userMsg = messages.find((m) => m.id === aiMsg.replyTo?.messageId);
+    if (!userMsg) return;
+    handleSendText(null, userMsg.text);
+  };
+
+  const handleCopyText = async (text) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast('Copied', 'success');
+    } catch (_) {
+      showToast('Copy failed', 'error');
     }
   };
 
   // ─── Render message ──────────────────────────────────────────
-  const renderMessage = (msg) => {
+  const renderMessage = (msg, isLastAIMessage) => {
     const isOwn = msg.senderId === user?.uid;
     const isDeleting = msg.id === deletingMessageId;
     const isAi = msg.senderId === ECHO_AI_ID;
-
     const replyToDisplay = msg.replyTo
       ? { ...msg.replyTo, senderName: msg.replyTo.senderName || 'User' }
       : null;
 
     let allowEdit = false;
     if (isOwn) {
-      const userMessages = messages.filter(m => m.senderId === user.uid);
+      const userMessages = messages.filter((m) => m.senderId === user.uid);
       const lastUserMsg = userMessages[userMessages.length - 1];
       if (lastUserMsg && lastUserMsg.id === msg.id) {
         if (msg.type === 'text' || (msg.type === 'media' && msg.mediaType !== 'audio')) {
@@ -661,17 +727,43 @@ const EchoAI = () => {
       }
     }
 
-    let copyText = null;
-    if (msg.type === 'text' && msg.text) copyText = msg.text;
-
     const allowDelete = isOwn || isAi;
+
+    // Error message (retry-able)
+    if (msg.error) {
+      return (
+        <div key={msg.id} className="echo-ai-error-row">
+          <div className="echo-ai-error-bubble">
+            <div className="echo-ai-error-icon">
+              <i className="fas fa-circle-exclamation" />
+            </div>
+            <div className="echo-ai-error-body">
+              <span className="echo-ai-error-text">{msg.errorMessage}</span>
+              {pendingRetryText && (
+                <button
+                  type="button"
+                  className="echo-ai-retry-btn"
+                  onClick={handleRetry}
+                >
+                  <i className="fas fa-rotate-right" />
+                  <span>Retry</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      );
+    }
 
     if (msg.type === 'echomoji') {
       const skinObj = msg.skinId ? getSkinById(msg.skinId) : null;
       return (
         <div
+          key={msg.id}
           className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
-          ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
+          ref={(el) => {
+            if (el) messageRefs.current[msg.id] = el;
+          }}
         >
           <MessageMenu
             isOwn={isOwn}
@@ -681,10 +773,14 @@ const EchoAI = () => {
             onEdit={null}
             copyText={null}
           >
-            {replyToDisplay && (
-              <RepliedMessage replyTo={replyToDisplay} onTap={() => {}} />
-            )}
-            <ECHOMOJI mood={msg.mood || 'neutral'} skin={skinObj} size={56} interactive={false} animated={true} />
+            {replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => {}} />}
+            <ECHOMOJI
+              mood={msg.mood || 'neutral'}
+              skin={skinObj}
+              size={56}
+              interactive={false}
+              animated={true}
+            />
           </MessageMenu>
         </div>
       );
@@ -693,26 +789,40 @@ const EchoAI = () => {
     if (msg.type === 'media') {
       let content;
       if (msg.mediaType === 'audio') {
-        if (msg.isUploading) {
-          content = (
-            <div className="media-upload-overlay">
-              <div className="upload-spinner">
-                <svg className="spinner-ring" viewBox="0 0 50 50">
-                  <circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" />
-                </svg>
-              </div>
+        content = msg.isUploading ? (
+          <div className="media-upload-overlay">
+            <div className="upload-spinner">
+              <svg className="spinner-ring" viewBox="0 0 50 50">
+                <circle
+                  className="spinner-path"
+                  cx="25"
+                  cy="25"
+                  r="20"
+                  fill="none"
+                  strokeWidth="4"
+                />
+              </svg>
             </div>
-          );
-        } else {
-          content = <AudioPlayer src={msg.mediaUrl} />;
-        }
+          </div>
+        ) : (
+          <AudioPlayer src={msg.mediaUrl} />
+        );
       } else {
-        content = <ChatMediaMessage message={msg} isUploading={msg.isUploading} uploadProgress={msg.uploadProgress} />;
+        content = (
+          <ChatMediaMessage
+            message={msg}
+            isUploading={msg.isUploading}
+            uploadProgress={msg.uploadProgress}
+          />
+        );
       }
       return (
         <div
+          key={msg.id}
           className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
-          ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
+          ref={(el) => {
+            if (el) messageRefs.current[msg.id] = el;
+          }}
         >
           <MessageMenu
             isOwn={isOwn}
@@ -722,24 +832,22 @@ const EchoAI = () => {
             onEdit={allowEdit ? () => handleEditMessage(msg) : null}
             copyText={null}
           >
-            {replyToDisplay && (
-              <RepliedMessage replyTo={replyToDisplay} onTap={() => {}} />
-            )}
+            {replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => {}} />}
             {content}
           </MessageMenu>
         </div>
       );
     }
 
-    const displayText = msg._isStreaming && msg._streamingText !== undefined
-      ? msg._streamingText
-      : msg.text || '';
+    const displayText =
+      msg._isStreaming && msg._streamingText !== undefined
+        ? msg._streamingText
+        : msg.text || '';
 
     const messageContent = isAi ? (
       <div className="markdown-body">
-        <Markdown remarkPlugins={[remarkGfm]}>
-          {String(displayText).trim()}
-        </Markdown>
+        <Markdown remarkPlugins={[remarkGfm]}>{String(displayText).trim()}</Markdown>
+        {msg._isStreaming && <span className="echo-ai-cursor" />}
       </div>
     ) : (
       <div className="message-text" style={{ whiteSpace: 'pre-wrap' }}>
@@ -750,8 +858,13 @@ const EchoAI = () => {
 
     return (
       <div
-        className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''}`}
-        ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
+        key={msg.id}
+        className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${
+          isAi ? 'echo-ai-bubble' : ''
+        }`}
+        ref={(el) => {
+          if (el) messageRefs.current[msg.id] = el;
+        }}
       >
         <MessageMenu
           isOwn={isOwn}
@@ -759,13 +872,36 @@ const EchoAI = () => {
           onDelete={() => handleDeleteMessage(msg.id)}
           onReply={null}
           onEdit={allowEdit ? () => handleEditMessage(msg) : null}
-          copyText={copyText}
+          copyText={isAi ? displayText : null}
         >
-          {replyToDisplay && (
-            <RepliedMessage replyTo={replyToDisplay} onTap={() => {}} />
-          )}
+          {replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => {}} />}
           {messageContent}
         </MessageMenu>
+
+        {isAi && !msg._isStreaming && displayText && (
+          <div className="echo-ai-message-actions">
+            <button
+              type="button"
+              className="echo-ai-action-btn"
+              onClick={() => handleCopyText(displayText)}
+              title="Copy"
+              aria-label="Copy response"
+            >
+              <i className="fas fa-copy" />
+            </button>
+            {isLastAIMessage && (
+              <button
+                type="button"
+                className="echo-ai-action-btn"
+                onClick={() => handleRegenerate(msg.id)}
+                title="Regenerate"
+                aria-label="Regenerate response"
+              >
+                <i className="fas fa-rotate-right" />
+              </button>
+            )}
+          </div>
+        )}
       </div>
     );
   };
@@ -783,7 +919,7 @@ const EchoAI = () => {
       const item = items[i];
       if (item.type.startsWith('image/') || item.type.startsWith('video/')) {
         e.preventDefault();
-        showToast('📎 Pasting images or videos is not supported in AI chat yet. Coming soon!', 'info');
+        showToast('📎 Pasting images or videos is not supported in AI chat yet.', 'info');
         return;
       }
     }
@@ -796,18 +932,6 @@ const EchoAI = () => {
       textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
     }
   }, [newMessage]);
-
-  const inputRef = useRef(null);
-  const inputContainerRef = useRef(null);
-  const captionPreviewRef = useRef(null);
-  const captionInputRef = useRef(null);
-  const focusedField = useRef('main');
-  const [captionText, setCaptionText] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [previewUrl, setPreviewUrl] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const fileInputRef = useRef(null);
 
   const handleEmojiSelect = (emoji) => {
     const target = focusedField.current;
@@ -843,31 +967,70 @@ const EchoAI = () => {
     }
   };
 
+  const sorted = sortMessages(messages);
+  const lastAIMessageId = [...sorted].reverse().find((m) => m.senderId === ECHO_AI_ID && !m.error)?.id;
+  const isFirstOpen = sorted.length === 0;
+
   return (
-    <div className="chat-view">
+    <div className="chat-view echo-ai-chat">
       <VideoAudioProvider>
-        <div className="messages-container" ref={messagesContainerRef} onScroll={handleScroll}>
+        <div
+          className="messages-container"
+          ref={messagesContainerRef}
+          onScroll={handleScroll}
+        >
           {loadingMessages && messages.length === 0 ? (
             <div className="chat-skeleton-list">
               <SkeletonMessage isOwn={false} />
               <SkeletonMessage isOwn={true} />
               <SkeletonMessage isOwn={false} />
             </div>
-          ) : messages.length === 0 ? (
-            <div className="empty-chat-state">
-              <i className="fas fa-paper-plane empty-icon" />
-              <p>No messages yet. Say hello!</p>
+          ) : isFirstOpen ? (
+            <div className="echo-ai-empty">
+              <div className="echo-ai-empty-avatar">
+                <img src={ECHO_AI_AVATAR} alt="ECHO AI" />
+              </div>
+              <h2 className="echo-ai-empty-title">
+                Hi{currentUserProfile?.name ? ` ${currentUserProfile.name.split(' ')[0]}` : ''} 👋
+              </h2>
+              <p className="echo-ai-empty-sub">
+                I'm ECHO AI. Ask me anything — I can write, code, brainstorm, and more.
+              </p>
+              <div className="echo-ai-suggestions">
+                {SUGGESTIONS.map((s) => (
+                  <button
+                    key={s.text}
+                    type="button"
+                    className="echo-ai-chip"
+                    onClick={() => handleSendText(null, s.text)}
+                  >
+                    <i className={`fas ${s.icon}`} />
+                    <span>{s.text}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           ) : (
-            sortMessages(messages).map((msg) => <React.Fragment key={msg.id}>{renderMessage(msg)}</React.Fragment>)
+            sorted.map((msg) => renderMessage(msg, msg.id === lastAIMessageId))
           )}
+
           {isAILoading && (
             <div className="message-row partner ai-thinking-row">
               <div className="message-bubble partner ai-thinking">
                 <div className="typing-indicator" aria-hidden="true">
-                  <span></span><span></span><span></span>
+                  <span></span>
+                  <span></span>
+                  <span></span>
                 </div>
                 <span className="ai-thinking-label">ECHO AI is thinking</span>
+                <button
+                  type="button"
+                  className="echo-ai-stop-btn"
+                  onClick={stopStreaming}
+                  title="Stop"
+                >
+                  Stop
+                </button>
               </div>
             </div>
           )}
@@ -883,14 +1046,18 @@ const EchoAI = () => {
         />
       )}
 
-      <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
+      <form
+        className="chat-input-container"
+        onSubmit={handleSendText}
+        ref={inputContainerRef}
+      >
         {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
         <div className="chat-input-row">
           <button
             type="button"
             className="chat-attach-btn"
             onClick={handleAttachClick}
-            title="Attach image or video (coming soon)"
+            title="Attach (coming soon)"
           >
             <i className="fas fa-paperclip" />
           </button>
@@ -906,7 +1073,7 @@ const EchoAI = () => {
             type="button"
             className="chat-voice-btn"
             onClick={handleVoiceClick}
-            title="Voice note (coming soon)"
+            title="Voice (coming soon)"
           >
             <i className="fas fa-microphone" />
           </button>
@@ -931,13 +1098,15 @@ const EchoAI = () => {
               borderRadius: '24px',
               border: '1px solid var(--border-color)',
               background: 'var(--bg-input)',
-              color: 'var(--text-primary)',  // ✅ changed from '#fff'
+              color: 'var(--text-primary)',
               fontSize: '14px',
               outline: 'none',
               boxSizing: 'border-box',
             }}
-            onFocus={() => { focusedField.current = 'main'; }}
-            onBlur={() => { /* keep last known focus */ }}
+            onFocus={() => {
+              focusedField.current = 'main';
+            }}
+            onBlur={() => {}}
           />
           <input
             type="file"
@@ -945,7 +1114,7 @@ const EchoAI = () => {
             accept="image/*,video/*"
             style={{ display: 'none' }}
             onChange={() => {
-              showToast('📎 Images and videos are not supported in AI chat yet. Coming soon!', 'info');
+              showToast('📎 Images and videos are not supported yet.', 'info');
               fileInputRef.current.value = '';
             }}
           />
@@ -974,7 +1143,13 @@ const EchoAI = () => {
         onSave={saveMediaCaption}
       />
 
-      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+      {toast && (
+        <Toast
+          type={toast.type}
+          message={toast.message}
+          onClose={() => setToast(null)}
+        />
+      )}
     </div>
   );
 };
