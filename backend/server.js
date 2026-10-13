@@ -94,45 +94,285 @@ io.on('connection', (socket) => {
   });
 });
 
-// ─── Push notifications ────────────────────────────────────────
+// ─── Push notifications (FCM v1) ──────────────────────────────
+//
+// Sends push notifications to any user when someone sends them a message.
+// Uses Firebase Cloud Messaging HTTP v1 API (via firebase-admin).
+// Works on web (PWA/homescreen) and native (Capacitor) clients alike.
+
+/**
+ * Fetch the recipient's FCM tokens from the DB.
+ */
+async function getRecipientTokens(uid) {
+  if (!uid) return [];
+  try {
+    const snap = await db.ref(`users/${uid}/fcmTokens`).once('value');
+    if (!snap.exists()) return [];
+    return Object.keys(snap.val());
+  } catch (err) {
+    console.warn('getRecipientTokens failed:', err.message);
+    return [];
+  }
+}
+
+/**
+ * Send an FCM push to all tokens of a user.
+ * Auto-cleans dead tokens from the DB.
+ */
+async function sendFcmToUser(recipientUid, notification, data = {}) {
+  if (!recipientUid) return { sent: 0, failed: 0 };
+
+  const tokens = await getRecipientTokens(recipientUid);
+  if (!tokens.length) {
+    return { sent: 0, failed: 0, reason: 'no_tokens' };
+  }
+
+  // FCM v1 requires string values in `data`
+  const safeData = {};
+  Object.entries(data).forEach(([k, v]) => {
+    if (v === undefined || v === null) return;
+    safeData[k] = String(v);
+  });
+
+  const baseMessage = {
+    notification: {
+      title: notification.title || 'New message',
+      body: notification.body || '',
+    },
+    data: safeData,
+    android: {
+      priority: 'high',
+      notification: {
+        sound: 'default',
+        clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+      },
+    },
+    apns: {
+      payload: {
+        aps: {
+          sound: 'default',
+          badge: 1,
+        },
+      },
+    },
+    webpush: {
+      notification: {
+        title: notification.title || 'New message',
+        body: notification.body || '',
+        icon: notification.icon || '/logo192.png',
+        badge: '/logo192.png',
+        tag: safeData.tag || undefined,
+      },
+      fcmOptions: {
+        link: safeData.url || '/',
+      },
+    },
+  };
+
+  const results = await Promise.allSettled(
+    tokens.map((token) =>
+      admin.messaging().send({ ...baseMessage, token })
+    )
+  );
+
+  const deadTokens = [];
+  let sent = 0;
+  results.forEach((r, i) => {
+    if (r.status === 'fulfilled') {
+      sent++;
+    } else {
+      const code = r.reason?.errorInfo?.code || r.reason?.code;
+      if (
+        code === 'messaging/registration-token-not-registered' ||
+        code === 'messaging/invalid-registration-token' ||
+        code === 'messaging/invalid-argument'
+      ) {
+        deadTokens.push(tokens[i]);
+      } else {
+        console.warn('[FCM] send failed:', code, r.reason?.message);
+      }
+    }
+  });
+
+  if (deadTokens.length) {
+    const updates = {};
+    deadTokens.forEach((t) => {
+      updates[`users/${recipientUid}/fcmTokens/${t}`] = null;
+    });
+    await db.ref().update(updates).catch(() => {});
+    console.log(`[FCM] Cleaned ${deadTokens.length} dead token(s) for ${recipientUid}`);
+  }
+
+  return { sent, failed: results.length - sent, deadCleaned: deadTokens.length };
+}
+
+/**
+ * Watch all chat messages. Fires when a new message arrives in any 1-1 chat.
+ * Sends push to the recipient.
+ */
 const chatsRef = db.ref('chats');
 chatsRef.on('child_added', (chatSnapshot) => {
-  chatSnapshot.child('messages').ref.on('child_added', async (msgSnapshot) => {
-    const message = msgSnapshot.val() || {};
-    const chatId = chatSnapshot.key;
-    const senderId = message.senderId;
-    if (!senderId || !chatId) return;
-    const parts = String(chatId).split('_');
-    const recipientId = parts.find((id) => id && id !== senderId);
-    if (!recipientId || recipientId === senderId) return;
-    const subsSnapshot = await db.ref(`pushSubscriptions/${recipientId}`).once('value');
-    const subs = subsSnapshot.val();
-    if (!subs) return;
-    let title = message.senderName || 'User';
-    let body = message.text || 'New message';
-    let url = `/chat/${senderId}`;
-    if (message.type === 'system' && message.endedBy) {
-      title = 'ECHO ended';
-      body = message.text || 'This ECHO was ended.';
-      url = `/chat/${message.endedBy}`;
-    }
-    const payload = JSON.stringify({
-      title,
-      body,
-      tag: chatId,
-      chatId,
-      messageId: msgSnapshot.key,
-      url,
-    });
-    const promises = Object.values(subs).map((sub) =>
-      webpush.sendNotification(sub, payload).catch((err) => {
-        if (err.statusCode === 410) {
-          db.ref(`pushSubscriptions/${recipientId}/${sub.endpoint}`).remove();
+  const chatId = chatSnapshot.key;
+  const messagesRef = chatSnapshot.child('messages').ref;
+
+  messagesRef.on('child_added', async (msgSnapshot) => {
+    try {
+      const message = msgSnapshot.val() || {};
+      const senderId = message.senderId;
+      if (!senderId || !chatId) return;
+      if (senderId === ECHO_AI_ID) {
+        // AI replies are usually not push-worthy unless you want them to be.
+        // Leave this early return if you don't want AI pushes.
+        return;
+      }
+
+      const parts = String(chatId).split('_');
+      const recipientId = parts.find((id) => id && id !== senderId);
+      if (!recipientId || recipientId === senderId) return;
+
+      // Skip system messages that aren't real notifications
+      if (message.type === 'system' && !message.endedBy) return;
+
+      let title = message.senderName || 'ECHO';
+      let body = message.text || 'New message';
+      let url = `/chat/${senderId}`;
+
+      if (message.type === 'system' && message.endedBy) {
+        title = 'ECHO ended';
+        body = message.text || 'This ECHO was ended.';
+        url = `/chat/${message.endedBy}`;
+      } else if (message.type === 'media') {
+        body =
+          message.mediaType === 'video'
+            ? '🎬 Video'
+            : message.mediaType === 'audio'
+            ? '🎤 Voice note'
+            : '📷 Image';
+      }
+
+      const result = await sendFcmToUser(
+        recipientId,
+        {
+          title,
+          body: body.slice(0, 150),
+          icon: message.senderAvatar || '/logo192.png',
+        },
+        {
+          tag: `chat-${chatId}`,
+          chatId,
+          messageId: msgSnapshot.key,
+          partnerId: senderId,
+          url,
+          type: 'message',
         }
-      })
-    );
-    await Promise.all(promises);
+      );
+
+      console.log(
+        `🔔 Push to ${recipientId}: sent=${result.sent} failed=${result.failed}`
+      );
+    } catch (err) {
+      console.warn('Message push handler failed:', err.message);
+    }
   });
+});
+
+/**
+ * Watch group chat messages and notify all other members.
+ */
+const groupsRef = db.ref('groups');
+groupsRef.on('child_added', (groupSnapshot) => {
+  const groupId = groupSnapshot.key;
+  const messagesRef = groupSnapshot.child('messages').ref;
+
+  messagesRef.on('child_added', async (msgSnapshot) => {
+    try {
+      const message = msgSnapshot.val() || {};
+      const senderId = message.senderId;
+      if (!senderId || senderId === 'system') return;
+
+      // Get group members
+      const membersSnap = await groupSnapshot.child('members').ref.once('value');
+      const members = membersSnap.val() || {};
+      const recipients = Object.keys(members).filter((uid) => uid !== senderId);
+      if (!recipients.length) return;
+
+      const groupName = groupSnapshot.child('name').val() || 'Group';
+      const senderName = message.senderName || 'Someone';
+
+      let body = message.text || 'New message';
+      if (message.type === 'media') {
+        body =
+          message.mediaType === 'video'
+            ? '🎬 Video'
+            : message.mediaType === 'audio'
+            ? '🎤 Voice note'
+            : '📷 Image';
+      }
+
+      const title = `${senderName} · ${groupName}`;
+      const url = `/chat/${groupId}`;
+
+      // Fire in parallel
+      await Promise.all(
+        recipients.map((uid) =>
+          sendFcmToUser(
+            uid,
+            {
+              title,
+              body: body.slice(0, 150),
+              icon: message.senderAvatar || '/logo192.png',
+            },
+            {
+              tag: `group-${groupId}`,
+              groupId,
+              messageId: msgSnapshot.key,
+              partnerId: senderId,
+              url,
+              type: 'group_message',
+            }
+          ).catch(() => {})
+        )
+      );
+    } catch (err) {
+      console.warn('Group push handler failed:', err.message);
+    }
+  });
+});
+
+/**
+ * HTTP endpoint — lets the frontend trigger a push manually if needed.
+ * (Optional; the DB watchers above will usually handle it.)
+ */
+app.post('/api/send-notification', requireUser, async (req, res) => {
+  try {
+    const { recipientUid, title, body, data } = req.body || {};
+    if (!recipientUid || !title) {
+      return res.status(400).json({ error: 'Missing recipientUid or title' });
+    }
+    const result = await sendFcmToUser(recipientUid, { title, body }, data);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    console.error('send-notification error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * HTTP endpoint — register a token (alternative to direct DB write).
+ */
+app.post('/api/register-token', requireUser, async (req, res) => {
+  try {
+    const { token } = req.body || {};
+    if (!token) return res.status(400).json({ error: 'Missing token' });
+    await db.ref(`users/${req.user.uid}/fcmTokens/${token}`).set({
+      token,
+      createdAt: Date.now(),
+      userAgent: (req.headers['user-agent'] || '').slice(0, 200),
+    });
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ==========================================================================
