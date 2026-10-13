@@ -22,42 +22,34 @@ import { isRealDisplayName, filterVisibleUsers } from '../../../utils/userIntegr
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 
-const HomeSkeleton = () => {
-  return (
-    <div className="home-page" style={{ background: 'var(--bg-primary)', minHeight: '100vh' }}>
-      <div className="home-container" style={{ padding: '20px', display: 'flex', flexDirection: 'column', height: '100vh', width: '100%' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', width: '100%' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: 'var(--bg-input)' }} />
-            <div style={{ width: '80px', height: '28px', borderRadius: '4px', background: 'var(--bg-input)' }} />
-          </div>
-          <div style={{ width: '100px', height: '36px', borderRadius: '30px', background: 'var(--bg-input)' }} />
-        </div>
-        <div style={{ width: '100%', boxSizing: 'border-box', marginBottom: '25px', position: 'relative' }}>
-          <section className="home-section live-section" style={{ background: 'var(--bg-card)', backdropFilter: 'blur(20px)', borderRadius: '24px', padding: '24px', border: '1px solid var(--border-color)', boxShadow: '0 20px 60px var(--shadow-color)' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <div style={{ width: '12px', height: '12px', borderRadius: '50%', background: 'var(--bg-input)' }} />
-                <div style={{ width: '100px', height: '20px', borderRadius: '4px', background: 'var(--bg-input)' }} />
-              </div>
-              <div style={{ width: '80px', height: '28px', borderRadius: '20px', background: 'var(--bg-input)' }} />
-            </div>
-            <div style={{ width: '200px', height: '14px', borderRadius: '4px', background: 'var(--bg-input)', marginBottom: '20px' }} />
-            <div style={{ display: 'flex', gap: '20px', overflowX: 'auto', paddingBottom: '8px', width: '100%' }}>
-              {[1, 2, 3, 4, 5, 6].map((i) => (
-                <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', minWidth: 'clamp(70px, 15vw, 85px)', padding: '12px 8px', borderRadius: '16px' }}>
-                  <div style={{ width: window.innerWidth < 600 ? '64px' : '80px', height: window.innerWidth < 600 ? '64px' : '80px', borderRadius: '50%', background: 'var(--bg-input)', animation: 'pulse-skeleton 1.5s infinite' }} />
-                  <div style={{ width: '60px', height: '14px', borderRadius: '4px', background: 'var(--bg-input)', animation: 'pulse-skeleton 1.5s infinite' }} />
-                </div>
-              ))}
-            </div>
-          </section>
-        </div>
-        <div style={{ width: '100%', height: '56px', borderRadius: '18px', background: 'var(--bg-input)' }} />
+const HomeSkeleton = () => (
+  <div className="home-page">
+    <div className="home-container">
+      <div className="home-header-skeleton">
+        <div className="skeleton-block" style={{ width: 28, height: 28, borderRadius: '50%' }} />
+        <div className="skeleton-block" style={{ width: 90, height: 24, borderRadius: 8 }} />
       </div>
+
+      <section className="home-section">
+        <div className="section-header">
+          <div className="skeleton-block" style={{ width: 110, height: 20, borderRadius: 8 }} />
+          <div className="skeleton-block" style={{ width: 70, height: 22, borderRadius: 12 }} />
+        </div>
+        <div className="skeleton-block" style={{ width: 200, height: 13, borderRadius: 6, marginBottom: 18 }} />
+        <div className="live-users-scroll">
+          {[1, 2, 3, 4, 5].map((i) => (
+            <div key={i} className="live-user-card" style={{ pointerEvents: 'none' }}>
+              <div className="skeleton-block" style={{ width: 72, height: 72, borderRadius: '50%' }} />
+              <div className="skeleton-block" style={{ width: 60, height: 12, borderRadius: 6 }} />
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div className="skeleton-block" style={{ width: '100%', height: 52, borderRadius: 14 }} />
     </div>
-  );
-};
+  </div>
+);
 
 const Home = () => {
   const { user } = useAuth();
@@ -408,6 +400,10 @@ const Home = () => {
     return <HomeSkeleton />;
   }
 
+  const liveCount = liveUids.length;
+  const onlineCount = onlineUsers.filter((u) => u.online && !u.isLive).length;
+  const totalCount = liveCount + onlineCount;
+
   return (
     <>
       <SEO
@@ -416,327 +412,100 @@ const Home = () => {
       />
       <StructuredData />
 
-      <div
-        className="home-page"
-        style={{
-          position: 'relative',
-          minHeight: '100vh',
-          width: '100vw',
-          overflow: 'hidden',
-          background: 'var(--bg-primary)',
-        }}
-      >
-        {isLive && (
-          <div style={{ position: 'fixed', top: 0, left: 0, width: '100vw', height: '100vh', zIndex: 0, background: '#000' }}>
-            {cameraError ? (
-              <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', color: '#fff', textAlign: 'center', padding: '20px' }}>
-                {cameraError}
+      <div className="home-page">
+        <div className="home-container">
+          {/* ─── Live Now section ─────────────────────────── */}
+          <section className="home-section">
+            <div className="section-header">
+              <div className="section-title-group">
+                <span className={`live-dot${liveCount > 0 ? ' is-live' : ''}`} aria-hidden="true" />
+                <h3 className="section-title">Live Now</h3>
               </div>
-            ) : (
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' }}
-              />
-            )}
-          </div>
-        )}
+              <span className="section-count">
+                {liveCount > 0
+                  ? `${liveCount} live · ${totalCount} total`
+                  : `${totalCount} online`}
+              </span>
+            </div>
 
-        {isLive && (
-          <div
-            style={{
-              position: 'fixed',
-              top: 0,
-              left: 0,
-              width: '100vw',
-              height: '100vh',
-              background: 'linear-gradient(180deg, color-mix(in srgb, var(--bg-primary) 75%, transparent) 0%, color-mix(in srgb, var(--bg-primary) 25%, transparent) 45%, color-mix(in srgb, var(--bg-primary) 70%, transparent) 100%)',
-              zIndex: 1,
-              pointerEvents: 'none',
-            }}
-          />
-        )}
+            <p className="section-hint">
+              {liveCount > 0
+                ? 'Tap a live user to watch their stream'
+                : 'Tap any profile to chat instantly'}
+            </p>
 
-        {isLive && (
-          <div
-            style={{
-              position: 'fixed',
-              top: 16,
-              left: '50%',
-              transform: 'translateX(-50%)',
-              zIndex: 5,
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '8px 16px',
-              borderRadius: 24,
-              background: 'rgba(239, 68, 68, 0.92)',
-              color: '#fff',
-              fontWeight: 800,
-              fontSize: 13,
-              letterSpacing: '0.5px',
-              boxShadow: '0 8px 28px rgba(239, 68, 68, 0.45)',
-              pointerEvents: 'none',
-            }}
-          >
-            <span style={{ width: 8, height: 8, borderRadius: '50%', background: '#fff', animation: 'liveRingPulse 1s ease-in-out infinite' }} />
-            YOU ARE LIVE
-          </div>
-        )}
-
-        <div
-          className="home-container"
-          style={{
-            position: 'relative',
-            zIndex: 2,
-            padding: '20px',
-            display: 'flex',
-            flexDirection: 'column',
-            height: '100vh',
-            width: '100%',
-            boxSizing: 'border-box',
-            overflowY: 'auto',
-          }}
-        >
-          <div style={{ width: '100%', boxSizing: 'border-box', marginBottom: '25px', position: 'relative' }}>
-            <div
-              style={{
-                position: 'absolute',
-                top: '-20px',
-                left: '-20px',
-                right: '-20px',
-                bottom: '-20px',
-                background: 'radial-gradient(circle at 30% 50%, rgba(139, 92, 246, 0.15), transparent 70%)',
-                zIndex: -1,
-                borderRadius: '30px',
-              }}
-            />
-            <section
-              className={`home-section live-section ${isLive ? 'is-broadcasting' : ''}`}
-              style={{
-                background: isLive ? 'color-mix(in srgb, var(--bg-card) 55%, transparent)' : 'var(--bg-card)',
-                backdropFilter: isLive ? 'blur(28px) saturate(1.2)' : 'blur(20px)',
-                WebkitBackdropFilter: isLive ? 'blur(28px) saturate(1.2)' : 'blur(20px)',
-                borderRadius: '24px',
-                padding: '24px',
-                border: isLive ? '1px solid color-mix(in srgb, #ef4444 40%, var(--border-color))' : '1px solid var(--border-color)',
-                boxShadow: isLive ? '0 20px 60px color-mix(in srgb, #ef4444 15%, transparent)' : '0 20px 60px var(--shadow-color)',
-                transition: 'background 0.35s ease, border 0.35s ease, box-shadow 0.35s ease',
-              }}
-            >
-              <div className="section-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', gap: '10px', flexWrap: 'wrap' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <span
-                      className="live-dot"
-                      style={{
-                        height: '12px',
-                        width: '12px',
-                        background: '#4ade80',
-                        borderRadius: '50%',
-                        display: 'inline-block',
-                        boxShadow: '0 0 20px rgba(74, 222, 128, 0.6)',
-                        animation: 'pulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite',
-                      }}
-                    />
-                  </div>
-                  <h3 style={{ margin: 0, fontSize: 'clamp(18px, 2.5vw, 20px)', fontWeight: 700, color: 'var(--text-primary)' }}>
-                    LIVE NOW
-                  </h3>
+            <div className="live-users-scroll">
+              {onlineUsers.length === 0 ? (
+                <div className="live-empty">
+                  <i className="fas fa-moon" aria-hidden="true" />
+                  <span>No one is online right now</span>
+                  <button
+                    type="button"
+                    className="live-empty-action"
+                    onClick={toggleLive}
+                  >
+                    Go live →
+                  </button>
                 </div>
-                <span
-                  className="live-count"
-                  style={{
-                    fontSize: '12px',
-                    fontWeight: 600,
-                    opacity: 0.95,
-                    background: 'rgba(74, 222, 128, 0.12)',
-                    padding: '6px 10px',
-                    borderRadius: '14px',
-                    border: '1px solid rgba(74, 222, 128, 0.25)',
-                    color: '#4ade80',
-                    whiteSpace: 'nowrap',
-                    flexShrink: 0,
-                    lineHeight: 1.2,
-                  }}
-                >
-                  {liveUids.length > 0
-                    ? `${liveUids.length} live · ${onlineUsers.length} online`
-                    : `${onlineUsers.length} online`}
-                </span>
-              </div>
-
-              <p className="live-hint" style={{ fontSize: 'clamp(13px, 1.5vw, 14px)', opacity: 0.6, marginBottom: '20px', color: 'var(--text-secondary)', letterSpacing: '0.3px' }}>
-                {liveUids.length > 0 ? 'Tap a live user to view their stream' : 'Tap any profile to view and chat instantly'}
-              </p>
-
-              <div
-                className="live-users-scroll"
-                style={{
-                  display: 'flex',
-                  gap: '20px',
-                  overflowX: 'auto',
-                  overflowY: 'hidden',
-                  paddingBottom: '14px',
-                  width: '100%',
-                  scrollbarWidth: 'thin',
-                  scrollbarColor: '#6C3CE1 transparent',
-                }}
-              >
-                {onlineUsers.length === 0 ? (
-                  <p className="live-empty" style={{ color: 'var(--text-muted)', padding: '20px 0', width: '100%', textAlign: 'center', fontSize: 'clamp(15px, 2vw, 17px)', fontStyle: 'italic' }}>
-                    🌙 No one online right now
-                  </p>
-                ) : (
-                  onlineUsers.map((profile) => (
-                    <div
-                      key={profile.uid}
-                      onClick={() => openUserPreview(profile.uid)}
-                      style={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        gap: '8px',
-                        cursor: 'pointer',
-                        minWidth: 'clamp(70px, 15vw, 85px)',
-                        transition: 'all 0.2s ease',
-                        padding: '12px 8px',
-                        borderRadius: '16px',
-                        backgroundColor: profile.isLive ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255,255,255,0.03)',
-                        boxShadow: profile.isLive ? '0 0 0 1px rgba(239, 68, 68, 0.35)' : 'none',
-                      }}
-                      className="live-user-card-hover"
-                    >
-                      <div
-                        className="live-avatar"
-                        style={{
-                          position: 'relative',
-                          transition: 'transform 0.2s',
-                          borderRadius: '50%',
-                          padding: profile.isLive ? '4px' : '0',
-                          background: profile.isLive ? 'linear-gradient(135deg, #6C3CE1, #a78bfa)' : 'transparent',
-                          boxShadow: profile.isLive ? '0 0 24px rgba(108,60,225,0.7), 0 0 48px rgba(108,60,225,0.3)' : 'none',
-                          animation: profile.isLive ? 'liveRingPulse 1.6s ease-in-out infinite' : 'none',
-                        }}
-                      >
+              ) : (
+                onlineUsers.map((profile) => (
+                  <button
+                    key={profile.uid}
+                    type="button"
+                    className={`live-user-card${profile.isLive ? ' is-live' : ''}`}
+                    onClick={() => openUserPreview(profile.uid)}
+                    aria-label={`${profile.name}${profile.isLive ? ' is live' : ''}`}
+                  >
+                    <div className="live-avatar-wrapper">
+                      <div className="live-avatar-ring">
                         <Avatar
                           src={profile.avatar}
                           name={profile.name}
-                          size={window.innerWidth < 600 ? 64 : 80}
+                          size={72}
                         />
-                        {!profile.isLive && (
-                          <span
-                            className="online-indicator"
-                            style={{
-                              position: 'absolute',
-                              bottom: '2px',
-                              right: '2px',
-                              width: '14px',
-                              height: '14px',
-                              background: '#4ade80',
-                              borderRadius: '50%',
-                              border: '3px solid var(--bg-primary)',
-                              boxShadow: '0 0 15px rgba(74, 222, 128, 0.5)',
-                            }}
-                          />
-                        )}
                       </div>
-                      <span
-                        className="live-username"
-                        style={{
-                          fontSize: 'clamp(12px, 1.5vw, 14px)',
-                          fontWeight: 600,
-                          color: 'var(--text-primary)',
-                          textAlign: 'center',
-                          maxWidth: '80px',
-                          whiteSpace: 'nowrap',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                        }}
-                      >
-                        {profile.name}
-                      </span>
+                      {!profile.isLive && profile.online && (
+                        <span className="online-dot" aria-hidden="true" />
+                      )}
                       {profile.isLive && (
-                        <span
-                          style={{
-                            background: '#ef4444',
-                            color: '#fff',
-                            fontSize: '10px',
-                            fontWeight: 800,
-                            letterSpacing: '0.6px',
-                            padding: '3px 10px',
-                            borderRadius: '10px',
-                            boxShadow: '0 0 12px rgba(239, 68, 68, 0.5)',
-                          }}
-                        >
-                          ● LIVE
-                        </span>
+                        <span className="live-badge">● LIVE</span>
                       )}
                     </div>
-                  ))
-                )}
-              </div>
-            </section>
-          </div>
+                    <span className="live-username">{profile.name}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </section>
 
-          <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '20px', width: '100%' }}>
-            <button
-              onClick={toggleLive}
-              style={{
-                flex: 1,
-                padding: 'clamp(14px, 2.5vh, 20px)',
-                borderRadius: '18px',
-                border: 'none',
-                fontWeight: 700,
-                fontSize: 'clamp(15px, 2vw, 18px)',
-                cursor: 'pointer',
-                color: '#fff',
-                background: isLive
-                  ? 'linear-gradient(135deg, #f87171, #dc2626)'
-                  : 'linear-gradient(135deg, #8b5cf6, #6d28d9)',
-                boxShadow: isLive
-                  ? '0 8px 30px rgba(220, 38, 38, 0.3)'
-                  : '0 8px 30px rgba(139, 92, 246, 0.3)',
-                transition: 'all 0.3s ease',
-                letterSpacing: '0.5px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '12px',
-              }}
-              className="go-live-btn"
-            >
-              <span style={{ fontSize: 'clamp(18px, 2vw, 22px)' }}>
-                <i className={`fas ${isLive ? 'fa-stop-circle' : 'fa-video'}`} />
-              </span>
-              {isLive ? 'End Live Stream' : 'Go Live Now'}
-            </button>
-          </div>
+          {/* ─── Go Live button ──────────────────────────── */}
+          <button
+            type="button"
+            className={`go-live-btn${isLive ? ' is-live' : ''}`}
+            onClick={toggleLive}
+          >
+            <i className={`fas ${isLive ? 'fa-stop-circle' : 'fa-video'}`} aria-hidden="true" />
+            <span>{isLive ? 'End Live Stream' : 'Go Live Now'}</span>
+          </button>
+
+          {cameraError && (
+            <div className="home-error-inline" role="alert">
+              {cameraError}
+            </div>
+          )}
         </div>
 
-        {/* STORIES BAR – Bottom Left */}
-        <div
-          style={{
-            position: 'fixed',
-            bottom: '90px',
-            left: '0',
-            zIndex: 9999,
-            width: '100%',
-            maxWidth: '450px',
-            pointerEvents: 'auto',
-          }}
-        >
-          <StoriesBar 
-            currentUserId={user?.uid} 
-            users={onlineUsers} 
-            ownStory={null} 
-            onAddStory={() => setShowRecorder(true)} 
+        {/* ─── Stories bar ──────────────────────────────── */}
+        <div className="home-stories-dock">
+          <StoriesBar
+            currentUserId={user?.uid}
+            users={onlineUsers}
+            ownStory={null}
+            onAddStory={() => setShowRecorder(true)}
             onViewStories={(stories, ownerId) => {
               setViewingStories(stories);
               setCurrentStoryOwnerId(ownerId);
-            }} 
+            }}
           />
         </div>
 
@@ -765,135 +534,51 @@ const Home = () => {
         )}
 
         {showRecorder && (
-          <StoryRecorder 
-            userId={user?.uid} 
-            onClose={() => setShowRecorder(false)} 
+          <StoryRecorder
+            userId={user?.uid}
+            onClose={() => setShowRecorder(false)}
           />
         )}
 
         {viewingStories && (
-          <StoryViewer 
-            stories={viewingStories} 
-            ownerName={viewingStories[0]?.userName || 'User'} 
-            ownerAvatar={viewingStories[0]?.avatar || ''} 
-            viewerId={user?.uid} 
-            onClose={() => setViewingStories(null)} 
+          <StoryViewer
+            stories={viewingStories}
+            ownerName={viewingStories[0]?.userName || 'User'}
+            ownerAvatar={viewingStories[0]?.avatar || ''}
+            viewerId={user?.uid}
+            onClose={() => setViewingStories(null)}
             onFinished={() => {
-              // 🚨 THE FIX: Instantly remove the user from the online list
               if (currentStoryOwnerId) {
-                setOnlineUids(prev => prev.filter(uid => uid !== currentStoryOwnerId));
+                setOnlineUids((prev) => prev.filter((uid) => uid !== currentStoryOwnerId));
               }
               setViewingStories(null);
-            }} 
+            }}
           />
         )}
+
+        {peerError && (
+          <div className="peer-error-toast" role="alert">
+            <span>{peerError}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setPeerError(null);
+                window.location.reload();
+              }}
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              className="peer-error-dismiss"
+              onClick={() => setPeerError(null)}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        )}
       </div>
-
-      <style>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.6; transform: scale(1.3); }
-        }
-        @keyframes liveRingPulse {
-          0%, 100% { opacity: 1; transform: scale(1); }
-          50% { opacity: 0.7; transform: scale(1.05); }
-        }
-        @keyframes fadeInDown {
-          from { opacity: 0; transform: translateX(-50%) translateY(-30px); }
-          to { opacity: 1; transform: translateX(-50%) translateY(0); }
-        }
-        @keyframes pulse-skeleton {
-          0%, 100% { opacity: 0.4; }
-          50% { opacity: 0.8; }
-        }
-        .live-users-scroll::-webkit-scrollbar {
-          height: 8px;
-          display: block;
-        }
-        .live-users-scroll::-webkit-scrollbar-track {
-          background: rgba(108,60,225,0.08);
-          border-radius: 99px;
-        }
-        .live-users-scroll::-webkit-scrollbar-thumb {
-          background: #6C3CE1;
-          border-radius: 99px;
-        }
-        .live-user-card-hover:hover {
-          transform: translateY(-4px) scale(1.02);
-          background-color: rgba(255,255,255,0.08) !important;
-        }
-        .live-user-card-hover:hover .live-avatar {
-          transform: scale(1.05);
-        }
-        .go-live-btn:hover {
-          transform: translateY(-2px);
-          box-shadow: 0 12px 40px rgba(139, 92, 246, 0.4) !important;
-        }
-        .go-live-btn:active {
-          transform: translateY(0px) scale(0.98);
-        }
-      `}</style>
-
-      {peerError && (
-        <div
-          role="alert"
-          style={{
-            position: 'fixed',
-            bottom: '100px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 9999,
-            maxWidth: 'min(420px, calc(100vw - 32px))',
-            padding: '12px 16px',
-            borderRadius: '14px',
-            background: 'rgba(239, 68, 68, 0.95)',
-            color: '#fff',
-            fontSize: '14px',
-            fontWeight: 600,
-            boxShadow: '0 8px 30px rgba(0,0,0,0.35)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-          }}
-        >
-          <span style={{ flex: 1 }}>{peerError}</span>
-          <button
-            type="button"
-            onClick={() => {
-              setPeerError(null);
-              window.location.reload();
-            }}
-            style={{
-              background: '#fff',
-              color: '#EF4444',
-              border: 'none',
-              borderRadius: '20px',
-              padding: '6px 12px',
-              fontWeight: 700,
-              cursor: 'pointer',
-              fontSize: '13px',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Try again
-          </button>
-          <button
-            type="button"
-            onClick={() => setPeerError(null)}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              color: '#fff',
-              fontSize: '18px',
-              cursor: 'pointer',
-              lineHeight: 1,
-            }}
-            aria-label="Dismiss"
-          >
-            ×
-          </button>
-        </div>
-      )}
     </>
   );
 };
