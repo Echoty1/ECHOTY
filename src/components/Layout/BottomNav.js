@@ -32,6 +32,80 @@ const isOnlineValue = (val) => {
   return false;
 };
 
+/**
+ * LiquidBlob — physics-driven indicator.
+ * Uses Hooke's law spring with velocity-based deformation for a real liquid feel.
+ */
+const LiquidBlob = ({ targetX, targetW, dragging, dragX, navRef }) => {
+  const blobRef = useRef(null);
+  // Physics state
+  const pos = useRef(targetX);
+  const vel = useRef(0);
+  const w = useRef(targetW);
+  const wVel = useRef(0);
+  const stretch = useRef(0); // extra width due to velocity
+
+  // Spring constants — tuned for liquid feel
+  const STIFFNESS = 0.16;       // how hard it pulls toward target
+  const DAMPING = 0.78;         // energy loss per frame (higher = less bouncy)
+  const W_STIFFNESS = 0.14;
+  const W_DAMPING = 0.75;
+  const STRETCH_FACTOR = 0.35;  // how much velocity → width
+  const MAX_STRETCH = 40;
+
+  useEffect(() => {
+    let raf = null;
+    let last = performance.now();
+
+    const tick = (now) => {
+      const dt = Math.min(32, now - last) / 16.67; // normalize to 60fps
+      last = now;
+
+      const target = dragging && dragX != null ? dragX : targetX;
+
+      // Spring force toward target
+      const dx = target - pos.current;
+      const forceX = dx * STIFFNESS;
+      vel.current = (vel.current + forceX) * DAMPING;
+      pos.current += vel.current * dt;
+
+      // Width spring
+      const targetWidth = targetW;
+      const dw = targetWidth - w.current;
+      const forceW = dw * W_STIFFNESS;
+      wVel.current = (wVel.current + forceW) * W_DAMPING;
+      w.current += wVel.current * dt;
+
+      // Deformation: when moving fast, stretch horizontally
+      // The velocity also has an inverse inertia — stretch shrinks
+      const vAbs = Math.abs(vel.current);
+      const desiredStretch = Math.min(MAX_STRETCH, vAbs * STRETCH_FACTOR);
+      // Smooth the stretch so it doesn't jitter
+      stretch.current += (desiredStretch - stretch.current) * 0.3;
+
+      const finalW = Math.max(w.current, targetWidth * 0.8) + stretch.current * 2;
+      const finalH = 56 - stretch.current * 0.15; // slight vertical squish
+
+      if (blobRef.current) {
+        const el = blobRef.current;
+        el.style.transform = `translate3d(${pos.current - finalW / 2}px, 0, 0)`;
+        el.style.width = `${finalW}px`;
+        el.style.height = `${Math.max(48, finalH)}px`;
+        // Radius adapts — squisher when stretched
+        const r = 22 - stretch.current * 0.08;
+        el.style.borderRadius = `${Math.max(14, r)}px`;
+      }
+
+      raf = requestAnimationFrame(tick);
+    };
+
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [targetX, targetW, dragging, dragX]);
+
+  return <div ref={blobRef} className="echo-v-blob" aria-hidden="true" />;
+};
+
 const BottomNav = () => {
   const { user } = useAuth();
   const { startVideoCall } = useCall();
@@ -54,8 +128,13 @@ const BottomNav = () => {
   const [callingUid, setCallingUid] = useState(null);
   const [leavingId, setLeavingId] = useState(null);
   const [onlineError, setOnlineError] = useState('');
-  const [blobLeft, setBlobLeft] = useState(0);
-  const [blobWidth, setBlobWidth] = useState(0);
+
+  // Blob target position
+  const [blobTargetX, setBlobTargetX] = useState(0);
+  const [blobTargetW, setBlobTargetW] = useState(60);
+  // Drag state for real-time finger tracking
+  const [dragging, setDragging] = useState(false);
+  const [dragX, setDragX] = useState(null);
 
   const swipeStartX = useRef(null);
   const swipeStartY = useRef(null);
@@ -70,7 +149,6 @@ const BottomNav = () => {
   const videoRef = useRef(null);
   const navRef = useRef(null);
   const tabRefs = useRef({});
-  const indicatorRef = useRef(null);
 
   const isSupport = user?.uid === SUPPORT_UID;
 
@@ -110,31 +188,26 @@ const BottomNav = () => {
   const rightTabs = sideTabs.slice(Math.ceil(sideTabs.length / 2));
   const hasPulse = unreadChatsCount > 0 || onlineCount > 0;
 
-  // ─── Move liquid indicator when active tab changes ───
-  useEffect(() => {
+  // ─── Compute blob target from active tab ───
+  const computeTarget = useCallback(() => {
     const el = tabRefs.current[activeTab?.id];
     const parent = navRef.current;
     if (!el || !parent) return;
     const elRect = el.getBoundingClientRect();
     const parentRect = parent.getBoundingClientRect();
-    setBlobLeft(elRect.left - parentRect.left + elRect.width / 2);
-    setBlobWidth(elRect.width);
-  }, [activeIndex, activeTab?.id]);
+    setBlobTargetX(elRect.left - parentRect.left + elRect.width / 2);
+    setBlobTargetW(elRect.width);
+  }, [activeTab?.id]);
 
-  // Recalculate on resize
   useEffect(() => {
-    const onResize = () => {
-      const el = tabRefs.current[activeTab?.id];
-      const parent = navRef.current;
-      if (!el || !parent) return;
-      const elRect = el.getBoundingClientRect();
-      const parentRect = parent.getBoundingClientRect();
-      setBlobLeft(elRect.left - parentRect.left + elRect.width / 2);
-      setBlobWidth(elRect.width);
-    };
+    computeTarget();
+  }, [computeTarget]);
+
+  useEffect(() => {
+    const onResize = () => computeTarget();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [activeTab?.id]);
+  }, [computeTarget]);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -410,13 +483,6 @@ const BottomNav = () => {
     return null;
   };
 
-  const getStatus = () => {
-    if (!activeTab) return '';
-    if (activeTab.id === 'home' && onlineCount > 0) return `${onlineCount} online`;
-    if (activeTab.id === 'chats' && unreadChatsCount > 0) return `${unreadChatsCount} unread`;
-    return '';
-  };
-
   const goToTab = (tab) => {
     if (!tab) return;
     const same =
@@ -475,6 +541,14 @@ const BottomNav = () => {
     const dy = t.clientY - (swipeStartY.current ?? t.clientY);
     if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
       swiping.current = true;
+      // Real-time finger tracking — put blob under finger
+      const parent = navRef.current;
+      if (parent) {
+        const parentRect = parent.getBoundingClientRect();
+        const localX = t.clientX - parentRect.left;
+        setDragging(true);
+        setDragX(localX);
+      }
     }
   };
 
@@ -485,6 +559,8 @@ const BottomNav = () => {
     const dy = t.clientY - (swipeStartY.current ?? t.clientY);
     swipeStartX.current = null;
     swipeStartY.current = null;
+    setDragging(false);
+    setDragX(null);
     if (Math.abs(dx) >= 50 && Math.abs(dx) > Math.abs(dy)) {
       swiping.current = true;
       if (dx < 0) goRelative(1);
@@ -514,7 +590,6 @@ const BottomNav = () => {
     }
   };
 
-  const status = getStatus();
   const initials = (name) => {
     const p = String(name || 'U').trim().split(/\s+/);
     return ((p[0]?.[0] || 'U') + (p[1]?.[0] || '')).toUpperCase();
@@ -556,15 +631,13 @@ const BottomNav = () => {
         <video ref={videoRef} src={WAVE_VIDEO} autoPlay muted loop playsInline preload="auto" />
       </div>
 
-      {/* ── LIQUID BLOB INDICATOR ── */}
-      <div
-        ref={indicatorRef}
-        className="echo-v-blob"
-        style={{
-          '--blob-x': `${blobLeft}px`,
-          '--blob-w': `${blobWidth}px`,
-        }}
-        aria-hidden="true"
+      {/* ── LIQUID BLOB (physics-driven) ── */}
+      <LiquidBlob
+        targetX={blobTargetX}
+        targetW={blobTargetW}
+        dragging={dragging}
+        dragX={dragX}
+        navRef={navRef}
       />
 
       {previewOpen && lastChatPreview && (
