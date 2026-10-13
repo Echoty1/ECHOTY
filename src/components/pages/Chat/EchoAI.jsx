@@ -61,6 +61,7 @@ const postChat = async (payload, signal) => {
   if (token) headers.Authorization = `Bearer ${token}`;
 
   const url = apiUrl('/api/chat');
+  const started = performance.now();
   console.log('[ECHO AI] POST', url, { hasToken: !!token, payload });
 
   const response = await fetch(url, {
@@ -70,12 +71,15 @@ const postChat = async (payload, signal) => {
     signal,
   });
 
-  // Log status + body so we can debug from the browser console
+  const elapsed = Math.round(performance.now() - started);
+  console.log(`[ECHO AI] Response in ${elapsed}ms status:`, response.status);
+
+  // Log body for debugging
   const cloned = response.clone();
   cloned
     .text()
     .then((body) => {
-      console.log('[ECHO AI] Response status:', response.status, 'body:', body);
+      console.log('[ECHO AI] Response body:', body.slice(0, 300));
     })
     .catch(() => {});
 
@@ -103,14 +107,6 @@ const EchoAI = () => {
 
   const abortRef = useRef(null);
 
-  const streamingRef = useRef({
-    active: false,
-    messageId: null,
-    fullText: '',
-    currentIndex: 0,
-    interval: null,
-  });
-
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
   const chatId = useRef(null);
@@ -120,7 +116,6 @@ const EchoAI = () => {
   const [replyTo, setReplyTo] = useState(null);
   const messageRefs = useRef({});
   const markReadTimeout = useRef(null);
-
   const scrollCooldownRef = useRef(false);
 
   const inputRef = useRef(null);
@@ -238,7 +233,7 @@ const EchoAI = () => {
     }
   };
 
-  // ─── Edit message (restricted to last user message) ──────────
+  // ─── Edit message ────────────────────────────────────────────
   const handleEditMessage = (msg) => {
     if (msg.senderId !== user?.uid) return;
 
@@ -342,93 +337,7 @@ const EchoAI = () => {
     setIsNearBottom(isNear);
   };
 
-  // ─── Adaptive word-by-word streaming ─────────────────────────
-  const startStreaming = (messageId, fullText) => {
-    if (streamingRef.current.interval) {
-      clearInterval(streamingRef.current.interval);
-      streamingRef.current.interval = null;
-    }
-
-    streamingRef.current.active = true;
-    streamingRef.current.messageId = messageId;
-    streamingRef.current.fullText = fullText;
-    streamingRef.current.currentIndex = 0;
-
-    setMessages((prev) =>
-      prev.map((msg) =>
-        msg.id === messageId
-          ? { ...msg, _streamingText: '', _isStreaming: true, _fullText: fullText }
-          : msg
-      )
-    );
-
-    const len = Math.max(1, fullText.length);
-    const stepSize = Math.max(1, Math.ceil(len / 100));
-    const tickMs = 25;
-
-    const interval = setInterval(() => {
-      if (!isMounted.current) {
-        clearInterval(interval);
-        return;
-      }
-      const { currentIndex, fullText: full, messageId: streamMsgId } = streamingRef.current;
-      const nextIndex = Math.min(full.length, currentIndex + stepSize);
-      const newText = full.slice(0, nextIndex);
-
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === streamMsgId ? { ...msg, _streamingText: newText, _isStreaming: true } : msg
-        )
-      );
-
-      if (isNearBottom && !scrollCooldownRef.current) {
-        scrollCooldownRef.current = true;
-        setTimeout(() => {
-          scrollCooldownRef.current = false;
-        }, 500);
-        setTimeout(() => scrollToBottom(true), 50);
-      }
-      streamingRef.current.currentIndex = nextIndex;
-
-      if (nextIndex >= full.length) {
-        clearInterval(interval);
-        streamingRef.current.interval = null;
-        streamingRef.current.active = false;
-
-        setMessages((prev) =>
-          prev.map((msg) =>
-            msg.id === streamMsgId
-              ? { ...msg, _streamingText: full, _isStreaming: false }
-              : msg
-          )
-        );
-        if (isNearBottom) setTimeout(() => scrollToBottom(true), 50);
-      }
-    }, tickMs);
-
-    streamingRef.current.interval = interval;
-  };
-
   const stopStreaming = () => {
-    if (streamingRef.current.interval) {
-      clearInterval(streamingRef.current.interval);
-      streamingRef.current.interval = null;
-    }
-    streamingRef.current.active = false;
-    if (streamingRef.current.messageId) {
-      const id = streamingRef.current.messageId;
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === id
-            ? {
-                ...msg,
-                _streamingText: streamingRef.current.fullText,
-                _isStreaming: false,
-              }
-            : msg
-        )
-      );
-    }
     if (abortRef.current) {
       try {
         abortRef.current.abort();
@@ -473,23 +382,10 @@ const EchoAI = () => {
           .map(([id, val]) => ({ id, ...val }))
           .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
 
-        setMessages((prev) => {
-          const prevMap = new Map(prev.map((m) => [m.id, m]));
-          return newMessages.map((msg) => {
-            const existing = prevMap.get(msg.id);
-            if (existing && existing._isStreaming) {
-              return {
-                ...msg,
-                _streamingText: existing._streamingText,
-                _isStreaming: true,
-                _fullText: existing._fullText,
-              };
-            }
-            return { ...msg, _streamingText: msg.text || '', _isStreaming: false };
-          });
-        });
+        setMessages(newMessages);
         setLoadingMessages(false);
 
+        // New AI message arrived → clear the loading state
         const prevMessages = messages;
         const newAIMessages = newMessages.filter(
           (msg) =>
@@ -499,18 +395,9 @@ const EchoAI = () => {
           setIsAILoading(false);
           setPendingRetryText(null);
           setLastError(null);
-          newAIMessages.forEach((aiMsg) => {
-            if (aiMsg.text && !streamingRef.current.active) {
-              if (streamingRef.current.interval) {
-                clearInterval(streamingRef.current.interval);
-                streamingRef.current.interval = null;
-              }
-              startStreaming(aiMsg.id, aiMsg.text);
-            }
-          });
         }
 
-        if (isNearBottom && !scrollCooldownRef.current && !streamingRef.current.active) {
+        if (isNearBottom && !scrollCooldownRef.current) {
           scrollCooldownRef.current = true;
           setTimeout(() => {
             scrollCooldownRef.current = false;
@@ -518,6 +405,7 @@ const EchoAI = () => {
           setTimeout(() => scrollToBottom(true), 100);
         }
 
+        // Cache update
         await clearMessageCache(cId);
         for (const msg of newMessages) {
           await upsertMessageInCache(cId, msg);
@@ -551,10 +439,6 @@ const EchoAI = () => {
       isMounted.current = false;
       if (markReadTimeout.current) clearTimeout(markReadTimeout.current);
       unsubscribe();
-      if (streamingRef.current.interval) {
-        clearInterval(streamingRef.current.interval);
-        streamingRef.current.interval = null;
-      }
     };
   }, [user?.uid, cacheKey, isNearBottom]);
 
@@ -821,15 +705,11 @@ const EchoAI = () => {
       );
     }
 
-    const displayText =
-      msg._isStreaming && msg._streamingText !== undefined
-        ? msg._streamingText
-        : msg.text || '';
+    const displayText = msg.text || '';
 
     const messageContent = isAi ? (
       <div className="markdown-body">
         <Markdown remarkPlugins={[remarkGfm]}>{String(displayText).trim()}</Markdown>
-        {msg._isStreaming && <span className="echo-ai-cursor" />}
       </div>
     ) : (
       <div className="message-text" style={{ whiteSpace: 'pre-wrap' }}>
@@ -860,7 +740,7 @@ const EchoAI = () => {
           {messageContent}
         </MessageMenu>
 
-        {isAi && !msg._isStreaming && displayText && (
+        {isAi && displayText && (
           <div className="echo-ai-message-actions">
             <button
               type="button"
