@@ -12,6 +12,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import Home from './components/pages/Home/Home';
 import Chats from './components/pages/Chats/Chats';
 import ChatView from './components/pages/Chat/ChatView';
+import EchoAI from './components/pages/Chat/EchoAI';
 import GroupInfoPage from './components/pages/Chat/GroupInfo';
 import GroupInvitePage from './components/pages/Chat/GroupInvitePage';
 import Profile from './components/pages/Profile/Profile';
@@ -379,6 +380,7 @@ function AppContent() {
         <Routes>
           <Route path="/" element={<Home />} />
           <Route path="/chats" element={<Chats />} />
+          <Route path="/chat/echo_ai_assistant" element={<EchoAI />} />
           <Route path="/chat/:userId" element={<ChatView />} />
           <Route path="/group/:chatId/info" element={<GroupInfoPage />} />
           <Route path="/join/:code" element={<GroupInvitePage />} />
