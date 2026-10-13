@@ -59,12 +59,27 @@ const postChat = async (payload, signal) => {
   const token = await auth.currentUser?.getIdToken?.();
   const headers = { 'Content-Type': 'application/json' };
   if (token) headers.Authorization = `Bearer ${token}`;
-  return fetch(apiUrl('/api/chat'), {
+
+  const url = apiUrl('/api/chat');
+  console.log('[ECHO AI] POST', url, { hasToken: !!token, payload });
+
+  const response = await fetch(url, {
     method: 'POST',
     headers,
     body: JSON.stringify(payload),
     signal,
   });
+
+  // Log status + body so we can debug from the browser console
+  const cloned = response.clone();
+  cloned
+    .text()
+    .then((body) => {
+      console.log('[ECHO AI] Response status:', response.status, 'body:', body);
+    })
+    .catch(() => {});
+
+  return response;
 };
 
 const EchoAI = () => {
@@ -84,6 +99,7 @@ const EchoAI = () => {
   const [isNearBottom, setIsNearBottom] = useState(true);
   const [toast, setToast] = useState(null);
   const [pendingRetryText, setPendingRetryText] = useState(null);
+  const [lastError, setLastError] = useState(null);
 
   const abortRef = useRef(null);
 
@@ -346,9 +362,8 @@ const EchoAI = () => {
       )
     );
 
-    // Adaptive speed: aim for ~2.5s total regardless of length
     const len = Math.max(1, fullText.length);
-    const stepSize = Math.max(1, Math.ceil(len / 100)); // ~100 ticks
+    const stepSize = Math.max(1, Math.ceil(len / 100));
     const tickMs = 25;
 
     const interval = setInterval(() => {
@@ -483,6 +498,7 @@ const EchoAI = () => {
         if (newAIMessages.length > 0) {
           setIsAILoading(false);
           setPendingRetryText(null);
+          setLastError(null);
           newAIMessages.forEach((aiMsg) => {
             if (aiMsg.text && !streamingRef.current.active) {
               if (streamingRef.current.interval) {
@@ -588,6 +604,7 @@ const EchoAI = () => {
     const replyToSave = currentReply;
     setReplyTo(null);
     setPendingRetryText(null);
+    setLastError(null);
 
     const cId = [user.uid, userId].sort().join('_');
     const messagesRef = ref(db, `chats/${cId}/messages`);
@@ -629,7 +646,6 @@ const EchoAI = () => {
       setTimeout(() => scrollToBottom(true), 50);
     }
 
-    // Set up abort controller so user can cancel
     const controller = new AbortController();
     abortRef.current = controller;
 
@@ -647,13 +663,13 @@ const EchoAI = () => {
       if (!contentType || !contentType.includes('application/json')) {
         const text = await response.text();
         throw new Error(
-          `Server returned non-JSON response (${response.status}): ${text.substring(0, 100)}`
+          `Server returned non-JSON (${response.status}): ${text.substring(0, 120)}`
         );
       }
 
       const result = await response.json();
       if (!response.ok) {
-        throw new Error(result.error || 'AI request failed');
+        throw new Error(result.error || `Request failed (${response.status})`);
       }
       if (result.conversationId) setCurrentConversationId(result.conversationId);
       setIsAILoading(false);
@@ -666,17 +682,11 @@ const EchoAI = () => {
       setIsAILoading(false);
       setPendingRetryText(textToSend);
 
-      const errorMsg = {
-        id: `error_${Date.now()}`,
-        senderId: ECHO_AI_ID,
-        text: '',
-        error: true,
-        errorMessage:
+      setLastError({
+        message:
           'ECHO AI could not reply right now. Check your connection and try again.',
-        timestamp: Date.now(),
-        type: 'text',
-      };
-      setMessages((prev) => [...prev, errorMsg]);
+        detail: err?.message || null,
+      });
     } finally {
       abortRef.current = null;
     }
@@ -684,13 +694,11 @@ const EchoAI = () => {
 
   const handleRetry = () => {
     if (!pendingRetryText) return;
-    // Remove the error bubble
-    setMessages((prev) => prev.filter((m) => !m.error));
+    setLastError(null);
     handleSendText(null, pendingRetryText);
   };
 
   const handleRegenerate = (aiMsgId) => {
-    // Find the user message that this AI replied to
     const aiMsg = messages.find((m) => m.id === aiMsgId);
     if (!aiMsg) return;
     const userMsg = messages.find((m) => m.id === aiMsg.replyTo?.messageId);
@@ -728,32 +736,6 @@ const EchoAI = () => {
     }
 
     const allowDelete = isOwn || isAi;
-
-    // Error message (retry-able)
-    if (msg.error) {
-      return (
-        <div key={msg.id} className="echo-ai-error-row">
-          <div className="echo-ai-error-bubble">
-            <div className="echo-ai-error-icon">
-              <i className="fas fa-circle-exclamation" />
-            </div>
-            <div className="echo-ai-error-body">
-              <span className="echo-ai-error-text">{msg.errorMessage}</span>
-              {pendingRetryText && (
-                <button
-                  type="button"
-                  className="echo-ai-retry-btn"
-                  onClick={handleRetry}
-                >
-                  <i className="fas fa-rotate-right" />
-                  <span>Retry</span>
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      );
-    }
 
     if (msg.type === 'echomoji') {
       const skinObj = msg.skinId ? getSkinById(msg.skinId) : null;
@@ -968,7 +950,9 @@ const EchoAI = () => {
   };
 
   const sorted = sortMessages(messages);
-  const lastAIMessageId = [...sorted].reverse().find((m) => m.senderId === ECHO_AI_ID && !m.error)?.id;
+  const lastAIMessageId = [...sorted]
+    .reverse()
+    .find((m) => m.senderId === ECHO_AI_ID)?.id;
   const isFirstOpen = sorted.length === 0;
 
   return (
@@ -1012,6 +996,32 @@ const EchoAI = () => {
             </div>
           ) : (
             sorted.map((msg) => renderMessage(msg, msg.id === lastAIMessageId))
+          )}
+
+          {lastError && (
+            <div className="echo-ai-error-row">
+              <div className="echo-ai-error-bubble">
+                <div className="echo-ai-error-icon">
+                  <i className="fas fa-circle-exclamation" />
+                </div>
+                <div className="echo-ai-error-body">
+                  <span className="echo-ai-error-text">{lastError.message}</span>
+                  {lastError.detail && (
+                    <span className="echo-ai-error-detail">{lastError.detail}</span>
+                  )}
+                  {pendingRetryText && (
+                    <button
+                      type="button"
+                      className="echo-ai-retry-btn"
+                      onClick={handleRetry}
+                    >
+                      <i className="fas fa-rotate-right" />
+                      <span>Retry</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
           )}
 
           {isAILoading && (
