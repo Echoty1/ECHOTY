@@ -34,66 +34,84 @@ const isOnlineValue = (val) => {
 
 /**
  * LiquidBlob — physics-driven indicator.
- * Uses Hooke's law spring with velocity-based deformation for a real liquid feel.
+ * Hooke's law spring + velocity-based deformation.
  */
-const LiquidBlob = ({ targetX, targetW, dragging, dragX, navRef }) => {
+const LiquidBlob = ({ targetX, targetW, dragging, dragX }) => {
   const blobRef = useRef(null);
-  // Physics state
-  const pos = useRef(targetX);
+  const pos = useRef(0);
   const vel = useRef(0);
-  const w = useRef(targetW);
+  const w = useRef(0);
   const wVel = useRef(0);
-  const stretch = useRef(0); // extra width due to velocity
+  const stretch = useRef(0);
+  const initialized = useRef(false);
 
-  // Spring constants — tuned for liquid feel
-  const STIFFNESS = 0.16;       // how hard it pulls toward target
-  const DAMPING = 0.78;         // energy loss per frame (higher = less bouncy)
+  const STIFFNESS = 0.16;
+  const DAMPING = 0.78;
   const W_STIFFNESS = 0.14;
   const W_DAMPING = 0.75;
-  const STRETCH_FACTOR = 0.35;  // how much velocity → width
+  const STRETCH_FACTOR = 0.35;
   const MAX_STRETCH = 40;
+
+  useEffect(() => {
+    // Snap on first real target so blob doesn't fly in from 0
+    if (!initialized.current && Number.isFinite(targetX) && targetX > 0) {
+      pos.current = targetX;
+      w.current = targetW;
+      initialized.current = true;
+    }
+  }, [targetX, targetW]);
 
   useEffect(() => {
     let raf = null;
     let last = performance.now();
 
     const tick = (now) => {
-      const dt = Math.min(32, now - last) / 16.67; // normalize to 60fps
+      const dt = Math.min(32, now - last) / 16.67;
       last = now;
 
-      const target = dragging && dragX != null ? dragX : targetX;
+      // ── Guard: if target invalid, freeze in place, don't drift
+      const validTarget = Number.isFinite(targetX) && targetX > 0;
+      const target = validTarget
+        ? dragging && dragX != null
+          ? dragX
+          : targetX
+        : pos.current; // hold
 
-      // Spring force toward target
+      const targetWidth = validTarget ? targetW : w.current;
+
+      // Spring X
       const dx = target - pos.current;
       const forceX = dx * STIFFNESS;
       vel.current = (vel.current + forceX) * DAMPING;
       pos.current += vel.current * dt;
 
-      // Width spring
-      const targetWidth = targetW;
+      // Spring width
       const dw = targetWidth - w.current;
       const forceW = dw * W_STIFFNESS;
       wVel.current = (wVel.current + forceW) * W_DAMPING;
       w.current += wVel.current * dt;
 
-      // Deformation: when moving fast, stretch horizontally
-      // The velocity also has an inverse inertia — stretch shrinks
+      // Velocity → stretch
       const vAbs = Math.abs(vel.current);
       const desiredStretch = Math.min(MAX_STRETCH, vAbs * STRETCH_FACTOR);
-      // Smooth the stretch so it doesn't jitter
       stretch.current += (desiredStretch - stretch.current) * 0.3;
 
       const finalW = Math.max(w.current, targetWidth * 0.8) + stretch.current * 2;
-      const finalH = 56 - stretch.current * 0.15; // slight vertical squish
+      const finalH = 56 - stretch.current * 0.15;
 
       if (blobRef.current) {
         const el = blobRef.current;
-        el.style.transform = `translate3d(${pos.current - finalW / 2}px, 0, 0)`;
-        el.style.width = `${finalW}px`;
-        el.style.height = `${Math.max(48, finalH)}px`;
-        // Radius adapts — squisher when stretched
-        const r = 22 - stretch.current * 0.08;
-        el.style.borderRadius = `${Math.max(14, r)}px`;
+        if (!validTarget && !initialized.current) {
+          // No valid target yet — hide blob
+          el.style.opacity = '0';
+        } else {
+          el.style.opacity = '1';
+          el.style.transform = `translate3d(${pos.current - finalW / 2}px, 0, 0)`;
+          el.style.width = `${finalW}px`;
+          el.style.height = `${Math.max(48, finalH)}px`;
+          const r = 22 - stretch.current * 0.08;
+          el.style.borderRadius = `${Math.max(14, r)}px`;
+        }
       }
 
       raf = requestAnimationFrame(tick);
@@ -103,7 +121,14 @@ const LiquidBlob = ({ targetX, targetW, dragging, dragX, navRef }) => {
     return () => cancelAnimationFrame(raf);
   }, [targetX, targetW, dragging, dragX]);
 
-  return <div ref={blobRef} className="echo-v-blob" aria-hidden="true" />;
+  return (
+    <div
+      ref={blobRef}
+      className="echo-v-blob"
+      style={{ opacity: 0 }}
+      aria-hidden="true"
+    />
+  );
 };
 
 const BottomNav = () => {
@@ -129,10 +154,8 @@ const BottomNav = () => {
   const [leavingId, setLeavingId] = useState(null);
   const [onlineError, setOnlineError] = useState('');
 
-  // Blob target position
   const [blobTargetX, setBlobTargetX] = useState(0);
-  const [blobTargetW, setBlobTargetW] = useState(60);
-  // Drag state for real-time finger tracking
+  const [blobTargetW, setBlobTargetW] = useState(0);
   const [dragging, setDragging] = useState(false);
   const [dragX, setDragX] = useState(null);
 
@@ -195,14 +218,36 @@ const BottomNav = () => {
     if (!el || !parent) return;
     const elRect = el.getBoundingClientRect();
     const parentRect = parent.getBoundingClientRect();
-    setBlobTargetX(elRect.left - parentRect.left + elRect.width / 2);
-    setBlobTargetW(elRect.width);
+
+    // Guard: if the nav or tab has zero size, we can't measure
+    if (elRect.width === 0 || parentRect.width === 0) return;
+
+    const nextX = elRect.left - parentRect.left + elRect.width / 2;
+    const nextW = elRect.width;
+
+    // Only update if changed — prevents spring micro-jitter
+    setBlobTargetX((prev) => (Math.abs(prev - nextX) < 0.5 ? prev : nextX));
+    setBlobTargetW((prev) => (Math.abs(prev - nextW) < 0.5 ? prev : nextW));
   }, [activeTab?.id]);
 
+  // Re-measure on tab change + route change, one frame after layout settles
   useEffect(() => {
-    computeTarget();
+    const raf = requestAnimationFrame(() => {
+      // Double RAF for slow layouts (Spotlight fullscreen, sheets, etc.)
+      requestAnimationFrame(() => computeTarget());
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [computeTarget, location.pathname, activeIndex]);
+
+  // Re-measure on nav resize (covers rotation, sheets, layout shifts)
+  useEffect(() => {
+    if (!navRef.current) return;
+    const observer = new ResizeObserver(() => computeTarget());
+    observer.observe(navRef.current);
+    return () => observer.disconnect();
   }, [computeTarget]);
 
+  // Fallback: also listen to window resize
   useEffect(() => {
     const onResize = () => computeTarget();
     window.addEventListener('resize', onResize);
@@ -275,6 +320,16 @@ const BottomNav = () => {
     });
     return () => mo.disconnect();
   }, []);
+
+  // Reset blob when nav is hidden so it doesn't drift while offscreen
+  useEffect(() => {
+    if (liveHidden) {
+      setBlobTargetX(0);
+      setBlobTargetW(0);
+      setDragging(false);
+      setDragX(null);
+    }
+  }, [liveHidden]);
 
   const recountOnline = useCallback(() => {
     const me = user?.uid;
@@ -541,7 +596,6 @@ const BottomNav = () => {
     const dy = t.clientY - (swipeStartY.current ?? t.clientY);
     if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy)) {
       swiping.current = true;
-      // Real-time finger tracking — put blob under finger
       const parent = navRef.current;
       if (parent) {
         const parentRect = parent.getBoundingClientRect();
@@ -631,13 +685,11 @@ const BottomNav = () => {
         <video ref={videoRef} src={WAVE_VIDEO} autoPlay muted loop playsInline preload="auto" />
       </div>
 
-      {/* ── LIQUID BLOB (physics-driven) ── */}
       <LiquidBlob
         targetX={blobTargetX}
         targetW={blobTargetW}
         dragging={dragging}
         dragX={dragX}
-        navRef={navRef}
       />
 
       {previewOpen && lastChatPreview && (
