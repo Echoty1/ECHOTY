@@ -10,6 +10,10 @@ const VAPID_KEY =
 const SW_URL = '/firebase-messaging-sw.js';
 const SW_SCOPE = '/firebase-cloud-messaging-push-scope';
 
+const BACKEND =
+  process.env.REACT_APP_BACKEND_URL ||
+  'https://echo-backend.onrender.com'; // ← change to your actual backend URL
+
 /**
  * Ensures the FCM service worker is registered and ACTIVE.
  */
@@ -62,7 +66,10 @@ const clearInstallationCache = async () => {
   try {
     const dbs = await indexedDB.databases();
     for (const db of dbs) {
-      if (db.name && (db.name.includes('firebase') || db.name.includes('firebase-installations'))) {
+      if (
+        db.name &&
+        (db.name.includes('firebase') || db.name.includes('firebase-installations'))
+      ) {
         await new Promise((resolve) => {
           const req = indexedDB.deleteDatabase(db.name);
           req.onsuccess = resolve;
@@ -77,6 +84,9 @@ const clearInstallationCache = async () => {
   }
 };
 
+/**
+ * Register the FCM token for the given user.
+ */
 export const registerFcmToken = async (uid, _retried = false) => {
   if (!uid) {
     console.warn('❌ registerFcmToken: no uid');
@@ -127,7 +137,9 @@ export const registerFcmToken = async (uid, _retried = false) => {
     });
     console.log('   ✅ Token saved to DB');
 
-    try { localStorage.setItem('echo_fcm_token', token); } catch (_) {}
+    try {
+      localStorage.setItem('echo_fcm_token', token);
+    } catch (_) {}
 
     console.log('✅ FCM registration complete');
     return token;
@@ -136,19 +148,15 @@ export const registerFcmToken = async (uid, _retried = false) => {
     console.error('   Code:', err.code);
     console.error('   Message:', err.message);
 
-    // Self-heal: "version 1 vs version 2" installations error
     const isVersionError =
       err.message?.includes('less than the existing version') ||
       err.message?.includes('version (1)') ||
       err.message?.includes('version (2)');
 
     if (isVersionError && !_retried) {
-      console.log('🔁 Version conflict detected — clearing installation cache and retrying...');
+      console.log('🔁 Version conflict detected — clearing cache and retrying...');
       await clearInstallationCache();
-
-      // Wait a moment for IndexedDB to settle
       await new Promise((r) => setTimeout(r, 800));
-
       return registerFcmToken(uid, true);
     }
 
@@ -156,10 +164,15 @@ export const registerFcmToken = async (uid, _retried = false) => {
   }
 };
 
+/**
+ * Remove this device's FCM token from the DB.
+ */
 export const unregisterFcmToken = async (uid) => {
   if (!uid) return;
   let token = null;
-  try { token = localStorage.getItem('echo_fcm_token'); } catch (_) {}
+  try {
+    token = localStorage.getItem('echo_fcm_token');
+  } catch (_) {}
   if (!token) return;
   try {
     await remove(ref(db, `users/${uid}/fcmTokens/${token}`));
@@ -169,48 +182,68 @@ export const unregisterFcmToken = async (uid) => {
   }
 };
 
+/**
+ * Foreground FCM handler — called when the app is open and focused.
+ * Shows an in-app notification (or you can leave it as a console log).
+ */
 export const setupForegroundHandler = async () => {
   const messaging = await getFirebaseMessaging();
   if (!messaging) return () => {};
+
   const unsub = onMessage(messaging, (payload) => {
     console.log('📩 Foreground FCM:', payload);
+
+    const title = payload.notification?.title || payload.data?.title;
+    const body = payload.notification?.body || payload.data?.body;
+    const partnerId = payload.data?.partnerId;
+
+    // Browser notifications work even in foreground if permission granted
+    if (Notification.permission === 'granted' && title) {
+      try {
+        const notif = new Notification(title, {
+          body,
+          icon: '/logo192.png',
+          tag: payload.data?.tag || partnerId || 'echo-msg',
+        });
+        notif.onclick = () => {
+          window.focus();
+          if (partnerId) window.location.hash = `#/chat/${partnerId}`;
+        };
+      } catch (_) {}
+    }
   });
+
   return unsub;
 };
 
+/**
+ * Send a push to a user via the backend.
+ * The backend uses Firebase Admin (FCM v1) — this is the modern, working path.
+ */
 export const sendPushToUser = async ({ recipientUid, title, body, data = {} }) => {
   if (!recipientUid) return;
+
   try {
-    const tokensSnap = await get(ref(db, `users/${recipientUid}/fcmTokens`));
-    if (!tokensSnap.exists()) {
-      console.warn('⚠️ No FCM tokens for user:', recipientUid);
+    // Get a fresh ID token so the backend can verify the request
+    const { auth } = await import('./firebase');
+    const token = await auth.currentUser?.getIdToken?.();
+
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers.Authorization = `Bearer ${token}`;
+
+    const res = await fetch(`${BACKEND}/api/send-notification`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ recipientUid, title, body, data }),
+    });
+
+    if (!res.ok) {
+      console.warn('Push backend returned', res.status);
       return;
     }
 
-    const tokens = Object.keys(tokensSnap.val());
-    if (!tokens.length) return;
-
-    const FCM_KEY = process.env.REACT_APP_FIREBASE_API_KEY;
-    if (!FCM_KEY) return;
-
-    console.log('🔔 Sending push to', tokens.length, 'token(s) for user', recipientUid);
-
-    const res = await fetch('https://fcm.googleapis.com/fcm/send', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `key=${FCM_KEY}`,
-      },
-      body: JSON.stringify({
-        registration_ids: tokens,
-        notification: { title, body, sound: 'default' },
-        data: { ...data, click_action: 'FLUTTER_NOTIFICATION_CLICK' },
-        priority: 'high',
-      }),
-    });
-
-    const result = await res.json();
-    console.log('🔔 FCM response:', result);
+    const result = await res.json().catch(() => ({}));
+    console.log('🔔 Push sent:', result);
   } catch (err) {
     console.warn('sendPushToUser failed:', err);
   }
