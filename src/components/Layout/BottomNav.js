@@ -9,7 +9,6 @@ import { setFaviconBadge } from '../../utils/faviconBadge';
 import './BottomNav.css';
 
 const SUPPORT_UID = '5cSplOLz30d8dgM3wvXUcDmL2QK2';
-const DEFAULT_TAB_KEY = 'echo_default_tab';
 const WAVE_VIDEO = '/wave-bg.mp4';
 
 const haptic = (pattern = 12) => {
@@ -38,18 +37,16 @@ const BottomNav = () => {
   const { startVideoCall } = useCall();
   const location = useLocation();
   const navigate = useNavigate();
+
   const [unreadChatsCount, setUnreadChatsCount] = useState(0);
   const [lastChatPreview, setLastChatPreview] = useState('');
   const [communityUnread, setCommunityUnread] = useState(0);
   const [controlUnread, setControlUnread] = useState(0);
   const [onlineCount, setOnlineCount] = useState(0);
-  const [coinBalance, setCoinBalance] = useState(0);
   const [swingKey, setSwingKey] = useState(0);
   const [hidden, setHidden] = useState(false);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [defaultToast, setDefaultToast] = useState(null);
-  const [spinningId, setSpinningId] = useState(null);
   const [pulseFlash, setPulseFlash] = useState(false);
   const [onlineSheetOpen, setOnlineSheetOpen] = useState(false);
   const [onlineUsers, setOnlineUsers] = useState([]);
@@ -57,6 +54,9 @@ const BottomNav = () => {
   const [callingUid, setCallingUid] = useState(null);
   const [leavingId, setLeavingId] = useState(null);
   const [onlineError, setOnlineError] = useState('');
+  const [blobLeft, setBlobLeft] = useState(0);
+  const [blobWidth, setBlobWidth] = useState(0);
+
   const swipeStartX = useRef(null);
   const swipeStartY = useRef(null);
   const swiping = useRef(false);
@@ -68,11 +68,13 @@ const BottomNav = () => {
   const presenceRef = useRef({});
   const contactIdsRef = useRef([]);
   const videoRef = useRef(null);
+  const navRef = useRef(null);
+  const tabRefs = useRef({});
+  const indicatorRef = useRef(null);
+
   const isSupport = user?.uid === SUPPORT_UID;
 
-  // ====================== UPDATED TABS ======================
-  // Spotlight is now the 3rd tab for everyone.
-  // Shop and Drop remain hidden.
+  // ====================== TABS ======================
   const baseTabs = useMemo(() => {
     if (isSupport) {
       return [
@@ -92,7 +94,6 @@ const BottomNav = () => {
       { to: '/other', label: 'Other', icon: 'fa-ellipsis-h', id: 'other' },
     ];
   }, [isSupport]);
-  // ==========================================================
 
   const orderedTabs = baseTabs;
   const activeIndex = useMemo(() => {
@@ -108,6 +109,32 @@ const BottomNav = () => {
   const leftTabs = sideTabs.slice(0, Math.ceil(sideTabs.length / 2));
   const rightTabs = sideTabs.slice(Math.ceil(sideTabs.length / 2));
   const hasPulse = unreadChatsCount > 0 || onlineCount > 0;
+
+  // ─── Move liquid indicator when active tab changes ───
+  useEffect(() => {
+    const el = tabRefs.current[activeTab?.id];
+    const parent = navRef.current;
+    if (!el || !parent) return;
+    const elRect = el.getBoundingClientRect();
+    const parentRect = parent.getBoundingClientRect();
+    setBlobLeft(elRect.left - parentRect.left + elRect.width / 2);
+    setBlobWidth(elRect.width);
+  }, [activeIndex, activeTab?.id]);
+
+  // Recalculate on resize
+  useEffect(() => {
+    const onResize = () => {
+      const el = tabRefs.current[activeTab?.id];
+      const parent = navRef.current;
+      if (!el || !parent) return;
+      const elRect = el.getBoundingClientRect();
+      const parentRect = parent.getBoundingClientRect();
+      setBlobLeft(elRect.left - parentRect.left + elRect.width / 2);
+      setBlobWidth(elRect.width);
+    };
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, [activeTab?.id]);
 
   useEffect(() => {
     const el = videoRef.current;
@@ -149,7 +176,6 @@ const BottomNav = () => {
   useEffect(() => {
     setSheetOpen(false);
     setOnlineSheetOpen(false);
-    setSpinningId(null);
   }, [location.pathname]);
 
   const [liveHidden, setLiveHidden] = useState(
@@ -168,7 +194,12 @@ const BottomNav = () => {
     };
     check();
     const mo = new MutationObserver(check);
-    mo.observe(document.body, { attributes: true, attributeFilter: ['class'], childList: true, subtree: true });
+    mo.observe(document.body, {
+      attributes: true,
+      attributeFilter: ['class'],
+      childList: true,
+      subtree: true,
+    });
     return () => mo.disconnect();
   }, []);
 
@@ -369,13 +400,6 @@ const BottomNav = () => {
     });
   }, [user?.uid, isSupport]);
 
-  useEffect(() => {
-    if (!user?.uid) return setCoinBalance(0);
-    return onValue(ref(db, `users/${user.uid}/coins`), (snap) => {
-      setCoinBalance(Number(snap.val()) || 0);
-    });
-  }, [user?.uid]);
-
   const getBadge = (tab) => {
     if (tab.id === 'chats' && unreadChatsCount > 0)
       return unreadChatsCount > 9 ? '9+' : String(unreadChatsCount);
@@ -393,8 +417,6 @@ const BottomNav = () => {
     return '';
   };
 
-  const stopSpinSoon = () => setTimeout(() => setSpinningId(null), 380);
-
   const goToTab = (tab) => {
     if (!tab) return;
     const same =
@@ -409,8 +431,6 @@ const BottomNav = () => {
 
   const goRelative = (dir) => {
     const next = orderedTabs[(activeIndex + dir + orderedTabs.length) % orderedTabs.length];
-    setSpinningId(next.id);
-    stopSpinSoon();
     goToTab(next);
   };
 
@@ -435,7 +455,6 @@ const BottomNav = () => {
       return;
     }
     setLeavingId(tab.id);
-    setSpinningId(tab.id);
     setTimeout(() => {
       setLeavingId(null);
       goToTab(tab);
@@ -491,8 +510,6 @@ const BottomNav = () => {
     centerTouchY.current = null;
     if (dy > 36 && !swiping.current) {
       haptic(14);
-      setSpinningId(activeTab.id);
-      stopSpinSoon();
       setSheetOpen(true);
     }
   };
@@ -505,15 +522,15 @@ const BottomNav = () => {
 
   const renderSide = (tab) => {
     const badge = getBadge(tab);
-    const spinning = spinningId === tab.id;
     return (
       <button
         key={tab.id}
+        ref={(el) => { tabRefs.current[tab.id] = el; }}
         type="button"
         className={`echo-v-tab ${leavingId === tab.id ? 'is-leaving' : ''}`}
         onClick={() => onTabClick(tab)}
       >
-        <div className={`echo-v-icon ${spinning ? 'silky-spin' : ''}`}>
+        <div className="echo-v-icon">
           <i className={`fas ${tab.icon}`} />
           {badge && <span className="echo-v-badge">{badge}</span>}
         </div>
@@ -526,6 +543,7 @@ const BottomNav = () => {
 
   return (
     <nav
+      ref={navRef}
       className={`echo-v-nav ${hidden ? 'is-hidden' : ''} ${liveHidden ? 'is-live-hidden' : ''}`}
       aria-label="Bottom navigation"
       onTouchStart={onNavPointerDown}
@@ -535,16 +553,19 @@ const BottomNav = () => {
       onMouseUp={onNavPointerUp}
     >
       <div className="echo-v-video" aria-hidden="true">
-        <video
-          ref={videoRef}
-          src={WAVE_VIDEO}
-          autoPlay
-          muted
-          loop
-          playsInline
-          preload="auto"
-        />
+        <video ref={videoRef} src={WAVE_VIDEO} autoPlay muted loop playsInline preload="auto" />
       </div>
+
+      {/* ── LIQUID BLOB INDICATOR ── */}
+      <div
+        ref={indicatorRef}
+        className="echo-v-blob"
+        style={{
+          '--blob-x': `${blobLeft}px`,
+          '--blob-w': `${blobWidth}px`,
+        }}
+        aria-hidden="true"
+      />
 
       {previewOpen && lastChatPreview && (
         <div className="echo-v-preview" onClick={() => setPreviewOpen(false)}>
@@ -553,8 +574,6 @@ const BottomNav = () => {
         </div>
       )}
 
-      {defaultToast && <div className="echo-v-toast">{defaultToast}</div>}
-
       {onlineSheetOpen && (
         <div className="echo-online-wrap">
           <div className="echo-online-bg" onClick={() => setOnlineSheetOpen(false)} />
@@ -562,14 +581,18 @@ const BottomNav = () => {
             <div className="handle" />
             <div className="online-head">
               <div>
-                <h3>Who’s online</h3>
+                <h3>Who's online</h3>
                 <p>
                   {onlineLoading
                     ? 'Connecting to presence…'
                     : `${onlineUsers.length} online on ECHO`}
                 </p>
               </div>
-              <button type="button" className="online-close" onClick={() => setOnlineSheetOpen(false)}>
+              <button
+                type="button"
+                className="online-close"
+                onClick={() => setOnlineSheetOpen(false)}
+              >
                 <i className="fas fa-xmark" />
               </button>
             </div>
@@ -664,7 +687,7 @@ const BottomNav = () => {
           <button
             key={swingKey}
             type="button"
-            className={`echo-v-tab center jump ${hasPulse ? 'has-pulse' : ''} ${
+            className={`echo-v-tab center ${hasPulse ? 'has-pulse' : ''} ${
               pulseFlash ? 'pulse-flash' : ''
             }`}
             onClick={() => onTabClick(activeTab, true)}
@@ -672,18 +695,7 @@ const BottomNav = () => {
             onTouchEnd={onCenterTouchEnd}
             aria-current="page"
           >
-            {hasPulse && (
-              <>
-                <span className="pulse-ring r1" />
-                <span className="pulse-ring r2" />
-                <span className="pulse-ring r3" />
-              </>
-            )}
-            <div
-              className={`echo-v-icon center-icon ${
-                spinningId === activeTab.id ? 'silky-spin' : ''
-              }`}
-            >
+            <div className="echo-v-icon center-icon">
               <i className={`fas ${activeTab.icon}`} />
               {getBadge(activeTab) && (
                 <span
@@ -699,10 +711,7 @@ const BottomNav = () => {
                 </span>
               )}
             </div>
-            <span className="echo-v-label">
-              {activeTab.label}
-              {status ? ` · ${status}` : ''}
-            </span>
+            <span className="echo-v-label">{activeTab.label}</span>
           </button>
         </div>
         <div className="echo-v-side">{rightTabs.map(renderSide)}</div>
