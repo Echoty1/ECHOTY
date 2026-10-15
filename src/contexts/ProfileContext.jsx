@@ -33,6 +33,29 @@ const VIRTUAL_PROFILES = {
   },
 };
 
+/**
+ * Derive a sensible display name from a Firebase Auth user.
+ * Never returns the literal string "User" — we treat that as "no name".
+ */
+const deriveNameFromAuthUser = (authUser) => {
+  if (!authUser) return '';
+  const dn = (authUser.displayName || '').trim();
+  if (dn) return dn;
+  const email = (authUser.email || '').trim();
+  if (email) {
+    const local = email.split('@')[0];
+    // Capitalize first letter, replace dots/underscores/dashes with spaces
+    const cleaned = local.replace(/[._-]+/g, ' ').trim();
+    if (cleaned) {
+      return cleaned
+        .split(/\s+/)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join(' ');
+    }
+  }
+  return '';
+};
+
 export const ProfileProvider = ({ children }) => {
   const { user } = useAuth();
   const [profiles, setProfiles] = useState({ ...VIRTUAL_PROFILES });
@@ -66,7 +89,6 @@ export const ProfileProvider = ({ children }) => {
   const fetchProfile = useCallback((uid) => {
     if (!uid) return () => {};
 
-    // AI / system accounts are not real Firebase profiles — never read or write them
     if (SYSTEM_UIDS.has(uid)) {
       const virtual = VIRTUAL_PROFILES[uid] || { name: 'ECHO AI', avatar: '', isVirtual: true };
       setProfiles((prev) => (prev[uid] ? prev : { ...prev, [uid]: virtual }));
@@ -92,16 +114,24 @@ export const ProfileProvider = ({ children }) => {
         let data = snapshot.val();
 
         if (!data) {
-          // Only the signed-in user may create their own missing profile
-          data = { name: isOwnProfile ? (user?.name || 'User') : 'User', avatar: '', mood: 'neutral' };
-          if (isOwnProfile && user?.uid === targetUid) {
+          // Profile node missing entirely
+          const derivedName = isOwnProfile ? deriveNameFromAuthUser(user) : '';
+          data = {
+            name: derivedName,        // may be '' — that's fine
+            avatar: '',
+            mood: 'neutral',
+          };
+          // Only create the profile node if we have a real name to write
+          if (isOwnProfile && user?.uid === targetUid && derivedName) {
             await update(profileRef, data).catch(() => {});
           }
-        } else if (!data.name && isOwnProfile && user?.uid === targetUid) {
-          data.name = user?.name || 'User';
-          await update(profileRef, { name: data.name }).catch(() => {});
-        } else if (!data.name) {
-          data.name = 'User';
+        } else if ((!data.name || data.name === 'User') && isOwnProfile && user?.uid === targetUid) {
+          // Heal an existing broken profile with a derived name (if we have one)
+          const derivedName = deriveNameFromAuthUser(user);
+          if (derivedName) {
+            data.name = derivedName;
+            await update(profileRef, { name: derivedName }).catch(() => {});
+          }
         }
 
         if (data.avatar) cacheMedia(data.avatar);
@@ -114,7 +144,7 @@ export const ProfileProvider = ({ children }) => {
         }
         setProfiles((prev) => ({
           ...prev,
-          [targetUid]: prev[targetUid] || { name: 'User', avatar: '', mood: 'neutral' },
+          [targetUid]: prev[targetUid] || { name: '', avatar: '', mood: 'neutral' },
         }));
       }
       setLoading(false);
@@ -129,11 +159,14 @@ export const ProfileProvider = ({ children }) => {
         if (timeoutId) clearTimeout(timeoutId);
 
         let finalData = data || {};
-        if (!finalData.name && isOwnProfile) {
-          finalData.name = user?.name || 'User';
-          update(profileRef, { name: finalData.name }).catch(() => {});
-        } else if (!finalData.name) {
-          finalData.name = 'User';
+
+        // Only heal the profile of the signed-in user, and only if we have a real name
+        if ((!finalData.name || finalData.name === 'User') && isOwnProfile) {
+          const derivedName = deriveNameFromAuthUser(user);
+          if (derivedName) {
+            finalData = { ...finalData, name: derivedName };
+            update(profileRef, { name: derivedName }).catch(() => {});
+          }
         }
 
         if (finalData.avatar) cacheMedia(finalData.avatar);
@@ -233,7 +266,7 @@ export const ProfileProvider = ({ children }) => {
     refreshProfile,
     getProfile: getProfileFromContext,
     updateProfile,
-    isOnline: (uid) => presence[uid] || false,
+    isOnline: (uid) => presence[uid] === true,
   };
 
   return <ProfileContext.Provider value={value}>{children}</ProfileContext.Provider>;
