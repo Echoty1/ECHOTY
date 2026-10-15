@@ -53,6 +53,23 @@ const getPasswordStrength = (pw) => {
   return { score, label: 'Strong', color: '#10B981' };
 };
 
+/**
+ * Derive a display name from the signup email.
+ * "john.doe@x.com" → "John Doe"
+ * "sarah_k@x.com"  → "Sarah K"
+ */
+const deriveNameFromEmail = (rawEmail) => {
+  const email = String(rawEmail || '').trim().toLowerCase();
+  if (!email) return '';
+  const local = email.split('@')[0];
+  const cleaned = local.replace(/[._-]+/g, ' ').trim();
+  if (!cleaned) return '';
+  return cleaned
+    .split(/\s+/)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+};
+
 /* ─── Fake mini chat preview for the hero ─── */
 const MiniChatPreview = () => (
   <div className="echo-preview">
@@ -217,7 +234,26 @@ const Login = () => {
         // 1. Create the account — this signs the user in automatically.
         const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
 
-        // 2. Send the verification email. If sending fails, don't block signup.
+        // 2. Write a proper profile immediately — this is what every
+        //    other screen reads. Derive name from email so it's never "User".
+        const newUid = cred.user.uid;
+        const derivedName = deriveNameFromEmail(email);
+        try {
+          await set(ref(db, `profiles/${newUid}`), {
+            name: derivedName,          // may be '' if email is weird — onboarding can still set it
+            username: '',               // filled later
+            avatar: '',
+            bio: '',
+            mood: 'neutral',
+            email: email.trim().toLowerCase(),
+            createdAt: serverTimestamp(),
+            lastActive: serverTimestamp(),
+          });
+        } catch (perr) {
+          console.warn('[Signup] profile write failed:', perr?.message || perr);
+        }
+
+        // 3. Send the verification email. If sending fails, don't block signup.
         try {
           await sendEmailVerification(cred.user, {
             url: window.location.origin + '/',
@@ -227,7 +263,7 @@ const Login = () => {
           console.warn('[Signup] verification email failed:', verr?.message || verr);
         }
 
-        // 3. NO signOut — user stays signed in.
+        // 4. NO signOut — user stays signed in.
         //    App.js detects `emailVerified === false` and renders <VerifyEmailScreen />.
         return;
       }
