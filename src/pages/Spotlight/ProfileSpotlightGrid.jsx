@@ -1,4 +1,4 @@
-// src/components/Spotlight/ProfileSpotlightGrid.jsx
+// src/pages/Spotlight/ProfileSpotlightGrid.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { db } from '../../services/firebase';
