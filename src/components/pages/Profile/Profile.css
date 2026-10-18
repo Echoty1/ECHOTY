@@ -1,239 +1,72 @@
 /* src/components/pages/Profile/Profile.css */
 
-.snap-profile {
-  background: var(--bg-primary);
-  min-height: 100vh;
-  padding-bottom: 100px;
-  max-width: 600px;
-  margin: 0 auto;
-}
+.snap-profile { background: var(--bg-primary); min-height: 100vh; padding-bottom: 100px; max-width: 600px; margin: 0 auto; }
 
 /* ─── HERO SECTION ─── */
-.snap-hero {
-  position: relative;
-  height: 220px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
-  overflow: hidden;
-}
-
-.snap-back-btn {
-  position: absolute;
-  top: 20px; left: 16px;
-  width: 40px; height: 40px;
-  border-radius: 50%;
-  background: rgba(0,0,0,0.4);
-  backdrop-filter: blur(8px);
-  border: none;
-  color: #fff;
-  z-index: 10;
-  cursor: pointer;
-  display: grid; place-items: center;
-  font-size: 16px;
-}
-
-.snap-hero-bg {
-  position: absolute; inset: 0;
-  background-size: cover;
-  background-position: center;
-  filter: blur(20px) brightness(0.6);
-  transform: scale(1.1);
-  z-index: 0;
-}
-
-.snap-hero-overlay {
-  position: absolute; inset: 0;
-  background: linear-gradient(to top, var(--bg-primary) 0%, transparent 100%);
-  z-index: 1;
-}
-
-.snap-avatar-wrapper {
-  position: relative;
-  z-index: 2;
-  margin-bottom: 12px;
-}
-
-.snap-avatar-ring {
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  background: conic-gradient(from 0deg, #6C3CE1, #EC4899, #6C3CE1);
-  animation: rotateRing 4s linear infinite;
-  z-index: 0;
-}
-
-.snap-avatar {
-  width: 100px; height: 100px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 4px solid var(--bg-primary);
-  position: relative;
-  z-index: 1;
-  background: var(--bg-input);
-}
-
+.snap-hero { position: relative; height: 220px; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; overflow: hidden; }
+.snap-back-btn { position: absolute; top: 20px; left: 16px; width: 40px; height: 40px; border-radius: 50%; background: rgba(0,0,0,0.4); backdrop-filter: blur(8px); border: none; color: #fff; z-index: 10; cursor: pointer; display: grid; place-items: center; font-size: 16px; }
+.snap-hero-bg { position: absolute; inset: 0; background-size: cover; background-position: center; filter: blur(20px) brightness(0.6); transform: scale(1.1); z-index: 0; }
+.snap-hero-overlay { position: absolute; inset: 0; background: linear-gradient(to top, var(--bg-primary) 0%, transparent 100%); z-index: 1; }
+.snap-avatar-wrapper { position: relative; z-index: 2; margin-bottom: 12px; }
+.snap-avatar-ring { position: absolute; inset: -4px; border-radius: 50%; background: conic-gradient(from 0deg, #6C3CE1, #EC4899, #6C3CE1); animation: rotateRing 4s linear infinite; z-index: 0; }
+.snap-avatar { width: 100px; height: 100px; border-radius: 50%; overflow: hidden; border: 4px solid var(--bg-primary); position: relative; z-index: 1; background: var(--bg-input); }
 .snap-avatar img, .snap-avatar video { width: 100%; height: 100%; object-fit: cover; }
-
-.snap-info {
-  position: relative;
-  z-index: 2;
-  text-align: center;
-  padding: 0 16px;
-}
-
-.snap-name {
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--text-primary);
-  margin: 0 0 4px;
-  letter-spacing: -0.3px;
-}
-
+.snap-info { position: relative; z-index: 2; text-align: center; padding: 0 16px; }
+.snap-name { font-size: 22px; font-weight: 800; color: var(--text-primary); margin: 0 0 4px; letter-spacing: -0.3px; }
 .snap-username-wrap { display: flex; justify-content: center; margin-bottom: 6px; }
 
-.snap-meta {
-  display: flex; gap: 12px; justify-content: center;
-  font-size: 11.5px; color: var(--text-muted); font-weight: 600;
-}
-.snap-meta i { font-size: 10px; margin-right: 3px; }
-
 /* ─── BIO & ACTIONS ─── */
-.snap-bio-section {
-  padding: 16px 20px 20px;
-  text-align: center;
-}
-
-.snap-bio {
-  font-size: 14px;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  margin: 0 0 16px;
-}
-
-.snap-actions-row {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-
-.snap-btn-primary, .snap-btn-secondary {
-  flex: 1;
-  max-width: 160px;
-  padding: 10px 16px;
-  border-radius: 999px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: none;
-  font-family: inherit;
-  transition: transform 0.15s ease;
-}
-
+.snap-bio-section { padding: 16px 20px 20px; text-align: center; }
+.snap-bio { font-size: 14px; color: var(--text-secondary); line-height: 1.5; margin: 0 0 16px; }
+.snap-actions-row { display: flex; gap: 10px; justify-content: center; }
+.snap-btn-primary, .snap-btn-secondary { flex: 1; max-width: 160px; padding: 10px 16px; border-radius: 999px; font-size: 13px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; border: none; font-family: inherit; transition: transform 0.15s ease; }
 .snap-btn-primary:active, .snap-btn-secondary:active { transform: scale(0.95); }
-
-.snap-btn-primary {
-  background: linear-gradient(135deg, #6C3CE1, #EC4899);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(108,60,225,0.3);
-}
-
-.snap-btn-secondary {
-  background: var(--bg-input);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-}
-
+.snap-btn-primary { background: linear-gradient(135deg, #6C3CE1, #EC4899); color: #fff; box-shadow: 0 4px 14px rgba(108,60,225,0.3); }
+.snap-btn-secondary { background: var(--bg-input); color: var(--text-primary); border: 1px solid var(--border-color); }
 .snap-btn-secondary.following { color: #10B981; border-color: rgba(16,185,129,0.3); }
 
 /* ─── STATS ROW ─── */
-.snap-stats-row {
-  display: flex;
-  border-top: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.snap-stat-btn {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 14px 8px;
-  background: transparent;
-  border: none;
-  border-right: 1px solid var(--border-color);
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.15s ease;
-}
-
+.snap-stats-row { display: flex; border-top: 1px solid var(--border-color); border-bottom: 1px solid var(--border-color); }
+.snap-stat-btn { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 14px 8px; background: transparent; border: none; border-right: 1px solid var(--border-color); cursor: pointer; font-family: inherit; transition: background 0.15s ease; }
 .snap-stat-btn:last-child { border-right: none; }
 .snap-stat-btn:hover { background: rgba(255,255,255,0.02); }
-
-.snap-stat-btn strong {
-  font-size: 16px; font-weight: 800; color: var(--text-primary);
-  display: block; line-height: 1.1;
-}
-
-.snap-stat-btn span {
-  font-size: 11px; color: var(--text-muted); text-transform: uppercase;
-  letter-spacing: 0.5px; font-weight: 700; margin-top: 2px;
-}
+.snap-stat-btn strong { font-size: 16px; font-weight: 800; color: var(--text-primary); display: block; line-height: 1.1; }
+.snap-stat-btn span { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; margin-top: 2px; }
 
 /* ─── TABS ─── */
-.snap-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--border-color);
-  margin-top: 4px;
-}
-
-.snap-tab {
-  flex: 1;
-  padding: 14px;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
+.snap-tabs { display: flex; border-bottom: 1px solid var(--border-color); margin-top: 4px; }
+.snap-tab { flex: 1; padding: 14px; background: transparent; border: none; border-bottom: 2px solid transparent; color: var(--text-muted); font-size: 13px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; transition: all 0.2s; }
 .snap-tab i { margin-right: 6px; font-size: 12px; }
+.snap-tab.active { color: var(--text-primary); border-bottom-color: #6C3CE1; }
 
-.snap-tab.active {
-  color: var(--text-primary);
-  border-bottom-color: #6C3CE1;
-}
-
-.snap-content-area {
-  padding: 16px;
-}
-
-.empty-tab-state {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 40px 20px; color: var(--text-muted); text-align: center;
-}
+.snap-content-area { padding: 16px; }
+.empty-tab-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px 20px; color: var(--text-muted); text-align: center; }
 .empty-tab-state i { font-size: 32px; opacity: 0.4; margin-bottom: 12px; }
 
-/* ─── MODALS & REUSED (kept from old file) ─── */
-.profile-name-edit-wrapper { width: 100%; position: relative; }
+/* ─── MODALS (FIXES) ─── */
+.custom-modal-overlay { position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.8); display: flex; align-items: center; justify-content: center; padding: 20px; }
+
+.echowers-modal-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(8px); display: flex; align-items: center; justify-content: center; z-index: 10000; padding: 20px; }
+.echowers-modal { background: var(--bg-card); border-radius: 20px; width: 100%; max-width: 420px; max-height: 80vh; display: flex; flex-direction: column; border: 1px solid var(--border-color); overflow: hidden; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+.echowers-modal-header { display: flex; justify-content: space-between; align-items: center; padding: 20px; border-bottom: 1px solid var(--border-color); }
+.echowers-modal-header h3 { margin: 0; font-size: 18px; color: var(--text-primary); }
+.close-btn { background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; padding: 4px; transition: color 0.2s; }
+.close-btn:hover { color: var(--text-primary); }
+.echowers-tabs { display: flex; padding: 0 16px; border-bottom: 1px solid var(--border-color); }
+.echowers-tabs button { flex: 1; background: none; border: none; padding: 14px 8px; color: var(--text-muted); font-size: 13px; font-weight: 600; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+.echowers-tabs button.active { color: #6C3CE1; border-bottom-color: #6C3CE1; }
+.echowers-list { flex: 1; overflow-y: auto; padding: 12px; }
+.echower-item { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 12px; cursor: pointer; transition: background 0.2s; }
+.echower-item:hover { background: var(--bg-input); }
+.echower-item .item-info { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.echower-item .item-info strong { font-size: 14px; color: var(--text-primary); }
+.echower-item .item-info span { font-size: 12px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.echower-item > i { color: var(--text-muted); font-size: 12px; }
+.empty-state { text-align: center; color: var(--text-muted); font-size: 13px; padding: 32px 16px; }
+
 .profile-name-input-wrapper { position: relative; display: flex; align-items: center; }
-.profile-name-input { width: 100%; padding: 12px 16px 12px 44px; border-radius: 12px; border: 2px solid var(--border-color); background: var(--bg-input); color: var(--text-primary); font-size: 16px; font-weight: 600; outline: none; }
-.emoji-btn { position: absolute; left: 12px; background: none; border: none; color: var(--text-muted); font-size: 18px; cursor: pointer; }
-.name-status { position: absolute; right: 12px; top: 50%; transform: translateY(-50%); font-size: 12px; font-weight: 600; }
-.name-status.taken { color: #EF4444; } .name-status.available { color: #10B981; }
-.profile-bio-edit-wrapper { position: relative; }
-.profile-bio-textarea { width: 100%; padding: 12px 16px 24px 44px; border-radius: 12px; border: 2px solid var(--border-color); background: var(--bg-input); color: var(--text-primary); font-size: 14px; resize: vertical; min-height: 80px; font-family: inherit; }
-.bio-emoji-btn { top: 12px; left: 12px; }
+.profile-name-input { width: 100%; padding: 12px 16px; border-radius: 12px; border: 2px solid var(--border-color); background: var(--bg-input); color: var(--text-primary); font-size: 16px; font-weight: 600; outline: none; text-align: center; }
+.profile-bio-edit-wrapper { position: relative; margin-bottom: 16px; }
+.profile-bio-textarea { width: 100%; padding: 12px 16px; border-radius: 12px; border: 2px solid var(--border-color); background: var(--bg-input); color: var(--text-primary); font-size: 14px; resize: vertical; min-height: 80px; font-family: inherit; text-align: center; }
 @keyframes rotateRing { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
