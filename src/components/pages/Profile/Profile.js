@@ -23,7 +23,7 @@ import UsernamePill from '../../common/UsernamePill';
 import './Profile.css';
 
 // We will build this component next
-import ProfileSpotlightGrid from '../../Spotlight/ProfileSpotlightGrid'; 
+import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid';
 
 const STORAGE_PREFIX = 'echo_cache_';
 
