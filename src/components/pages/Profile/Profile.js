@@ -12,7 +12,6 @@ import AvatarPicker from '../../AvatarPicker/AvatarPicker';
 import Toast from '../../Toast/Toast';
 import { useCachedImage } from '../../../utils/mediaCache';
 import ChatEmojiPicker from '../Chat/ChatEmojiPicker';
-import MoodPicker from '../../common/MoodPicker';
 import Avatar from '../../common/Avatar';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
@@ -20,37 +19,13 @@ import { listenToMyEchowers, listenToMyEchowerCount } from '../../../services/ec
 import AvatarCustomizer from './AvatarCustomizer';
 import UsernameEditor from './UsernameEditor';
 import UsernamePill from '../../common/UsernamePill';
+import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid';
 import './Profile.css';
 
-// We will build this component next
-import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid';
-
-const STORAGE_PREFIX = 'echo_cache_';
-
-const getFastLocal = (key) => {
-  try {
-    const item = localStorage.getItem(STORAGE_PREFIX + key);
-    return item ? JSON.parse(item) : null;
-  } catch (e) {
-    return null;
-  }
-};
-
-const setFastLocal = (key, val) => {
-  try {
-    localStorage.setItem(STORAGE_PREFIX + key, JSON.stringify(val));
-  } catch (e) {}
-};
-
+const getFastLocal = (key) => { try { const item = localStorage.getItem('echo_cache_' + key); return item ? JSON.parse(item) : null; } catch { return null; } };
+const setFastLocal = (key, val) => { try { localStorage.setItem('echo_cache_' + key, JSON.stringify(val)); } catch {} };
 const SkeletonBlock = ({ width = '100%', height = '16px', borderRadius = '8px', style = {} }) => (
-  <div
-    style={{
-      width, height, borderRadius,
-      background: 'rgba(255,255,255,0.08)',
-      animation: 'pulse 1.5s infinite ease-in-out',
-      ...style,
-    }}
-  />
+  <div style={{ width, height, borderRadius, background: 'rgba(255,255,255,0.08)', animation: 'pulse 1.5s infinite ease-in-out', ...style }} />
 );
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024;
@@ -63,7 +38,7 @@ const Profile = () => {
   const navigate = useNavigate();
   const { refreshProfile, profiles, fetchProfile } = useProfile();
 
-  const [activeTab, setActiveTab] = useState('spotlight'); // spotlight | echoes
+  const [activeTab, setActiveTab] = useState('spotlight');
   const [showGifLibrary, setShowGifLibrary] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [showAvatarCustomizer, setShowAvatarCustomizer] = useState(false);
@@ -82,7 +57,6 @@ const Profile = () => {
   const editingContainerRef = useRef(null);
 
   const isDemoUser = user?.uid === DEMO_UID;
-
   const [showEchowersModal, setShowEchowersModal] = useState(false);
   const [followerUids, setFollowerUids] = useState([]);
   const [followingUids, setFollowingUids] = useState([]);
@@ -96,34 +70,10 @@ const Profile = () => {
   const [activeHairStyle, setActiveHairStyle] = useState(() => cachedUserSkins?.hairStyle || 'short');
   const [loading, setLoading] = useState(() => !cachedProfile);
   const [editing, setEditing] = useState(false);
-  const [editData, setEditData] = useState(
-    () => cachedProfile || { name: '', avatar: '', videoUrl: '', mood: 'happy', activeSkin: null, bio: '', country: '', city: '' }
-  );
+  const [editData, setEditData] = useState(() => cachedProfile || { name: '', avatar: '', videoUrl: '', mood: 'happy', activeSkin: null, bio: '', country: '', city: '' });
   const [unlockedGifs, setUnlockedGifs] = useState([]);
   const imageInputRef = useRef(null);
   const [nameAvailable, setNameAvailable] = useState(true);
-  const [nameCheckLoading, setNameCheckLoading] = useState(false);
-
-  const checkNameAvailability = useCallback(async (newName) => {
-    const trimmed = newName.trim();
-    if (!trimmed || (profile?.name && trimmed.toLowerCase() === profile.name.toLowerCase())) {
-      setNameAvailable(true); return;
-    }
-    setNameCheckLoading(true);
-    try {
-      const q = query(ref(db, 'profiles'), orderByChild('searchName'), equalTo(trimmed.toLowerCase()), limitToFirst(1));
-      const snapshot = await get(q);
-      setNameAvailable(!snapshot.exists());
-    } catch { setNameAvailable(true); } finally { setNameCheckLoading(false); }
-  }, [profile]);
-
-  const debounceTimer = useRef(null);
-  useEffect(() => {
-    if (!editing) return;
-    if (debounceTimer.current) clearTimeout(debounceTimer.current);
-    debounceTimer.current = setTimeout(() => checkNameAvailability(editData.name || ''), 400);
-    return () => { if (debounceTimer.current) clearTimeout(debounceTimer.current); };
-  }, [editData.name, editing, checkNameAvailability]);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -166,25 +116,16 @@ const Profile = () => {
   }, [user?.uid, editing, fetchProfile]);
 
   const handleSave = async () => {
-    if (!user) return;
-    const name = editData.name?.trim() || '';
-    if (name.length === 0) return setToast({ message: 'Name is required.', type: 'error' });
-    if (name.length > NAME_MAX_LENGTH) return setToast({ message: `Name must be ${NAME_MAX_LENGTH} chars or less.`, type: 'error' });
-    const bio = editData.bio?.trim() || '';
-    if (bio.length > BIO_MAX_LENGTH) return setToast({ message: `Bio must be ${BIO_MAX_LENGTH} chars or less.`, type: 'error' });
-    if (!nameAvailable) return;
-
+    if (!user || !editData.name?.trim() || !nameAvailable) return;
     try {
-      const updates = { ...editData, name, bio, searchName: name.toLowerCase() };
+      const updates = { ...editData, name: editData.name.trim(), searchName: editData.name.trim().toLowerCase() };
       await update(ref(db, 'profiles/' + user.uid), updates);
       setFastLocal('profile_' + user.uid, updates);
       setProfile(updates);
       await refreshProfile(user.uid);
       setEditing(false);
       setToast({ message: 'Profile saved!', type: 'success' });
-    } catch (error) {
-      setToast({ message: 'Failed to save profile.', type: 'error' });
-    }
+    } catch { setToast({ message: 'Failed to save profile.', type: 'error' }); }
   };
 
   const handleSaveAvatar = async (avatarData) => {
@@ -201,7 +142,7 @@ const Profile = () => {
   };
 
   const handleUploadImage = async (file) => {
-    if (!user || file.size > MAX_FILE_SIZE || !['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) return;
+    if (!user || file.size > MAX_FILE_SIZE) return;
     setUploading(true);
     try {
       const formData = new FormData();
@@ -209,7 +150,6 @@ const Profile = () => {
       formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
       const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, { method: 'POST', body: formData });
       const data = await res.json();
-      if (!res.ok) throw new Error();
       const updateData = { avatar: data.secure_url, videoUrl: '', activeSkin: null };
       setProfile((prev) => ({ ...prev, ...updateData }));
       setEditData((prev) => ({ ...prev, ...updateData }));
@@ -237,16 +177,6 @@ const Profile = () => {
     setEditData((prev) => ({ ...prev, mood }));
   };
 
-  const insertTextAtCursor = (field, text) => {
-    const el = field === 'name' ? nameInputRef.current : bioInputRef.current;
-    if (!el) return;
-    const start = el.selectionStart; const end = el.selectionEnd;
-    const newValue = el.value.substring(0, start) + text + el.value.substring(end);
-    if (field === 'name') setEditData({ ...editData, name: newValue });
-    else setEditData({ ...editData, bio: newValue });
-    setTimeout(() => { el.focus(); el.setSelectionRange(start + text.length, start + text.length); }, 0);
-  };
-
   const currentMediaUrl = (editing ? editData.videoUrl : profile?.videoUrl) || (editing ? editData.avatar : profile?.avatar);
   const cachedMediaUrl = useCachedImage(currentMediaUrl, null);
   const displayMediaUrl = cachedMediaUrl || currentMediaUrl;
@@ -262,7 +192,6 @@ const Profile = () => {
       <div className="profile-page snap-profile">
         <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={(e) => e.target.files[0] && handleUploadImage(e.target.files[0])} />
 
-        {/* ─── HERO SECTION ─── */}
         <div className="snap-hero">
           <div className="snap-hero-bg" style={{ backgroundImage: displayMediaUrl ? `url(${displayMediaUrl})` : 'var(--bg-card)' }} />
           <div className="snap-hero-overlay" />
@@ -283,10 +212,8 @@ const Profile = () => {
               <div className="profile-name-edit-wrapper" ref={editingContainerRef}>
                 <div className="profile-name-input-wrapper">
                   <input ref={nameInputRef} type="text" className="profile-name-input" value={editData.name || ''} onChange={(e) => e.target.value.length <= NAME_MAX_LENGTH && setEditData({ ...editData, name: e.target.value })} placeholder="Your name" />
-                  <button type="button" className="emoji-btn" onClick={() => { setActiveField('name'); setShowEmojiPicker(true); }}><i className="fas fa-smile" /></button>
                 </div>
                 {!nameAvailable && <span className="name-status taken">Taken</span>}
-                {nameAvailable && editData.name?.trim() !== profile?.name && <span className="name-status available">Available</span>}
               </div>
             ) : (
               <h1 className="snap-name">{profile?.name || 'User'}</h1>
@@ -307,12 +234,10 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* ─── BIO & EDIT ACTIONS ─── */}
         <div className="snap-bio-section">
           {editing ? (
             <div className="profile-bio-edit-wrapper">
               <textarea ref={bioInputRef} className="profile-bio-textarea" value={editData.bio || ''} onChange={(e) => e.target.value.length <= BIO_MAX_LENGTH && setEditData({ ...editData, bio: e.target.value })} placeholder="Write a short bio..." rows={3} />
-              <button type="button" className="emoji-btn bio-emoji-btn" onClick={() => { setActiveField('bio'); setShowEmojiPicker(true); }}><i className="fas fa-smile" /></button>
             </div>
           ) : (
             <p className="snap-bio">{profile?.bio || 'No bio yet.'}</p>
@@ -333,7 +258,6 @@ const Profile = () => {
           </div>
         </div>
 
-        {/* ─── STATS & MOOD ─── */}
         <div className="snap-stats-row">
           <button className="snap-stat-btn" onClick={() => { setActiveEchowersTab('followers'); setShowEchowersModal(true); }}>
             <strong>{followerUids.length}</strong><span>Echowers</span>
@@ -347,43 +271,33 @@ const Profile = () => {
           </button>
         </div>
 
-        {/* ─── TABS & CONTENT ─── */}
         <div className="snap-tabs">
-          <button className={`snap-tab ${activeTab === 'spotlight' ? 'active' : ''}`} onClick={() => setActiveTab('spotlight')}>
-            <i className="fas fa-bolt" /> Spotlight
-          </button>
-          <button className={`snap-tab ${activeTab === 'echoes' ? 'active' : ''}`} onClick={() => setActiveTab('echoes')}>
-            <i className="fas fa-bookmark" /> Saved
-          </button>
+          <button className={`snap-tab ${activeTab === 'spotlight' ? 'active' : ''}`} onClick={() => setActiveTab('spotlight')}><i className="fas fa-bolt" /> Spotlight</button>
+          <button className={`snap-tab ${activeTab === 'echoes' ? 'active' : ''}`} onClick={() => setActiveTab('echoes')}><i className="fas fa-bookmark" /> Saved</button>
         </div>
 
         <div className="snap-content-area">
           {activeTab === 'spotlight' && <ProfileSpotlightGrid uid={user?.uid} />}
-          {activeTab === 'echoes' && (
-            <div className="empty-tab-state">
-              <i className="fas fa-ghost" />
-              <p>Saved Echoes will appear here.</p>
-            </div>
-          )}
+          {activeTab === 'echoes' && <div className="empty-tab-state"><i className="fas fa-ghost" /><p>Saved Echoes will appear here.</p></div>}
         </div>
 
-        {/* ─── MODALS ─── */}
+        {/* MODALS */}
         <AvatarPicker isOpen={showAvatarPicker} onClose={() => setShowAvatarPicker(false)} onUploadImage={() => imageInputRef.current?.click()} onChooseLibrary={() => { setShowAvatarPicker(false); setShowGifLibrary(true); }} uploading={uploading} isDemo={isDemoUser} />
         <GifLibraryModal isOpen={showGifLibrary} onClose={() => setShowGifLibrary(false)} onSelect={handleGifSelect} ownedGifs={unlockedGifs} mode="profile" />
         <UsernameEditor uid={user?.uid} currentUsername={profile?.username} isOpen={showUsernameEditor} onClose={() => setShowUsernameEditor(false)} />
         
-        {showAvatarCustomizer && !editing && (
-          <AvatarCustomizer currentSkin={activeSkinObj} currentHair={activeHairStyle} currentMood={profile?.mood} onSave={handleSaveAvatar} onCancel={() => setShowAvatarCustomizer(false)} />
-        )}
-
-        {showEmojiPicker && (
-          <ChatEmojiPicker onClose={() => { setShowEmojiPicker(false); setActiveField(null); }} onSelect={(emoji) => activeField && insertTextAtCursor(activeField, emoji)} excludeRefs={[editingContainerRef]} style={{ position: 'fixed', left: '20px', top: '50%', transform: 'translateY(-50%)', width: '320px', maxHeight: '70vh' }} />
+        {showAvatarCustomizer && (
+          <div className="custom-modal-overlay" onClick={() => setShowAvatarCustomizer(false)}>
+            <div onClick={e => e.stopPropagation()}>
+              <AvatarCustomizer currentSkin={activeSkinObj} currentHair={activeHairStyle} currentMood={profile?.mood} onSave={handleSaveAvatar} onCancel={() => setShowAvatarCustomizer(false)} />
+            </div>
+          </div>
         )}
 
         {showEchowersModal && (
           <div className="echowers-modal-overlay" onClick={() => setShowEchowersModal(false)}>
             <div className="echowers-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="echowers-modal-header"><h3>Echowers</h3><button className="close-btn" onClick={() => setShowEchowersModal(false)}>X</button></div>
+              <div className="echowers-modal-header"><h3>Echowers</h3><button className="close-btn" onClick={() => setShowEchowersModal(false)}>✕</button></div>
               <div className="echowers-tabs">
                 <button className={activeEchowersTab === 'followers' ? 'active' : ''} onClick={() => setActiveEchowersTab('followers')}>Echowers ({followerUids.length})</button>
                 <button className={activeEchowersTab === 'following' ? 'active' : ''} onClick={() => setActiveEchowersTab('following')}>Echowing ({followingUids.length})</button>
@@ -393,7 +307,7 @@ const Profile = () => {
                   <p className="empty-state">No one here yet.</p>
                 ) : (
                   (activeEchowersTab === 'followers' ? followerUids : followingUids).map((uid) => {
-                    const p = profiles[uid]; if (!p) return null;
+                    const p = profiles[uid] || { name: 'User', avatar: '' };
                     return (
                       <div key={uid} className="echower-item" onClick={() => navigate('/chat/' + uid)}>
                         <Avatar src={p.avatar} name={p.name} size={50} />
