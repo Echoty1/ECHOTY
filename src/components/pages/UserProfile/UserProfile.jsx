@@ -53,20 +53,16 @@ const UserProfile = () => {
   if (loading) return <div className="user-profile-page loading">Loading...</div>;
   if (!profile) return <div className="user-profile-page error">User not found.</div>;
 
-  const memberSince = profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Recently';
   const coverImage = profile.avatar || profile.videoUrl;
 
   return (
     <div className="profile-page snap-profile">
       <SEO title={`${profile.name} on ECHO`} />
       
-      {/* ─── HERO SECTION ─── */}
       <div className="snap-hero">
         <button className="snap-back-btn" onClick={() => navigate(-1)}><i className="fas fa-arrow-left" /></button>
-        
         <div className="snap-hero-bg" style={{ backgroundImage: coverImage ? `url(${coverImage})` : 'var(--bg-card)' }} />
         <div className="snap-hero-overlay" />
-        
         <div className="snap-avatar-wrapper">
           <div className="snap-avatar-ring" />
           <div className="snap-avatar">
@@ -77,14 +73,9 @@ const UserProfile = () => {
         <div className="snap-info">
           <h1 className="snap-name">{profile.name || 'User'}</h1>
           {profile.username && <div className="snap-username-wrap"><UsernamePill uid={uid} username={profile.username} size="md" /></div>}
-          <div className="snap-meta">
-            <span><i className="fas fa-calendar-alt" /> {memberSince}</span>
-            {profile.country && <span><i className="fas fa-map-marker-alt" /> {profile.country}</span>}
-          </div>
         </div>
       </div>
 
-      {/* ─── BIO & ACTIONS ─── */}
       <div className="snap-bio-section">
         <p className="snap-bio">{profile.bio || 'No bio yet.'}</p>
         
@@ -100,7 +91,6 @@ const UserProfile = () => {
         )}
       </div>
 
-      {/* ─── STATS ─── */}
       <div className="snap-stats-row">
         <div className="snap-stat-btn">
           <strong>{echowerCount}</strong><span>Echowers</span>
@@ -110,7 +100,6 @@ const UserProfile = () => {
         </div>
       </div>
 
-      {/* ─── TABS & CONTENT ─── */}
       <div className="snap-tabs">
         <button className={`snap-tab ${activeTab === 'spotlight' ? 'active' : ''}`} onClick={() => setActiveTab('spotlight')}>
           <i className="fas fa-bolt" /> Spotlight
