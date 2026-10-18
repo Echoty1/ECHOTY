@@ -7,7 +7,7 @@ import { followUser, unfollowUser, isEchowing, listenToMyEchowerCount, listenToM
 import Avatar from '../../common/Avatar';
 import UsernamePill from '../../common/UsernamePill';
 import SEO from '../../common/SEO';
-import ProfileSpotlightGrid from '../../Spotlight/ProfileSpotlightGrid';
+import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid';
 import './UserProfile.css';
 
 const UserProfile = () => {
