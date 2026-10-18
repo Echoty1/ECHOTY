@@ -13,16 +13,34 @@ const ProfileSpotlightGrid = ({ uid }) => {
     if (!uid) return;
     const fetchPosts = async () => {
       try {
-        // Assuming your spotlight posts are stored at `spotlight/posts`
-        // and each post has a `uid` field pointing to the creator
-        const q = query(ref(db, 'spotlight/posts'), orderByChild('uid'), equalTo(uid));
-        const snap = await get(q);
-        if (snap.exists()) {
-          const data = snap.val();
-          const postsArray = Object.keys(data).map(key => ({ id: key, ...data[key] }))
-            .sort((a, b) => b.createdAt - a.createdAt);
-          setPosts(postsArray);
+        let postsArray = [];
+
+        // 1. Try fetching from the user's dedicated posts node (fastest)
+        const userPostsSnap = await get(ref(db, `spotlight/users/${uid}/posts`));
+        if (userPostsSnap.exists()) {
+          const postIds = Object.keys(userPostsSnap.val());
+          // Fetch each post's full data
+          for (const id of postIds) {
+            const postSnap = await get(ref(db, `spotlight/posts/${id}`));
+            if (postSnap.exists()) {
+              postsArray.push({ id, ...postSnap.val() });
+            }
+          }
         }
+
+        // 2. If empty, fall back to querying the global posts node
+        if (postsArray.length === 0) {
+          const q = query(ref(db, 'spotlight/posts'), orderByChild('uid'), equalTo(uid));
+          const snap = await get(q);
+          if (snap.exists()) {
+            const data = snap.val();
+            postsArray = Object.keys(data).map(key => ({ id: key, ...data[key] }));
+          }
+        }
+
+        // Sort by newest
+        postsArray.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        setPosts(postsArray);
       } catch (err) {
         console.error('Failed to load spotlight posts:', err);
       } finally {
@@ -56,14 +74,19 @@ const ProfileSpotlightGrid = ({ uid }) => {
             backgroundPosition: 'center',
             cursor: 'pointer',
             borderRadius: '8px',
-            overflow: 'hidden'
+            overflow: 'hidden',
+            position: 'relative'
           }}
         >
-          {post.mediaUrl?.includes('.mp4') && (
+          {(post.mediaUrl?.includes('.mp4') || post.mediaUrl?.includes('.webm') || post.mediaType === 'video') && (
              <div style={{ width: '100%', height: '100%', background: 'rgba(0,0,0,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <i className="fas fa-play" style={{ color: 'white', fontSize: 24, filter: 'drop-shadow(0 2px 4px rgba(0,0,0,0.5))' }} />
              </div>
           )}
+          {/* Optional: Show view count */}
+          <div style={{ position: 'absolute', bottom: 4, left: 6, color: '#fff', fontSize: 10, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3, textShadow: '0 1px 3px rgba(0,0,0,0.8)' }}>
+            <i className="fas fa-play" style={{ fontSize: 8 }} /> {post.viewCount || 0}
+          </div>
         </div>
       ))}
     </div>
