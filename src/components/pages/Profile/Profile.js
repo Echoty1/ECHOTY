@@ -4,14 +4,12 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { db } from '../../../services/firebase';
-import { ref, onValue, update, set, get, query, orderByChild, equalTo, limitToFirst } from 'firebase/database';
+import { ref, onValue, update, set, get } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import GifLibraryModal from '../../GifLibrary/GifLibraryModal';
-import AvatarPicker from '../../AvatarPicker/AvatarPicker';
 import Toast from '../../Toast/Toast';
 import { useCachedImage } from '../../../utils/mediaCache';
-import ChatEmojiPicker from '../Chat/ChatEmojiPicker';
 import Avatar from '../../common/Avatar';
 import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
@@ -40,12 +38,11 @@ const Profile = () => {
 
   const [activeTab, setActiveTab] = useState('spotlight');
   const [showGifLibrary, setShowGifLibrary] = useState(false);
-  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false); // Controls the bottom sheet
   const [showAvatarCustomizer, setShowAvatarCustomizer] = useState(false);
   const [showUsernameEditor, setShowUsernameEditor] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
-  const [copiedUid, setCopiedUid] = useState(false);
 
   const NAME_MAX_LENGTH = 25;
   const BIO_MAX_LENGTH = 130;
@@ -54,7 +51,6 @@ const Profile = () => {
   const [activeField, setActiveField] = useState(null);
   const nameInputRef = useRef(null);
   const bioInputRef = useRef(null);
-  const editingContainerRef = useRef(null);
 
   const isDemoUser = user?.uid === DEMO_UID;
   const [showEchowersModal, setShowEchowersModal] = useState(false);
@@ -73,7 +69,6 @@ const Profile = () => {
   const [editData, setEditData] = useState(() => cachedProfile || { name: '', avatar: '', videoUrl: '', mood: 'happy', activeSkin: null, bio: '', country: '', city: '' });
   const [unlockedGifs, setUnlockedGifs] = useState([]);
   const imageInputRef = useRef(null);
-  const [nameAvailable, setNameAvailable] = useState(true);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -116,7 +111,7 @@ const Profile = () => {
   }, [user?.uid, editing, fetchProfile]);
 
   const handleSave = async () => {
-    if (!user || !editData.name?.trim() || !nameAvailable) return;
+    if (!user || !editData.name?.trim()) return;
     try {
       const updates = { ...editData, name: editData.name.trim(), searchName: editData.name.trim().toLowerCase() };
       await update(ref(db, 'profiles/' + user.uid), updates);
@@ -170,13 +165,6 @@ const Profile = () => {
     } catch {}
   };
 
-  const handleMoodChange = async (mood) => {
-    if (!user) return;
-    await update(ref(db, 'profiles/' + user.uid), { mood });
-    setProfile((prev) => ({ ...prev, mood }));
-    setEditData((prev) => ({ ...prev, mood }));
-  };
-
   const currentMediaUrl = (editing ? editData.videoUrl : profile?.videoUrl) || (editing ? editData.avatar : profile?.avatar);
   const cachedMediaUrl = useCachedImage(currentMediaUrl, null);
   const displayMediaUrl = cachedMediaUrl || currentMediaUrl;
@@ -198,22 +186,21 @@ const Profile = () => {
           
           <div className="snap-avatar-wrapper">
             <div className="snap-avatar-ring" />
-            <div className="snap-avatar" onClick={() => (editing || isDemoUser) && setShowAvatarPicker(true)}>
+            <div className="snap-avatar" onClick={() => setShowAvatarPicker(true)}>
               {loading ? <SkeletonBlock width="100%" height="100%" borderRadius="50%" /> : 
                isVideoFormat ? <video src={displayMediaUrl} autoPlay loop muted playsInline /> : 
                displayMediaUrl ? <img src={displayMediaUrl} alt="Avatar" /> : 
                <Avatar src={null} name={editData?.name || profile?.name || 'User'} size={100} />}
-              {(editing || isDemoUser) && <div className="avatar-overlay">Change</div>}
+              <div className="avatar-overlay">Change</div>
             </div>
           </div>
 
           <div className="snap-info">
             {editing ? (
-              <div className="profile-name-edit-wrapper" ref={editingContainerRef}>
+              <div className="profile-name-edit-wrapper">
                 <div className="profile-name-input-wrapper">
                   <input ref={nameInputRef} type="text" className="profile-name-input" value={editData.name || ''} onChange={(e) => e.target.value.length <= NAME_MAX_LENGTH && setEditData({ ...editData, name: e.target.value })} placeholder="Your name" />
                 </div>
-                {!nameAvailable && <span className="name-status taken">Taken</span>}
               </div>
             ) : (
               <h1 className="snap-name">{profile?.name || 'User'}</h1>
@@ -246,7 +233,7 @@ const Profile = () => {
           <div className="snap-actions-row">
             {editing ? (
               <>
-                <button className="snap-btn-primary" onClick={handleSave} disabled={!nameAvailable}><i className="fas fa-check" /> Save</button>
+                <button className="snap-btn-primary" onClick={handleSave}><i className="fas fa-check" /> Save</button>
                 <button className="snap-btn-secondary" onClick={() => { setEditing(false); setEditData(profile); }}>Cancel</button>
               </>
             ) : (
@@ -281,8 +268,35 @@ const Profile = () => {
           {activeTab === 'echoes' && <div className="empty-tab-state"><i className="fas fa-ghost" /><p>Saved Echoes will appear here.</p></div>}
         </div>
 
-        {/* MODALS */}
-        <AvatarPicker isOpen={showAvatarPicker} onClose={() => setShowAvatarPicker(false)} onUploadImage={() => imageInputRef.current?.click()} onChooseLibrary={() => { setShowAvatarPicker(false); setShowGifLibrary(true); }} uploading={uploading} isDemo={isDemoUser} />
+        {/* PREMIUM iOS BOTTOM SHEET FOR AVATAR PICKER */}
+        {showAvatarPicker && (
+          <div className="ios-sheet-overlay" onClick={() => setShowAvatarPicker(false)}>
+            <div className="ios-sheet-content" onClick={(e) => e.stopPropagation()}>
+              <div className="ios-sheet-handle" />
+              <h3 className="ios-sheet-title">Change Profile Photo</h3>
+              
+              <div className="ios-sheet-actions">
+                <button className="ios-sheet-btn" onClick={() => { setShowAvatarPicker(false); imageInputRef.current?.click(); }}>
+                  <i className="fas fa-image" style={{ color: '#007AFF' }} /> Upload Image
+                </button>
+                
+                <button className="ios-sheet-btn" onClick={() => { setShowAvatarPicker(false); setShowGifLibrary(true); }}>
+                  <i className="fas fa-photo-video" style={{ color: '#34C759' }} /> Choose from Library
+                </button>
+                
+                <button className="ios-sheet-btn" onClick={() => { setShowAvatarPicker(false); setShowAvatarCustomizer(true); }}>
+                  <i className="fas fa-magic" style={{ color: '#AF52DE' }} /> Customize ECHOMOJI
+                </button>
+              </div>
+
+              <button className="ios-sheet-cancel" onClick={() => setShowAvatarPicker(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* OTHER MODALS */}
         <GifLibraryModal isOpen={showGifLibrary} onClose={() => setShowGifLibrary(false)} onSelect={handleGifSelect} ownedGifs={unlockedGifs} mode="profile" />
         <UsernameEditor uid={user?.uid} currentUsername={profile?.username} isOpen={showUsernameEditor} onClose={() => setShowUsernameEditor(false)} />
         
