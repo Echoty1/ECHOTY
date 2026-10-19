@@ -55,7 +55,6 @@ import { useAppBadge } from './hooks/useAppBadge';
 // ─── Spotlight ─────────────────────────────────────────────
 import SpotlightFeed from './pages/Spotlight/SpotlightFeed';
 import SpotlightUpload from './pages/Spotlight/SpotlightUpload';
-import SpotlightProfile from './pages/Spotlight/SpotlightProfile';
 import SpotlightHistory from './pages/Spotlight/SpotlightHistory';
 import './pages/Spotlight/Spotlight.css';
 // ────────────────────────────────────────────────────────────
@@ -97,15 +96,8 @@ function LoadingScreen() {
   return (
     <div
       style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '100vh',
-        background: 'var(--bg-primary)',
-        position: 'relative',
-        overflow: 'hidden',
-        transition: 'background 0.3s ease',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+        height: '100vh', background: 'var(--bg-primary)', position: 'relative', overflow: 'hidden', transition: 'background 0.3s ease',
       }}
     >
       <div style={{ position: 'absolute', width: '240px', height: '240px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.3, animation: 'echoRingPulse 2.5s ease-out infinite' }} />
@@ -139,10 +131,8 @@ function AppContent() {
 
   useGlobalMessageListener();
 
-  // ─── Onboarding + App badge ─────────────────────────────
   const { done: onboardingDone, completeOnboarding } = useOnboarding();
   useAppBadge();
-  // ────────────────────────────────────────────────────────
 
   const [minTimePassed, setMinTimePassed] = useState(false);
   const [showUpdatePopup, setShowUpdatePopup] = useState(false);
@@ -152,15 +142,8 @@ function AppContent() {
   const showLoading = loading || !minTimePassed;
   const isSpotlightRoute = pathname.startsWith('/spotlight');
   const showHappr =
-    Boolean(user) &&
-    !showLoading &&
-    !banInfo?.isBanned &&
-    (pathname === '/' ||
-      pathname === '/chats' ||
-      pathname === '/communities' ||
-      pathname === '/shop' ||
-      pathname === '/other' ||
-      pathname === '/echodrop');
+    Boolean(user) && !showLoading && !banInfo?.isBanned &&
+    (pathname === '/' || pathname === '/chats' || pathname === '/communities' || pathname === '/shop' || pathname === '/other' || pathname === '/echodrop');
 
   useEffect(() => {
     const prime = () => unlockAudio();
@@ -238,12 +221,8 @@ function AppContent() {
         key.startsWith('echocache_v2_')
       )).filter((key) => {
         const essential = [
-          'echo_has_recovered_',
-          'echo_app_version',
-          'echo_changelog_version',
-          'echo_install_popup_dismissed_until',
-          'echo_update_shown',
-          'firebase:host',
+          'echo_has_recovered_', 'echo_app_version', 'echo_changelog_version',
+          'echo_install_popup_dismissed_until', 'echo_update_shown', 'firebase:host',
         ];
         return !essential.some((e) => key.startsWith(e));
       });
@@ -350,11 +329,9 @@ function AppContent() {
     return <VerifyEmailScreen />;
   }
 
-  // ─── Show onboarding on first launch (after login) ──────
   if (!onboardingDone) {
     return <OnboardingFlow onComplete={completeOnboarding} />;
   }
-  // ────────────────────────────────────────────────────────
 
   return (
     <>
@@ -385,7 +362,13 @@ function AppContent() {
           <Route path="/group/:chatId/info" element={<GroupInfoPage />} />
           <Route path="/join/:code" element={<GroupInvitePage />} />
           <Route path="/profile" element={<Profile />} />
+          
+          {/* ─── UNIFIED PROFILE ROUTES ────────────────── */}
+          {/* Both routes now point to the same Snapchat-style layout */}
           <Route path="/user/:uid" element={<UserProfile />} />
+          <Route path="/spotlight/user/:uid" element={<UserProfile />} />
+          {/* ────────────────────────────────────────────── */}
+
           <Route path="/other" element={<Other />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/bookmarks" element={<Bookmarks />} />
@@ -400,7 +383,6 @@ function AppContent() {
           {/* ─── Spotlight ──────────────────────────────── */}
           <Route path="/spotlight" element={<SpotlightFeed />} />
           <Route path="/spotlight/upload" element={<SpotlightUpload />} />
-          <Route path="/spotlight/user/:uid" element={<SpotlightProfile />} />
           <Route path="/spotlight/history" element={<SpotlightHistory />} />
           {/* ────────────────────────────────────────────── */}
 
@@ -426,7 +408,6 @@ function App() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaData) }}
       />
-
       <ThemeProvider>
         <AuthProvider>
           <PresenceProvider>
