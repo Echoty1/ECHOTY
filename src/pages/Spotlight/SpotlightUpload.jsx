@@ -19,7 +19,6 @@ const SpotlightUpload = () => {
   const navigate = useNavigate();
 
   const fileInputRef = useRef(null);
-  const videoRef = useRef(null);
 
   const [stage, setStage] = useState('pick'); // 'pick' | 'review'
   const [recorderOpen, setRecorderOpen] = useState(false);
@@ -61,10 +60,13 @@ const SpotlightUpload = () => {
     })();
   }, []);
 
-  /* Cleanup preview URL */
+  /* Cleanup preview URL on unmount only */
   useEffect(() => {
-    return () => { if (previewUrl) URL.revokeObjectURL(previewUrl); };
-  }, [previewUrl]);
+    return () => {
+      if (previewUrl) URL.revokeObjectURL(previewUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   /* Warn on exit if there's an unsaved file */
   useEffect(() => {
@@ -79,6 +81,33 @@ const SpotlightUpload = () => {
     window.addEventListener('beforeunload', handler);
     return () => window.removeEventListener('beforeunload', handler);
   }, [stage, file]);
+
+  /* ─── Read video metadata from a picked file ─────────── */
+  const readVideoMeta = (f) =>
+    new Promise((resolve) => {
+      try {
+        const url = URL.createObjectURL(f);
+        const v = document.createElement('video');
+        v.preload = 'metadata';
+        v.muted = true;
+        v.src = url;
+        const cleanup = () => URL.revokeObjectURL(url);
+        v.onloadedmetadata = () => {
+          resolve({
+            duration: v.duration || 0,
+            width: v.videoWidth || 0,
+            height: v.videoHeight || 0,
+          });
+          cleanup();
+        };
+        v.onerror = () => {
+          resolve({ duration: 0, width: 0, height: 0 });
+          cleanup();
+        };
+      } catch (_) {
+        resolve({ duration: 0, width: 0, height: 0 });
+      }
+    });
 
   /* ─── Handle picked file ──────────────────────────────── */
   const handleFileChosen = async (f) => {
@@ -95,8 +124,17 @@ const SpotlightUpload = () => {
     }
     if (previewUrl) URL.revokeObjectURL(previewUrl);
 
+    // Reset per-file metadata so a picked video doesn't inherit
+    // stale dims/duration from a previous recording.
+    let meta = { duration: 0, width: 0, height: 0 };
+    if (isVideo) {
+      meta = await readVideoMeta(f);
+    }
+
     setFile(f);
     setMediaType(isVideo ? 'video' : 'image');
+    setDuration(meta.duration);
+    setDims({ width: meta.width, height: meta.height });
     setPreviewUrl(URL.createObjectURL(f));
     setStage('review');
 
@@ -105,6 +143,9 @@ const SpotlightUpload = () => {
       const id = await saveDraft(f, {
         mediaType: isVideo ? 'video' : 'image',
         caption: '',
+        duration: meta.duration,
+        width: meta.width,
+        height: meta.height,
       });
       draftIdRef.current = id;
     } catch (_) {}
@@ -150,9 +191,11 @@ const SpotlightUpload = () => {
         setHasDraft(false);
         return;
       }
-      const f = new File([d.blob], `draft_${d.id}.${d.mediaType === 'video' ? 'webm' : 'jpg'}`, {
-        type: d.blob.type || 'video/webm',
-      });
+      const f = new File(
+        [d.blob],
+        `draft_${d.id}.${d.mediaType === 'video' ? 'webm' : 'jpg'}`,
+        { type: d.blob.type || 'video/webm' }
+      );
       setFile(f);
       setMediaType(d.mediaType);
       setDuration(d.duration || 0);
@@ -181,17 +224,33 @@ const SpotlightUpload = () => {
   const replaceFile = () => {
     setStage('pick');
     setFile(null);
+    setDuration(0);
+    setDims({ width: 0, height: 0 });
     if (previewUrl) URL.revokeObjectURL(previewUrl);
     setPreviewUrl(null);
     setCaption('');
+    // Do NOT delete the draft here — the user may still resume it.
+    // It will be replaced/cleared on the next saveDraft() or publish.
   };
 
   const cancel = async () => {
     // If there's a file but no caption yet, ask if we should save as draft
     if (file && !caption.trim()) {
       const keep = window.confirm('Save as draft? You can resume it next time.');
-      if (keep && draftIdRef.current) {
-        // Already saved
+      if (keep) {
+        // If the draft hasn't been persisted yet (e.g. saveDraft failed earlier),
+        // try one more time before leaving.
+        if (!draftIdRef.current) {
+          try {
+            draftIdRef.current = await saveDraft(file, {
+              mediaType,
+              caption: '',
+              duration,
+              width: dims.width,
+              height: dims.height,
+            });
+          } catch (_) {}
+        }
         leavingRef.current = true;
         navigate(-1);
         return;
@@ -199,6 +258,7 @@ const SpotlightUpload = () => {
       // User chose not to keep it → delete draft
       if (draftIdRef.current) {
         try { await deleteDraft(draftIdRef.current); } catch (_) {}
+        draftIdRef.current = null;
       }
     }
     leavingRef.current = true;
@@ -271,6 +331,7 @@ const SpotlightUpload = () => {
       // Draft is done — clear it
       if (draftIdRef.current) {
         try { await deleteDraft(draftIdRef.current); } catch (_) {}
+        draftIdRef.current = null;
       }
       leavingRef.current = true;
 
@@ -395,7 +456,6 @@ const SpotlightUpload = () => {
           <div className="spotlight-upload-preview">
             {mediaType === 'video' ? (
               <video
-                ref={videoRef}
                 src={previewUrl}
                 className="spotlight-upload-media"
                 controls
