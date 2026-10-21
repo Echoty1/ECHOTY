@@ -363,11 +363,8 @@ function AppContent() {
           <Route path="/join/:code" element={<GroupInvitePage />} />
           <Route path="/profile" element={<Profile />} />
           
-          {/* ─── UNIFIED PROFILE ROUTES ────────────────── */}
-          {/* Both routes now point to the same Snapchat-style layout */}
+          {/* ONLY user profile is a standalone page. Spotlight uses an overlay. */}
           <Route path="/user/:uid" element={<UserProfile />} />
-          <Route path="/spotlight/user/:uid" element={<UserProfile />} />
-          {/* ────────────────────────────────────────────── */}
 
           <Route path="/other" element={<Other />} />
           <Route path="/settings" element={<Settings />} />
