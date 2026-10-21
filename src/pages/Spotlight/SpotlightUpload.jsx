@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { useProfile } from '../../contexts/ProfileContext';
 import Toast from '../../components/Toast/Toast';
 import SpotlightRecorder from './SpotlightRecorder';
+import './Spotlight.css';
 import { publishSpotlightPost } from '../../services/spotlightService';
 import { saveDraft, listDrafts, deleteDraft, getDraft } from '../../services/spotlightDrafts';
 
