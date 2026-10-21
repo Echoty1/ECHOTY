@@ -10,8 +10,9 @@ import SEO from '../../common/SEO';
 import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid';
 import './UserProfile.css';
 
-const UserProfile = () => {
-  const { uid } = useParams();
+const UserProfile = ({ uid: propUid, onClose }) => {
+  const { uid: paramUid } = useParams();
+  const uid = propUid || paramUid;
   const navigate = useNavigate();
   const { user } = useAuth();
   const { profiles, fetchProfile } = useProfile();
@@ -57,20 +58,24 @@ const UserProfile = () => {
     }
   };
 
-  if (loading) return <div className="user-profile-page loading">Loading...</div>;
-  if (!profile) return <div className="user-profile-page error">User not found.</div>;
+  const handleBack = () => {
+    if (onClose) onClose();
+    else navigate(-1);
+  };
+
+  if (loading) return <div className={`user-profile-page loading ${onClose ? 'is-overlay' : ''}`}>Loading...</div>;
+  if (!profile) return <div className={`user-profile-page error ${onClose ? 'is-overlay' : ''}`}>User not found.</div>;
 
   const coverImage = profile.avatar || profile.videoUrl;
   const memberSince = profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Recently';
 
   return (
-    <div className="profile-page snap-profile">
+    <div className={`profile-page snap-profile ${onClose ? 'profile-overlay-mode' : ''}`}>
       <SEO title={`${profile.name} on ECHO`} />
       
-      {/* ─── HERO SECTION ─── */}
       <div className="snap-hero">
-        <button className="snap-back-btn" onClick={() => navigate(-1)}>
-          <i className="fas fa-arrow-left" />
+        <button className="snap-back-btn" onClick={handleBack}>
+          <i className={`fas ${onClose ? 'fa-times' : 'fa-arrow-left'}`} />
         </button>
         
         <div className="snap-hero-bg" style={{ backgroundImage: coverImage ? `url(${coverImage})` : 'var(--bg-card)' }} />
@@ -97,7 +102,6 @@ const UserProfile = () => {
         </div>
       </div>
 
-      {/* ─── BIO & ACTIONS ─── */}
       <div className="snap-bio-section">
         <p className="snap-bio">{profile.bio || 'No bio yet.'}</p>
         
@@ -111,7 +115,7 @@ const UserProfile = () => {
             </button>
             <button 
               className="snap-btn-primary" 
-              onClick={() => navigate(`/chat/${uid}`)}
+              onClick={() => { if(onClose) onClose(); navigate(`/chat/${uid}`); }}
             >
               <i className="fas fa-comment" /> Message
             </button>
@@ -119,7 +123,6 @@ const UserProfile = () => {
         )}
       </div>
 
-      {/* ─── STATS ─── */}
       <div className="snap-stats-row">
         <div className="snap-stat-btn">
           <strong>{echowerCount}</strong><span>Echowers</span>
@@ -129,7 +132,6 @@ const UserProfile = () => {
         </div>
       </div>
 
-      {/* ─── TABS & CONTENT ─── */}
       <div className="snap-tabs">
         <button className={`snap-tab ${activeTab === 'spotlight' ? 'active' : ''}`} onClick={() => setActiveTab('spotlight')}>
           <i className="fas fa-bolt" /> Spotlight
