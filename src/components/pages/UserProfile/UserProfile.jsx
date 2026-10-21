@@ -63,7 +63,7 @@ const UserProfile = ({ uid: propUid, onClose }) => {
     else navigate(-1);
   };
 
-  if (loading) return <div className={`user-profile-page loading ${onClose ? 'is-overlay' : ''}`}>Loading...</div>;
+  if (loading) return <div className={`user-profile-page loading ${onClose ? 'is-overlay' : ''}`}><div className="user-profile-spinner" /></div>;
   if (!profile) return <div className={`user-profile-page error ${onClose ? 'is-overlay' : ''}`}>User not found.</div>;
 
   const coverImage = profile.avatar || profile.videoUrl;
@@ -74,8 +74,9 @@ const UserProfile = ({ uid: propUid, onClose }) => {
       <SEO title={`${profile.name} on ECHO`} />
       
       <div className="snap-hero">
-        <button className="snap-back-btn" onClick={handleBack}>
-          <i className={`fas ${onClose ? 'fa-times' : 'fa-arrow-left'}`} />
+        {/* THE PREMIUM BACK BUTTON */}
+        <button className="snap-back-btn" onClick={handleBack} aria-label="Go back">
+          <i className="fas fa-arrow-left" />
         </button>
         
         <div className="snap-hero-bg" style={{ backgroundImage: coverImage ? `url(${coverImage})` : 'var(--bg-card)' }} />
@@ -111,7 +112,7 @@ const UserProfile = ({ uid: propUid, onClose }) => {
               className={`snap-btn-secondary ${isFollowing ? 'following' : ''}`} 
               onClick={handleToggleEchower}
             >
-              {isFollowing ? '✓ Echowing' : '+ Echower'}
+              {isFollowing ? <><i className="fas fa-check" /> Echowing</> : <><i className="fas fa-plus" /> Echower</>}
             </button>
             <button 
               className="snap-btn-primary" 
