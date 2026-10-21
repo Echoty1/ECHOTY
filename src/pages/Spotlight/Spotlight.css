@@ -1059,3 +1059,77 @@
   border-radius: 999px;
   padding: 12px 16px;
 }
+/* ═══════════════════════════════════════════════════════════════
+   DEFINITIVE FIX: POPUP SHEETS (Share & Comments)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* The dark backdrop behind the popup */
+.spotlight-comments-backdrop,
+.spotlight-share-backdrop,
+.spotlight-options-backdrop,
+.spotlight-notifs-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999 !important; /* Force it above everything */
+  background: rgba(0, 0, 0, 0.75) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  display: flex !important;
+  align-items: flex-end !important; /* Stick to bottom */
+  justify-content: center !important;
+}
+
+/* The actual popup box */
+.spotlight-comments-sheet,
+.spotlight-share-sheet,
+.spotlight-options-sheet,
+.spotlight-notifs-sheet {
+  width: 100% !important;
+  max-width: 560px !important;
+  background: #14101e !important;
+  border-radius: 24px 24px 0 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: 85vh !important; /* NEVER go higher than 85% of screen */
+  overflow: hidden !important; /* Cut off anything that tries to spill out */
+  margin: 0 !important;
+  padding: 0 !important; /* Reset padding so inner components control it */
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6) !important;
+}
+
+/* Ensure the content inside the sheet can scroll if it's too long */
+.spotlight-comments-sheet > div:last-child,
+.spotlight-share-sheet > div:last-child {
+  overflow-y: auto !important;
+  padding: 16px 20px calc(24px + env(safe-area-inset-bottom, 0px)) !important;
+}
+
+/* The Top Header of the popup */
+.sheet-header,
+.spotlight-comments-sheet > div:first-child,
+.spotlight-share-sheet > div:first-child {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 16px 20px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
+  background: #14101e !important;
+}
+
+/* Force any image that pops up in the share sheet to be contained */
+.spotlight-share-sheet img {
+  max-width: 100% !important;
+  max-height: 200px !important;
+  object-fit: cover !important;
+  border-radius: 12px !important;
+  margin-bottom: 16px !important;
+}
+
+/* Share Button Grid */
+.spotlight-share-sheet .share-grid,
+.spotlight-share-sheet > div:first-child + div {
+  display: flex !important;
+  flex-wrap: wrap !important;
+  gap: 10px !important;
+  padding: 0 20px 16px !important;
+}
