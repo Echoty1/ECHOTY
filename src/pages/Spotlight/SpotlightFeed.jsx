@@ -28,6 +28,9 @@ import {
   fetchPostsByHashtag,
 } from '../../services/spotlightService';
 
+// IMPORT the new overlay component
+import UserProfile from '../../components/pages/UserProfile/UserProfile';
+
 const PULL_THRESHOLD = 80;
 const UNDO_WINDOW_MS = 5000;
 const RECENT_SEARCHES_KEY = 'echo_spotlight_recent_searches';
@@ -56,6 +59,9 @@ const SpotlightFeed = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [params] = useSearchParams();
+
+  // NEW STATE: Holds the UID of the user whose profile is being viewed
+  const [viewingUser, setViewingUser] = useState(null);
 
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -89,9 +95,8 @@ const SpotlightFeed = () => {
   const [recentSearches, setRecentSearches] = useState(() => loadRecentSearches());
   const [searchSuggestions, setSearchSuggestions] = useState({ authors: [], hashtags: [] });
   const [trendingTags, setTrendingTags] = useState([]);
-  // Extra state to allow search-by-author / search-by-hashtag to filter the feed
-  const [authorFilter, setAuthorFilter] = useState(null); // { uid, name }
-  const [hashtagFilter, setHashtagFilter] = useState(null); // tag string
+  const [authorFilter, setAuthorFilter] = useState(null);
+  const [hashtagFilter, setHashtagFilter] = useState(null);
 
   const [rotationSeed] = useState(() => getOrCreateSessionSeed(true));
   const [rotationOffset, setRotationOffset] = useState(0);
@@ -143,7 +148,6 @@ const SpotlightFeed = () => {
     return listenToMyEchoing(user.uid, setEchoing);
   }, [user?.uid]);
 
-  /* Load trending hashtags when search opens */
   useEffect(() => {
     if (!searchOpen) return;
     let cancelled = false;
@@ -153,7 +157,6 @@ const SpotlightFeed = () => {
     return () => { cancelled = true; };
   }, [searchOpen]);
 
-  /* Debounced suggestions when user types */
   useEffect(() => {
     if (!searchOpen) return;
     const q = searchQuery.trim();
@@ -170,7 +173,6 @@ const SpotlightFeed = () => {
     return () => { cancelled = true; clearTimeout(t); };
   }, [searchQuery, searchOpen]);
 
-  /* Hashtag sheet custom event */
   useEffect(() => {
     const handler = (e) => {
       if (e.detail) setHashtagSheet(e.detail);
@@ -179,7 +181,6 @@ const SpotlightFeed = () => {
     return () => window.removeEventListener('spotlight-hashtag-tap', handler);
   }, []);
 
-  /* ─── Auto-advance: scroll to next slide ─────────────────── */
   const scrollToNextPost = useCallback((endedPostId) => {
     if (!autoAdvance) return;
     const container = containerRef.current;
@@ -188,7 +189,6 @@ const SpotlightFeed = () => {
     if (currentIdx < 0) return;
     const nextIdx = currentIdx + 1;
     if (nextIdx >= posts.length) {
-      // Wrap to top
       container.scrollTo({ top: 0, behavior: 'smooth' });
       return;
     }
@@ -196,17 +196,11 @@ const SpotlightFeed = () => {
     container.scrollTo({ top: nextIdx * h, behavior: 'smooth' });
   }, [autoAdvance, posts]);
 
-  /* ─── Feed filter pipeline ───────────────────────────────── */
   const applyFilters = useCallback(() => {
-    // If we're in a filtered view (author/hashtag), use the pre-loaded list
     let raw;
-    if (authorFilter) {
-      raw = authorFilterPostsRef.current || [];
-    } else if (hashtagFilter) {
-      raw = hashtagFilterPostsRef.current || [];
-    } else {
-      raw = rawPostsRef.current || [];
-    }
+    if (authorFilter) raw = authorFilterPostsRef.current || [];
+    else if (hashtagFilter) raw = hashtagFilterPostsRef.current || [];
+    else raw = rawPostsRef.current || [];
 
     const pinnedId = freshPostId || focusPostId;
     const seenForRanking = new Set(seenIdsRef.current);
@@ -228,7 +222,6 @@ const SpotlightFeed = () => {
       ranked = ranked.filter((p) => set.has(p.uid));
     }
 
-    // Text search filter (only if no author/hashtag filter active)
     const q = searchQuery.trim().toLowerCase();
     if (q && !authorFilter && !hashtagFilter) {
       const clean = q.replace(/^[@#]/, '');
@@ -258,7 +251,6 @@ const SpotlightFeed = () => {
     setLoading(false);
   }, [feedTab, echoing, searchQuery, freshPostId, focusPostId, rotationSeed, rotationOffset, authorFilter, hashtagFilter]);
 
-  /* ─── Real-time feed (default view) ──────────────────────── */
   useEffect(() => {
     let cancelled = false;
     let unsub = null;
@@ -273,10 +265,8 @@ const SpotlightFeed = () => {
       });
     })();
     return () => { cancelled = true; if (unsub) unsub(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid]);
 
-  /* ─── Filter by author ───────────────────────────────────── */
   useEffect(() => {
     if (!authorFilter?.uid) {
       authorFilterPostsRef.current = null;
@@ -291,7 +281,6 @@ const SpotlightFeed = () => {
     return () => { cancelled = true; };
   }, [authorFilter, applyFilters]);
 
-  /* ─── Filter by hashtag ──────────────────────────────────── */
   useEffect(() => {
     if (!hashtagFilter) {
       hashtagFilterPostsRef.current = null;
@@ -323,10 +312,8 @@ const SpotlightFeed = () => {
       navigate(location.pathname, { replace: true, state: null });
     }, 2500);
     return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [freshPostId]);
 
-  /* ─── Active slide detection ─────────────────────────────── */
   useEffect(() => {
     const container = containerRef.current;
     if (!container || posts.length === 0) return;
@@ -352,7 +339,6 @@ const SpotlightFeed = () => {
     return () => observer.disconnect();
   }, [posts.length]);
 
-  /* ─── Scroll + pull-to-refresh ───────────────────────────── */
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -424,6 +410,7 @@ const SpotlightFeed = () => {
         setNotifsOpen(false);
         setHashtagSheet(null);
         setSearchOpen(false);
+        setViewingUser(null); // Close profile overlay on Escape
       }
     };
     window.addEventListener('keydown', onKey);
@@ -435,7 +422,11 @@ const SpotlightFeed = () => {
     else delete videoRefs.current[postId];
   }, []);
 
-  const handleOpenProfile = (uid) => navigate(`/spotlight/user/${uid}`);
+  // ─── THIS IS THE MAGIC FIX ───────────────────────────────────
+  // Instead of navigating away, we set viewingUser to open the overlay
+  const handleOpenProfile = (uid) => setViewingUser(uid);
+  // ─────────────────────────────────────────────────────────────
+
   const handleOpenOptions = useCallback((post) => setOptionsFor(post), []);
 
   const handleConfirmDelete = useCallback(async (post) => {
@@ -493,7 +484,6 @@ const SpotlightFeed = () => {
     });
   };
 
-  /* ─── Search helpers ─────────────────────────────────────── */
   const pushRecentSearch = (term) => {
     const clean = String(term || '').trim();
     if (!clean) return;
@@ -513,7 +503,6 @@ const SpotlightFeed = () => {
     pushRecentSearch(q);
 
     if (q.startsWith('@')) {
-      // find first matching author from suggestions or fire off a fetch
       const handle = q.slice(1).toLowerCase();
       const match = searchSuggestions.authors.find(
         (a) => (a.username || '').toLowerCase() === handle || (a.name || '').toLowerCase() === handle
@@ -536,7 +525,6 @@ const SpotlightFeed = () => {
         return;
       }
     }
-    // Free-text: keep the query and close the panel
     setAuthorFilter(null);
     setHashtagFilter(null);
     setSearchQuery(q);
@@ -655,7 +643,6 @@ const SpotlightFeed = () => {
         </button>
       </div>
 
-      {/* Active filter chip */}
       {hasActiveFilter && (
         <div className="spotlight-filter-chip-wrap">
           <button
@@ -672,7 +659,6 @@ const SpotlightFeed = () => {
         </div>
       )}
 
-      {/* New search panel */}
       {searchOpen && (
         <div className="spotlight-search-panel">
           <div className="spotlight-search-input-wrap">
@@ -699,7 +685,6 @@ const SpotlightFeed = () => {
           </div>
 
           <div className="spotlight-search-body">
-            {/* Recent searches */}
             {!searchQuery && recentSearches.length > 0 && (
               <div className="spotlight-search-section">
                 <div className="spotlight-search-section-head">
@@ -731,7 +716,6 @@ const SpotlightFeed = () => {
               </div>
             )}
 
-            {/* Trending hashtags */}
             {!searchQuery && trendingTags.length > 0 && (
               <div className="spotlight-search-section">
                 <div className="spotlight-search-section-head">
@@ -754,7 +738,6 @@ const SpotlightFeed = () => {
               </div>
             )}
 
-            {/* Live suggestions */}
             {searchQuery && (
               <>
                 {searchSuggestions.authors.length > 0 && (
@@ -951,7 +934,7 @@ const SpotlightFeed = () => {
         uid={user?.uid}
         onClose={() => setNotifsOpen(false)}
         onOpenPost={(id) => navigate(`/spotlight?focus=${id}`)}
-        onOpenProfile={(uid) => navigate(`/spotlight/user/${uid}`)}
+        onOpenProfile={(uid) => setViewingUser(uid)} // Updates to use the overlay!
         onOpenHistory={() => {
           setNotifsOpen(false);
           navigate('/spotlight/history');
@@ -964,6 +947,12 @@ const SpotlightFeed = () => {
         onClose={() => setHashtagSheet(null)}
         onPickPost={(id) => navigate(`/spotlight?focus=${id}`)}
       />
+
+      {/* ─── THE NEW OVERLAY MODAL ──────────────────────── */}
+      {viewingUser && (
+        <UserProfile uid={viewingUser} onClose={() => setViewingUser(null)} />
+      )}
+      {/* ────────────────────────────────────────────────────── */}
 
       {showUndoToast && (
         <div className="spotlight-undo-toast">
