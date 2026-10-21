@@ -963,3 +963,99 @@
 
 /* ── Kill the old duplicate FAB (feed page) ── */
 .spotlight-fab-create { display: none !important; }
+/* ═══════════════════════════════════════════════════════════════
+   FIX: COMMENTS & SHARE SHEETS (White box fix)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* Force the sheets themselves to be dark and structured */
+.spotlight-comments-sheet,
+.spotlight-share-sheet,
+.spotlight-options-sheet,
+.spotlight-notifs-sheet {
+  background: #14101e !important; /* Force dark background */
+  color: #fff !important;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Fix the top header row (where the "X" and title are) */
+.spotlight-comments-sheet > div:first-child,
+.spotlight-share-sheet > div:first-child {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 12px;
+}
+
+/* Fix the title text */
+.spotlight-comments-sheet h3,
+.spotlight-share-sheet h3,
+.spotlight-comments-sheet h2,
+.spotlight-share-sheet h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff !important;
+}
+
+/* Fix the close button (the white square X) */
+.spotlight-comments-sheet > div:first-child button,
+.spotlight-share-sheet > div:first-child button {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: none;
+  color: #fff !important;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* Fix the Share buttons (WhatsApp, X, Telegram, etc.) */
+.spotlight-share-sheet button {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #fff !important;
+  border-radius: 12px;
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background 0.2s;
+}
+.spotlight-share-sheet button:hover {
+  background: rgba(255, 255, 255, 0.1) !important;
+}
+
+/* Fix the Share sheet wrapper layout */
+.spotlight-share-sheet > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+/* Fix the Comment section scrolling area */
+.spotlight-comments-sheet > div:last-child,
+.spotlight-comments-sheet > div:nth-child(2) {
+  flex: 1;
+  overflow-y: auto;
+  background: #14101e !important;
+}
+
+/* Make sure the Comment input bar at the bottom looks good */
+.spotlight-comments-sheet input {
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #fff !important;
+  border-radius: 999px;
+  padding: 12px 16px;
+}
