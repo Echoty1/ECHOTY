@@ -1,130 +1,295 @@
 /* src/components/pages/UserProfile/UserProfile.css */
 
-.user-profile-page {
-  max-width: 480px;
-  margin: 0 auto;
-  padding: 20px;
-  min-height: 100vh;
+/* ─── PROFILE OVERLAY (SNAPCHAT SLIDE UP) ─── */
+.profile-overlay-mode {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
   background: var(--bg-primary);
-  color: var(--text-primary);
+  overflow-y: auto;
+  animation: snapSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
-.user-profile-header {
-  margin-bottom: 20px;
+@keyframes snapSlideUp {
+  from { transform: translateY(100%); opacity: 0.5; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
-.back-btn {
-  background: transparent;
-  border: none;
-  color: var(--text-primary);
+.profile-overlay-mode .snap-hero {
+  border-radius: 24px 24px 0 0;
+  margin-top: 12px; /* Gives that floating card feel */
+  background: var(--bg-primary);
+}
+
+/* ─── MAIN LAYOUT ─── */
+.snap-profile {
+  background: var(--bg-primary);
+  min-height: 100vh;
+  padding-bottom: 100px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+/* ─── HERO SECTION ─── */
+.snap-hero {
+  position: relative;
+  height: 220px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  overflow: hidden;
+}
+
+/* PREMIUM GLASS BACK BUTTON */
+.snap-back-btn {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  z-index: 10;
   cursor: pointer;
+  display: grid;
+  place-items: center;
+  font-size: 16px;
+  transition: transform 0.15s ease, background 0.15s ease;
 }
 
-.user-profile-card {
-  background: var(--bg-card);
-  border: 1px solid var(--border-color);
-  border-radius: 24px;
-  padding: 30px 20px;
+.snap-back-btn:hover { background: rgba(0, 0, 0, 0.7); }
+.snap-back-btn:active { transform: scale(0.9); }
+
+.snap-hero-bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  filter: blur(25px) brightness(0.6);
+  transform: scale(1.15);
+  z-index: 0;
+}
+
+.snap-hero-overlay {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, var(--bg-primary) 0%, rgba(10, 10, 15, 0.4) 50%, transparent 100%);
+  z-index: 1;
+}
+
+.snap-avatar-wrapper {
+  position: relative;
+  z-index: 2;
+  margin-bottom: 12px;
+}
+
+.snap-avatar-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  background: conic-gradient(from 0deg, #6C3CE1, #EC4899, #6C3CE1);
+  animation: rotateRing 4s linear infinite;
+  z-index: 0;
+  box-shadow: 0 0 20px rgba(236, 72, 153, 0.4);
+}
+
+.snap-avatar {
+  width: 104px;
+  height: 104px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 4px solid var(--bg-primary);
+  position: relative;
+  z-index: 1;
+  background: var(--bg-input);
+}
+
+.snap-avatar img, .snap-avatar video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.snap-info {
+  position: relative;
+  z-index: 2;
   text-align: center;
-  box-shadow: 0 8px 32px var(--shadow-color);
+  padding: 0 16px;
 }
 
-.user-profile-avatar {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 15px;
-}
-
-.user-profile-avatar > div {
-  border: 3px solid #8B5CF6;
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
-}
-
-.user-profile-name {
+.snap-name {
   font-size: 24px;
-  font-weight: 700;
-  margin-bottom: 10px;
+  font-weight: 800;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+  letter-spacing: -0.4px;
 }
 
-.user-profile-stats {
+.snap-username-wrap {
   display: flex;
   justify-content: center;
-  margin-bottom: 15px;
+  margin-bottom: 6px;
 }
 
-.user-profile-stats .stat {
-  text-align: center;
-  padding: 10px 20px;
-  background: rgba(255,255,255,0.05);
-  border-radius: 12px;
-}
-
-.user-profile-stats h4 {
-  margin: 0;
-  font-size: 20px;
-}
-
-.user-profile-stats p {
-  margin: 0;
+.snap-meta {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
   font-size: 12px;
   color: var(--text-muted);
+  font-weight: 600;
+}
+.snap-meta i { font-size: 10px; margin-right: 4px; }
+
+/* ─── BIO & ACTIONS ─── */
+.snap-bio-section {
+  padding: 16px 20px 20px;
+  text-align: center;
 }
 
-.user-profile-bio {
+.snap-bio {
+  font-size: 14.5px;
   color: var(--text-secondary);
-  font-size: 14px;
   line-height: 1.5;
-  margin-bottom: 20px;
+  margin: 0 0 16px;
 }
 
-.user-profile-actions {
+.snap-actions-row {
   display: flex;
   gap: 10px;
   justify-content: center;
 }
 
-.echower-btn, .message-btn {
-  padding: 10px 20px;
-  border-radius: 20px;
+.snap-btn-primary, .snap-btn-secondary {
+  flex: 1;
+  max-width: 160px;
+  padding: 12px 16px;
+  border-radius: 999px;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   border: none;
-  font-weight: 600;
+  font-family: inherit;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+}
+.snap-btn-primary:active, .snap-btn-secondary:active { transform: scale(0.95); }
+
+.snap-btn-primary {
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(108,60,225,0.35);
+}
+.snap-btn-primary:hover { box-shadow: 0 6px 20px rgba(108,60,225,0.5); }
+
+.snap-btn-secondary {
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border-color);
+}
+.snap-btn-secondary.following {
+  color: #10B981;
+  border-color: rgba(16,185,129,0.3);
+  background: rgba(16,185,129,0.1);
+}
+
+/* ─── STATS ROW ─── */
+.snap-stats-row {
+  display: flex;
+  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
+}
+
+.snap-stat-btn {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 8px;
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border-color);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s ease;
+}
+.snap-stat-btn:last-child { border-right: none; }
+
+.snap-stat-btn strong {
+  font-size: 17px;
+  font-weight: 800;
+  color: var(--text-primary);
+  display: block;
+  line-height: 1.1;
+}
+
+.snap-stat-btn span {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+
+/* ─── TABS ─── */
+.snap-tabs {
+  display: flex;
+  border-bottom: 1px solid var(--border-color);
+  margin-top: 4px;
+}
+
+.snap-tab {
+  flex: 1;
+  padding: 16px;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
   cursor: pointer;
   transition: all 0.2s;
 }
-
-.echower-btn {
-  background: linear-gradient(135deg, #8b5cf6, #6d28d9);
-  color: white;
-}
-
-.echower-btn.following {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: var(--text-muted);
-}
-
-.message-btn {
-  background: var(--bg-input);
-  border: 1px solid var(--border-color);
+.snap-tab i { margin-right: 6px; font-size: 12px; }
+.snap-tab.active {
   color: var(--text-primary);
+  border-bottom-color: #6C3CE1;
 }
 
-.message-btn:hover {
-  border-color: #6C3CE1;
+.snap-content-area {
+  padding: 2px; /* Tighter grid padding */
 }
 
-/* ═══════════════════════════════════════════════════════════
-   NEW: Loading / error states
-   ═══════════════════════════════════════════════════════════ */
+/* ─── LOADING & ERROR ─── */
 .user-profile-page.loading,
 .user-profile-page.error {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
+  min-height: 100vh;
   padding: 80px 24px;
   gap: 16px;
   color: var(--text-secondary);
+}
+
+.user-profile-page.is-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg-primary);
 }
 
 .user-profile-spinner {
@@ -136,171 +301,5 @@
   animation: user-profile-spin 0.9s linear infinite;
 }
 
-@keyframes user-profile-spin {
-  to { transform: rotate(360deg); }
-}
-
-/* ═══════════════════════════════════════════════════════════
-   NEW: Header layout — back button (left) + ⋮ menu (right)
-   ═══════════════════════════════════════════════════════════ */
-.user-profile-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 20px;
-  padding: 4px 0;
-  position: relative;
-}
-
-.user-profile-menu { position: relative; }
-
-.user-profile-menu-btn {
-  background: transparent;
-  border: 1px solid transparent;
-  color: var(--text-primary);
-  font-size: 16px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.user-profile-menu-btn:hover { background: rgba(255,255,255,0.06); }
-
-.user-profile-menu-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 998;
-  background: transparent;
-}
-
-.user-profile-menu-dropdown {
-  position: absolute;
-  top: calc(100% + 6px);
-  right: 0;
-  min-width: 160px;
-  padding: 6px;
-  background: var(--bg-secondary);
-  border: 1px solid var(--border-color);
-  border-radius: 12px;
-  box-shadow: 0 12px 32px rgba(0,0,0,0.35);
-  z-index: 999;
-  animation: userProfileMenuIn 0.14s ease;
-}
-
-@keyframes userProfileMenuIn {
-  from { opacity: 0; transform: translateY(-4px) scale(0.97); }
-  to   { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-.user-profile-menu-dropdown button {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px 12px;
-  background: transparent;
-  border: none;
-  border-radius: 8px;
-  color: var(--text-primary);
-  font-size: 14px;
-  font-family: inherit;
-  cursor: pointer;
-  text-align: left;
-  transition: background 0.12s ease;
-}
-.user-profile-menu-dropdown button:hover {
-  background: rgba(108,60,225,0.12);
-}
-
-/* ═══════════════════════════════════════════════════════════
-   NEW: Avatar with hidden (locked) state
-   ═══════════════════════════════════════════════════════════ */
-.user-profile-avatar {
-  position: relative;
-  display: flex;
-  justify-content: center;
-  margin-bottom: 15px;
-}
-
-.user-profile-avatar-hidden {
-  width: 110px;
-  height: 110px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(135deg, #6C3CE1 0%, #EC4899 100%);
-  color: #fff;
-  font-size: 36px;
-  border: 3px solid #8B5CF6;
-  box-shadow: 0 0 20px rgba(139, 92, 246, 0.3);
-}
-
-.user-profile-online-dot {
-  position: absolute;
-  bottom: 6px;
-  right: calc(50% - 55px + 6px);
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  background: #10B981;
-  border: 3px solid var(--bg-primary);
-  box-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
-  z-index: 2;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   NEW: Status line under the name
-   ═══════════════════════════════════════════════════════════ */
-.user-profile-status {
-  margin: 4px 0 12px;
-  font-size: 13px;
-  font-weight: 500;
-  text-align: center;
-  letter-spacing: 0.01em;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   NEW: Hidden bio placeholder
-   ═══════════════════════════════════════════════════════════ */
-.user-profile-bio-hidden {
-  font-style: italic;
-  opacity: 0.6;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  justify-content: center;
-}
-
-/* ═══════════════════════════════════════════════════════════
-   NEW: Locked state for Message button when blocked
-   ═══════════════════════════════════════════════════════════ */
-.message-btn:disabled,
-.message-btn[disabled] {
-  opacity: 0.55;
-  cursor: not-allowed;
-  border-color: rgba(239, 68, 68, 0.4);
-  color: rgba(239, 68, 68, 0.85);
-}
-/* Add to the bottom of src/components/pages/UserProfile/UserProfile.css */
-
-.profile-overlay-mode {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: var(--bg-primary);
-  overflow-y: auto;
-  animation: snapSlideUp 0.3s cubic-bezier(0.2, 1, 0.4, 1) forwards;
-}
-
-@keyframes snapSlideUp {
-  from { transform: translateY(100%); opacity: 0.5; }
-  to { transform: translateY(0); opacity: 1; }
-}
-
-/* Add a subtle border to the top of the sheet */
-.profile-overlay-mode .snap-hero {
-  border-radius: 24px 24px 0 0;
-  margin-top: 16px;
-  background: var(--bg-primary);
-}
+@keyframes user-profile-spin { to { transform: rotate(360deg); } }
+@keyframes rotateRing { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
