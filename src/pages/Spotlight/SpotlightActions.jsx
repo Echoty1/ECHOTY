@@ -1,5 +1,5 @@
 // src/pages/Spotlight/SpotlightActions.jsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 const fmt = (n) => {
   const v = Number(n) || 0;
@@ -22,6 +22,28 @@ const SpotlightActions = ({
   onAuthorTap,
   showDuet = true,
 }) => {
+  // Local state to make the counts update instantly
+  const [likeCount, setLikeCount] = useState(post.likeCount || 0);
+  const [reechoCount, setReechoCount] = useState(post.reechoCount || 0);
+
+  // Sync if the post prop changes externally
+  useEffect(() => {
+    setLikeCount(post.likeCount || 0);
+    setReechoCount(post.reechoCount || 0);
+  }, [post.likeCount, post.reechoCount]);
+
+  const handleLikeClick = () => {
+    // Optimistically update local UI
+    setLikeCount((prev) => (liked ? Math.max(0, prev - 1) : prev + 1));
+    onLike?.();
+  };
+
+  const handleReechoClick = () => {
+    // Optimistically update local UI
+    setReechoCount((prev) => (reechoed ? Math.max(0, prev - 1) : prev + 1));
+    onReecho?.();
+  };
+
   return (
     <div className="spotlight-actions">
       <button
@@ -58,13 +80,13 @@ const SpotlightActions = ({
       <button
         type="button"
         className={`spotlight-action ${liked ? 'active like' : ''}`}
-        onClick={onLike}
+        onClick={handleLikeClick}
         aria-label={liked ? 'Unlike' : 'Like'}
       >
         <span className="spotlight-action-icon">
           <i className={`${liked ? 'fas' : 'far'} fa-heart`} />
         </span>
-        <span className="spotlight-action-count">{fmt(post.likeCount)}</span>
+        <span className="spotlight-action-count">{fmt(likeCount)}</span>
       </button>
 
       <button
@@ -82,14 +104,14 @@ const SpotlightActions = ({
       <button
         type="button"
         className={`spotlight-action ${reechoed ? 'active reecho' : ''}`}
-        onClick={onReecho}
+        onClick={handleReechoClick}
         aria-label={reechoed ? 'Undo Reecho' : 'Reecho'}
         title="Reecho to your profile"
       >
         <span className="spotlight-action-icon">
           <i className="fas fa-retweet" />
         </span>
-        <span className="spotlight-action-count">{fmt(post.reechoCount)}</span>
+        <span className="spotlight-action-count">{fmt(reechoCount)}</span>
       </button>
 
       {showDuet && (
