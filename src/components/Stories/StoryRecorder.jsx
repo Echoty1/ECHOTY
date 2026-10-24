@@ -2,13 +2,28 @@ import React, { useRef, useState, useEffect } from 'react';
 import { createImageStatus, getUserMemories, deleteStatus } from '../../services/statusService';
 import './StoriesBar.css';
 
-const StoryRecorder = ({ userId, onClose, onOpenMemories }) => {
+const StoryRecorder = ({ userId, onClose }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
+  
   const [facingMode, setFacingMode] = useState('user');
   const [showFlash, setShowFlash] = useState(false);
   const [isSnapping, setIsSnapping] = useState(false);
+  
+  // Memories State
+  const [memories, setMemories] = useState([]);
+  const [showMemories, setShowMemories] = useState(false);
+  const [selectedMemory, setSelectedMemory] = useState(null);
+
+  const fetchMemories = async () => {
+    try {
+      const data = await getUserMemories(userId);
+      setMemories(data);
+    } catch (err) {
+      console.error('Failed to fetch memories:', err);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -60,6 +75,17 @@ const StoryRecorder = ({ userId, onClose, onOpenMemories }) => {
     }
   };
 
+  const handleDeleteMemory = async (statusId) => {
+    if (!window.confirm("Delete this Echus?")) return;
+    await deleteStatus(userId, statusId);
+    fetchMemories();
+  };
+
+  const openMemories = () => {
+    fetchMemories();
+    setShowMemories(true);
+  };
+
   return (
     <div className="instants-camera-overlay">
       {/* Header */}
@@ -68,7 +94,7 @@ const StoryRecorder = ({ userId, onClose, onOpenMemories }) => {
           <i className="fas fa-times" />
         </button>
         <h2 className="camera-title">New instant</h2>
-        <button className="camera-history-btn" onClick={onOpenMemories}>
+        <button className="camera-history-btn" onClick={openMemories}>
           <i className="fas fa-th" />
           <span className="history-badge">1</span>
         </button>
@@ -113,6 +139,55 @@ const StoryRecorder = ({ userId, onClose, onOpenMemories }) => {
         </div>
         Friends <i className="fas fa-chevron-down" />
       </div>
+
+      {/* MEMORIES PANEL (Overlay) */}
+      {showMemories && !selectedMemory && (
+        <div className="memories-glass-panel">
+          <div className="memories-header">
+            <h4>Your Echus Memories</h4>
+            <button className="close-memories" onClick={() => setShowMemories(false)}>✕</button>
+          </div>
+          
+          {memories.length === 0 ? (
+            <p className="no-memories">No memories yet. Snap a photo to see it here.</p>
+          ) : (
+            <div className="memories-grid">
+              {memories.map((mem) => (
+                <div key={mem.id} className="memory-card" onClick={() => setSelectedMemory(mem)}>
+                  <img src={mem.imageUrl} alt="Memory" />
+                  <div className="memory-info">
+                    <span>{new Date(mem.createdAt).toLocaleDateString()}</span>
+                    <button className="delete-memory" onClick={(e) => {
+                      e.stopPropagation();
+                      handleDeleteMemory(mem.id);
+                    }}>
+                      <i className="fas fa-trash"></i>
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* FULLSCREEN MEMORY VIEW */}
+      {selectedMemory && (
+        <div className="memory-fullscreen-overlay" onClick={() => setSelectedMemory(null)}>
+          <div className="memory-fullscreen-content" onClick={(e) => e.stopPropagation()}>
+            <img src={selectedMemory.imageUrl} alt="Memory Full" />
+            <div className="memory-fullscreen-actions">
+              <button className="cancel-memory-btn" onClick={() => setSelectedMemory(null)}>Cancel</button>
+              <button className="delete-memory-btn" onClick={() => {
+                handleDeleteMemory(selectedMemory.id);
+                setSelectedMemory(null);
+              }}>
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
