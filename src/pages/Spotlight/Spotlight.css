@@ -1428,3 +1428,174 @@
   from { transform: translateY(100%); opacity: 0; }
   to { transform: translateY(0); opacity: 1; }
 }
+/* ═══════════════════════════════════════════════════════════════
+   7. ACTIVITY / NOTIFICATIONS SHEET (SpotlightNotifications.jsx)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* The Backdrop */
+.spotlight-notifs-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 9999999 !important;
+  background: rgba(0, 0, 0, 0.7) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+  height: 100dvh !important;
+  width: 100vw !important;
+}
+
+/* The Main Sheet */
+.spotlight-notifs-sheet {
+  width: 100% !important;
+  max-width: 600px !important;
+  height: 85dvh !important; /* Takes 85% of screen height */
+  background: #14101e !important;
+  border-radius: 24px 24px 0 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6) !important;
+  animation: sheetSlideUp 0.3s cubic-bezier(0.2, 1, 0.4, 1) forwards;
+  padding-bottom: env(safe-area-inset-bottom, 16px) !important;
+  overflow: hidden !important;
+}
+
+/* The Header */
+.spotlight-notifs-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 16px 20px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  flex-shrink: 0;
+}
+
+.spotlight-notifs-title {
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  color: #fff !important;
+}
+
+/* The Header Buttons (History and X) */
+.spotlight-notifs-header button {
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: none !important;
+  color: #fff !important;
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  font-size: 14px !important;
+  transition: background 0.2s !important;
+}
+.spotlight-notifs-header button:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
+
+/* The Scrollable List */
+.spotlight-notifs-list {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  padding: 16px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Empty State */
+.spotlight-notifs-empty {
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  height: 100% !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  text-align: center !important;
+}
+.spotlight-notifs-empty i {
+  font-size: 48px !important;
+  margin-bottom: 16px !important;
+  opacity: 0.5 !important;
+}
+.spotlight-notifs-empty h3 {
+  color: #fff !important;
+  margin: 0 0 8px 0 !important;
+  font-size: 16px !important;
+}
+.spotlight-notifs-empty p {
+  margin: 0 !important;
+  font-size: 13px !important;
+}
+
+/* Individual Notification Rows (Assuming standard structure) */
+.spotlight-notif-row {
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 12px !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  border: 1px solid rgba(255, 255, 255, 0.05) !important;
+  border-radius: 16px !important;
+  cursor: pointer !important;
+  transition: background 0.2s !important;
+}
+.spotlight-notif-row:hover {
+  background: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* Avatars */
+.spotlight-notif-avatar {
+  width: 44px !important;
+  height: 44px !important;
+  border-radius: 50% !important;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #fff !important;
+  font-weight: 800 !important;
+  font-size: 16px !important;
+  flex-shrink: 0 !important;
+  overflow: hidden !important;
+}
+.spotlight-notif-avatar img {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+/* Text & Thumbnail */
+.spotlight-notif-content {
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+}
+.spotlight-notif-text {
+  color: rgba(255, 255, 255, 0.9) !important;
+  font-size: 14px !important;
+  line-height: 1.4 !important;
+}
+.spotlight-notif-text strong {
+  color: #fff !important;
+}
+.spotlight-notif-time {
+  color: rgba(255, 255, 255, 0.4) !important;
+  font-size: 11px !important;
+}
+
+/* The Post Thumbnail on the right side */
+.spotlight-notif-thumb {
+  width: 48px !important;
+  height: 48px !important;
+  border-radius: 8px !important;
+  object-fit: cover !important;
+  background: #000 !important;
+  flex-shrink: 0 !important;
+}
