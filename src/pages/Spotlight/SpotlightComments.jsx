@@ -11,7 +11,7 @@ import {
   deleteCommentReply,
 } from '../../services/spotlightService';
 
-const QUICK_EMOJIS = ['❤️', '😂', '🔥', '👏', '😮'];
+const QUICK_EMOJIS = ['❤️', '😂', '🔥', '👏', '😮', '😢', '🙏', '💯'];
 
 const timeAgo = (ts) => {
   if (!ts) return '';
@@ -37,11 +37,19 @@ const CommentLikePill = ({ postId, comment, currentUser }) => {
   const pick = async (emoji) => {
     setPickerOpen(false);
     if (!currentUser?.uid) return;
+    
+    // Optimistic UI
+    const isRemoving = reaction === emoji;
+    setReaction(isRemoving ? null : emoji);
+    setCount((c) => Math.max(0, c + (isRemoving ? -1 : reaction ? 0 : 1)));
+
     try {
-      const active = await toggleCommentLike(postId, comment.id, currentUser.uid, emoji);
-      setReaction(active ? emoji : null);
-      setCount((c) => Math.max(0, c + (active ? 1 : -1)));
-    } catch (_) {}
+      await toggleCommentLike(postId, comment.id, currentUser.uid, emoji);
+    } catch (_) {
+      // Revert on failure
+      setReaction(reaction);
+      setCount(comment.likeCount || 0);
+    }
   };
 
   return (
@@ -88,6 +96,8 @@ const CommentReplies = ({ postId, comment, currentUser, currentProfile }) => {
     const t = text.trim();
     if (!t || !currentUser?.uid || sending) return;
     setSending(true);
+    setText(''); // Clear immediately
+
     try {
       await addCommentReply(
         postId,
@@ -97,8 +107,9 @@ const CommentReplies = ({ postId, comment, currentUser, currentProfile }) => {
         currentProfile?.avatar || '',
         t
       );
-      setText('');
-    } catch (_) {}
+    } catch (_) {
+      setText(t); // Restore on failure
+    }
     setSending(false);
   };
 
@@ -239,6 +250,7 @@ const SpotlightComments = ({ isOpen, post, currentUser, currentProfile, onClose 
   const [comments, setComments] = useState([]);
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  const [showEmojiBar, setShowEmojiBar] = useState(false);
   const inputRef = useRef(null);
   const scrollRef = useRef(null);
 
@@ -248,16 +260,24 @@ const SpotlightComments = ({ isOpen, post, currentUser, currentProfile, onClose 
     return () => unsub();
   }, [isOpen, post?.id]);
 
+  // Auto-scroll to bottom when comments change
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && scrollRef.current) {
       const t = setTimeout(() => {
         scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-        inputRef.current?.focus();
-      }, 120);
+      }, 150);
       return () => clearTimeout(t);
     }
   }, [isOpen, comments.length]);
 
+  // Focus input when opened
+  useEffect(() => {
+    if (isOpen) {
+      setTimeout(() => inputRef.current?.focus(), 300);
+    }
+  }, [isOpen]);
+
+  // Lock body scroll & escape key
   useEffect(() => {
     if (!isOpen) return;
     const prev = document.body.style.overflow;
@@ -276,6 +296,9 @@ const SpotlightComments = ({ isOpen, post, currentUser, currentProfile, onClose 
     const t = text.trim();
     if (!t || sending) return;
     setSending(true);
+    setText(''); // Clear input immediately
+    setShowEmojiBar(false);
+
     try {
       await addSpotlightComment(
         post.id,
@@ -284,9 +307,9 @@ const SpotlightComments = ({ isOpen, post, currentUser, currentProfile, onClose 
         currentProfile?.avatar || '',
         t
       );
-      setText('');
     } catch (err) {
       console.warn('Comment failed:', err);
+      setText(t); // Restore on failure
     } finally {
       setSending(false);
     }
@@ -296,6 +319,7 @@ const SpotlightComments = ({ isOpen, post, currentUser, currentProfile, onClose 
     <div className="spotlight-comments-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
       <div className="spotlight-comments-sheet" role="dialog" aria-modal="true">
         <div className="spotlight-comments-handle" aria-hidden="true" />
+        
         <div className="spotlight-comments-header">
           <span className="spotlight-comments-title">
             {comments.length === 0 ? 'Comments' : `${comments.length} comment${comments.length === 1 ? '' : 's'}`}
@@ -325,10 +349,33 @@ const SpotlightComments = ({ isOpen, post, currentUser, currentProfile, onClose 
           )}
         </div>
 
+        {/* EMOJI PICKER BAR */}
+        {showEmojiBar && (
+          <div className="spotlight-comments-emoji-bar">
+            {QUICK_EMOJIS.map(e => (
+              <button 
+                key={e} 
+                type="button" 
+                onClick={() => setText(prev => prev + e)}
+              >
+                {e}
+              </button>
+            ))}
+          </div>
+        )}
+
         <form
           className="spotlight-comments-input-row"
           onSubmit={(e) => { e.preventDefault(); handleSend(); }}
         >
+          <button 
+            type="button" 
+            className="spotlight-comments-emoji-btn"
+            onClick={() => setShowEmojiBar(!showEmojiBar)}
+          >
+            <i className="far fa-smile" />
+          </button>
+          
           <input
             ref={inputRef}
             type="text"
@@ -338,9 +385,10 @@ const SpotlightComments = ({ isOpen, post, currentUser, currentProfile, onClose 
             onChange={(e) => setText(e.target.value)}
             maxLength={500}
           />
+          
           <button
             type="submit"
-            className="spotlight-comments-send"
+            className={`spotlight-comments-send ${text.trim() ? 'active' : ''}`}
             disabled={!text.trim() || sending}
             aria-label="Send"
           >
