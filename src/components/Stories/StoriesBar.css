@@ -1,4 +1,7 @@
-/* ─── Main Wrapper ─── */
+/* ═══════════════════════════════════════════════════════════════
+   1. STORIES BAR (The Horizontal Tray)
+   ═══════════════════════════════════════════════════════════════ */
+
 .stories-bar-container {
   position: fixed;
   bottom: 90px;
@@ -15,6 +18,7 @@
   overflow-x: auto;
   padding: 10px 16px;
   scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
 .stories-bar-scroll::-webkit-scrollbar { display: none; }
 
@@ -112,7 +116,11 @@
   text-align: center;
 }
 
-/* ─── Viewer Overlay ─── */
+
+/* ═══════════════════════════════════════════════════════════════
+   2. STORY VIEWER (The Fullscreen Instants UI)
+   ═══════════════════════════════════════════════════════════════ */
+
 .viewer-overlay {
   position: fixed;
   inset: 0;
@@ -123,64 +131,6 @@
   color: #fff;
   user-select: none;
   overflow: hidden;
-}
-
-/* Tilted Card Stack Background */
-.stacked-cards-bg {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.stack-card {
-  position: absolute;
-  width: 82vw;
-  max-width: 400px;
-  aspect-ratio: 9 / 15;
-  border-radius: 40px;
-  background: #222;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.stack-card.layer-1 {
-  transform: rotate(-6deg) scale(0.9);
-  opacity: 0.5;
-}
-.stack-card.layer-2 {
-  transform: rotate(4deg) scale(0.95);
-  opacity: 0.7;
-}
-
-/* Main Image Container */
-.viewer-tap-area {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  position: relative;
-  z-index: 2;
-  cursor: pointer;
-}
-
-.viewer-image-container {
-  width: 82vw;
-  max-width: 400px;
-  aspect-ratio: 9 / 15;
-  border-radius: 40px;
-  overflow: hidden;
-  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
-  transition: transform 0.2s ease;
-  position: relative;
-}
-
-.viewer-image {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 /* Progress Bar */
@@ -201,6 +151,7 @@
   border-radius: 3px;
   overflow: hidden;
 }
+.progress-segment.full { background: rgba(255, 255, 255, 0.8); }
 
 .progress-bar-fill {
   height: 100%;
@@ -208,7 +159,7 @@
   transition: width 0.1s linear;
 }
 
-/* Header */
+/* Header (Avatar, Name, Close) */
 .viewer-header {
   position: absolute;
   top: calc(24px + env(safe-area-inset-top, 0px));
@@ -217,17 +168,18 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  z-index: 10;
+  z-index: 20;
 }
 
 .viewer-header-info {
   display: flex;
   align-items: center;
   gap: 10px;
-  background: rgba(0,0,0,0.4);
-  padding: 4px 12px 4px 4px;
+  background: rgba(0,0,0,0.5);
+  padding: 4px 14px 4px 4px;
   border-radius: 999px;
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 
 .viewer-avatar-ring {
@@ -246,18 +198,91 @@
   border: 2px solid #000;
 }
 
-.owner-name { font-weight: 600; font-size: 14px; }
-.viewer-time { font-size: 12px; color: rgba(255, 255, 255, 0.7); }
+.owner-name { font-weight: 700; font-size: 14px; }
+.viewer-time { font-size: 12px; color: rgba(255, 255, 255, 0.7); margin-left: 4px; }
 
 .close-viewer {
-  background: rgba(0,0,0,0.4);
+  background: rgba(0,0,0,0.5);
   backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
   border: none;
   color: #fff;
   width: 36px; height: 36px;
   border-radius: 50%;
   font-size: 16px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* The Main Stage */
+.viewer-tap-area {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+  cursor: pointer;
+  padding: 40px 0;
+}
+
+/* Tilted Background Cards */
+.stacked-cards-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.stack-card {
+  position: absolute;
+  width: 85vw;
+  max-width: 400px;
+  aspect-ratio: 9 / 15;
+  border-radius: 40px;
+  overflow: hidden;
+  background: #222;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+}
+
+.stack-card img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.4; /* Dims the background images */
+  filter: blur(4px);
+}
+
+.stack-card.layer-1 {
+  transform: rotate(-8deg) scale(0.9) translateY(-10px);
+}
+.stack-card.layer-2 {
+  transform: rotate(6deg) scale(0.95) translateY(10px);
+}
+
+/* The Active Main Image */
+.viewer-image-container {
+  width: 85vw;
+  max-width: 400px;
+  aspect-ratio: 9 / 15;
+  border-radius: 40px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+  transition: transform 0.2s ease;
+  position: relative;
+  z-index: 5;
+}
+
+.viewer-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 /* Floating Reactions */
@@ -269,7 +294,7 @@
   align-items: center;
   justify-content: center;
   gap: 16px;
-  z-index: 10;
+  z-index: 20;
 }
 
 .reaction-btn {
@@ -282,14 +307,32 @@
   justify-content: center;
   cursor: pointer;
   transition: transform 0.15s;
-  box-shadow: 0 10px 20px rgba(0,0,0,0.4);
+  box-shadow: 0 10px 20px rgba(0,0,0,0.6);
 }
 .reaction-btn:active { transform: scale(0.9); }
 
 .reaction-btn.small { width: 48px; height: 48px; font-size: 20px; }
 .reaction-btn.large { width: 64px; height: 64px; font-size: 28px; color: #ec4899; }
 
-/* ─── Recorder Overlay Styles (Keep your existing ones below) ─── */
+
+/* ═══════════════════════════════════════════════════════════════
+   3. DESKTOP RESPONSIVENESS (Makes it look perfect on PC)
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (min-width: 768px) {
+  .viewer-image-container,
+  .stack-card {
+    width: 420px;
+    height: 700px;
+    aspect-ratio: auto; /* Locks the height on desktop */
+  }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════
+   4. STORY RECORDER (Keep your existing ones below)
+   ═══════════════════════════════════════════════════════════════ */
+
 .recorder-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 10000; backdrop-filter: blur(12px); }
 .recorder-modal-small { background: rgba(30, 30, 30, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 24px; width: 320px; color: #fff; box-shadow: 0 25px 80px rgba(0,0,0,0.6); position: relative; overflow: hidden; }
 .small-camera-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
