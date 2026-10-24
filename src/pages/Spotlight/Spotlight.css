@@ -1158,3 +1158,188 @@
   80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(1.4); opacity: 0; }
 }
+/* ═══════════════════════════════════════════════════════════════
+   SHARE SHEET (SpotlightShare.jsx)
+   ═══════════════════════════════════════════════════════════════ */
+
+.spotlight-share-sheet {
+  width: 100% !important;
+  max-width: 560px !important;
+  background: #14101e !important;
+  border-radius: 24px 24px 0 0 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: 85vh !important;
+  overflow: hidden !important;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6) !important;
+  animation: spSheetUp 0.28s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+
+.spotlight-share-handle {
+  width: 40px;
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.2);
+  margin: 12px auto 8px;
+}
+
+.spotlight-share-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 20px 16px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.spotlight-share-title {
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.spotlight-share-close {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.spotlight-share-close:hover { background: rgba(255, 255, 255, 0.15); }
+
+/* Horizontal Quick Share Buttons */
+.spotlight-share-quickrow {
+  display: flex;
+  gap: 12px;
+  padding: 20px;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.spotlight-share-quickrow::-webkit-scrollbar { display: none; }
+
+.spotlight-share-quick {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  min-width: 64px;
+  transition: transform 0.15s;
+}
+.spotlight-share-quick:hover { transform: scale(1.05); }
+.spotlight-share-quick:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.spotlight-share-quick-icon {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.spotlight-share-quick-icon.whatsapp { background: rgba(37, 211, 102, 0.15); color: #25D366; border-color: rgba(37, 211, 102, 0.3); }
+.spotlight-share-quick-icon.twitter  { background: rgba(255, 255, 255, 0.1); color: #fff; }
+.spotlight-share-quick-icon.telegram { background: rgba(0, 136, 204, 0.15); color: #0088cc; border-color: rgba(0, 136, 204, 0.3); }
+.spotlight-share-quick-icon.copy     { background: rgba(108, 60, 225, 0.15); color: #a78bfa; border-color: rgba(108, 60, 225, 0.3); }
+.spotlight-share-quick-icon.native   { background: rgba(236, 72, 153, 0.15); color: #ec4899; border-color: rgba(236, 72, 153, 0.3); }
+
+.spotlight-share-quick-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+/* Send to Chat Section */
+.spotlight-share-section-title {
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.4);
+  padding: 0 20px 12px;
+}
+
+.spotlight-share-chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.spotlight-share-chat-list::-webkit-scrollbar { width: 6px; }
+.spotlight-share-chat-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
+
+.spotlight-share-chat-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background 0.15s;
+}
+.spotlight-share-chat-row:hover { background: rgba(255, 255, 255, 0.05); }
+.spotlight-share-chat-row:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.spotlight-share-chat-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-weight: 800;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.spotlight-share-chat-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.spotlight-share-chat-name {
+  flex: 1;
+  font-size: 15px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.spotlight-share-chat-send {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 14px;
+}
+
+.spotlight-share-empty {
+  text-align: center;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 13px;
+  padding: 24px 0;
+}
