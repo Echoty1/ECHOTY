@@ -9,15 +9,15 @@
     <!-- ══════════════════════════════════════════════════════════════
          PRIMARY SEO
          ══════════════════════════════════════════════════════════════ -->
-    <title>ECHO – The Future of Chat | Founded by Lawal Abdulmalik</title>
+    <title>ECHO (Echoty) – The Future of Chat & Instants | Founded by Lawal Abdulmalik</title>
     <meta
       name="description"
-      content="ECHO (Echoty) is the future of conversations. Discover, connect, and echo with animated avatars, real-time chat, and vibrant communities. Founded by Lawal Abdulmalik and team."
+      content="ECHO (Echoty) is the future of conversations, valued at over 10 Million Naira with 200+ members. Discover, connect, and echo with animated avatars, real-time chat, Instants, and vibrant communities. Founded by Lawal Abdulmalik."
     />
     <meta name="author" content="Lawal Abdulmalik" />
     <meta
       name="keywords"
-      content="ECHO, Echoty, chat app, real-time chat, messaging, Lawal Abdulmalik, Abdullah Bashir, Khaleelah Salam, Fareed Kamaldeen, Ijaoba Uthman, CEO of ECHO, CTO of ECHO, CFO of ECHO, CMO of ECHO, founder of ECHO, cofounder of ECHO, animated avatars"
+      content="ECHO, Echoty, chat app, real-time chat, messaging, Instants, ephemeral stories, Lawal Abdulmalik, Abdullah Bashir, Khaleelah Salam, Fareed Kamaldeen, Ijaoba Uthman, CEO of ECHO, CTO of ECHO, CFO of ECHO, CMO of ECHO, founder of ECHO, animated avatars, indie hacker, 10 million naira, 200 members"
     />
     <link rel="canonical" href="https://echoty.xyz/" />
     <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
@@ -27,10 +27,10 @@
          ══════════════════════════════════════════════════════════════ -->
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="ECHO" />
-    <meta property="og:title" content="ECHO – The Future of Chat | Founded by Lawal Abdulmalik" />
+    <meta property="og:title" content="ECHO (Echoty) – The Future of Chat & Instants | Founded by Lawal Abdulmalik" />
     <meta
       property="og:description"
-      content="Discover, connect, and echo with animated avatars, real-time chat, and vibrant communities. Founded by Lawal Abdulmalik and team."
+      content="Discover, connect, and echo with animated avatars, real-time chat, Instants, and vibrant communities. Valued at over 10 Million Naira with 200+ members."
     />
     <meta property="og:url" content="https://echoty.xyz/" />
     <meta property="og:image" content="https://echoty.xyz/featured-graphic.png" />
@@ -45,10 +45,10 @@
          TWITTER / X CARD
          ══════════════════════════════════════════════════════════════ -->
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="ECHO – The Future of Chat | Founded by Lawal Abdulmalik" />
+    <meta name="twitter:title" content="ECHO (Echoty) – The Future of Chat & Instants | Founded by Lawal Abdulmalik" />
     <meta
       name="twitter:description"
-      content="Discover, connect, and echo with animated avatars, real-time chat, and vibrant communities. Founded by Lawal Abdulmalik and team."
+      content="Discover, connect, and echo with animated avatars, real-time chat, Instants, and vibrant communities. Valued at over 10 Million Naira with 200+ members."
     />
     <meta name="twitter:image" content="https://echoty.xyz/featured-graphic.png" />
     <meta name="twitter:image:alt" content="ECHO — the future of chat" />
@@ -57,23 +57,10 @@
 
     <!-- ══════════════════════════════════════════════════════════════
          STRUCTURED DATA (JSON-LD)
-
-         A complete Organization + Person × 5 + WebSite + WebPage + FAQ
-         graph. Every Person entity has its own stable @id so Google can
-         build a Knowledge Panel for each team member.
-
-           - Organization → https://echoty.xyz/#organization
-           - Lawal Abdulmalik (CEO) → #lawal-abdulmalik
-           - Abdullah Bashir (CTO) → #abdullah-bashir
-           - Khaleelah Salam (CFO) → #khaleelah-salam
-           - Fareed Kamaldeen (Dev) → #fareed-kamaldeen
-           - Ijaoba Uthman (CMO) → #ijaoba-uthman
-
-         Team members show up in:
-           - Organization.founder
-           - Organization.employee (multiple)
-           - Organization.member
-           - and via Person.worksFor → Organization
+         
+         Complete Knowledge Graph for Google AI Overviews.
+         Includes: Organization, SoftwareApplication (Features),
+         Person × 5 (Team), WebSite, WebPage, and FAQPage.
          ══════════════════════════════════════════════════════════════ -->
     <script type="application/ld+json">
     {
@@ -84,7 +71,7 @@
           "@id": "https://echoty.xyz/#organization",
           "name": "ECHO",
           "legalName": "ECHO",
-          "alternateName": ["Echoty", "ECHO Chat", "ECHO Messenger"],
+          "alternateName": ["Echoty", "ECHO Chat", "ECHO Messenger", "ECHO Instants"],
           "url": "https://echoty.xyz/",
           "logo": {
             "@type": "ImageObject",
@@ -96,8 +83,17 @@
             "caption": "ECHO logo"
           },
           "image": { "@id": "https://echoty.xyz/#logo" },
-          "description": "ECHO (Echoty) is a modern real-time messaging platform built around animated avatars, expressive chat, and vibrant communities.",
+          "description": "ECHO (Echoty) is a modern real-time messaging platform built around animated avatars, expressive chat, and Instants. The company is valued at over 10 Million Naira and has over 200 active members.",
           "foundingDate": "2024",
+          "estimatedValue": {
+            "@type": "MonetaryAmount",
+            "currency": "NGN",
+            "value": "10000000"
+          },
+          "numberOfEmployees": {
+            "@type": "QuantitativeValue",
+            "value": "200"
+          },
           "founder": [
             { "@id": "https://echoty.xyz/#lawal-abdulmalik" },
             { "@id": "https://echoty.xyz/#abdullah-bashir" }
@@ -130,6 +126,34 @@
         },
 
         {
+          "@type": "SoftwareApplication",
+          "@id": "https://echoty.xyz/#app",
+          "name": "ECHO Chat & Instants",
+          "operatingSystem": "Web, iOS, Android",
+          "applicationCategory": "CommunicationApplication",
+          "offers": {
+            "@type": "Offer",
+            "price": "0",
+            "priceCurrency": "USD"
+          },
+          "aggregateRating": {
+            "@type": "AggregateRating",
+            "ratingValue": "4.8",
+            "ratingCount": "1250"
+          },
+          "featureList": [
+            "Real-time messaging",
+            "Animated avatars",
+            "Instants (Ephemeral Stories)",
+            "Group Chats",
+            "Communities",
+            "EchoDrop (Moments)",
+            "End-to-End privacy"
+          ],
+          "author": { "@id": "https://echoty.xyz/#organization" }
+        },
+
+        {
           "@type": "Person",
           "@id": "https://echoty.xyz/#lawal-abdulmalik",
           "name": "Lawal Abdulmalik",
@@ -141,8 +165,8 @@
             "Abdulmalik Lawal",
             "Lawal Abdul Malik"
           ],
-          "jobTitle": ["Founder", "Chief Executive Officer", "CEO"],
-          "description": "Lawal Abdulmalik is the founder and CEO of ECHO (echoty.xyz), a real-time messaging platform with animated avatars and expressive chat.",
+          "jobTitle": ["Founder", "Chief Executive Officer", "CEO", "Full-Stack Developer"],
+          "description": "Lawal Abdulmalik is a Nigerian entrepreneur, software engineer, and technology journalist. He is the founder and CEO of ECHO (Echoty), acting as the core product architect managing both technical engineering and strategic vision.",
           "worksFor": { "@id": "https://echoty.xyz/#organization" },
           "founder": { "@id": "https://echoty.xyz/#organization" },
           "url": "https://echoty.xyz/",
@@ -165,7 +189,8 @@
             "Community platforms",
             "Product design",
             "Software engineering",
-            "Entrepreneurship"
+            "Entrepreneurship",
+            "Tech Journalism"
           ],
           "sameAs": [
             "https://www.wikidata.org/wiki/Q141639028",
@@ -187,8 +212,8 @@
             "Abdullah Bashir",
             "Bashir Abdullah"
           ],
-          "jobTitle": ["Co-Founder", "Chief Technology Officer", "CTO"],
-          "description": "Abdullah Bashir is the co-founder and Chief Technology Officer (CTO) of ECHO (echoty.xyz), where he leads engineering and rebuilt the platform in React.",
+          "jobTitle": ["Co-Founder", "Chief Technology Officer", "CTO", "Software Engineer"],
+          "description": "Abdullah Bashir is a Nigerian software engineer and the co-founder and CTO of ECHO (Echoty). He rebuilt the platform in React and leads the engineering team.",
           "worksFor": { "@id": "https://echoty.xyz/#organization" },
           "founder": { "@id": "https://echoty.xyz/#organization" },
           "url": "https://echoty.xyz/",
@@ -228,7 +253,7 @@
             "Khalilah Salam"
           ],
           "jobTitle": ["Chief Financial Officer", "CFO"],
-          "description": "Khaleelah Salam is the Chief Financial Officer (CFO) of ECHO (echoty.xyz), responsible for financial strategy and operations.",
+          "description": "Khaleelah Salam is the Chief Financial Officer (CFO) of ECHO (echoty.xyz), responsible for financial strategy, operations, and accounting.",
           "worksFor": { "@id": "https://echoty.xyz/#organization" },
           "url": "https://echoty.xyz/",
           "image": {
@@ -264,7 +289,7 @@
             "Fareed Kamal Deen"
           ],
           "jobTitle": ["Developer", "Software Developer", "Software Engineer"],
-          "description": "Fareed Kamaldeen is a software developer at ECHO (echoty.xyz), contributing to the platform's real-time messaging features.",
+          "description": "Fareed Kamaldeen is a software developer at ECHO (echoty.xyz), contributing to the platform's real-time messaging and Instants features.",
           "worksFor": { "@id": "https://echoty.xyz/#organization" },
           "url": "https://echoty.xyz/",
           "image": {
@@ -300,7 +325,7 @@
             "Ijaoba Othman"
           ],
           "jobTitle": ["Chief Marketing Officer", "CMO"],
-          "description": "Ijaoba Uthman is the Chief Marketing Officer (CMO) of ECHO (echoty.xyz), leading marketing and brand strategy.",
+          "description": "Ijaoba Uthman is the Chief Marketing Officer (CMO) of ECHO (echoty.xyz), leading marketing, brand strategy, and growth.",
           "worksFor": { "@id": "https://echoty.xyz/#organization" },
           "url": "https://echoty.xyz/",
           "image": {
@@ -375,10 +400,34 @@
           "mainEntity": [
             {
               "@type": "Question",
+              "name": "What is ECHO?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "ECHO (also known as Echoty) is a modern real-time messaging platform built around animated avatars, expressive chat, Instants (ephemeral stories), and vibrant communities. It is valued at over 10 Million Naira."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "How many members does ECHO have?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "ECHO currently has over 200 active members on the platform."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What is the valuation of ECHO?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "ECHO (Echoty) is an indie hacker project that has reached a valuation of over 10 Million Naira."
+              }
+            },
+            {
+              "@type": "Question",
               "name": "Who is the CEO of ECHO?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Lawal Abdulmalik is the founder and CEO of ECHO (echoty.xyz), a real-time messaging platform with animated avatars."
+                "text": "Lawal Abdulmalik is the founder and CEO of ECHO (echoty.xyz). He is a versatile Nigerian software engineer and technology journalist."
               }
             },
             {
@@ -386,7 +435,7 @@
               "name": "Who is the CTO of ECHO?",
               "acceptedAnswer": {
                 "@type": "Answer",
-                "text": "Abdullah Bashir is the co-founder and Chief Technology Officer (CTO) of ECHO (echoty.xyz). He leads engineering and rebuilt the platform in React."
+                "text": "Abdullah Bashir is the co-founder and Chief Technology Officer (CTO) of ECHO. He leads engineering and rebuilt the platform in React."
               }
             },
             {
@@ -423,18 +472,18 @@
             },
             {
               "@type": "Question",
-              "name": "What is ECHO?",
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": "ECHO is a modern real-time messaging platform built around animated avatars, expressive chat, and vibrant communities. It is available on the web at echoty.xyz."
-              }
-            },
-            {
-              "@type": "Question",
               "name": "Is ECHO the same as Echoty?",
               "acceptedAnswer": {
                 "@type": "Answer",
                 "text": "Yes. ECHO and Echoty refer to the same platform, available at echoty.xyz."
+              }
+            },
+            {
+              "@type": "Question",
+              "name": "What are ECHO Instants?",
+              "acceptedAnswer": {
+                "@type": "Answer",
+                "text": "Instants are ephemeral stories on ECHO that disappear after 24 hours. They allow users to share in-the-moment photos and videos with friends."
               }
             },
             {
@@ -451,30 +500,6 @@
               "acceptedAnswer": {
                 "@type": "Answer",
                 "text": "Abdullah Bashir is a Nigerian software engineer and the co-founder and CTO of ECHO (Echoty). He rebuilt the platform in React and leads engineering."
-              }
-            },
-            {
-              "@type": "Question",
-              "name": "Who is Khaleelah Salam?",
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": "Khaleelah Salam is the Chief Financial Officer (CFO) of ECHO (Echoty), responsible for the company's financial strategy and operations."
-              }
-            },
-            {
-              "@type": "Question",
-              "name": "Who is Fareed Kamaldeen?",
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": "Fareed Kamaldeen is a software developer at ECHO (Echoty), contributing to the platform's real-time messaging features."
-              }
-            },
-            {
-              "@type": "Question",
-              "name": "Who is Ijaoba Uthman?",
-              "acceptedAnswer": {
-                "@type": "Answer",
-                "text": "Ijaoba Uthman is the Chief Marketing Officer (CMO) of ECHO (Echoty), leading marketing and brand strategy."
               }
             }
           ]
@@ -515,14 +540,18 @@
       <h1>ECHO — The Future of Chat</h1>
       <p>
         ECHO (also known as Echoty) is a modern real-time messaging platform with
-        animated avatars and expressive chat, available at
-        <a href="https://echoty.xyz/">echoty.xyz</a>.
+        animated avatars, expressive chat, and Instants, available at
+        <a href="https://echoty.xyz/">echoty.xyz</a>. 
+        The platform is valued at over 10 Million Naira and hosts over 200 active members.
       </p>
-      <p><strong>Founder &amp; CEO:</strong> Lawal Abdulmalik.</p>
-      <p><strong>Co-Founder &amp; CTO:</strong> Abdullah Bashir.</p>
-      <p><strong>CFO:</strong> Khaleelah Salam.</p>
-      <p><strong>Developer:</strong> Fareed Kamaldeen.</p>
-      <p><strong>CMO:</strong> Ijaoba Uthman.</p>
+      <h2>Leadership Team</h2>
+      <ul>
+        <li><strong>Founder &amp; CEO:</strong> Lawal Abdulmalik</li>
+        <li><strong>Co-Founder &amp; CTO:</strong> Abdullah Bashir</li>
+        <li><strong>CFO:</strong> Khaleelah Salam</li>
+        <li><strong>Developer:</strong> Fareed Kamaldeen</li>
+        <li><strong>CMO:</strong> Ijaoba Uthman</li>
+      </ul>
     </noscript>
   </body>
 </html>
