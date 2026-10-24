@@ -12,7 +12,6 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onFin
     setProgress(0);
     if (!currentStory) return;
 
-    // Mark as viewed instantly
     if (currentStory.userId && currentStory.id && viewerId) {
       markStatusViewed(currentStory.userId, currentStory.id, viewerId);
     }
@@ -36,22 +35,23 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onFin
       setCurrentIndex(prev => prev + 1);
       setProgress(0);
     } else {
-      // ALL STORIES VIEWED: Tell parent to remove instantly!
       onFinished();
       onClose();
     }
   };
 
-  const handleClose = () => {
-    // If user taps X early, they haven't finished. Just close.
-    onClose();
-  };
+  const handleClose = () => onClose();
 
   if (!currentStory) return null;
 
   return (
     <div className="viewer-overlay">
-      
+      {/* Tilted Cards Behind the Main Image */}
+      <div className="stacked-cards-bg">
+        <div className="stack-card layer-1" />
+        <div className="stack-card layer-2" />
+      </div>
+
       <div className="progress-bar-container">
         {stories.map((_, idx) => (
           <div key={idx} className={`progress-segment ${idx < currentIndex ? 'full' : idx === currentIndex ? 'active' : ''}`}>
@@ -80,6 +80,13 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onFin
             draggable={false}
           />
         </div>
+      </div>
+
+      {/* Floating Reactions */}
+      <div className="instants-floating-reactions">
+        <button className="reaction-btn small"><i className="fas fa-smile" /></button>
+        <button className="reaction-btn large" onClick={(e) => e.stopPropagation()}><i className="fas fa-heart" /></button>
+        <button className="reaction-btn small"><i className="fas fa-plus" /></button>
       </div>
     </div>
   );
