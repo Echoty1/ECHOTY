@@ -46,12 +46,7 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onFin
 
   return (
     <div className="viewer-overlay">
-      {/* Tilted Cards Behind the Main Image */}
-      <div className="stacked-cards-bg">
-        <div className="stack-card layer-1" />
-        <div className="stack-card layer-2" />
-      </div>
-
+      {/* Progress Bars at the very top */}
       <div className="progress-bar-container">
         {stories.map((_, idx) => (
           <div key={idx} className={`progress-segment ${idx < currentIndex ? 'full' : idx === currentIndex ? 'active' : ''}`}>
@@ -60,6 +55,7 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onFin
         ))}
       </div>
 
+      {/* Top Header */}
       <div className="viewer-header">
         <div className="viewer-header-info">
           <div className="viewer-avatar-ring">
@@ -71,7 +67,20 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onFin
         <button className="close-viewer" onClick={handleClose}>✕</button>
       </div>
 
+      {/* The Main Stage */}
       <div className="viewer-tap-area" onClick={handleNext}>
+        
+        {/* Tilted Background Cards */}
+        <div className="stacked-cards-bg">
+          <div className="stack-card layer-1">
+             <img src={currentStory.imageUrl} alt="" />
+          </div>
+          <div className="stack-card layer-2">
+             <img src={currentStory.imageUrl} alt="" />
+          </div>
+        </div>
+
+        {/* The Active Image */}
         <div className="viewer-image-container">
           <img 
             src={currentStory.imageUrl} 
@@ -80,12 +89,13 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onFin
             draggable={false}
           />
         </div>
+
       </div>
 
-      {/* Floating Reactions */}
-      <div className="instants-floating-reactions">
+      {/* Floating Reactions (Inside the tap area so they don't close the story) */}
+      <div className="instants-floating-reactions" onClick={(e) => e.stopPropagation()}>
         <button className="reaction-btn small"><i className="fas fa-smile" /></button>
-        <button className="reaction-btn large" onClick={(e) => e.stopPropagation()}><i className="fas fa-heart" /></button>
+        <button className="reaction-btn large"><i className="fas fa-heart" /></button>
         <button className="reaction-btn small"><i className="fas fa-plus" /></button>
       </div>
     </div>
