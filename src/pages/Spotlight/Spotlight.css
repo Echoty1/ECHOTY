@@ -915,23 +915,30 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════
-   6. PREMIUM MOBILE BOTTOM SHEETS (SHARE & COMMENTS)
+   6. PREMIUM MOBILE BOTTOM SHEETS (FIXED FOR NAVBAR & KEYBOARD)
    ═══════════════════════════════════════════════════════════════ */
 
+/* Force the backdrop to cover the entire screen, including the BottomNav */
 .spotlight-share-backdrop,
 .spotlight-comments-backdrop,
 .spotlight-options-backdrop {
   position: fixed !important;
-  inset: 0 !important;
-  z-index: 99999 !important;
-  background: rgba(0, 0, 0, 0.7) !important;
+  top: 0 !important;
+  left: 0 !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  z-index: 9999999 !important; /* Stacks above everything */
+  background: rgba(0, 0, 0, 0.75) !important;
   backdrop-filter: blur(8px) !important;
   -webkit-backdrop-filter: blur(8px) !important;
   display: flex !important;
-  align-items: flex-end !important;
+  align-items: flex-end !important; /* Anchors sheet to bottom */
   justify-content: center !important;
+  height: 100dvh !important; /* Dynamic viewport height for mobile */
+  width: 100vw !important;
 }
 
+/* The Sheet Container */
 .spotlight-share-sheet,
 .spotlight-comments-sheet {
   width: 100% !important;
@@ -943,7 +950,16 @@
   box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6) !important;
   animation: sheetSlideUp 0.3s cubic-bezier(0.2, 1, 0.4, 1) forwards;
   position: relative !important;
-  padding-bottom: env(safe-area-inset-bottom, 16px) !important;
+  
+  /* Fixes the keyboard pushing content off screen */
+  max-height: 90dvh !important;
+  height: auto !important;
+  padding-bottom: max(16px, env(safe-area-inset-bottom)) !important; 
+}
+
+/* Comments get a defined height to allow scrolling */
+.spotlight-comments-sheet {
+  height: 85dvh !important;
 }
 
 @keyframes sheetSlideUp {
@@ -1058,8 +1074,8 @@
 
 .spotlight-share-chat-list {
   padding: 0 16px 16px !important;
-  max-height: 40vh !important;
   overflow-y: auto !important;
+  flex: 1 !important;
 }
 .spotlight-share-chat-list::-webkit-scrollbar { width: 4px; }
 .spotlight-share-chat-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
@@ -1119,11 +1135,6 @@
 }
 
 /* ── COMMENTS SPECIFIC STYLES ── */
-.spotlight-comments-sheet {
-  height: 80vh !important;
-  max-height: 80vh !important;
-}
-
 .spotlight-comments-list {
   flex: 1 !important;
   overflow-y: auto !important;
@@ -1131,6 +1142,7 @@
   display: flex !important;
   flex-direction: column !important;
   gap: 20px !important;
+  -webkit-overflow-scrolling: touch;
 }
 .spotlight-comments-list::-webkit-scrollbar { width: 4px; }
 .spotlight-comments-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
@@ -1334,14 +1346,17 @@
 }
 .spotlight-comment-reply-send:disabled { opacity: 0.4 !important; cursor: not-allowed !important; }
 
+/* ── Bottom Input Bar (Pinned above keyboard) ── */
 .spotlight-comments-input-row {
   display: flex !important;
   align-items: center !important;
   gap: 10px !important;
-  padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+  padding: 12px 16px !important; 
   background: #14101e !important;
   border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
   flex-shrink: 0 !important;
+  /* This ensures the input is never hidden behind the iOS home bar/keyboard */
+  padding-bottom: max(16px, env(safe-area-inset-bottom)) !important; 
 }
 
 .spotlight-comments-emoji-btn {
@@ -1360,10 +1375,11 @@
   border-radius: 999px !important;
   padding: 12px 18px !important;
   color: #fff !important;
-  font-size: 14px !important;
   outline: none !important;
+  /* 16px prevents mobile browsers from auto-zooming on tap */
+  font-size: 16px !important; 
 }
-.spotlight-comments-input::placeholder { color: rgba(255, 255, 255, 0.3) !important; }
+.spotlight-comments-input::placeholder { color: rgba(255, 255, 255, 0.3) !important; font-size: 14px !important; }
 .spotlight-comments-input:focus { border-color: rgba(108, 60, 225, 0.5) !important; }
 
 .spotlight-comments-send {
@@ -1394,6 +1410,7 @@
   overflow-x: auto !important;
   scrollbar-width: none !important;
   animation: spSlideUp 0.2s ease-out !important;
+  flex-shrink: 0 !important;
 }
 .spotlight-comments-emoji-bar::-webkit-scrollbar { display: none !important; }
 
