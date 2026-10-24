@@ -5,11 +5,13 @@ import './StoriesBar.css';
 const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onFinished }) => {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [progress, setProgress] = useState(0);
+  const [isFading, setIsFading] = useState(false);
 
   const currentStory = stories[currentIndex];
 
   useEffect(() => {
     setProgress(0);
+    setIsFading(false);
     if (!currentStory) return;
 
     if (currentStory.userId && currentStory.id && viewerId) {
@@ -20,33 +22,35 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onFin
       setProgress((prev) => {
         if (prev >= 100) {
           clearInterval(interval);
-          handleNext();
+          triggerNext();
           return 100;
         }
-        return prev + 2;
+        return prev + 2; // Adjust speed here (2 = 5 seconds approx)
       });
     }, 100);
 
     return () => clearInterval(interval);
   }, [currentStory, currentIndex, viewerId]);
 
-  const handleNext = () => {
-    if (currentIndex < stories.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-      setProgress(0);
-    } else {
-      onFinished();
-      onClose();
-    }
-  };
+  const triggerNext = () => {
+    if (isFading) return; // Prevent double taps
+    setIsFading(true); // Start the fade out animation
 
-  const handleClose = () => onClose();
+    setTimeout(() => {
+      if (currentIndex < stories.length - 1) {
+        setCurrentIndex(prev => prev + 1);
+      } else {
+        onFinished();
+        onClose();
+      }
+    }, 250); // Wait 250ms for the CSS fade to finish before switching
+  };
 
   if (!currentStory) return null;
 
   return (
     <div className="viewer-overlay">
-      {/* Progress Bars at the very top */}
+      {/* Progress Bars */}
       <div className="progress-bar-container">
         {stories.map((_, idx) => (
           <div key={idx} className={`progress-segment ${idx < currentIndex ? 'full' : idx === currentIndex ? 'active' : ''}`}>
@@ -55,7 +59,7 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onFin
         ))}
       </div>
 
-      {/* Top Header */}
+      {/* Header */}
       <div className="viewer-header">
         <div className="viewer-header-info">
           <div className="viewer-avatar-ring">
@@ -64,24 +68,24 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onFin
           <span className="owner-name">{ownerName || 'User'}</span>
           <span className="viewer-time">Now</span>
         </div>
-        <button className="close-viewer" onClick={handleClose}>✕</button>
+        <button className="close-viewer" onClick={onClose}>✕</button>
       </div>
 
-      {/* The Main Stage */}
-      <div className="viewer-tap-area" onClick={handleNext}>
+      {/* Main Stage */}
+      <div className="viewer-tap-area" onClick={triggerNext}>
         
         {/* Tilted Background Cards */}
         <div className="stacked-cards-bg">
-          <div className="stack-card layer-1">
+          <div className={`stack-card layer-1 ${isFading ? 'fade-out' : ''}`}>
              <img src={currentStory.imageUrl} alt="" />
           </div>
-          <div className="stack-card layer-2">
+          <div className={`stack-card layer-2 ${isFading ? 'fade-out' : ''}`}>
              <img src={currentStory.imageUrl} alt="" />
           </div>
         </div>
 
         {/* The Active Image */}
-        <div className="viewer-image-container">
+        <div className={`viewer-image-container ${isFading ? 'fade-out' : 'fade-in'}`}>
           <img 
             src={currentStory.imageUrl} 
             alt="Story" 
@@ -92,7 +96,7 @@ const StoryViewer = ({ stories, ownerName, ownerAvatar, viewerId, onClose, onFin
 
       </div>
 
-      {/* Floating Reactions (Inside the tap area so they don't close the story) */}
+      {/* Floating Reactions */}
       <div className="instants-floating-reactions" onClick={(e) => e.stopPropagation()}>
         <button className="reaction-btn small"><i className="fas fa-smile" /></button>
         <button className="reaction-btn large"><i className="fas fa-heart" /></button>
