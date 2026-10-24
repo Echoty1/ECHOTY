@@ -52,11 +52,15 @@ import { useOnboarding } from './hooks/useOnboarding';
 import { useAppBadge } from './hooks/useAppBadge';
 // ────────────────────────────────────────────────────────────
 
-// ─── Spotlight ─────────────────────────────────────────────
+// ─── Spotlight & Instants ──────────────────────────────────
 import SpotlightFeed from './pages/Spotlight/SpotlightFeed';
 import SpotlightUpload from './pages/Spotlight/SpotlightUpload';
 import SpotlightHistory from './pages/Spotlight/SpotlightHistory';
 import './pages/Spotlight/Spotlight.css';
+
+// Make sure this path matches where you saved the Intro component
+import InstantsIntro from './components/Stories/InstantsIntro'; 
+import StoryViewer from './components/Stories/StoryViewer';
 // ────────────────────────────────────────────────────────────
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
@@ -145,6 +149,28 @@ function AppContent() {
     Boolean(user) && !showLoading && !banInfo?.isBanned &&
     (pathname === '/' || pathname === '/chats' || pathname === '/communities' || pathname === '/shop' || pathname === '/other' || pathname === '/echodrop');
 
+  // ─── INSTANTS INTRO STATE ───
+  const [showInstantsIntro, setShowInstantsIntro] = useState(false);
+  const [hasSeenInstantsIntro, setHasSeenInstantsIntro] = useState(
+    localStorage.getItem('seen_instants_intro') === 'true'
+  );
+  const [pendingStoryViewer, setPendingStoryViewer] = useState(null);
+
+  const handleOpenStory = (stories, userObj) => {
+    if (!hasSeenInstantsIntro) {
+      setShowInstantsIntro(true);
+      setPendingStoryViewer({ stories, userObj });
+    } else {
+      setPendingStoryViewer({ stories, userObj }); // Open directly
+    }
+  };
+
+  const handleIntroStart = () => {
+    setShowInstantsIntro(false);
+    setHasSeenInstantsIntro(true);
+    localStorage.setItem('seen_instants_intro', 'true');
+  };
+
   useEffect(() => {
     const prime = () => unlockAudio();
     window.addEventListener('touchstart', prime, { once: true, passive: true });
@@ -223,6 +249,7 @@ function AppContent() {
         const essential = [
           'echo_has_recovered_', 'echo_app_version', 'echo_changelog_version',
           'echo_install_popup_dismissed_until', 'echo_update_shown', 'firebase:host',
+          'seen_instants_intro'
         ];
         return !essential.some((e) => key.startsWith(e));
       });
@@ -387,6 +414,24 @@ function AppContent() {
         </Routes>
       </div>
       <BottomNav />
+      
+      {/* ─── INSTANTS OVERLAYS ─── */}
+      {showInstantsIntro && (
+        <InstantsIntro onStart={handleIntroStart} />
+      )}
+
+      {pendingStoryViewer && !showInstantsIntro && (
+        <StoryViewer 
+          stories={pendingStoryViewer.stories} 
+          ownerName={pendingStoryViewer.userObj?.name}
+          ownerAvatar={pendingStoryViewer.userObj?.avatar}
+          viewerId={user?.uid}
+          onClose={() => setPendingStoryViewer(null)}
+          onFinished={() => { /* handle removal of unseen dot */ }}
+        />
+      )}
+      {/* ────────────────────────── */}
+
       {showUpdatePopup && (
         <UpdatePopup currentVersion={appVersion} onClose={() => setShowUpdatePopup(false)} />
       )}
