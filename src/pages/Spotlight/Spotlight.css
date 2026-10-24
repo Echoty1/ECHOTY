@@ -1599,3 +1599,224 @@
   background: #000 !important;
   flex-shrink: 0 !important;
 }
+/* ═══════════════════════════════════════════════════════════════
+   8. WATCH HISTORY PAGE (SpotlightHistory.jsx)
+   ═══════════════════════════════════════════════════════════════ */
+
+.spotlight-history-page {
+  min-height: 100vh;
+  background: #0d0a15 !important; /* Force dark background */
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  /* Add padding at the bottom so the BottomNav doesn't cover the grid */
+  padding-bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+}
+
+/* ── Top Bar ── */
+.spotlight-history-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  padding-top: calc(16px + env(safe-area-inset-top, 0px));
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: rgba(13, 10, 21, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.spotlight-profile-back {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: none;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.spotlight-history-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.spotlight-history-clear {
+  background: none;
+  border: none;
+  color: #ec4899; /* Pink clear button */
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 8px;
+}
+
+/* ── Loading & Empty States ── */
+.spotlight-history-loading,
+.spotlight-history-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.spotlight-history-empty i {
+  font-size: 56px;
+  color: #a78bfa;
+  margin-bottom: 16px;
+}
+
+.spotlight-history-empty h2 {
+  color: #fff;
+  font-size: 20px;
+  margin: 0 0 8px;
+}
+
+.spotlight-history-empty p {
+  margin: 0 0 24px;
+  font-size: 14px;
+}
+
+/* ── Grid Layout ── */
+.spotlight-history-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr); /* 3 columns on phones */
+  gap: 2px; /* Very tight gap like Instagram/TikTok */
+  padding: 2px;
+}
+
+@media (min-width: 600px) {
+  .spotlight-history-grid {
+    grid-template-columns: repeat(4, 1fr); /* 4 columns on tablets/desktop */
+  }
+}
+
+/* ── Individual Grid Tiles ── */
+.spotlight-history-tile {
+  position: relative;
+  aspect-ratio: 9 / 16; /* Vertical video shape */
+  background: #1a1526;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.spotlight-history-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Crops image nicely instead of stretching */
+  transition: transform 0.2s;
+}
+
+.spotlight-history-tile:active img {
+  transform: scale(1.05);
+}
+
+.spotlight-history-tile-fallback {
+  color: rgba(255, 255, 255, 0.2);
+  font-size: 24px;
+}
+
+/* The little play icon for videos */
+.spotlight-history-tile-play {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: #fff;
+  font-size: 12px;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.8));
+}
+
+/* The time ago text at the bottom */
+.spotlight-history-tile-meta {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: 24px 8px 8px;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, transparent 100%);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+}
+
+/* ── Confirmation Modal (Clear History) ── */
+.spotlight-confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 9999999;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.spotlight-confirm {
+  background: #14101e;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+  padding: 24px;
+  width: 100%;
+  max-width: 400px;
+  text-align: center;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+  animation: spPop 0.2s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+
+.spotlight-confirm h3 {
+  margin: 0 0 12px;
+  font-size: 18px;
+  color: #fff;
+}
+
+.spotlight-confirm p {
+  margin: 0 0 24px;
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.6);
+  line-height: 1.5;
+}
+
+.spotlight-confirm-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.spotlight-confirm-actions button {
+  flex: 1;
+  padding: 12px;
+  border-radius: 12px;
+  border: none;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  transition: background 0.2s;
+}
+
+.spotlight-confirm-actions button.danger {
+  background: #ef4444;
+  color: #fff;
+}
+.spotlight-confirm-actions button.danger:hover {
+  background: #dc2626;
+}
