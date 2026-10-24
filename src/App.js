@@ -58,9 +58,9 @@ import SpotlightUpload from './pages/Spotlight/SpotlightUpload';
 import SpotlightHistory from './pages/Spotlight/SpotlightHistory';
 import './pages/Spotlight/Spotlight.css';
 
-// Make sure this path matches where you saved the Intro component
 import InstantsIntro from './components/Stories/InstantsIntro'; 
 import StoryViewer from './components/Stories/StoryViewer';
+import StoryRecorder from './components/Stories/StoryRecorder'; // Added Recorder!
 // ────────────────────────────────────────────────────────────
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
@@ -155,6 +155,10 @@ function AppContent() {
     localStorage.getItem('seen_instants_intro') === 'true'
   );
   const [pendingStoryViewer, setPendingStoryViewer] = useState(null);
+  
+  // ─── RECORDER STATE ───
+  const [showRecorder, setShowRecorder] = useState(false);
+  const [showMemories, setShowMemories] = useState(false);
 
   const handleOpenStory = (stories, userObj) => {
     if (!hasSeenInstantsIntro) {
@@ -428,6 +432,14 @@ function AppContent() {
           viewerId={user?.uid}
           onClose={() => setPendingStoryViewer(null)}
           onFinished={() => { /* handle removal of unseen dot */ }}
+        />
+      )}
+
+      {showRecorder && (
+        <StoryRecorder 
+          userId={user?.uid} 
+          onClose={() => setShowRecorder(false)} 
+          onOpenMemories={() => setShowMemories(true)}
         />
       )}
       {/* ────────────────────────── */}
