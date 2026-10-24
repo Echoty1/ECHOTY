@@ -14,7 +14,6 @@
   overflow: hidden;
 }
 
-/* Feed container */
 .spotlight-feed-container {
   flex: 1;
   height: 100vh;
@@ -38,7 +37,6 @@
   flex-shrink: 0;
 }
 
-/* Force inner post to fill the slide */
 .spotlight-slide > .spotlight-post {
   width: 100%;
   height: 100%;
@@ -382,36 +380,6 @@
   pointer-events: none;
 }
 
-/* ─── WATERMARK ─── */
-.spotlight-watermark {
-  position: absolute;
-  left: 20px;
-  bottom: 22px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  pointer-events: none;
-  z-index: 8;
-  mix-blend-mode: screen;
-  opacity: 0.9;
-  display: none; /* Hide watermark if not needed, otherwise remove this line */
-}
-.spotlight-watermark-tick {
-  display: inline-block;
-  width: 5px;
-  height: 20px;
-  border-radius: 3px;
-  background: linear-gradient(180deg, #a78bfa, #ec4899);
-  box-shadow: 0 0 10px rgba(167, 139, 250, 0.7);
-}
-.spotlight-watermark-text {
-  color: #fff;
-  font-size: 18px;
-  font-weight: 900;
-  letter-spacing: 0.18em;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.6);
-}
-
 /* ─── LOADING/EMPTY ─── */
 .spotlight-feed-loading,
 .spotlight-feed-empty {
@@ -630,43 +598,7 @@
 .spotlight-search-suggest-arrow { color: rgba(255, 255, 255, 0.35); font-size: 12px; }
 
 /* ═══════════════════════════════════════════════════════════════
-   4. OTHER MODALS (Comments, Share, etc)
-   ═══════════════════════════════════════════════════════════════ */
-.spotlight-comments-backdrop, 
-.spotlight-share-backdrop, 
-.spotlight-options-backdrop,
-.spotlight-notifs-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 300;
-  background: rgba(0, 0, 0, 0.6);
-  backdrop-filter: blur(6px);
-  display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  padding-bottom: 20px;
-}
-.spotlight-comments-sheet, 
-.spotlight-share-sheet, 
-.spotlight-options-sheet,
-.spotlight-notifs-sheet {
-  width: 100%;
-  max-width: 560px;
-  max-height: 80vh;
-  background: #14101e;
-  border-radius: 24px 24px 0 0;
-  animation: spSheetUp 0.28s cubic-bezier(0.2, 1.2, 0.4, 1);
-  padding: 12px 16px 24px;
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.5);
-  margin: 0 8px;
-}
-@keyframes spSheetUp {
-  from { transform: translateY(100%); }
-  to { transform: translateY(0); }
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   5. UPLOAD PAGE — full (pick + review stages)
+   4. UPLOAD PAGE
    ═══════════════════════════════════════════════════════════════ */
 
 .spotlight-upload-page {
@@ -678,7 +610,6 @@
   font-family: inherit;
 }
 
-/* ── Top bar ── */
 .spotlight-upload-top {
   display: flex;
   align-items: center;
@@ -732,7 +663,6 @@
 }
 .spotlight-upload-publish-top:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* ── Body ── */
 .spotlight-upload-body {
   flex: 1;
   padding: 22px 20px 32px;
@@ -744,7 +674,6 @@
   width: 100%;
 }
 
-/* ── Draft banner ── */
 .spotlight-upload-draft {
   display: flex;
   align-items: center;
@@ -784,7 +713,6 @@
 }
 .spotlight-upload-draft-resume:disabled { opacity: 0.6; cursor: not-allowed; }
 
-/* ── Pick stage: method cards ── */
 .spotlight-upload-methods {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
@@ -843,7 +771,6 @@
   margin-top: 10px;
 }
 
-/* ── Review stage: preview ── */
 .spotlight-upload-preview {
   position: relative;
   border-radius: 18px;
@@ -906,7 +833,6 @@
 .spotlight-upload-replace:hover { background: rgba(0, 0, 0, 0.75); }
 .spotlight-upload-replace:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ── Review stage: caption ── */
 .spotlight-upload-caption {
   width: 100%;
   resize: none;
@@ -931,7 +857,6 @@
   margin-top: -8px;
 }
 
-/* ── Review stage: publish button ── */
 .spotlight-upload-actions {
   padding: 12px 20px calc(20px + env(safe-area-inset-bottom, 0px));
   border-top: 1px solid rgba(255, 255, 255, 0.06);
@@ -963,180 +888,10 @@
 
 /* ── Kill the old duplicate FAB (feed page) ── */
 .spotlight-fab-create { display: none !important; }
+
 /* ═══════════════════════════════════════════════════════════════
-   FIX: COMMENTS & SHARE SHEETS (White box fix)
+   5. HEART POP ANIMATION
    ═══════════════════════════════════════════════════════════════ */
-
-/* Force the sheets themselves to be dark and structured */
-.spotlight-comments-sheet,
-.spotlight-share-sheet,
-.spotlight-options-sheet,
-.spotlight-notifs-sheet {
-  background: #14101e !important; /* Force dark background */
-  color: #fff !important;
-  display: flex;
-  flex-direction: column;
-}
-
-/* Fix the top header row (where the "X" and title are) */
-.spotlight-comments-sheet > div:first-child,
-.spotlight-share-sheet > div:first-child {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  margin-bottom: 12px;
-}
-
-/* Fix the title text */
-.spotlight-comments-sheet h3,
-.spotlight-share-sheet h3,
-.spotlight-comments-sheet h2,
-.spotlight-share-sheet h2 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff !important;
-}
-
-/* Fix the close button (the white square X) */
-.spotlight-comments-sheet > div:first-child button,
-.spotlight-share-sheet > div:first-child button {
-  background: rgba(255, 255, 255, 0.08) !important;
-  border: none;
-  color: #fff !important;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-/* Fix the Share buttons (WhatsApp, X, Telegram, etc.) */
-.spotlight-share-sheet button {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  color: #fff !important;
-  border-radius: 12px;
-  padding: 10px 14px;
-  font-size: 13px;
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  transition: background 0.2s;
-}
-.spotlight-share-sheet button:hover {
-  background: rgba(255, 255, 255, 0.1) !important;
-}
-
-/* Fix the Share sheet wrapper layout */
-.spotlight-share-sheet > div {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-
-/* Fix the Comment section scrolling area */
-.spotlight-comments-sheet > div:last-child,
-.spotlight-comments-sheet > div:nth-child(2) {
-  flex: 1;
-  overflow-y: auto;
-  background: #14101e !important;
-}
-
-/* Make sure the Comment input bar at the bottom looks good */
-.spotlight-comments-sheet input {
-  background: rgba(255, 255, 255, 0.05) !important;
-  border: 1px solid rgba(255, 255, 255, 0.1) !important;
-  color: #fff !important;
-  border-radius: 999px;
-  padding: 12px 16px;
-}
-/* ═══════════════════════════════════════════════════════════════
-   DEFINITIVE FIX: POPUP SHEETS (Share & Comments)
-   ═══════════════════════════════════════════════════════════════ */
-
-/* The dark backdrop behind the popup */
-.spotlight-comments-backdrop,
-.spotlight-share-backdrop,
-.spotlight-options-backdrop,
-.spotlight-notifs-backdrop {
-  position: fixed !important;
-  inset: 0 !important;
-  z-index: 9999 !important; /* Force it above everything */
-  background: rgba(0, 0, 0, 0.75) !important;
-  backdrop-filter: blur(8px) !important;
-  -webkit-backdrop-filter: blur(8px) !important;
-  display: flex !important;
-  align-items: flex-end !important; /* Stick to bottom */
-  justify-content: center !important;
-}
-
-/* The actual popup box */
-.spotlight-comments-sheet,
-.spotlight-share-sheet,
-.spotlight-options-sheet,
-.spotlight-notifs-sheet {
-  width: 100% !important;
-  max-width: 560px !important;
-  background: #14101e !important;
-  border-radius: 24px 24px 0 0 !important;
-  display: flex !important;
-  flex-direction: column !important;
-  max-height: 85vh !important; /* NEVER go higher than 85% of screen */
-  overflow: hidden !important; /* Cut off anything that tries to spill out */
-  margin: 0 !important;
-  padding: 0 !important; /* Reset padding so inner components control it */
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6) !important;
-}
-
-/* Ensure the content inside the sheet can scroll if it's too long */
-.spotlight-comments-sheet > div:last-child,
-.spotlight-share-sheet > div:last-child {
-  overflow-y: auto !important;
-  padding: 16px 20px calc(24px + env(safe-area-inset-bottom, 0px)) !important;
-}
-
-/* The Top Header of the popup */
-.sheet-header,
-.spotlight-comments-sheet > div:first-child,
-.spotlight-share-sheet > div:first-child {
-  display: flex !important;
-  align-items: center !important;
-  justify-content: space-between !important;
-  padding: 16px 20px !important;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
-  background: #14101e !important;
-}
-
-/* Force any image that pops up in the share sheet to be contained */
-.spotlight-share-sheet img {
-  max-width: 100% !important;
-  max-height: 200px !important;
-  object-fit: cover !important;
-  border-radius: 12px !important;
-  margin-bottom: 16px !important;
-}
-
-/* Share Button Grid */
-.spotlight-share-sheet .share-grid,
-.spotlight-share-sheet > div:first-child + div {
-  display: flex !important;
-  flex-wrap: wrap !important;
-  gap: 10px !important;
-  padding: 0 20px 16px !important;
-}
-/* ═══════════════════════════════════════════════════════════════
-   HEART DOUBLE-TAP ANIMATION
-   ═══════════════════════════════════════════════════════════════ */
-
 .spotlight-heart-pop {
   position: absolute;
   top: 50%;
@@ -1158,561 +913,499 @@
   80% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
   100% { transform: translate(-50%, -50%) scale(1.4); opacity: 0; }
 }
+
 /* ═══════════════════════════════════════════════════════════════
-   SHARE SHEET (SpotlightShare.jsx)
+   6. PREMIUM MOBILE BOTTOM SHEETS (SHARE & COMMENTS)
    ═══════════════════════════════════════════════════════════════ */
 
-.spotlight-share-sheet {
+.spotlight-share-backdrop,
+.spotlight-comments-backdrop,
+.spotlight-options-backdrop {
+  position: fixed !important;
+  inset: 0 !important;
+  z-index: 99999 !important;
+  background: rgba(0, 0, 0, 0.7) !important;
+  backdrop-filter: blur(8px) !important;
+  -webkit-backdrop-filter: blur(8px) !important;
+  display: flex !important;
+  align-items: flex-end !important;
+  justify-content: center !important;
+}
+
+.spotlight-share-sheet,
+.spotlight-comments-sheet {
   width: 100% !important;
-  max-width: 560px !important;
+  max-width: 600px !important;
   background: #14101e !important;
   border-radius: 24px 24px 0 0 !important;
   display: flex !important;
   flex-direction: column !important;
-  max-height: 85vh !important;
-  overflow: hidden !important;
   box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6) !important;
-  animation: spSheetUp 0.28s cubic-bezier(0.2, 1.2, 0.4, 1);
+  animation: sheetSlideUp 0.3s cubic-bezier(0.2, 1, 0.4, 1) forwards;
+  position: relative !important;
+  padding-bottom: env(safe-area-inset-bottom, 16px) !important;
 }
 
-.spotlight-share-handle {
-  width: 40px;
-  height: 4px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.2);
-  margin: 12px auto 8px;
+@keyframes sheetSlideUp {
+  from { transform: translateY(100%); }
+  to { transform: translateY(0); }
 }
 
-.spotlight-share-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 20px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+.spotlight-share-handle,
+.spotlight-comments-handle {
+  width: 44px;
+  height: 5px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.15);
+  margin: 10px auto 0;
+  flex-shrink: 0;
 }
 
-.spotlight-share-title {
-  font-size: 16px;
-  font-weight: 800;
-  color: #fff;
+.spotlight-share-header,
+.spotlight-comments-header {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: 16px 20px !important;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06) !important;
+  flex-shrink: 0;
 }
 
-.spotlight-share-close {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
+.spotlight-share-title,
+.spotlight-comments-title {
+  font-size: 16px !important;
+  font-weight: 800 !important;
+  color: #fff !important;
+}
+
+.spotlight-share-close,
+.spotlight-comments-close {
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: none !important;
+  color: #fff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
   transition: background 0.2s;
 }
-.spotlight-share-close:hover { background: rgba(255, 255, 255, 0.15); }
+.spotlight-share-close:hover,
+.spotlight-comments-close:hover {
+  background: rgba(255, 255, 255, 0.15) !important;
+}
 
-/* Horizontal Quick Share Buttons */
+/* ── SHARE SPECIFIC STYLES ── */
 .spotlight-share-quickrow {
-  display: flex;
-  gap: 12px;
-  padding: 20px;
-  overflow-x: auto;
-  scrollbar-width: none;
+  display: flex !important;
+  gap: 12px !important;
+  padding: 20px !important;
+  overflow-x: auto !important;
+  scrollbar-width: none !important;
+  flex-shrink: 0;
 }
 .spotlight-share-quickrow::-webkit-scrollbar { display: none; }
 
 .spotlight-share-quick {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  min-width: 64px;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 8px !important;
+  background: none !important;
+  border: none !important;
+  cursor: pointer !important;
+  min-width: 68px !important;
   transition: transform 0.15s;
 }
-.spotlight-share-quick:hover { transform: scale(1.05); }
-.spotlight-share-quick:disabled { opacity: 0.6; cursor: not-allowed; }
+.spotlight-share-quick:active { transform: scale(0.95); }
 
 .spotlight-share-quick-icon {
-  width: 54px;
-  height: 54px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  background: rgba(255, 255, 255, 0.08);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  width: 56px !important;
+  height: 56px !important;
+  border-radius: 50% !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  font-size: 24px !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  color: #fff !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
 }
 
-.spotlight-share-quick-icon.whatsapp { background: rgba(37, 211, 102, 0.15); color: #25D366; border-color: rgba(37, 211, 102, 0.3); }
-.spotlight-share-quick-icon.twitter  { background: rgba(255, 255, 255, 0.1); color: #fff; }
-.spotlight-share-quick-icon.telegram { background: rgba(0, 136, 204, 0.15); color: #0088cc; border-color: rgba(0, 136, 204, 0.3); }
-.spotlight-share-quick-icon.copy     { background: rgba(108, 60, 225, 0.15); color: #a78bfa; border-color: rgba(108, 60, 225, 0.3); }
-.spotlight-share-quick-icon.native   { background: rgba(236, 72, 153, 0.15); color: #ec4899; border-color: rgba(236, 72, 153, 0.3); }
+.spotlight-share-quick-icon.whatsapp { background: rgba(37, 211, 102, 0.15) !important; color: #25D366 !important; border-color: rgba(37, 211, 102, 0.3) !important; }
+.spotlight-share-quick-icon.twitter  { background: rgba(255, 255, 255, 0.1) !important; color: #fff !important; }
+.spotlight-share-quick-icon.telegram { background: rgba(0, 136, 204, 0.15) !important; color: #0088cc !important; border-color: rgba(0, 136, 204, 0.3) !important; }
+.spotlight-share-quick-icon.copy     { background: rgba(108, 60, 225, 0.15) !important; color: #a78bfa !important; border-color: rgba(108, 60, 225, 0.3) !important; }
+.spotlight-share-quick-icon.native   { background: rgba(236, 72, 153, 0.15) !important; color: #ec4899 !important; border-color: rgba(236, 72, 153, 0.3) !important; }
 
 .spotlight-share-quick-label {
-  font-size: 11px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.7);
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: rgba(255, 255, 255, 0.7) !important;
+  white-space: nowrap !important;
 }
 
-/* Send to Chat Section */
 .spotlight-share-section-title {
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: rgba(255, 255, 255, 0.4);
-  padding: 0 20px 12px;
+  font-size: 11px !important;
+  font-weight: 800 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.05em !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+  padding: 0 20px 10px !important;
 }
 
 .spotlight-share-chat-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0 20px 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+  padding: 0 16px 16px !important;
+  max-height: 40vh !important;
+  overflow-y: auto !important;
 }
-.spotlight-share-chat-list::-webkit-scrollbar { width: 6px; }
-.spotlight-share-chat-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
+.spotlight-share-chat-list::-webkit-scrollbar { width: 4px; }
+.spotlight-share-chat-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
 
 .spotlight-share-chat-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  width: 100%;
-  text-align: left;
-  transition: background 0.15s;
+  display: flex !important;
+  align-items: center !important;
+  gap: 12px !important;
+  padding: 12px !important;
+  border-radius: 16px !important;
+  background: transparent !important;
+  border: none !important;
+  cursor: pointer !important;
+  width: 100% !important;
+  text-align: left !important;
+  transition: background 0.15s !important;
 }
-.spotlight-share-chat-row:hover { background: rgba(255, 255, 255, 0.05); }
-.spotlight-share-chat-row:disabled { opacity: 0.6; cursor: not-allowed; }
+.spotlight-share-chat-row:active { background: rgba(255, 255, 255, 0.08) !important; }
 
 .spotlight-share-chat-avatar {
-  width: 44px;
-  height: 44px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #6C3CE1, #EC4899);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: 16px;
-  flex-shrink: 0;
+  width: 46px !important;
+  height: 46px !important;
+  border-radius: 50% !important;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #fff !important;
+  font-weight: 800 !important;
+  font-size: 18px !important;
+  flex-shrink: 0 !important;
+  overflow: hidden !important;
 }
-.spotlight-share-chat-avatar img {
-  width: 100%;
-  height: 100%;
-  border-radius: 50%;
-  object-fit: cover;
-}
+.spotlight-share-chat-avatar img { width: 100% !important; height: 100% !important; object-fit: cover !important; }
 
 .spotlight-share-chat-name {
-  flex: 1;
-  font-size: 15px;
-  font-weight: 700;
-  color: #fff;
+  flex: 1 !important;
+  font-size: 15px !important;
+  font-weight: 700 !important;
+  color: #fff !important;
+  white-space: nowrap !important;
+  overflow: hidden !important;
+  text-overflow: ellipsis !important;
 }
 
 .spotlight-share-chat-send {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.05);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 14px;
+  width: 36px !important;
+  height: 36px !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: rgba(255, 255, 255, 0.6) !important;
+  font-size: 14px !important;
+  flex-shrink: 0 !important;
 }
 
-.spotlight-share-empty {
-  text-align: center;
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 13px;
-  padding: 24px 0;
-}
-/* ═══════════════════════════════════════════════════════════════
-   COMMENTS SHEET (SpotlightComments.jsx) - PREMIUM UI
-   ═══════════════════════════════════════════════════════════════ */
-
+/* ── COMMENTS SPECIFIC STYLES ── */
 .spotlight-comments-sheet {
-  width: 100% !important;
-  max-width: 560px !important;
-  height: 80vh !important; /* Fixed height so it doesn't jump around */
+  height: 80vh !important;
   max-height: 80vh !important;
-  background: #14101e !important;
-  border-radius: 24px 24px 0 0 !important;
+}
+
+.spotlight-comments-list {
+  flex: 1 !important;
+  overflow-y: auto !important;
+  padding: 16px !important;
   display: flex !important;
   flex-direction: column !important;
-  overflow: hidden !important;
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.6) !important;
-  animation: spSheetUp 0.28s cubic-bezier(0.2, 1.2, 0.4, 1);
+  gap: 20px !important;
 }
+.spotlight-comments-list::-webkit-scrollbar { width: 4px; }
+.spotlight-comments-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 4px; }
 
-.spotlight-comments-handle {
-  width: 40px;
-  height: 4px;
-  border-radius: 4px;
-  background: rgba(255, 255, 255, 0.2);
-  margin: 12px auto 8px;
-  flex-shrink: 0;
-}
-
-.spotlight-comments-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 20px 16px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  flex-shrink: 0;
-}
-
-.spotlight-comments-title {
-  font-size: 16px;
-  font-weight: 800;
-  color: #fff;
-}
-
-.spotlight-comments-close {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-.spotlight-comments-close:hover { background: rgba(255, 255, 255, 0.15); }
-
-/* ── Scrollable List ── */
-.spotlight-comments-list {
-  flex: 1;
-  overflow-y: auto;
-  padding: 12px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-.spotlight-comments-list::-webkit-scrollbar { width: 6px; }
-.spotlight-comments-list::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.1); border-radius: 3px; }
-
-.spotlight-comments-empty {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-  color: rgba(255, 255, 255, 0.4);
-  gap: 12px;
-}
-.spotlight-comments-empty i { font-size: 48px; opacity: 0.5; }
-.spotlight-comments-empty p { font-size: 14px; margin: 0; }
-
-/* ── Comment Row ── */
 .spotlight-comment-row {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  position: relative;
+  display: flex !important;
+  gap: 12px !important;
+  align-items: flex-start !important;
 }
 
 .spotlight-comment-avatar {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  background: linear-gradient(135deg, #6C3CE1, #EC4899);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: 800;
-  font-size: 14px;
-  flex-shrink: 0;
-  overflow: hidden;
+  width: 38px !important;
+  height: 38px !important;
+  border-radius: 50% !important;
+  background: linear-gradient(135deg, #6C3CE1, #EC4899) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  color: #fff !important;
+  font-weight: 800 !important;
+  font-size: 14px !important;
+  flex-shrink: 0 !important;
+  overflow: hidden !important;
 }
-.spotlight-comment-avatar.small { width: 28px; height: 28px; font-size: 12px; }
-.spotlight-comment-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.spotlight-comment-avatar.small { width: 28px !important; height: 28px !important; font-size: 12px !important; }
+.spotlight-comment-avatar img { width: 100% !important; height: 100% !important; object-fit: cover !important; }
 
 .spotlight-comment-body {
-  flex: 1;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex: 1 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
 }
 
 .spotlight-comment-header {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
 }
 
 .spotlight-comment-name {
-  font-size: 13px;
-  font-weight: 700;
-  color: rgba(255, 255, 255, 0.9);
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: rgba(255, 255, 255, 0.9) !important;
 }
 
 .spotlight-comment-badge {
-  font-size: 9px;
-  font-weight: 800;
-  background: rgba(108, 60, 225, 0.2);
-  color: #a78bfa;
-  padding: 2px 6px;
-  border-radius: 4px;
-  margin-left: 4px;
+  font-size: 9px !important;
+  font-weight: 800 !important;
+  background: rgba(108, 60, 225, 0.2) !important;
+  color: #a78bfa !important;
+  padding: 2px 6px !important;
+  border-radius: 4px !important;
+  margin-left: 4px !important;
 }
 
 .spotlight-comment-time {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px !important;
+  color: rgba(255, 255, 255, 0.4) !important;
 }
 
 .spotlight-comment-text {
-  font-size: 14px;
-  color: rgba(255, 255, 255, 0.85);
-  line-height: 1.4;
-  word-break: break-word;
+  font-size: 14px !important;
+  color: rgba(255, 255, 255, 0.85) !important;
+  line-height: 1.5 !important;
+  word-break: break-word !important;
 }
 
 .spotlight-comment-meta-row {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-top: 4px;
+  display: flex !important;
+  align-items: center !important;
+  gap: 16px !important;
+  margin-top: 4px !important;
 }
 
 .spotlight-comment-reply-toggle {
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: 12px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.4);
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  background: none !important;
+  border: none !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  cursor: pointer !important;
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
 }
-.spotlight-comment-reply-toggle:hover { color: rgba(255, 255, 255, 0.8); }
+.spotlight-comment-reply-toggle:active { color: #fff !important; }
 
 .spotlight-comment-delete {
-  background: none;
-  border: none;
-  padding: 4px;
-  color: rgba(255, 255, 255, 0.3);
-  cursor: pointer;
-  transition: color 0.2s;
+  background: none !important;
+  border: none !important;
+  padding: 4px !important;
+  color: rgba(255, 255, 255, 0.3) !important;
+  cursor: pointer !important;
+  transition: color 0.2s !important;
 }
-.spotlight-comment-delete:hover { color: #ef4444; }
+.spotlight-comment-delete:hover { color: #ef4444 !important; }
 
-/* ── Comment Likes ── */
 .spotlight-comment-right {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  gap: 8px !important;
 }
 
 .spotlight-comment-like {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  position: relative;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important;
+  position: relative !important;
 }
 
 .spotlight-comment-like-btn {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 16px;
-  cursor: pointer;
-  padding: 4px;
-  transition: transform 0.15s;
+  background: none !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+  font-size: 18px !important;
+  cursor: pointer !important;
+  padding: 4px !important;
 }
-.spotlight-comment-like-btn:hover { transform: scale(1.1); }
-.spotlight-comment-like-btn.active { color: #fff; }
-
-.spotlight-comment-emoji { font-size: 16px; }
+.spotlight-comment-like-btn.active { color: #fff !important; }
+.spotlight-comment-emoji { font-size: 16px !important; }
 
 .spotlight-comment-like-count {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.4);
-  margin-top: 2px;
+  font-size: 11px !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+  margin-top: 2px !important;
 }
 
-/* The little emoji popup inside the comment row */
 .spotlight-comment-like-picker {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  margin-top: 8px;
-  background: #242030;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  padding: 6px;
-  display: flex;
-  gap: 4px;
-  z-index: 10;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
-  animation: spPop 0.15s cubic-bezier(0.2, 1.2, 0.4, 1);
+  position: absolute !important;
+  top: 100% !important;
+  right: 0 !important;
+  margin-top: 8px !important;
+  background: #242030 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 20px !important;
+  padding: 6px !important;
+  display: flex !important;
+  gap: 4px !important;
+  z-index: 10 !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5) !important;
+  animation: spPop 0.15s cubic-bezier(0.2, 1.2, 0.4, 1) !important;
 }
 @keyframes spPop { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
 
 .spotlight-comment-like-pick {
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  padding: 4px;
-  transition: transform 0.1s;
+  background: none !important;
+  border: none !important;
+  font-size: 20px !important;
+  cursor: pointer !important;
+  padding: 4px !important;
+  transition: transform 0.1s !important;
 }
-.spotlight-comment-like-pick:hover { transform: scale(1.2); }
+.spotlight-comment-like-pick:hover { transform: scale(1.2) !important; }
 
-/* ── Replies ── */
 .spotlight-comment-thread {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
 }
 
 .spotlight-comment-replies {
-  margin-left: 48px; /* Indent replies */
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  margin-left: 48px !important;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 12px !important;
 }
 
 .spotlight-comment-reply-input {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 4px;
+  display: flex !important;
+  align-items: center !important;
+  gap: 8px !important;
+  margin-top: 4px !important;
 }
 
 .spotlight-comment-reply-input input {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  padding: 8px 14px;
-  color: #fff;
-  font-size: 13px;
-  outline: none;
+  flex: 1 !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 999px !important;
+  padding: 8px 14px !important;
+  color: #fff !important;
+  font-size: 13px !important;
+  outline: none !important;
 }
-.spotlight-comment-reply-input input:focus { border-color: rgba(108, 60, 225, 0.5); }
+.spotlight-comment-reply-input input:focus { border-color: rgba(108, 60, 225, 0.5) !important; }
 
 .spotlight-comment-reply-send {
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
+  width: 32px !important;
+  height: 32px !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: none !important;
+  color: #fff !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.2s !important;
 }
-.spotlight-comment-reply-send:disabled { opacity: 0.4; cursor: not-allowed; }
+.spotlight-comment-reply-send:disabled { opacity: 0.4 !important; cursor: not-allowed !important; }
 
-/* ── Bottom Input Bar ── */
 .spotlight-comments-input-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px));
-  background: #14101e;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  flex-shrink: 0;
+  display: flex !important;
+  align-items: center !important;
+  gap: 10px !important;
+  padding: 12px 16px calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+  background: #14101e !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  flex-shrink: 0 !important;
 }
 
 .spotlight-comments-emoji-btn {
-  background: none;
-  border: none;
-  color: rgba(255, 255, 255, 0.5);
-  font-size: 20px;
-  cursor: pointer;
-  padding: 8px;
-  border-radius: 50%;
-  transition: color 0.2s, background 0.2s;
+  background: none !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.5) !important;
+  font-size: 22px !important;
+  cursor: pointer !important;
+  flex-shrink: 0 !important;
 }
-.spotlight-comments-emoji-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.05); }
 
 .spotlight-comments-input {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 999px;
-  padding: 10px 16px;
-  color: #fff;
-  font-size: 14px;
-  outline: none;
-  transition: border-color 0.2s;
+  flex: 1 !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 999px !important;
+  padding: 12px 18px !important;
+  color: #fff !important;
+  font-size: 14px !important;
+  outline: none !important;
 }
-.spotlight-comments-input::placeholder { color: rgba(255, 255, 255, 0.3); }
-.spotlight-comments-input:focus { border-color: rgba(108, 60, 225, 0.5); background: rgba(255, 255, 255, 0.08); }
+.spotlight-comments-input::placeholder { color: rgba(255, 255, 255, 0.3) !important; }
+.spotlight-comments-input:focus { border-color: rgba(108, 60, 225, 0.5) !important; }
 
 .spotlight-comments-send {
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.08);
-  border: none;
-  color: rgba(255, 255, 255, 0.4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-  flex-shrink: 0;
+  width: 42px !important;
+  height: 42px !important;
+  border-radius: 50% !important;
+  background: rgba(255, 255, 255, 0.08) !important;
+  border: none !important;
+  color: rgba(255, 255, 255, 0.4) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  flex-shrink: 0 !important;
+  transition: all 0.2s !important;
 }
 .spotlight-comments-send.active {
-  background: linear-gradient(135deg, #6C3CE1, #EC4899);
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(108, 60, 225, 0.4);
+  background: linear-gradient(135deg, #6C3CE1, #EC4899) !important;
+  color: #fff !important;
 }
-.spotlight-comments-send:disabled { cursor: not-allowed; opacity: 0.5; }
+.spotlight-comments-send:disabled { cursor: not-allowed !important; opacity: 0.5 !important; }
 
-/* ── Emoji Bar (above input) ── */
 .spotlight-comments-emoji-bar {
-  display: flex;
-  gap: 8px;
-  padding: 10px 16px;
-  background: #1a1526;
-  border-top: 1px solid rgba(255, 255, 255, 0.06);
-  overflow-x: auto;
-  scrollbar-width: none;
-  animation: spSlideUp 0.2s ease-out;
+  display: flex !important;
+  gap: 8px !important;
+  padding: 10px 16px !important;
+  background: #1a1526 !important;
+  border-top: 1px solid rgba(255, 255, 255, 0.06) !important;
+  overflow-x: auto !important;
+  scrollbar-width: none !important;
+  animation: spSlideUp 0.2s ease-out !important;
 }
-.spotlight-comments-emoji-bar::-webkit-scrollbar { display: none; }
+.spotlight-comments-emoji-bar::-webkit-scrollbar { display: none !important; }
 
 .spotlight-comments-emoji-bar button {
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  padding: 4px;
-  transition: transform 0.1s;
+  background: none !important;
+  border: none !important;
+  font-size: 24px !important;
+  cursor: pointer !important;
+  padding: 4px !important;
+  transition: transform 0.1s !important;
 }
-.spotlight-comments-emoji-bar button:hover { transform: scale(1.2); }
+.spotlight-comments-emoji-bar button:hover { transform: scale(1.2) !important; }
 
 @keyframes spSlideUp {
   from { transform: translateY(100%); opacity: 0; }
