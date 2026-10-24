@@ -9,78 +9,64 @@
   pointer-events: auto;
 }
 
-/* ─── Scrolling ─── */
 .stories-bar-scroll {
   display: flex;
   gap: 14px;
   overflow-x: auto;
   padding: 10px 16px;
   scrollbar-width: none;
-  -ms-overflow-style: none;
 }
+.stories-bar-scroll::-webkit-scrollbar { display: none; }
 
-.stories-bar-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-/* ─── Circle ─── */
+/* ─── Story Circle ─── */
 .story-circle-wrapper {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 7px;
+  gap: 6px;
   cursor: pointer;
   flex-shrink: 0;
-  position: relative;
 }
 
-/* The 3D Curve Glow */
+/* The Instagram Ring */
 .story-ring {
   width: 68px;
   height: 68px;
   border-radius: 50%;
   padding: 3px;
-  background: rgba(139, 92, 246, 0.4); /* Transparent Purple */
+  background: rgba(255, 255, 255, 0.1); /* Gray default */
   display: flex;
   align-items: center;
   justify-content: center;
   transition: transform 0.15s ease;
   position: relative;
-  box-shadow: 0 0 0 rgba(0, 0, 0, 0);
-}
-
-.story-circle-wrapper:hover .story-ring {
-  transform: scale(1.05);
-  box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
 }
 
 .story-circle-wrapper:active .story-ring {
   transform: scale(0.92);
 }
 
-/* Instagram Style Gradient */
+/* Unviewed Story Gradient */
 .story-ring.has-story {
   background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
 }
 
-/* 🔵 "Your Echus" Circle (Transparent Purple) */
+/* Your Echus (Own Story) */
 .story-ring.own {
-  background: rgba(139, 92, 246, 0.6); /* Transparent Purple */
-  border: 1px solid rgba(139, 92, 246, 0.8);
+  background: rgba(255, 255, 255, 0.1);
 }
 
-/* Avatar */
 .story-avatar-inner {
   width: 100%;
   height: 100%;
   border-radius: 50%;
-  background: rgba(139, 92, 246, 0.3); /* Transparent Purple Background */
+  background: #000;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   overflow: hidden;
-  border: 2px solid rgba(139, 92, 246, 0.5);
+  border: 2px solid #000; /* The black gap */
 }
 
 .story-img {
@@ -96,28 +82,28 @@
   position: relative;
 }
 
+/* The Blue Plus Icon */
 .add-badge {
   position: absolute;
   bottom: 0;
   right: 0;
-  width: 22px;
-  height: 22px;
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  background: #0095f6;
+  background: #0095f6; /* Instagram Blue */
   color: white;
   font-size: 14px;
   font-weight: 700;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 2px solid rgba(139, 92, 246, 0.8); /* Purple border instead of black */
-  line-height: 1;
+  border: 2px solid #000;
   z-index: 3;
 }
 
 .story-name {
-  font-size: 11px;
-  font-weight: 600;
+  font-size: 12px;
+  font-weight: 500;
   color: #ffffff;
   max-width: 68px;
   overflow: hidden;
@@ -126,391 +112,83 @@
   text-align: center;
 }
 
-/* ─── THE STACKED GRID (Peeking from behind - Transparent Purple) ─── */
-.story-circle-wrapper::before,
-.story-circle-wrapper::after {
-  content: '';
-  position: absolute;
-  top: 3px;
-  bottom: 3px;
-  border-radius: 50%;
-  background: rgba(139, 92, 246, 0.25); /* Transparent Purple */
-  pointer-events: none;
-  transition: transform 0.2s ease;
-  z-index: -1;
-}
-
-/* 1st layer behind */
-.story-circle-wrapper::before {
-  left: -6px;
-  right: 6px;
-  transform: rotate(-4deg);
-}
-
-/* 2nd layer behind (curved) */
-.story-circle-wrapper::after {
-  left: -11px;
-  right: 11px;
-  transform: rotate(-8deg);
-  background: rgba(139, 92, 246, 0.15); /* Lighter transparent purple */
-}
-
-/* When hovering, the stack expands slightly */
-.story-circle-wrapper:hover::before {
-  transform: rotate(-3deg);
-}
-
-.story-circle-wrapper:hover::after {
-  transform: rotate(-6deg);
-}
-
-/* ─── Recorder Overlay ─── */
-.recorder-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.6);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 10000;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
-.recorder-modal-small {
-  background: rgba(30, 30, 30, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  padding: 20px;
-  border-radius: 24px;
-  width: 320px;
-  color: #fff;
-  box-shadow: 0 25px 80px rgba(0,0,0,0.6);
-  position: relative;
-  overflow: hidden;
-}
-
-/* ─── Camera Header ─── */
-.small-camera-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-}
-
-.small-camera-header h3 {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 700;
-  letter-spacing: -0.5px;
-}
-
-.camera-header-actions {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.memories-btn {
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  color: #fff;
-  padding: 6px 12px;
-  border-radius: 20px;
-  cursor: pointer;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  transition: all 0.2s;
-}
-
-.memories-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.close-btn {
-  background: transparent;
-  border: none;
-  color: #aaa;
-  font-size: 20px;
-  cursor: pointer;
-}
-
-/* ─── Camera Space ─── */
-.small-camera-space {
-  width: 100%;
-  aspect-ratio: 1 / 1;
-  background: #000;
-  border-radius: 20px;
-  position: relative;
-  overflow: hidden;
-  cursor: pointer;
-  box-shadow: inset 0 0 20px rgba(0,0,0,0.8);
-}
-
-.small-camera-space:active {
-  transform: scale(0.98);
-}
-
-/* ─── Video Feed (No hard-coded transform! JS controls this) ─── */
-.small-video-feed {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  transition: transform 0.15s ease-out;
-  transform-origin: center center;
-}
-
-.snapping-flash {
-  position: absolute;
-  inset: 0;
-  background: #fff;
-  animation: flash 0.15s ease-out;
-  pointer-events: none;
-}
-
-@keyframes flash {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
-
-/* ─── Switch Camera Button ─── */
-.switch-camera-btn {
-  position: absolute;
-  bottom: 15px;
-  right: 15px;
-  width: 46px;
-  height: 46px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.6);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  color: #fff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  z-index: 10;
-  transition: all 0.2s ease;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
-}
-
-.switch-camera-btn:hover {
-  background: rgba(0, 0, 0, 0.8);
-  border-color: rgba(255, 255, 255, 0.5);
-  transform: scale(1.05);
-}
-
-.switch-camera-btn:active {
-  transform: scale(0.95);
-}
-
-/* ─── Memories Glass Panel ─── */
-.memories-glass-panel {
-  position: absolute;
-  top: 20px;
-  left: 10px;
-  right: 10px;
-  max-height: 250px;
-  background: rgba(255, 255, 255, 0.1);
-  backdrop-filter: blur(15px);
-  -webkit-backdrop-filter: blur(15px);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 16px;
-  padding: 15px;
-  z-index: 10;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.4);
-  overflow-y: auto;
-}
-
-.memories-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.memories-header h4 {
-  margin: 0;
-  font-size: 14px;
-  color: #fff;
-}
-
-.close-memories {
-  background: transparent;
-  border: none;
-  color: #aaa;
-  font-size: 18px;
-  cursor: pointer;
-}
-
-.no-memories {
-  color: #ccc;
-  font-size: 13px;
-  text-align: center;
-  padding: 10px;
-}
-
-.memories-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-
-.memory-card {
-  position: relative;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid rgba(255,255,255,0.1);
-  aspect-ratio: 1 / 1;
-  background: #000;
-}
-
-.memory-card img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.memory-info {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: rgba(0,0,0,0.6);
-  padding: 4px;
-  font-size: 10px;
-  color: #fff;
-}
-
-.delete-memory {
-  background: rgba(255, 0, 0, 0.7);
-  border: none;
-  color: #fff;
-  border-radius: 4px;
-  cursor: pointer;
-  padding: 2px 4px;
-  font-size: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-/* ─── Full Memory Overlay ─── */
-.memory-fullscreen-overlay {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 10001;
-  background: rgba(0, 0, 0, 0.85);
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-}
-
-.memory-fullscreen-content {
-  max-width: 90vw;
-  max-height: 80vh;
-  background: rgba(30, 30, 30, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 20px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 15px;
-  box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6);
-  animation: memoryZoomIn 0.3s ease;
-  cursor: default;
-}
-
-@keyframes memoryZoomIn {
-  from { transform: scale(0.9); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-}
-
-.memory-fullscreen-content img {
-  max-width: 100%;
-  max-height: 60vh;
-  border-radius: 12px;
-  object-fit: contain;
-}
-
-.memory-fullscreen-actions {
-  display: flex;
-  gap: 15px;
-  width: 100%;
-  justify-content: center;
-}
-
-.cancel-memory-btn, .delete-memory-btn {
-  padding: 10px 24px;
-  border-radius: 20px;
-  border: none;
-  cursor: pointer;
-  font-weight: 600;
-  font-size: 14px;
-  transition: all 0.2s;
-}
-
-.cancel-memory-btn {
-  background: rgba(255, 255, 255, 0.1);
-  color: #fff;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.cancel-memory-btn:hover {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.delete-memory-btn {
-  background: #ff3040;
-  color: #fff;
-}
-
-.delete-memory-btn:hover {
-  background: #d6001c;
-}
-
-/* ─── Viewer Overlay (Instagram Style) ─── */
+/* ─── Viewer Overlay ─── */
 .viewer-overlay {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
-  background: rgba(0, 0, 0, 0.92);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+  inset: 0;
+  background: #000;
   z-index: 10000;
   display: flex;
   flex-direction: column;
   color: #fff;
-  cursor: pointer;
   user-select: none;
-  transition: opacity 0.3s ease, transform 0.3s ease;
+  overflow: hidden;
 }
 
-.viewer-overlay.closing {
-  opacity: 0;
-  transform: scale(0.95);
+/* Tilted Card Stack Background */
+.stacked-cards-bg {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.stack-card {
+  position: absolute;
+  width: 82vw;
+  max-width: 400px;
+  aspect-ratio: 9 / 15;
+  border-radius: 40px;
+  background: #222;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.stack-card.layer-1 {
+  transform: rotate(-6deg) scale(0.9);
+  opacity: 0.5;
+}
+.stack-card.layer-2 {
+  transform: rotate(4deg) scale(0.95);
+  opacity: 0.7;
+}
+
+/* Main Image Container */
+.viewer-tap-area {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+  cursor: pointer;
+}
+
+.viewer-image-container {
+  width: 82vw;
+  max-width: 400px;
+  aspect-ratio: 9 / 15;
+  border-radius: 40px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8);
+  transition: transform 0.2s ease;
+  position: relative;
+}
+
+.viewer-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 /* Progress Bar */
 .progress-bar-container {
   position: absolute;
-  top: 10px;
-  left: 5%;
-  right: 5%;
+  top: calc(10px + env(safe-area-inset-top, 0px));
+  left: 20px;
+  right: 20px;
   display: flex;
   gap: 4px;
   z-index: 10;
@@ -518,9 +196,9 @@
 
 .progress-segment {
   flex: 1;
-  height: 2px;
+  height: 3px;
   background: rgba(255, 255, 255, 0.3);
-  border-radius: 2px;
+  border-radius: 3px;
   overflow: hidden;
 }
 
@@ -533,9 +211,9 @@
 /* Header */
 .viewer-header {
   position: absolute;
-  top: 20px;
-  left: 15px;
-  right: 15px;
+  top: calc(24px + env(safe-area-inset-top, 0px));
+  left: 20px;
+  right: 20px;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -546,81 +224,18 @@
   display: flex;
   align-items: center;
   gap: 10px;
+  background: rgba(0,0,0,0.4);
+  padding: 4px 12px 4px 4px;
+  border-radius: 999px;
+  backdrop-filter: blur(10px);
 }
 
-.owner-name {
-  font-weight: 600;
-  font-size: 14px;
-}
-
-.viewer-time {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-}
-
-.close-viewer {
-  background: transparent;
-  border: none;
-  color: #fff;
-  font-size: 20px;
-  cursor: pointer;
-}
-
-/* Main Image Area */
-.viewer-tap-area {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-  position: relative;
-}
-
-.viewer-image-container {
-  position: relative;
-  z-index: 2;
-  max-width: 100%;
-  max-height: 80vh;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  flex-direction: column;
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-
-.viewer-image-container.switching {
-  opacity: 0;
-  transform: scale(0.9);
-}
-
-.viewer-image {
-  max-width: 100%;
-  max-height: 80vh;
-  object-fit: contain;
-  animation: viewerImageScale 0.3s ease;
-}
-
-@keyframes viewerImageScale {
-  from {
-    transform: scale(0.95);
-    opacity: 0;
-  }
-  to {
-    transform: scale(1);
-    opacity: 1;
-  }
-}
-
-/* Viewer Avatar Ring */
 .viewer-avatar-ring {
   width: 32px;
   height: 32px;
   border-radius: 50%;
   padding: 2px;
   background: linear-gradient(45deg, #f09433 0%, #e6683c 25%, #dc2743 50%, #cc2366 75%, #bc1888 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
 }
 
 .viewer-avatar {
@@ -631,104 +246,74 @@
   border: 2px solid #000;
 }
 
-/* ─── STACKED CURVE INSIDE VIEWER ─── */
-.stacked-stories-back {
+.owner-name { font-weight: 600; font-size: 14px; }
+.viewer-time { font-size: 12px; color: rgba(255, 255, 255, 0.7); }
+
+.close-viewer {
+  background: rgba(0,0,0,0.4);
+  backdrop-filter: blur(10px);
+  border: none;
+  color: #fff;
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  font-size: 16px;
+  cursor: pointer;
+}
+
+/* Floating Reactions */
+.instants-floating-reactions {
   position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
-  width: 80%;
-  height: 80%;
-  pointer-events: none;
-  z-index: 1;
-}
-
-.back-story-layer {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  border-radius: 20px;
-  background: #222;
-  opacity: 0.8;
-  animation: layerFadeIn 0.3s ease;
-}
-
-.layer-1 {
-  width: 100%;
-  height: 100%;
-  transform: translate(-50%, -50%) rotate(3deg);
-  background: #2a2a2a;
-}
-
-.layer-2 {
-  width: 95%;
-  height: 95%;
-  transform: translate(-50%, -50%) rotate(6deg);
-  background: #333;
-}
-
-.layer-3 {
-  width: 90%;
-  height: 90%;
-  transform: translate(-50%, -50%) rotate(9deg);
-  background: #3a3a3a;
-}
-
-@keyframes layerFadeIn {
-  from { opacity: 0; transform: translate(-50%, -50%) scale(0.9); }
-  to { opacity: 1; transform: translate(-50%, -50%) scale(1); }
-}
-
-/* ─── REAL CAMERA NO-GREY LOADING FIX ─── */
-.camera-loading {
-  position: absolute;
-  inset: 0;
+  bottom: calc(30px + env(safe-area-inset-bottom, 0px));
+  left: 0; right: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #aaa;
-  font-size: 12px;
-  font-weight: 500;
-  pointer-events: none;
+  gap: 16px;
+  z-index: 10;
 }
 
-/* 🚨 FLASH EFFECT */
-.snapping-flash {
-  position: absolute;
-  inset: 0;
-  background: #fff;
-  animation: flash 0.2s ease-out forwards;
-  pointer-events: none;
-  z-index: 5;
+.reaction-btn {
+  background: #1a1a1a;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.15s;
+  box-shadow: 0 10px 20px rgba(0,0,0,0.4);
 }
+.reaction-btn:active { transform: scale(0.9); }
 
-@keyframes flash {
-  from { opacity: 1; }
-  to { opacity: 0; }
-}
+.reaction-btn.small { width: 48px; height: 48px; font-size: 20px; }
+.reaction-btn.large { width: 64px; height: 64px; font-size: 28px; color: #ec4899; }
 
-/* 🚨 HIDE GREY BY NOT SHOWING IT */
-.camera-loading {
-  background: transparent !important;
-  color: transparent !important;
-}
-
-/* Smooth close animation */
-.viewer-overlay {
-  transition: opacity 0.4s ease, transform 0.4s ease;
-}
-
-.viewer-overlay.closing {
-  opacity: 0;
-  transform: scale(0.95);
-}
-
-/* Smooth switching between stories */
-.viewer-image-container {
-  transition: opacity 0.25s ease, transform 0.25s ease;
-}
-
-.viewer-image-container.switching {
-  opacity: 0;
-  transform: scale(0.9);
-}
+/* ─── Recorder Overlay Styles (Keep your existing ones below) ─── */
+.recorder-overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; justify-content: center; align-items: center; z-index: 10000; backdrop-filter: blur(12px); }
+.recorder-modal-small { background: rgba(30, 30, 30, 0.7); border: 1px solid rgba(255, 255, 255, 0.1); padding: 20px; border-radius: 24px; width: 320px; color: #fff; box-shadow: 0 25px 80px rgba(0,0,0,0.6); position: relative; overflow: hidden; }
+.small-camera-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.small-camera-header h3 { margin: 0; font-size: 18px; font-weight: 700; letter-spacing: -0.5px; }
+.camera-header-actions { display: flex; align-items: center; gap: 10px; }
+.memories-btn { background: rgba(255, 255, 255, 0.1); border: 1px solid rgba(255, 255, 255, 0.2); color: #fff; padding: 6px 12px; border-radius: 20px; cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 6px; transition: all 0.2s; }
+.close-btn { background: transparent; border: none; color: #aaa; font-size: 20px; cursor: pointer; }
+.small-camera-space { width: 100%; aspect-ratio: 1 / 1; background: #000; border-radius: 20px; position: relative; overflow: hidden; cursor: pointer; box-shadow: inset 0 0 20px rgba(0,0,0,0.8); }
+.small-video-feed { width: 100%; height: 100%; object-fit: cover; transition: transform 0.15s ease-out; transform-origin: center center; }
+.snapping-flash { position: absolute; inset: 0; background: #fff; animation: flash 0.15s ease-out; pointer-events: none; z-index: 5; }
+@keyframes flash { from { opacity: 1; } to { opacity: 0; } }
+.switch-camera-btn { position: absolute; bottom: 15px; right: 15px; width: 46px; height: 46px; border-radius: 50%; background: rgba(0, 0, 0, 0.6); border: 1px solid rgba(255, 255, 255, 0.3); backdrop-filter: blur(8px); color: #fff; display: flex; align-items: center; justify-content: center; cursor: pointer; z-index: 10; transition: all 0.2s ease; box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3); }
+.memories-glass-panel { position: absolute; top: 20px; left: 10px; right: 10px; max-height: 250px; background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 16px; padding: 15px; z-index: 10; box-shadow: 0 10px 40px rgba(0,0,0,0.4); overflow-y: auto; }
+.memories-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.memories-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.memory-card { position: relative; border-radius: 10px; overflow: hidden; border: 1px solid rgba(255,255,255,0.1); aspect-ratio: 1 / 1; background: #000; }
+.memory-card img { width: 100%; height: 100%; object-fit: cover; }
+.memory-info { position: absolute; bottom: 0; left: 0; right: 0; display: flex; justify-content: space-between; align-items: center; background: rgba(0,0,0,0.6); padding: 4px; font-size: 10px; color: #fff; }
+.delete-memory { background: rgba(255, 0, 0, 0.7); border: none; color: #fff; border-radius: 4px; cursor: pointer; padding: 2px 4px; font-size: 10px; }
+.memory-fullscreen-overlay { position: fixed; inset: 0; z-index: 10001; background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(10px); display: flex; justify-content: center; align-items: center; cursor: pointer; }
+.memory-fullscreen-content { max-width: 90vw; max-height: 80vh; background: rgba(30, 30, 30, 0.9); border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 20px; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 15px; box-shadow: 0 20px 80px rgba(0, 0, 0, 0.6); }
+.memory-fullscreen-content img { max-width: 100%; max-height: 60vh; border-radius: 12px; object-fit: contain; }
+.memory-fullscreen-actions { display: flex; gap: 15px; width: 100%; justify-content: center; }
+.cancel-memory-btn, .delete-memory-btn { padding: 10px 24px; border-radius: 20px; border: none; cursor: pointer; font-weight: 600; font-size: 14px; }
+.cancel-memory-btn { background: rgba(255, 255, 255, 0.1); color: #fff; border: 1px solid rgba(255, 255, 255, 0.2); }
+.delete-memory-btn { background: #ff3040; color: #fff; }
+.camera-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; color: #aaa; font-size: 12px; pointer-events: none; }
