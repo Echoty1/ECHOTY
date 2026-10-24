@@ -603,3 +603,49 @@
   justify-content: center;
   font-size: 10px;
 }
+/* ═══════════════════════════════════════════════════════════════
+   7. STORY FADE TRANSITIONS (Instants Animation)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* When the image loads or switches in */
+.viewer-image-container.fade-in {
+  animation: storyFadeIn 0.3s cubic-bezier(0.2, 1, 0.4, 1) forwards;
+}
+
+/* When the image is tapped to move to the next */
+.viewer-image-container.fade-out {
+  animation: storyFadeOut 0.25s cubic-bezier(0.4, 0, 1, 1) forwards;
+  pointer-events: none;
+}
+
+/* The background cards also fade out */
+.stack-card.fade-out {
+  animation: bgFadeOut 0.25s ease-out forwards;
+}
+
+@keyframes storyFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes storyFadeOut {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+}
+
+@keyframes bgFadeOut {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
