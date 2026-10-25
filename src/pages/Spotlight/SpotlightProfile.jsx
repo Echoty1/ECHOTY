@@ -5,6 +5,7 @@ import { ref, get } from 'firebase/database';
 import { db } from '../../services/firebase';
 import { useAuth } from '../../hooks/useAuth';
 import Toast from '../../components/Toast/Toast';
+import AccountSwitcher from '../../components/common/AccountSwitcher';
 import {
   listenToUserSpotlightPosts,
   listenToUserReechoedPosts,
@@ -23,7 +24,7 @@ const fmt = (n) => {
 const SpotlightProfile = () => {
   const { uid } = useParams();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, getSavedAccounts, switchAccount, signOutAll } = useAuth();
 
   const [tab, setTab] = useState('posts');
   const [profile, setProfile] = useState(null);
@@ -35,8 +36,17 @@ const SpotlightProfile = () => {
   const [echoingCount, setEchoingCount] = useState(0);
   const [previewPost, setPreviewPost] = useState(null);
   const [toast, setToast] = useState(null);
+  
+  const [showSwitcher, setShowSwitcher] = useState(false);
+  const [savedAccounts, setSavedAccounts] = useState([]);
 
   const isMe = user?.uid === uid;
+
+  useEffect(() => {
+    if (isMe) {
+      setSavedAccounts(getSavedAccounts());
+    }
+  }, [isMe, getSavedAccounts, showSwitcher]);
 
   useEffect(() => {
     if (!uid) return;
@@ -49,7 +59,6 @@ const SpotlightProfile = () => {
       const cnt = await fetchEchoersCount(uid);
       if (!cancelled) setEchoersCount(cnt);
 
-      // Echoing count = how many users this person has echoed
       try {
         const echoSnap = await get(ref(db, `spotlight/echoes/${uid}`));
         if (!cancelled) {
@@ -98,6 +107,27 @@ const SpotlightProfile = () => {
 
   const openOwnSpotlight = () => {
     navigate('/spotlight');
+  };
+
+  const handleSwitchAccount = async (account) => {
+    try {
+      await switchAccount(account);
+    } catch (err) {
+      setToast({ message: err.message, type: 'error' });
+      setTimeout(() => setToast(null), 2000);
+    }
+  };
+
+  const handleAddAccount = () => {
+    setShowSwitcher(false);
+    window.location.href = '/login';
+  };
+
+  const handleSignOutAll = async () => {
+    if (window.confirm("Sign out of all accounts?")) {
+      await signOutAll();
+      window.location.href = '/login';
+    }
   };
 
   const name = profile?.name || 'User';
@@ -212,6 +242,14 @@ const SpotlightProfile = () => {
               >
                 <i className="fas fa-bolt" /> Open Spotlight
               </button>
+              <button
+                type="button"
+                className="spotlight-profile-echo-btn secondary"
+                onClick={() => setShowSwitcher(true)}
+                style={{ marginLeft: 8, background: 'rgba(255,255,255,0.08)', color: '#fff', border: '1px solid rgba(255,255,255,0.1)' }}
+              >
+                <i className="fas fa-users" /> Switch Account
+              </button>
             </div>
           ) : (
             <div className="spotlight-profile-actions">
@@ -309,6 +347,21 @@ const SpotlightProfile = () => {
       )}
 
       {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+
+      {/* Account Switcher */}
+      <AccountSwitcher
+        isOpen={showSwitcher}
+        onClose={() => setShowSwitcher(false)}
+        currentUser={{
+          name: name,
+          email: user?.email || 'user@echoty.xyz',
+          avatar: avatar,
+        }}
+        savedAccounts={savedAccounts}
+        onSwitchAccount={handleSwitchAccount}
+        onAddAccount={handleAddAccount}
+        onSignOutAll={handleSignOutAll}
+      />
     </div>
   );
 };
