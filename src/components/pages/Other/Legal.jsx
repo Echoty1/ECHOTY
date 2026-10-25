@@ -4,44 +4,99 @@ import SEO from '../../common/SEO';
 import StructuredData from '../../common/StructuredData';
 import './Legal.css';
 
-const Legal = () => {
-  const sectionRefs = useRef([]);
-  const timeoutRef = useRef(null);
+const legalIcons = {
+  document: (
+    <>
+      <path d="M7 3.75h7l4 4v12.5H7z" />
+      <path d="M14 3.75v4h4M10 12h5M10 15.5h5" />
+    </>
+  ),
+  shield: (
+    <>
+      <path d="m12 3.5 7 2.5v5.2c0 4.3-2.9 7.5-7 9.3-4.1-1.8-7-5-7-9.3V6z" />
+      <path d="m9 11.5 2 2 4-4" />
+    </>
+  ),
+  flag: (
+    <>
+      <path d="M6 20V4" />
+      <path d="M6 5h11l-2 3 2 3H6" />
+    </>
+  ),
+  check: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="m8 12 2.5 2.5L16 9" />
+    </>
+  ),
+  plane: <path d="m21 3-7.2 18-3.7-7.1L3 10.2 21 3Zm0 0L10.1 13.9" />,
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7v5l3.2 2" />
+    </>
+  )
+};
 
-  // ─── Intersection Observer for scroll animations ──────────────
+const LegalIcon = ({ name, className = '' }) => (
+  <svg
+    className={`legal-icon ${className}`}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.8"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    aria-hidden="true"
+    focusable="false"
+  >
+    {legalIcons[name]}
+  </svg>
+);
+
+const Legal = () => {
+  const pageRef = useRef(null);
+
   useEffect(() => {
+    const page = pageRef.current;
+    const cards = page?.querySelectorAll('.legal-card');
+
+    if (
+      !page ||
+      !cards?.length ||
+      typeof IntersectionObserver === 'undefined' ||
+      (typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+    ) {
+      return undefined;
+    }
+
+    page.classList.add('legal-page--reveal');
+
     const observer = new IntersectionObserver(
       (entries) => {
         entries.forEach((entry) => {
           if (entry.isIntersecting) {
             entry.target.classList.add('legal-section-visible');
+            observer.unobserve(entry.target);
           }
         });
       },
-      { threshold: 0.1, rootMargin: '0px 0px -30px 0px' }
+      { threshold: 0.12, rootMargin: '0px 0px -32px 0px' }
     );
 
-    sectionRefs.current.forEach((ref) => {
-      if (ref) observer.observe(ref);
-    });
-
-    // ─── Fallback: show all cards after 1.5s if observer fails ──
-    timeoutRef.current = setTimeout(() => {
-      sectionRefs.current.forEach((ref) => {
-        if (ref) ref.classList.add('legal-section-visible');
-      });
-    }, 1500);
+    cards.forEach((card) => observer.observe(card));
 
     return () => {
       observer.disconnect();
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      page.classList.remove('legal-page--reveal');
     };
   }, []);
 
   const sections = [
     {
       id: 'terms',
-      icon: 'fa-file-contract',
+      icon: 'document',
       title: 'Terms of Service',
       color: '#8B5CF6',
       content: (
@@ -65,13 +120,13 @@ const Legal = () => {
     },
     {
       id: 'privacy',
-      icon: 'fa-shield-alt',
+      icon: 'shield',
       title: 'Privacy Policy',
       color: '#10B981',
       content: (
         <>
           <div className="legal-highlight">
-            <i className="fas fa-check-circle" /> We do not sell your data. Ever.
+            <LegalIcon name="check" /> We do not sell your data. Ever.
           </div>
           <ul>
             <li>We store profiles, chats, communities, and live session data in Firebase so the app works.</li>
@@ -85,7 +140,7 @@ const Legal = () => {
     },
     {
       id: 'report',
-      icon: 'fa-flag',
+      icon: 'flag',
       title: 'Report a User',
       color: '#EF4444',
       content: (
@@ -93,16 +148,16 @@ const Legal = () => {
           <p>
             Reports are reviewed by the ECHO team within 24 hours. Include the username or ID, what happened, and screenshots if you have them.
           </p>
-          <p style={{ marginTop: '12px' }}>
+          <p>
             <strong>Your identity is protected.</strong> We do not share reporter information with the reported user.
           </p>
           <div className="legal-report-action">
             <button
               className="legal-report-btn"
               type="button"
-              onClick={() => window.open('https://forms.gle/WLfbUjc5MXip7QwE7', '_blank')}
+              onClick={() => window.open('https://forms.gle/WLfbUjc5MXip7QwE7', '_blank', 'noopener,noreferrer')}
             >
-              <i className="fas fa-paper-plane" /> Open Report Form
+              <LegalIcon name="plane" /> Open Report Form
             </button>
           </div>
         </>
@@ -114,39 +169,42 @@ const Legal = () => {
     <>
       <SEO title="Legal & Policies – ECHO" description="Terms, privacy, and reporting for ECHO." />
       <StructuredData />
-      <div className="legal-page">
+      <main className="legal-page" ref={pageRef}>
         <header className="legal-hero">
-          <p className="legal-kicker">Legal</p>
-          <h1>Policies</h1>
-          <p>Terms, privacy, and reporting – transparent and simple.</p>
-          <p className="legal-updated">Last updated September 1, 2026</p>
+          <p className="legal-kicker"><span aria-hidden="true" /> ECHO · LEGAL</p>
+          <h1>Legal <span>&amp; Policies</span></h1>
+          <p className="legal-intro">Clear, straightforward information about using ECHO.</p>
+          <p className="legal-updated">
+            <LegalIcon name="clock" />
+            <span>Last updated <time dateTime="2026-09-01">September 1, 2026</time></span>
+          </p>
         </header>
 
         <div className="legal-grid">
-          {sections.map((section, index) => (
-            <div
+          {sections.map((section) => (
+            <section
               key={section.id}
               className="legal-card"
-              ref={(el) => (sectionRefs.current[index] = el)}
+              aria-labelledby={`legal-${section.id}-title`}
               style={{ '--card-color': section.color }}
             >
               <div className="legal-card-header">
-                <span className="legal-card-icon" style={{ background: `${section.color}20`, color: section.color }}>
-                  <i className={`fas ${section.icon}`} />
+                <span className="legal-card-icon">
+                  <LegalIcon name={section.icon} />
                 </span>
-                <h2>{section.title}</h2>
+                <h2 id={`legal-${section.id}-title`}>{section.title}</h2>
               </div>
               <div className="legal-card-body">
                 {section.content}
               </div>
-            </div>
+            </section>
           ))}
         </div>
 
-        <div className="legal-footer">
-          <p>ECHO · echoty.xyz</p>
-        </div>
-      </div>
+        <footer className="legal-footer">
+          <p>ECHO <span aria-hidden="true">·</span> echoty.xyz</p>
+        </footer>
+      </main>
     </>
   );
 };
