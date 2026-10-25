@@ -1,10 +1,10 @@
 // src/components/pages/Profile/Profile.js
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { db } from '../../../services/firebase';
-import { ref, onValue, update, set, get } from 'firebase/database';
+import { ref, onValue, update, set } from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import GifLibraryModal from '../../GifLibrary/GifLibraryModal';
@@ -18,6 +18,7 @@ import AvatarCustomizer from './AvatarCustomizer';
 import UsernameEditor from './UsernameEditor';
 import UsernamePill from '../../common/UsernamePill';
 import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid';
+import AccountSwitcher from '../../common/AccountSwitcher'; // <-- NEW IMPORT
 import './Profile.css';
 
 const getFastLocal = (key) => { try { const item = localStorage.getItem('echo_cache_' + key); return item ? JSON.parse(item) : null; } catch { return null; } };
@@ -32,17 +33,23 @@ const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
-  const { user } = useAuth();
+  // Grab the Account Switcher functions from AuthContext
+  const { user, getSavedAccounts, switchAccount, signOutAll } = useAuth();
+  
   const navigate = useNavigate();
   const { refreshProfile, profiles, fetchProfile } = useProfile();
 
   const [activeTab, setActiveTab] = useState('spotlight');
   const [showGifLibrary, setShowGifLibrary] = useState(false);
-  const [showAvatarPicker, setShowAvatarPicker] = useState(false); // Controls the bottom sheet
+  const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [showAvatarCustomizer, setShowAvatarCustomizer] = useState(false);
   const [showUsernameEditor, setShowUsernameEditor] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
+
+  // Account Switcher State
+  const [showSwitcher, setShowSwitcher] = useState(false);
+  const [savedAccounts, setSavedAccounts] = useState([]);
 
   const NAME_MAX_LENGTH = 25;
   const BIO_MAX_LENGTH = 130;
@@ -69,6 +76,13 @@ const Profile = () => {
   const [editData, setEditData] = useState(() => cachedProfile || { name: '', avatar: '', videoUrl: '', mood: 'happy', activeSkin: null, bio: '', country: '', city: '' });
   const [unlockedGifs, setUnlockedGifs] = useState([]);
   const imageInputRef = useRef(null);
+
+  // Load saved accounts when switcher opens
+  useEffect(() => {
+    if (showSwitcher) {
+      setSavedAccounts(getSavedAccounts());
+    }
+  }, [showSwitcher, getSavedAccounts]);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -165,6 +179,28 @@ const Profile = () => {
     } catch {}
   };
 
+  // ─── Account Switcher Handlers ───
+  const handleSwitchAccount = async (account) => {
+    try {
+      await switchAccount(account);
+    } catch (err) {
+      setToast({ message: err.message, type: 'error' });
+      setTimeout(() => setToast(null), 2500);
+    }
+  };
+
+  const handleAddAccount = () => {
+    setShowSwitcher(false);
+    window.location.href = '/login';
+  };
+
+  const handleSignOutAll = async () => {
+    if (window.confirm("Are you sure you want to sign out of all accounts?")) {
+      await signOutAll();
+      window.location.href = '/login';
+    }
+  };
+
   const currentMediaUrl = (editing ? editData.videoUrl : profile?.videoUrl) || (editing ? editData.avatar : profile?.avatar);
   const cachedMediaUrl = useCachedImage(currentMediaUrl, null);
   const displayMediaUrl = cachedMediaUrl || currentMediaUrl;
@@ -238,6 +274,15 @@ const Profile = () => {
               </>
             ) : (
               <>
+                {/* Account Switcher Button Added Here */}
+                <button 
+                  className="snap-btn-secondary" 
+                  onClick={() => setShowSwitcher(true)}
+                  title="Switch Account"
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
+                >
+                  <i className="fas fa-users" /> Accounts
+                </button>
                 <button className="snap-btn-secondary" onClick={() => setShowUsernameEditor(true)}><i className="fas fa-at" /> {profile?.username ? 'Change handle' : 'Set handle'}</button>
                 <button className="snap-btn-primary" onClick={() => setEditing(true)}><i className="fas fa-pen" /> Edit Profile</button>
               </>
@@ -335,6 +380,21 @@ const Profile = () => {
             </div>
           </div>
         )}
+
+        {/* ACCOUNT SWITCHER OVERLAY */}
+        <AccountSwitcher
+          isOpen={showSwitcher}
+          onClose={() => setShowSwitcher(false)}
+          currentUser={{
+            name: profile?.name || user?.displayName || 'ECHO',
+            email: user?.email || 'user@echoty.xyz',
+            avatar: profile?.avatar || user?.photoURL || '',
+          }}
+          savedAccounts={savedAccounts}
+          onSwitchAccount={handleSwitchAccount}
+          onAddAccount={handleAddAccount}
+          onSignOutAll={handleSignOutAll}
+        />
 
         {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
       </div>
