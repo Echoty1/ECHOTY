@@ -55,11 +55,6 @@ const getPasswordStrength = (pw) => {
   return { score, label: 'Strong', color: '#10B981' };
 };
 
-/**
- * Derive a display name from the signup email.
- * "john.doe@x.com" → "John Doe"
- * "sarah_k@x.com"  → "Sarah K"
- */
 const deriveNameFromEmail = (rawEmail) => {
   const email = String(rawEmail || '').trim().toLowerCase();
   if (!email) return '';
@@ -72,7 +67,6 @@ const deriveNameFromEmail = (rawEmail) => {
     .join(' ');
 };
 
-/* ─── Fake mini chat preview for the hero ─── */
 const MiniChatPreview = () => (
   <div className="echo-preview">
     <div className="echo-preview-header">
@@ -128,7 +122,6 @@ const MiniChatPreview = () => (
   </div>
 );
 
-/* ─── Social proof row ─── */
 const SocialProof = () => (
   <div className="echo-proof">
     <div className="echo-proof-avatars">
@@ -166,11 +159,17 @@ const Login = () => {
 
   const errorRef = useRef(null);
 
-  // Redirect if already logged in, UNLESS they clicked "Add account"
   useEffect(() => {
     const isAddingAccount = sessionStorage.getItem('echo_adding_account') === 'true';
-    if (user && !isAddingAccount) {
+    const switchTargetEmail = sessionStorage.getItem('echo_switch_target_email');
+
+    if (user && !isAddingAccount && !switchTargetEmail) {
       navigate('/');
+    }
+
+    if (switchTargetEmail) {
+      setEmail(switchTargetEmail);
+      setInfo(`Please enter the password for ${switchTargetEmail} to switch accounts.`);
     }
   }, [user, navigate]);
 
@@ -201,8 +200,8 @@ const Login = () => {
     if (native) setIsRedirecting(true);
     try {
       await signInWithGoogle();
-      // Clear the Add Account flag if they successfully logged in
       sessionStorage.removeItem('echo_adding_account');
+      sessionStorage.removeItem('echo_switch_target_email');
     } catch (err) {
       if (auth.currentUser) {
         setBusy(false);
@@ -271,7 +270,8 @@ const Login = () => {
           console.warn('[Signup] verification email failed:', verr?.message || verr);
         }
         
-        sessionStorage.removeItem('echo_adding_account'); // Clear flag on success
+        sessionStorage.removeItem('echo_adding_account');
+        sessionStorage.removeItem('echo_switch_target_email');
         return;
       }
 
@@ -291,8 +291,8 @@ const Login = () => {
         } catch (_) {}
       }
 
-      // Clear the Add Account flag on successful login
       sessionStorage.removeItem('echo_adding_account');
+      sessionStorage.removeItem('echo_switch_target_email');
 
     } catch (err) {
       setError(friendlyAuthError(err));
@@ -359,6 +359,7 @@ const Login = () => {
         unreadCount: 0,
       });
       sessionStorage.removeItem('echo_adding_account');
+      sessionStorage.removeItem('echo_switch_target_email');
     } catch (err) {
       setError(friendlyAuthError(err));
       setBusy(false);
@@ -377,7 +378,6 @@ const Login = () => {
     <div className="echo-auth-root">
       <style>{AUTH_STYLES}</style>
 
-      {/* ─── LEFT: Hero + Product preview ─── */}
       <aside className="echo-auth-hero">
         <div className="echo-auth-hero-grid" aria-hidden="true" />
 
@@ -406,7 +406,6 @@ const Login = () => {
             Real-time chat, animated avatars, and a community that actually feels alive.
           </p>
 
-          {/* Live product preview */}
           <MiniChatPreview />
 
           <SocialProof />
@@ -417,7 +416,6 @@ const Login = () => {
         <div className="echo-auth-orb echo-auth-orb-c" aria-hidden="true" />
       </aside>
 
-      {/* ─── RIGHT: Auth card ─── */}
       <main className="echo-auth-main">
         <div className="echo-auth-card">
           <div className="echo-auth-mobile-brand">
@@ -663,7 +661,6 @@ const Login = () => {
   );
 };
 
-/* ───────────────────────── Styles ───────────────────────── */
 const AUTH_STYLES = `
   .echo-auth-root {
     --brand: #6C3CE1;
@@ -688,7 +685,6 @@ const AUTH_STYLES = `
     .echo-auth-root { grid-template-columns: 1.05fr 1fr; }
   }
 
-  /* ─── HERO ─── */
   .echo-auth-hero {
     display: none;
     position: relative;
@@ -762,7 +758,6 @@ const AUTH_STYLES = `
     max-width: 42ch;
   }
 
-  /* ─── Mini chat preview ─── */
   .echo-preview {
     width: 100%;
     max-width: 380px;
@@ -897,7 +892,6 @@ const AUTH_STYLES = `
     box-shadow: 0 4px 12px rgba(108,60,225,0.4);
   }
 
-  /* ─── Social proof ─── */
   .echo-proof {
     display: flex; align-items: center; gap: 14px;
   }
@@ -926,7 +920,6 @@ const AUTH_STYLES = `
   }
   .echo-proof-text strong { color: #fff; font-weight: 700; }
 
-  /* ─── Orbs ─── */
   .echo-auth-orb {
     position: absolute;
     border-radius: 50%;
@@ -954,7 +947,6 @@ const AUTH_STYLES = `
     50%      { transform: translate(-20px, 30px) scale(1.08); }
   }
 
-  /* ─── MAIN ─── */
   .echo-auth-main {
     display: flex; flex-direction: column;
     align-items: center; justify-content: center;
@@ -999,7 +991,6 @@ const AUTH_STYLES = `
   }
   .echo-auth-hint { font-size: 13px; color: var(--text-3); margin: 12px 0 20px; }
 
-  /* Alerts */
   .echo-auth-alert {
     display: flex; align-items: flex-start; gap: 10px;
     padding: 12px 14px; border-radius: 12px;
@@ -1031,7 +1022,6 @@ const AUTH_STYLES = `
     40%, 80% { transform: translateX(4px); }
   }
 
-  /* Buttons */
   .echo-auth-btn {
     width: 100%;
     display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -1106,7 +1096,6 @@ const AUTH_STYLES = `
     content: ''; flex: 1; height: 1px; background: var(--border);
   }
 
-  /* Fields */
   .echo-auth-field { margin-bottom: 14px; }
   .echo-auth-label-row {
     display: flex; align-items: center; justify-content: space-between;
