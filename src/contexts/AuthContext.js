@@ -33,6 +33,8 @@ export const useAuth = () => {
   return ctx;
 };
 
+const SAVED_ACCOUNTS_KEY = 'echo_saved_accounts';
+
 export const AuthProvider = ({ children }) => {
   const [currentUser, setCurrentUser] = useState(null);
   const [userProfile, setUserProfile] = useState(null);
@@ -44,7 +46,73 @@ export const AuthProvider = ({ children }) => {
   const banUnsubRef = useRef(null);
   const presenceUnsubRef = useRef(null);
 
-  // Subscribe to user profile
+  // Save/update the active account in localStorage for the switcher
+  useEffect(() => {
+    if (currentUser) {
+      try {
+        const saved = JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || '[]');
+        const filtered = saved.filter((a) => a.uid !== currentUser.uid);
+        const newEntry = {
+          uid: currentUser.uid,
+          name: userProfile?.name || currentUser.displayName || 'User',
+          email: currentUser.email || '',
+          avatar: userProfile?.avatar || currentUser.photoURL || '',
+          sessionExpired: false,
+        };
+        localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify([newEntry, ...filtered]));
+      } catch (_) {}
+    }
+  }, [currentUser, userProfile]);
+
+  const getSavedAccounts = useCallback(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || '[]');
+      return saved.filter((a) => a.uid !== currentUser?.uid);
+    } catch (_) {
+      return [];
+    }
+  }, [currentUser]);
+
+  const markAccountExpired = useCallback((uid) => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SAVED_ACCOUNTS_KEY) || '[]');
+      const updated = saved.map((a) =>
+        a.uid === uid ? { ...a, sessionExpired: true } : a
+      );
+      localStorage.setItem(SAVED_ACCOUNTS_KEY, JSON.stringify(updated));
+    } catch (_) {}
+  }, []);
+
+  const switchAccount = useCallback(async (account) => {
+    if (!account || account.sessionExpired) {
+      throw new Error('This account session has expired. Please sign in again.');
+    }
+    try {
+      // Firebase handles session switching natively if the token is still valid.
+      // Because Firebase persists multiple tokens in IndexedDB, we just need to 
+      // trigger a reload after setting a "switch target" so onAuthStateChanged picks it up.
+      localStorage.setItem('echo_switch_target', account.email);
+      window.location.reload();
+    } catch (err) {
+      markAccountExpired(account.uid);
+      throw err;
+    }
+  }, [markAccountExpired]);
+
+  const signOutAll = useCallback(async () => {
+    try {
+      if (currentUser?.uid) {
+        await remove(ref(db, `status/${currentUser.uid}`)).catch(() => {});
+      }
+      await signOut(auth);
+      localStorage.removeItem(SAVED_ACCOUNTS_KEY);
+      localStorage.removeItem('echo_switch_target');
+    } catch (e) {
+      console.error('[Auth] sign out all error:', e);
+      throw e;
+    }
+  }, [currentUser]);
+
   const subscribeToProfile = useCallback((uid) => {
     if (profileUnsubRef.current) {
       profileUnsubRef.current();
@@ -56,7 +124,6 @@ export const AuthProvider = ({ children }) => {
     });
   }, []);
 
-  // Subscribe to ban status
   const subscribeToBan = useCallback((uid) => {
     if (banUnsubRef.current) {
       banUnsubRef.current();
@@ -73,7 +140,6 @@ export const AuthProvider = ({ children }) => {
     });
   }, []);
 
-  // Setup presence
   const setupPresence = useCallback((uid) => {
     if (presenceUnsubRef.current) {
       presenceUnsubRef.current();
@@ -91,9 +157,7 @@ export const AuthProvider = ({ children }) => {
     if (!uid) return;
     try {
       await remove(ref(db, `status/${uid}`));
-    } catch (e) {
-      // ignore
-    }
+    } catch (e) {}
   }, []);
 
   useEffect(() => {
@@ -106,30 +170,15 @@ export const AuthProvider = ({ children }) => {
             setInitializing(false);
             return;
           }
-
           setCurrentUser(user);
           subscribeToProfile(user.uid);
           subscribeToBan(user.uid);
           setupPresence(user.uid);
-
-          try {
-            await applyWelcomeFollow(user.uid);
-          } catch (e) {
-            console.warn('[Auth] welcome follow failed:', e?.message || e);
-          }
+          try { await applyWelcomeFollow(user.uid); } catch (e) {}
         } else {
-          if (presenceUnsubRef.current) {
-            presenceUnsubRef.current();
-            presenceUnsubRef.current = null;
-          }
-          if (profileUnsubRef.current) {
-            profileUnsubRef.current();
-            profileUnsubRef.current = null;
-          }
-          if (banUnsubRef.current) {
-            banUnsubRef.current();
-            banUnsubRef.current = null;
-          }
+          if (presenceUnsubRef.current) { presenceUnsubRef.current(); presenceUnsubRef.current = null; }
+          if (profileUnsubRef.current) { profileUnsubRef.current(); profileUnsubRef.current = null; }
+          if (banUnsubRef.current) { banUnsubRef.current(); banUnsubRef.current = null; }
           setCurrentUser(null);
           setUserProfile(null);
           setBanInfo({ isBanned: false });
@@ -141,7 +190,6 @@ export const AuthProvider = ({ children }) => {
         setInitializing(false);
       }
     });
-
     return () => {
       unsubscribe();
       if (profileUnsubRef.current) profileUnsubRef.current();
@@ -152,9 +200,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = useCallback(async () => {
     try {
-      if (currentUser?.uid) {
-        await cleanupPresence(currentUser.uid);
-      }
+      if (currentUser?.uid) await cleanupPresence(currentUser.uid);
       await signOut(auth);
     } catch (e) {
       console.error('[Auth] logout error:', e);
@@ -171,6 +217,9 @@ export const AuthProvider = ({ children }) => {
     loading,
     initializing,
     logout,
+    getSavedAccounts,
+    switchAccount,
+    signOutAll,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
