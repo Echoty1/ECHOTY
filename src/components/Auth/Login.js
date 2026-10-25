@@ -1,7 +1,4 @@
 // src/components/Auth/Login.js
-// Phone (Capacitor): native Google via @capacitor-firebase/authentication
-// Web/desktop: popup Google
-// After login → same app (AuthContext). No Expo handoff.
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
@@ -179,11 +176,17 @@ const Login = () => {
         setPassword(savedPass);
         setInfo(`Switching to ${switchTargetEmail}...`);
         
-        // Auto-submit after a brief moment so the user sees it happening
-        setTimeout(() => {
-          const form = document.querySelector('.echo-auth-form');
-          if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-        }, 300);
+        // 🔴 FORCE FIREBASE TO FORGET OLD SESSION
+        // This prevents the "bounce back" to the previous account
+        signOut(auth).then(() => {
+          // Auto-submit after signing out
+          setTimeout(() => {
+            const form = document.querySelector('.echo-auth-form');
+            if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+          }, 300);
+        }).catch((err) => {
+          console.error("Sign out error during switch:", err);
+        });
       } else {
         setInfo(`Please enter the password for ${switchTargetEmail} to switch accounts.`);
       }
