@@ -310,4 +310,247 @@ const Home = ({ onOpenRecorder, onOpenStory }) => {
       unsubAccounts();
       clearTimeout(timeout);
     };
-  }, [user
+  }, [user, isDemoUser, isSupportUser, profiles, fetchProfile]);
+
+  useEffect(() => {
+    if (!user) return;
+    const liveRef = ref(db, 'live');
+    const unsubLive = onValue(liveRef, (snapshot) => {
+      const data = snapshot.val() || {};
+      const live = Object.keys(data).filter((uid) => uid !== user.uid);
+      setLiveUids(live);
+      const meta = {};
+      live.forEach((uid) => {
+        const entry = data[uid] || {};
+        meta[uid] = {
+          name: entry.name || '',
+          avatar: entry.avatar || '',
+        };
+        fetchProfile?.(uid);
+      });
+      setLiveMeta(meta);
+    });
+    return () => unsubLive();
+  }, [user, fetchProfile]);
+
+  const openUserPreview = (uid) => {
+    const profile = profiles[uid];
+    if (profile) {
+      setSelectedUser({
+        uid,
+        ...profile,
+        isLive: liveUids.includes(uid),
+      });
+    }
+  };
+
+  const closeUserPreview = () => setSelectedUser(null);
+
+  useEffect(() => {
+    if (activeVideoCall) setSelectedUser(null);
+  }, [activeVideoCall]);
+
+  const startChat = (uid, name, avatar) => {
+    closeUserPreview();
+    navigate(`/chat/${uid}`, {
+      state: { userName: name || 'User', userAvatar: avatar || '' },
+    });
+  };
+
+  const handleJoinLive = (uid, name) => {
+    closeUserPreview();
+    setViewingLive({ uid, name, avatar: profiles[uid]?.avatar || '' });
+  };
+
+  const closeLiveView = () => setViewingLive(null);
+
+  const combinedUids = Array.from(new Set([...onlineUids, ...liveUids])).filter((id) => !bannedUids.has(id));
+  const onlineUsers = filterVisibleUsers(
+    combinedUids
+      .map((uid) => {
+        const profile = profiles[uid];
+        const isLiveUser = liveUids.includes(uid);
+        const fromLive = liveMeta[uid] || {};
+        if (!profile) return null;
+        const name = (profile.name || fromLive.name || '').trim();
+        if (!isRealDisplayName(name)) return null;
+        return {
+          uid,
+          ...profile,
+          name,
+          avatar: profile.avatar || fromLive.avatar || '',
+          online: onlineUids.includes(uid),
+          isLive: isLiveUser,
+        };
+      })
+      .filter(Boolean)
+  ).sort((a, b) => (b.isLive ? 1 : 0) - (a.isLive ? 1 : 0));
+
+  if (isLive && broadcastStream) {
+    return <BroadcastView onEnd={stopCamera} stream={broadcastStream} />;
+  }
+
+  if (loading) {
+    return <HomeSkeleton />;
+  }
+
+  const liveCount = liveUids.length;
+  const onlineCount = onlineUsers.filter((u) => u.online && !u.isLive).length;
+  const totalCount = liveCount + onlineCount;
+
+  return (
+    <>
+      <SEO
+        title="Live Now – Chat with Friends"
+        description="See who's online and start a conversation instantly on ECHO."
+      />
+      <StructuredData />
+
+      <div className="home-page">
+        <div className="home-container">
+          {/* ─── Live Now section ─────────────────────────── */}
+          <section className="home-section">
+            <div className="section-header">
+              <div className="section-title-group">
+                <span className={`live-dot${liveCount > 0 ? ' is-live' : ''}`} aria-hidden="true" />
+                <h3 className="section-title">Live Now</h3>
+              </div>
+              <span className="section-count">
+                {liveCount > 0
+                  ? `${liveCount} live · ${totalCount} total`
+                  : `${totalCount} online`}
+              </span>
+            </div>
+
+            <p className="section-hint">
+              {liveCount > 0
+                ? 'Tap a live user to watch their stream'
+                : 'Tap any profile to chat instantly'}
+            </p>
+
+            <div className="live-users-scroll">
+              {onlineUsers.length === 0 ? (
+                <div className="live-empty">
+                  <i className="fas fa-moon" aria-hidden="true" />
+                  <span>No one is online right now</span>
+                  <button
+                    type="button"
+                    className="live-empty-action"
+                    onClick={toggleLive}
+                  >
+                    Go live →
+                  </button>
+                </div>
+              ) : (
+                onlineUsers.map((profile) => (
+                  <button
+                    key={profile.uid}
+                    type="button"
+                    className={`live-user-card${profile.isLive ? ' is-live' : ''}`}
+                    onClick={() => openUserPreview(profile.uid)}
+                    aria-label={`${profile.name}${profile.isLive ? ' is live' : ''}`}
+                  >
+                    <div className="live-avatar-wrapper">
+                      <div className="live-avatar-ring">
+                        <Avatar
+                          src={profile.avatar}
+                          name={profile.name}
+                          size={72}
+                        />
+                      </div>
+                      {!profile.isLive && profile.online && (
+                        <span className="online-dot" aria-hidden="true" />
+                      )}
+                      {profile.isLive && (
+                        <span className="live-badge">● LIVE</span>
+                      )}
+                    </div>
+                    <span className="live-username">{profile.name}</span>
+                  </button>
+                ))
+              )}
+            </div>
+          </section>
+
+          {/* ─── Go Live button ──────────────────────────── */}
+          <button
+            type="button"
+            className={`go-live-btn${isLive ? ' is-live' : ''}`}
+            onClick={toggleLive}
+          >
+            <i className={`fas ${isLive ? 'fa-stop-circle' : 'fa-video'}`} aria-hidden="true" />
+            <span>{isLive ? 'End Live Stream' : 'Go Live Now'}</span>
+          </button>
+
+          {cameraError && (
+            <div className="home-error-inline" role="alert">
+              {cameraError}
+            </div>
+          )}
+        </div>
+
+        {/* ─── Stories bar ──────────────────────────────── */}
+        <div className="home-stories-dock">
+          <StoriesBar
+            currentUserId={user?.uid}
+            users={onlineUsers}
+            ownStory={null}
+            onAddStory={onOpenRecorder} // Passed from App.js
+            onViewStories={(stories, ownerId) => {
+              onOpenStory(stories, ownerId); // Passed from App.js
+            }}
+          />
+        </div>
+
+        {selectedUser && (
+          <UserPreviewModal
+            user={selectedUser}
+            onClose={closeUserPreview}
+            onChat={() => startChat(selectedUser.uid, selectedUser.name, selectedUser.avatar)}
+            onVideoCall={() => {
+              const u = selectedUser;
+              setSelectedUser(null);
+              startVideoCall(u.uid, u.name, u.avatar);
+            }}
+            callerIsLive={isLive}
+            onJoinLive={() => handleJoinLive(selectedUser.uid, selectedUser.name)}
+          />
+        )}
+
+        {viewingLive && (
+          <LiveViewModal
+            broadcasterId={viewingLive.uid}
+            broadcasterName={viewingLive.name}
+            broadcasterAvatar={viewingLive.avatar || profiles[viewingLive.uid]?.avatar || ''}
+            onClose={closeLiveView}
+          />
+        )}
+
+        {peerError && (
+          <div className="peer-error-toast" role="alert">
+            <span>{peerError}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setPeerError(null);
+                window.location.reload();
+              }}
+            >
+              Try again
+            </button>
+            <button
+              type="button"
+              className="peer-error-dismiss"
+              onClick={() => setPeerError(null)}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </div>
+        )}
+      </div>
+    </>
+  );
+};
+
+export default Home;
