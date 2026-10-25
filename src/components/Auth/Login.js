@@ -159,6 +159,7 @@ const Login = () => {
 
   const errorRef = useRef(null);
 
+  // ─── Auto-Login Switch Logic ───
   useEffect(() => {
     const isAddingAccount = sessionStorage.getItem('echo_adding_account') === 'true';
     const switchTargetEmail = sessionStorage.getItem('echo_switch_target_email');
@@ -169,7 +170,23 @@ const Login = () => {
 
     if (switchTargetEmail) {
       setEmail(switchTargetEmail);
-      setInfo(`Please enter the password for ${switchTargetEmail} to switch accounts.`);
+      
+      // Retrieve the saved password for instant login
+      const savedPasswords = JSON.parse(localStorage.getItem('echo_saved_passwords') || '{}');
+      const savedPass = savedPasswords[switchTargetEmail];
+
+      if (savedPass) {
+        setPassword(savedPass);
+        setInfo(`Switching to ${switchTargetEmail}...`);
+        
+        // Auto-submit after a brief moment so the user sees it happening
+        setTimeout(() => {
+          const form = document.querySelector('.echo-auth-form');
+          if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+        }, 300);
+      } else {
+        setInfo(`Please enter the password for ${switchTargetEmail} to switch accounts.`);
+      }
     }
   }, [user, navigate]);
 
@@ -290,6 +307,11 @@ const Login = () => {
           });
         } catch (_) {}
       }
+
+      // 🔴 SAVE THE PASSWORD FOR INSTANT SWITCHING
+      const savedPasswords = JSON.parse(localStorage.getItem('echo_saved_passwords') || '{}');
+      savedPasswords[email.trim().toLowerCase()] = password;
+      localStorage.setItem('echo_saved_passwords', JSON.stringify(savedPasswords));
 
       sessionStorage.removeItem('echo_adding_account');
       sessionStorage.removeItem('echo_switch_target_email');
@@ -479,7 +501,7 @@ const Login = () => {
             <span>or</span>
           </div>
 
-          <form onSubmit={handleSubmit} noValidate>
+          <form className="echo-auth-form" onSubmit={handleSubmit} noValidate>
             <div className="echo-auth-field">
               <label className="echo-auth-label">Email</label>
               <div className={`echo-auth-input-wrap ${focusedField === 'email' ? 'focused' : ''}`}>
