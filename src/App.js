@@ -50,7 +50,6 @@ import { unlockAudio } from './services/notificationService';
 import OnboardingFlow from './components/Onboarding/OnboardingFlow';
 import { useOnboarding } from './hooks/useOnboarding';
 import { useAppBadge } from './hooks/useAppBadge';
-// ────────────────────────────────────────────────────────────
 
 // ─── Spotlight & Instants ──────────────────────────────────
 import SpotlightFeed from './pages/Spotlight/SpotlightFeed';
@@ -61,7 +60,6 @@ import './pages/Spotlight/Spotlight.css';
 import InstantsIntro from './components/Stories/InstantsIntro'; 
 import StoryViewer from './components/Stories/StoryViewer';
 import StoryRecorder from './components/Stories/StoryRecorder'; 
-// ────────────────────────────────────────────────────────────
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
@@ -155,25 +153,20 @@ function AppContent() {
   const [pendingStoryViewer, setPendingStoryViewer] = useState(null);
   const [showRecorder, setShowRecorder] = useState(false);
   
-  // When a user clicks an Echu to view it
   const handleOpenStory = (stories, userObj) => {
     setShowInstantsIntro(true);
     setPendingAction('view');
     setPendingStoryViewer({ stories, userObj });
   };
 
-  // When a user clicks the camera button to record
   const handleOpenRecorder = () => {
     setShowInstantsIntro(true);
     setPendingAction('record');
   };
 
-  // When they click "Try it" on the intro screen
   const handleIntroStart = () => {
     setShowInstantsIntro(false);
-    if (pendingAction === 'view') {
-      // The viewer will open automatically because pendingStoryViewer is set
-    } else if (pendingAction === 'record') {
+    if (pendingAction === 'record') {
       setShowRecorder(true);
     }
     setPendingAction(null);
@@ -434,7 +427,7 @@ function AppContent() {
           ownerAvatar={pendingStoryViewer.userObj?.avatar}
           viewerId={user?.uid}
           onClose={() => setPendingStoryViewer(null)}
-          onFinished={() => { /* handle removal of unseen dot */ }}
+          onFinished={() => { setPendingStoryViewer(null); }}
         />
       )}
 
