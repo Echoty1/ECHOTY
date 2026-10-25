@@ -3,6 +3,8 @@
 // Web/desktop: popup Google
 // After login → same app (AuthContext). No Expo handoff.
 import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../../hooks/useAuth';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
@@ -143,6 +145,9 @@ const SocialProof = () => (
 );
 
 const Login = () => {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -160,6 +165,14 @@ const Login = () => {
   const passwordStrength = getPasswordStrength(password);
 
   const errorRef = useRef(null);
+
+  // Redirect if already logged in, UNLESS they clicked "Add account"
+  useEffect(() => {
+    const isAddingAccount = sessionStorage.getItem('echo_adding_account') === 'true';
+    if (user && !isAddingAccount) {
+      navigate('/');
+    }
+  }, [user, navigate]);
 
   useEffect(() => {
     if (typeof navigator !== 'undefined' && navigator.serviceWorker) {
@@ -188,6 +201,8 @@ const Login = () => {
     if (native) setIsRedirecting(true);
     try {
       await signInWithGoogle();
+      // Clear the Add Account flag if they successfully logged in
+      sessionStorage.removeItem('echo_adding_account');
     } catch (err) {
       if (auth.currentUser) {
         setBusy(false);
@@ -230,18 +245,13 @@ const Login = () => {
     try {
       if (isSignup) {
         armEmailGate();
-
-        // 1. Create the account — this signs the user in automatically.
         const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-
-        // 2. Write a proper profile immediately — this is what every
-        //    other screen reads. Derive name from email so it's never "User".
         const newUid = cred.user.uid;
         const derivedName = deriveNameFromEmail(email);
         try {
           await set(ref(db, `profiles/${newUid}`), {
-            name: derivedName,          // may be '' if email is weird — onboarding can still set it
-            username: '',               // filled later
+            name: derivedName,
+            username: '',
             avatar: '',
             bio: '',
             mood: 'neutral',
@@ -252,8 +262,6 @@ const Login = () => {
         } catch (perr) {
           console.warn('[Signup] profile write failed:', perr?.message || perr);
         }
-
-        // 3. Send the verification email. If sending fails, don't block signup.
         try {
           await sendEmailVerification(cred.user, {
             url: window.location.origin + '/',
@@ -262,9 +270,8 @@ const Login = () => {
         } catch (verr) {
           console.warn('[Signup] verification email failed:', verr?.message || verr);
         }
-
-        // 4. NO signOut — user stays signed in.
-        //    App.js detects `emailVerified === false` and renders <VerifyEmailScreen />.
+        
+        sessionStorage.removeItem('echo_adding_account'); // Clear flag on success
         return;
       }
 
@@ -276,15 +283,17 @@ const Login = () => {
         cred.user.uid === DEMO_UID || email.trim().toLowerCase() === DEMO_EMAIL;
 
       if (!isDemo && !cred.user.emailVerified) {
-        // Re-send verification email but keep them signed in.
         try {
           await sendEmailVerification(cred.user, {
             url: window.location.origin + '/',
             handleCodeInApp: false,
           });
         } catch (_) {}
-        // App.js will route to <VerifyEmailScreen /> automatically.
       }
+
+      // Clear the Add Account flag on successful login
+      sessionStorage.removeItem('echo_adding_account');
+
     } catch (err) {
       setError(friendlyAuthError(err));
     }
@@ -349,6 +358,7 @@ const Login = () => {
         lastUpdated: Date.now(),
         unreadCount: 0,
       });
+      sessionStorage.removeItem('echo_adding_account');
     } catch (err) {
       setError(friendlyAuthError(err));
       setBusy(false);
