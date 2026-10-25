@@ -6,7 +6,7 @@ const InstantsIntro = ({ onStart }) => {
     <div className="instants-intro-overlay">
       <div className="instants-intro-content">
         
-        {/* Stacked Cards Graphic */}
+        {/* Advanced Stacked Cards Graphic */}
         <div className="instants-intro-stack">
           <div className="intro-card-layer layer-1">
             <img src="https://images.unsplash.com/photo-1518791841217-8f162f1e1131?w=800" alt="" />
@@ -19,36 +19,50 @@ const InstantsIntro = ({ onStart }) => {
           </div>
         </div>
 
-        <h1 className="instants-intro-title">Introducing Instants</h1>
+        {/* Branded Title */}
+        <h1 className="instants-intro-title">
+          Introducing <span>Echus</span>
+        </h1>
 
+        {/* Feature List */}
         <div className="instants-feature-list">
           <div className="instants-feature">
-            <i className="fas fa-camera" />
+            <div className="feature-icon-wrapper">
+              <i className="fas fa-camera" />
+            </div>
             <div>
               <h4>Share in the moment</h4>
               <p>Get straight to the camera to share with friends, fast.</p>
             </div>
           </div>
+          
           <div className="instants-feature">
-            <i className="far fa-clock" />
+            <div className="feature-icon-wrapper">
+              <i className="far fa-clock" />
+            </div>
             <div>
               <h4>Photos disappear</h4>
-              <p>Instants can't be viewed again once they're gone.</p>
+              <p>Echus can't be viewed again once they're gone.</p>
             </div>
           </div>
+          
           <div className="instants-feature">
-            <i className="fas fa-link" />
+            <div className="feature-icon-wrapper">
+              <i className="fas fa-link" />
+            </div>
             <div>
               <h4>Use either app</h4>
-              <p>Share and view instants from here or from Instagram.</p>
+              <p>Share and view echus from here or from ECHO.</p>
             </div>
           </div>
         </div>
 
+        {/* Disclaimer */}
         <p className="instants-disclaimer">
-          Instants follow our Privacy Policy, including for personalized ads. Your instants must comply with our Community Guidelines.
+          Echus follow our Privacy Policy, including for personalized ads. Your echus must comply with our Community Guidelines.
         </p>
 
+        {/* CTA Button */}
         <button className="instants-try-btn" onClick={onStart}>
           Try it
         </button>
