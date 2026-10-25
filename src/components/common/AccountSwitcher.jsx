@@ -34,7 +34,7 @@ const AccountSwitcher = ({
             {currentUser?.avatar ? (
               <img src={currentUser.avatar} alt="Avatar" />
             ) : (
-              <div className="account-avatar-fallback" style={{ background: currentUser?.color || '#E65C00' }}>
+              <div className="account-avatar-fallback" style={{ background: '#E65C00' }}>
                 {(currentUser?.name || 'E').charAt(0).toUpperCase()}
               </div>
             )}
@@ -97,7 +97,6 @@ const AccountSwitcher = ({
           </div>
           <span>Sign out of all accounts</span>
         </button>
-
       </div>
     </div>
   );
