@@ -87,12 +87,20 @@ export const AuthProvider = ({ children }) => {
     if (!account || account.sessionExpired) {
       throw new Error('This account session has expired. Please sign in again.');
     }
+    
     try {
-      // Firebase handles session switching natively if the token is still valid.
-      // Because Firebase persists multiple tokens in IndexedDB, we just need to 
-      // trigger a reload after setting a "switch target" so onAuthStateChanged picks it up.
-      localStorage.setItem('echo_switch_target', account.email);
-      window.location.reload();
+      // On the Firebase Free Plan, we must force a re-login for the target account 
+      // to securely swap the token.
+      
+      // 1. Set the email so the login page auto-fills it
+      sessionStorage.setItem('echo_switch_target_email', account.email);
+      
+      // 2. Sign out the current user
+      await signOut(auth);
+      
+      // 3. Redirect to login so they can re-authenticate the saved account
+      window.location.href = '/login';
+      
     } catch (err) {
       markAccountExpired(account.uid);
       throw err;
@@ -106,7 +114,8 @@ export const AuthProvider = ({ children }) => {
       }
       await signOut(auth);
       localStorage.removeItem(SAVED_ACCOUNTS_KEY);
-      localStorage.removeItem('echo_switch_target');
+      sessionStorage.removeItem('echo_switch_target_email');
+      sessionStorage.removeItem('echo_adding_account');
     } catch (e) {
       console.error('[Auth] sign out all error:', e);
       throw e;
