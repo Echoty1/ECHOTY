@@ -6,7 +6,7 @@ const InstantsIntro = ({ onStart }) => {
     <div className="instants-intro-overlay">
       <div className="instants-intro-content">
         
-        {/* Stacked Cards */}
+        {/* Stacked Cards Graphic */}
         <div className="instants-intro-stack">
           <div className="intro-card-layer layer-1">
             <img src="https://images.unsplash.com/photo-1518791841217-8f162f1e1131?w=800" alt="" />
@@ -46,7 +46,7 @@ const InstantsIntro = ({ onStart }) => {
         </div>
 
         <p className="instants-disclaimer">
-          Instants follow our Privacy Policy, including for personalized ads. Your instants meet comply with our Community Guidelines.
+          Instants follow our Privacy Policy, including for personalized ads. Your instants must comply with our Community Guidelines.
         </p>
 
         <button className="instants-try-btn" onClick={onStart}>
