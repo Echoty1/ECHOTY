@@ -1,16 +1,17 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { signOut, getAuth } from 'firebase/auth'; // <-- Import Firebase Auth
 import './AccountSwitcher.css';
 
 const AccountSwitcher = ({ 
   currentUser, 
   savedAccounts, 
   onSwitchAccount, 
-  onAddAccount, 
   onSignOutAll,
   isOpen,
   onClose
 }) => {
   const wrapperRef = useRef(null);
+  const [isSigningOut, setIsSigningOut] = useState(false);
 
   useEffect(() => {
     function handleClickOutside(event) {
@@ -21,6 +22,26 @@ const AccountSwitcher = ({
     if (isOpen) document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [isOpen, onClose]);
+
+  // Custom Add Account Handler
+  const handleAddAccount = async () => {
+    setIsSigningOut(true);
+    try {
+      const auth = getAuth();
+      
+      // 1. Set a flag so the Login page knows we intentionally came here
+      sessionStorage.setItem('echo_adding_account', 'true'); 
+      
+      // 2. Sign out the current session
+      await signOut(auth); 
+      
+      // 3. Redirect to login
+      window.location.href = '/login';
+    } catch (error) {
+      console.error("Error signing out to add account:", error);
+      setIsSigningOut(false);
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -60,7 +81,7 @@ const AccountSwitcher = ({
             <div 
               key={acc.uid} 
               className={`account-item ${isExpired ? 'expired' : 'clickable'}`}
-              onClick={() => !isExpired && onSwitchAccount(acc)}
+              onClick={() => !isExpired && !isSigningOut && onSwitchAccount(acc)}
             >
               <div className="account-avatar-wrapper">
                 {acc.avatar ? (
@@ -82,16 +103,16 @@ const AccountSwitcher = ({
 
         <div className="account-divider" />
 
-        <button className="account-action-btn" onClick={onAddAccount}>
+        <button className="account-action-btn" onClick={handleAddAccount} disabled={isSigningOut}>
           <div className="action-icon-circle">
-            <i className="fas fa-plus" />
+            {isSigningOut ? <i className="fas fa-spinner fa-spin" /> : <i className="fas fa-plus" />}
           </div>
-          <span>Add another account</span>
+          <span>{isSigningOut ? 'Signing out...' : 'Add another account'}</span>
         </button>
 
         <div className="account-divider" />
 
-        <button className="account-action-btn sign-out" onClick={onSignOutAll}>
+        <button className="account-action-btn sign-out" onClick={() => !isSigningOut && onSignOutAll()}>
           <div className="action-icon-circle">
             <i className="fas fa-sign-out-alt" />
           </div>
