@@ -591,3 +591,65 @@
   from { opacity: 1; }
   to { opacity: 0; }
 }
+/* ═══════════════════════════════════════════════════════════════
+   FINAL FIX: Desktop Camera Proportional Layout
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 1. Make the overlay a perfect full-screen flexbox */
+.instants-camera-overlay {
+  position: fixed !important;
+  inset: 0 !important;
+  background: #000 !important;
+  z-index: 9999999 !important;
+  display: flex !important;
+  flex-direction: column !important;
+  align-items: center !important; /* Centers everything horizontally */
+  height: 100dvh !important;
+  width: 100vw !important;
+}
+
+/* 2. Lock the preview into a phone-shaped portrait box */
+.instants-camera-preview {
+  flex: 1 !important;
+  width: 100% !important;
+  max-width: 420px !important; /* Stops it from being too wide on PC */
+  margin: 10px 0 !important;
+  border-radius: 40px !important;
+  overflow: hidden !important;
+  position: relative !important;
+  background: #111 !important;
+}
+
+/* 3. Ensure the video fills the box correctly without stretching */
+.instants-video-feed {
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover !important;
+}
+
+/* 4. Center the controls */
+.instants-camera-controls {
+  width: 100% !important;
+  max-width: 420px !important; /* Aligns with the camera width */
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important; /* Spreads the buttons out */
+  padding: 20px 40px !important; /* Adds space on the sides */
+  flex-shrink: 0 !important;
+}
+
+/* 5. Center the header too */
+.instants-camera-header {
+  width: 100% !important;
+  max-width: 420px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: space-between !important;
+  padding: calc(16px + env(safe-area-inset-top, 0px)) 20px 16px !important;
+  flex-shrink: 0 !important;
+}
+
+/* 6. Center the audience pill */
+.instants-audience-pill {
+  margin-bottom: calc(20px + env(safe-area-inset-bottom, 0px)) !important;
+}
