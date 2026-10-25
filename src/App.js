@@ -60,7 +60,7 @@ import './pages/Spotlight/Spotlight.css';
 
 import InstantsIntro from './components/Stories/InstantsIntro'; 
 import StoryViewer from './components/Stories/StoryViewer';
-import StoryRecorder from './components/Stories/StoryRecorder'; // Added Recorder!
+import StoryRecorder from './components/Stories/StoryRecorder'; 
 // ────────────────────────────────────────────────────────────
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
@@ -149,30 +149,34 @@ function AppContent() {
     Boolean(user) && !showLoading && !banInfo?.isBanned &&
     (pathname === '/' || pathname === '/chats' || pathname === '/communities' || pathname === '/shop' || pathname === '/other' || pathname === '/echodrop');
 
-  // ─── INSTANTS INTRO STATE ───
+  // ─── INSTANTS STATE (ALWAYS SHOW INTRO) ───
   const [showInstantsIntro, setShowInstantsIntro] = useState(false);
-  const [hasSeenInstantsIntro, setHasSeenInstantsIntro] = useState(
-    localStorage.getItem('seen_instants_intro') === 'true'
-  );
+  const [pendingAction, setPendingAction] = useState(null); // 'view' or 'record'
   const [pendingStoryViewer, setPendingStoryViewer] = useState(null);
-  
-  // ─── RECORDER STATE ───
   const [showRecorder, setShowRecorder] = useState(false);
-  const [showMemories, setShowMemories] = useState(false);
-
+  
+  // When a user clicks an Echu to view it
   const handleOpenStory = (stories, userObj) => {
-    if (!hasSeenInstantsIntro) {
-      setShowInstantsIntro(true);
-      setPendingStoryViewer({ stories, userObj });
-    } else {
-      setPendingStoryViewer({ stories, userObj }); // Open directly
-    }
+    setShowInstantsIntro(true);
+    setPendingAction('view');
+    setPendingStoryViewer({ stories, userObj });
   };
 
+  // When a user clicks the camera button to record
+  const handleOpenRecorder = () => {
+    setShowInstantsIntro(true);
+    setPendingAction('record');
+  };
+
+  // When they click "Try it" on the intro screen
   const handleIntroStart = () => {
     setShowInstantsIntro(false);
-    setHasSeenInstantsIntro(true);
-    localStorage.setItem('seen_instants_intro', 'true');
+    if (pendingAction === 'view') {
+      // The viewer will open automatically because pendingStoryViewer is set
+    } else if (pendingAction === 'record') {
+      setShowRecorder(true);
+    }
+    setPendingAction(null);
   };
 
   useEffect(() => {
@@ -386,7 +390,7 @@ function AppContent() {
         }}
       >
         <Routes>
-          <Route path="/" element={<Home />} />
+          <Route path="/" element={<Home onOpenRecorder={handleOpenRecorder} onOpenStory={handleOpenStory} />} />
           <Route path="/chats" element={<Chats />} />
           <Route path="/chat/echo_ai_assistant" element={<EchoAI />} />
           <Route path="/chat/:userId" element={<ChatView />} />
@@ -394,7 +398,6 @@ function AppContent() {
           <Route path="/join/:code" element={<GroupInvitePage />} />
           <Route path="/profile" element={<Profile />} />
           
-          {/* ONLY user profile is a standalone page. Spotlight uses an overlay. */}
           <Route path="/user/:uid" element={<UserProfile />} />
 
           <Route path="/other" element={<Other />} />
@@ -439,7 +442,6 @@ function AppContent() {
         <StoryRecorder 
           userId={user?.uid} 
           onClose={() => setShowRecorder(false)} 
-          onOpenMemories={() => setShowMemories(true)}
         />
       )}
       {/* ────────────────────────── */}
