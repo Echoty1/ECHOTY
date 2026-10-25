@@ -75,12 +75,6 @@ const StoryRecorder = ({ userId, onClose }) => {
     }
   };
 
-  const handleDeleteMemory = async (statusId) => {
-    if (!window.confirm("Delete this Echus?")) return;
-    await deleteStatus(userId, statusId);
-    fetchMemories();
-  };
-
   const openMemories = () => {
     fetchMemories();
     setShowMemories(true);
@@ -88,7 +82,7 @@ const StoryRecorder = ({ userId, onClose }) => {
 
   return (
     <div className="instants-camera-overlay">
-      {/* Header */}
+      {/* Top Header */}
       <div className="instants-camera-header">
         <button className="camera-close-btn" onClick={onClose}>
           <i className="fas fa-times" />
@@ -96,7 +90,7 @@ const StoryRecorder = ({ userId, onClose }) => {
         <h2 className="camera-title">New instant</h2>
         <button className="camera-history-btn" onClick={openMemories}>
           <i className="fas fa-th" />
-          <span className="history-badge">1</span>
+          {memories.length > 0 && <span className="history-badge">{memories.length}</span>}
         </button>
       </div>
 
@@ -132,7 +126,7 @@ const StoryRecorder = ({ userId, onClose }) => {
         </button>
       </div>
 
-      {/* Bottom Audience Pill */}
+      {/* Audience Pill */}
       <div className="instants-audience-pill">
         <div className="audience-avatar">
           <i className="fas fa-user" />
@@ -140,7 +134,7 @@ const StoryRecorder = ({ userId, onClose }) => {
         Friends <i className="fas fa-chevron-down" />
       </div>
 
-      {/* MEMORIES PANEL (Overlay) */}
+      {/* Memories Panel */}
       {showMemories && !selectedMemory && (
         <div className="memories-glass-panel">
           <div className="memories-header">
@@ -159,7 +153,7 @@ const StoryRecorder = ({ userId, onClose }) => {
                     <span>{new Date(mem.createdAt).toLocaleDateString()}</span>
                     <button className="delete-memory" onClick={(e) => {
                       e.stopPropagation();
-                      handleDeleteMemory(mem.id);
+                      deleteStatus(userId, mem.id).then(fetchMemories);
                     }}>
                       <i className="fas fa-trash"></i>
                     </button>
@@ -171,19 +165,13 @@ const StoryRecorder = ({ userId, onClose }) => {
         </div>
       )}
 
-      {/* FULLSCREEN MEMORY VIEW */}
+      {/* Fullscreen Memory */}
       {selectedMemory && (
         <div className="memory-fullscreen-overlay" onClick={() => setSelectedMemory(null)}>
           <div className="memory-fullscreen-content" onClick={(e) => e.stopPropagation()}>
             <img src={selectedMemory.imageUrl} alt="Memory Full" />
             <div className="memory-fullscreen-actions">
-              <button className="cancel-memory-btn" onClick={() => setSelectedMemory(null)}>Cancel</button>
-              <button className="delete-memory-btn" onClick={() => {
-                handleDeleteMemory(selectedMemory.id);
-                setSelectedMemory(null);
-              }}>
-                Delete
-              </button>
+              <button className="cancel-memory-btn" onClick={() => setSelectedMemory(null)}>Close</button>
             </div>
           </div>
         </div>
