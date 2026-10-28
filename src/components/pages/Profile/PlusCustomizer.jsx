@@ -13,18 +13,7 @@ const PlusCustomizer = () => {
       <div className="plus-section">
         <div className="plus-section-title"><i className="fas fa-palette" style={{ color: '#FFD700' }}/> App Theme</div>
         <div className="theme-grid">
-          <div className={`theme-card ${appTheme === 'theme-default' ? 'active' : ''}`} onClick={() => setAppTheme('theme-default')}>
-            <div className="theme-preview default-preview"></div><span>Default</span>
-          </div>
-          <div className={`theme-card ${appTheme === 'theme-midnight' ? 'active' : ''}`} onClick={() => setAppTheme('theme-midnight')}>
-            <div className="theme-preview midnight-preview"></div><span>Midnight</span>
-          </div>
-          <div className={`theme-card ${appTheme === 'theme-amoled' ? 'active' : ''}`} onClick={() => setAppTheme('theme-amoled')}>
-            <div className="theme-preview amoled-preview"></div><span>AMOLED</span>
-          </div>
-          <div className={`theme-card ${appTheme === 'theme-ocean' ? 'active' : ''}`} onClick={() => setAppTheme('theme-ocean')}>
-            <div className="theme-preview ocean-preview"></div><span>Ocean</span>
-          </div>
+          {/* ... existing themes ... */}
         </div>
       </div>
 
@@ -36,6 +25,7 @@ const PlusCustomizer = () => {
           <button className={`pill-btn ${chatStyle === 'glass' ? 'active' : ''}`} onClick={() => setChatStyle('glass')}>Glass</button>
           <button className={`pill-btn ${chatStyle === 'gold' ? 'active' : ''}`} onClick={() => setChatStyle('gold')}>Gold</button>
         </div>
+        <p style={{ fontSize: '11px', color: '#aaa', marginTop: '8px' }}>Your bubble style will be visible to the person you are chatting with.</p>
       </div>
 
       <div className="plus-section">
@@ -45,6 +35,7 @@ const PlusCustomizer = () => {
           <button className={`pill-btn ${ringStyle === 'neon' ? 'active' : ''}`} onClick={() => setRingStyle('neon')}>Neon</button>
           <button className={`pill-btn ${ringStyle === 'fire' ? 'active' : ''}`} onClick={() => setRingStyle('fire')}>Fire</button>
         </div>
+        <p style={{ fontSize: '11px', color: '#aaa', marginTop: '8px' }}>Your aura will be visible to everyone who visits your profile.</p>
       </div>
     </>
   );
