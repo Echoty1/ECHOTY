@@ -15,18 +15,23 @@ export const SubscriptionProvider = ({ children }) => {
   const [chatStyle, setChatStyle] = useState(''); // '', 'neon', 'glass', 'gold'
   const [ringStyle, setRingStyle] = useState('gold'); // 'gold', 'neon', 'fire'
 
-  const upgradeToPlus = () => {
+  const upgradeToPlus = async () => {
     setIsEchoPlus(true);
     setShowUpgradeModal(false);
-    // In a real app, this would save to Firebase. For now, we just set local state.
+    if (user?.uid) {
+      await update(ref(db, `profiles/${user.uid}`), { 
+        isEchoPlus: true, 
+        premiumChatStyle: chatStyle, 
+        premiumRingStyle: ringStyle 
+      }).catch(console.error);
+    }
   };
 
-  // Sync settings to Firebase so others can see your premium status
+  // Sync settings to Firebase whenever they change
   const syncPremiumSettings = async (newChatStyle, newRingStyle) => {
     if (!user?.uid || !isEchoPlus) return;
     try {
       await update(ref(db, `profiles/${user.uid}`), {
-        isEchoPlus: true,
         premiumChatStyle: newChatStyle,
         premiumRingStyle: newRingStyle
       });
@@ -35,7 +40,6 @@ export const SubscriptionProvider = ({ children }) => {
     }
   };
 
-  // Wrapper functions to update state AND sync to database
   const updateChatStyle = (style) => {
     setChatStyle(style);
     syncPremiumSettings(style, ringStyle);
