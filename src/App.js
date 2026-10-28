@@ -9,6 +9,11 @@ import { PresenceProvider } from './contexts/PresenceContext';
 import { CacheProvider } from './contexts/CacheContext';
 import { CallProvider } from './contexts/CallContext';
 import { ThemeProvider } from './contexts/ThemeContext';
+
+// ─── NEW: ECHO Plus Imports ────────────────────────────────
+import { SubscriptionProvider } from './contexts/SubscriptionContext';
+import PlusCheckout from './components/common/PlusCheckout';
+
 import Home from './components/pages/Home/Home';
 import Chats from './components/pages/Chats/Chats';
 import ChatView from './components/pages/Chat/ChatView';
@@ -463,8 +468,12 @@ function App() {
             <ProfileProvider>
               <CacheProvider>
                 <CallProvider>
-                  <ScrollRestoration />
-                  <AppContent />
+                  {/* ECHO Plus wraps the app to share upgrade state */}
+                  <SubscriptionProvider>
+                    <ScrollRestoration />
+                    <AppContent />
+                    <PlusCheckout />
+                  </SubscriptionProvider>
                 </CallProvider>
               </CacheProvider>
             </ProfileProvider>
