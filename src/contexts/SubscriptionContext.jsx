@@ -1,59 +1,82 @@
-// src/components/common/PlusCheckout.jsx
-import React, { useState } from 'react';
-import { useSubscription } from '../../contexts/SubscriptionContext';
+// src/contexts/SubscriptionContext.jsx
+import React, { createContext, useState, useContext, useEffect } from 'react';
+import { ref, update, onValue } from 'firebase/database';
+import { db } from '../services/firebase';
+import { useAuth } from '../hooks/useAuth';
 
-const PlusCheckout = () => {
-  const { showUpgradeModal, setShowUpgradeModal, upgradeToPlus } = useSubscription();
-  const [isProcessing, setIsProcessing] = useState(false);
+const SubscriptionContext = createContext();
 
-  if (!showUpgradeModal) return null;
+export const SubscriptionProvider = ({ children }) => {
+  const { user } = useAuth();
+  
+  const [isEchoPlus, setIsEchoPlus] = useState(() => {
+    return localStorage.getItem('echo_plus_status') === 'true';
+  }); 
+  
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  
+  const [appTheme, setAppTheme] = useState('theme-default');
+  const [chatStyle, setChatStyle] = useState(''); 
+  const [ringStyle, setRingStyle] = useState('gold'); 
 
-  const handlePayment = (e) => {
-    e.preventDefault();
-    setIsProcessing(true);
-    
-    // Simulate Stripe processing
-    setTimeout(() => {
-      setIsProcessing(false);
-      upgradeToPlus(); // This triggers the DB save and local storage save
-      alert("Payment Successful! Welcome to ECHO Plus ⚡");
-    }, 2000);
+  useEffect(() => {
+    if (!user?.uid) return;
+    const profileRef = ref(db, `profiles/${user.uid}`);
+    const unsub = onValue(profileRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.val();
+        if (data.isEchoPlus) {
+          setIsEchoPlus(true);
+          localStorage.setItem('echo_plus_status', 'true');
+          if (data.premiumChatStyle) setChatStyle(data.premiumChatStyle);
+          if (data.premiumRingStyle) setRingStyle(data.premiumRingStyle);
+        }
+      }
+    });
+    return () => unsub();
+  }, [user?.uid]);
+
+  const upgradeToPlus = async () => {
+    setIsEchoPlus(true);
+    setShowUpgradeModal(false);
+    localStorage.setItem('echo_plus_status', 'true'); 
+    if (user?.uid) {
+      try {
+        await update(ref(db, `profiles/${user.uid}`), { 
+          isEchoPlus: true, 
+          premiumChatStyle: chatStyle || 'gold', 
+          premiumRingStyle: ringStyle || 'gold' 
+        });
+      } catch (e) { console.error("Failed to save Plus status", e); }
+    }
   };
 
-  // ... (rest of the modal code remains the same)
+  const syncPremiumSettings = async (newChatStyle, newRingStyle) => {
+    if (!user?.uid || !isEchoPlus) return;
+    try {
+      await update(ref(db, `profiles/${user.uid}`), {
+        premiumChatStyle: newChatStyle,
+        premiumRingStyle: newRingStyle
+      });
+    } catch (e) { console.error("Failed to sync premium settings", e); }
+  };
+
+  const updateChatStyle = (style) => { setChatStyle(style); syncPremiumSettings(style, ringStyle); };
+  const updateRingStyle = (style) => { setRingStyle(style); syncPremiumSettings(chatStyle, style); };
+
+  useEffect(() => {
+    document.body.classList.remove('theme-default', 'theme-midnight', 'theme-amoled', 'theme-ocean');
+    document.body.classList.add(appTheme); 
+  }, [appTheme]);
+
   return (
-    <div className="checkout-overlay" onClick={() => !isProcessing && setShowUpgradeModal(false)}>
-      <div className="checkout-modal" onClick={e => e.stopPropagation()}>
-        <div className="checkout-header" style={{ textAlign: 'center' }}>
-          <h2>⚡ Subscribe to <span className="gold-text">ECHO Plus</span></h2>
-          <p style={{ color: '#aaa', marginTop: '5px' }}>$4.99 / month</p>
-        </div>
-        <form onSubmit={handlePayment} className="payment-form">
-          <div className="input-group">
-            <label>Email Address</label>
-            <input type="email" placeholder="you@example.com" required />
-          </div>
-          <div className="input-group">
-            <label>Card Information</label>
-            <input type="text" placeholder="Card number" maxLength="16" required />
-            <div className="card-row">
-              <input type="text" placeholder="MM / YY" maxLength="5" required />
-              <input type="text" placeholder="CVC" maxLength="3" required />
-            </div>
-          </div>
-          <div className="input-group">
-            <label>Name on Card</label>
-            <input type="text" placeholder="Name" required />
-          </div>
-          <button type="submit" className="btn-pay" disabled={isProcessing}>
-            {isProcessing ? "Processing..." : "Pay $4.99"}
-          </button>
-          <p className="secure-text">🔒 Payments secured by Stripe</p>
-        </form>
-        <button className="btn-close" onClick={() => setShowUpgradeModal(false)}>Cancel</button>
-      </div>
-    </div>
+    <SubscriptionContext.Provider value={{ 
+      isEchoPlus, showUpgradeModal, setShowUpgradeModal, upgradeToPlus,
+      appTheme, setAppTheme, chatStyle, setChatStyle: updateChatStyle, ringStyle, setRingStyle: updateRingStyle
+    }}>
+      {children}
+    </SubscriptionContext.Provider>
   );
 };
 
-export default PlusCheckout;
+export const useSubscription = () => useContext(SubscriptionContext);
