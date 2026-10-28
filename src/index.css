@@ -560,3 +560,95 @@ body.theme-ocean { background: linear-gradient(135deg, #001f3f, #003366); color:
 .btn-pay:disabled { opacity: 0.7; cursor: not-allowed; }
 .secure-text { text-align: center; font-size: 0.75rem; color: #666; margin-top: 10px; }
 .btn-close { background: transparent; color: #888; border: none; margin-top: 15px; cursor: pointer; width: 100%; }
+/* =========================================
+   ECHO PLUS PREMIUM FEATURES & UI
+   ========================================= */
+
+/* 1. Premium Status Card on Profile */
+.echo-plus-status-card {
+  position: relative;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(255, 165, 0, 0.05));
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 20px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 20px rgba(255, 215, 0, 0.15);
+}
+
+.plus-card-glow {
+  position: absolute;
+  top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: 150%; height: 150%;
+  background: radial-gradient(circle, rgba(255, 215, 0, 0.15) 0%, transparent 60%);
+  z-index: 0;
+  animation: pulseGlow 3s infinite alternate;
+}
+
+.plus-card-content {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.plus-crown { font-size: 24px; }
+.plus-card-content h4 { color: #FFD700; margin: 0; font-size: 15px; font-weight: 800; }
+.plus-card-content p { color: #aaa; margin: 2px 0 0 0; font-size: 12px; }
+
+@keyframes pulseGlow {
+  0% { opacity: 0.5; transform: translate(-50%, -50%) scale(1); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1.1); }
+}
+
+/* 2. Premium Gold Chat Bubbles */
+.message-bubble.own.gold { background: linear-gradient(135deg, #FFD700, #FFA500); color: #000; border: none; box-shadow: 0 4px 15px rgba(255, 215, 0, 0.4); }
+.message-bubble.partner.gold { background: rgba(255, 255, 255, 0.05); color: #fff; border: 1px solid rgba(255, 215, 0, 0.4); }
+
+/* 3. Premium Typing Indicator */
+.premium-typing {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.1), rgba(0, 0, 0, 0));
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  border-radius: 20px 20px 20px 4px;
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+  padding: 8px 12px;
+}
+
+.premium-typing-content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.premium-typing-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: #FFD700;
+  letter-spacing: 0.5px;
+  animation: textPulse 1.5s infinite;
+}
+
+@keyframes textPulse {
+  0%, 100% { opacity: 0.5; }
+  50% { opacity: 1; }
+}
+
+/* 4. Plus Customizer Upgrades */
+.customizer-subtitle {
+  font-size: 12px;
+  color: #aaa;
+  text-align: center;
+  margin-top: -15px;
+  margin-bottom: 20px;
+}
+
+/* Gold ring for chat bubbles customizer */
+.pill-btn.ring-gold.active { background: linear-gradient(135deg, #FFD700, #FFA500); color: #000; border-color: transparent; }
+.pill-btn.ring-neon.active { background: linear-gradient(135deg, #00ffff, #ff00ff); color: #000; border-color: transparent; }
+.pill-btn.ring-fire.active { background: linear-gradient(135deg, #ff4500, #ff0000); color: #fff; border-color: transparent; }
