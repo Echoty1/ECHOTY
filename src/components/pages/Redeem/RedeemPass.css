@@ -1,0 +1,71 @@
+.redeem-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary);
+  padding: 20px;
+}
+
+.redeem-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  padding: 40px 30px;
+  text-align: center;
+  max-width: 400px;
+  width: 100%;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  animation: slideUp 0.4s ease;
+}
+
+.redeem-card.success {
+  border-color: #FFD700;
+  box-shadow: 0 0 40px rgba(255, 215, 0, 0.2);
+}
+
+.redeem-icon {
+  font-size: 50px;
+  margin-bottom: 20px;
+}
+.redeem-icon.success { color: #FFD700; text-shadow: 0 0 20px rgba(255,215,0,0.5); }
+.redeem-icon.error { color: #EF4444; }
+
+.redeem-card h2 {
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  font-size: 22px;
+}
+
+.redeem-card p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 20px;
+  line-height: 1.5;
+}
+
+.redirect-text {
+  font-size: 12px;
+  opacity: 0.5;
+  margin-top: 20px;
+}
+
+.redeem-spinner {
+  width: 40px; height: 40px;
+  border: 3px solid rgba(255,255,255,0.1);
+  border-top-color: #FFD700;
+  border-radius: 50%;
+  margin: 0 auto 20px;
+  animation: spin 1s linear infinite;
+}
+
+.redeem-btn {
+  background: linear-gradient(135deg, #6C3CE1, #EC4899);
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-weight: bold;
+  cursor: pointer;
+  width: 100%;
+}
