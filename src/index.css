@@ -788,3 +788,80 @@ body.theme-ocean { background: linear-gradient(135deg, #001f3f, #003366); color:
   cursor: pointer;
   width: 100%;
 }
+
+/* =========================================
+   NEW PREMIUM FEATURES
+   ========================================= */
+
+/* 1. Premium Profile Backgrounds */
+.premium-bg-aurora {
+  background: linear-gradient(135deg, #00c6ff, #0072ff, #a855f7, #ec4899) !important;
+  background-size: 400% 400% !important;
+  animation: auroraShift 10s ease infinite !important;
+  filter: blur(20px) brightness(0.7) !important;
+}
+
+@keyframes auroraShift {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+.premium-bg-matrix {
+  background: #000 !important;
+  background-image: linear-gradient(0deg, transparent 24%, rgba(0, 255, 0, .3) 25%, rgba(0, 255, 0, .3) 26%, transparent 27%, transparent 74%, rgba(0, 255, 0, .3) 75%, rgba(0, 255, 0, .3) 76%, transparent 77%, transparent), linear-gradient(90deg, transparent 24%, rgba(0, 255, 0, .3) 25%, rgba(0, 255, 0, .3) 26%, transparent 27%, transparent 74%, rgba(0, 255, 0, .3) 75%, rgba(0, 255, 0, .3) 76%, transparent 77%, transparent) !important;
+  background-size: 50px 50px !important;
+  animation: matrixMove 5s linear infinite !important;
+  filter: blur(2px) brightness(0.6) !important;
+}
+
+@keyframes matrixMove {
+  0% { background-position: 0 0; }
+  100% { background-position: 50px 50px; }
+}
+
+.premium-bg-galaxy {
+  background: radial-gradient(circle at bottom, #1B2735 0%, #090A0F 100%) !important;
+  position: relative;
+}
+.premium-bg-galaxy::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-image: 
+    radial-gradient(1px 1px at 20px 30px, #fff, rgba(0,0,0,0)),
+    radial-gradient(1px 1px at 40px 70px, #fff, rgba(0,0,0,0)),
+    radial-gradient(2px 2px at 90px 40px, #fff, rgba(0,0,0,0)),
+    radial-gradient(1px 1px at 130px 80px, #fff, rgba(0,0,0,0));
+  background-repeat: repeat;
+  background-size: 200px 200px;
+  opacity: 0.8;
+  animation: galaxyTwinkle 3s infinite alternate;
+}
+
+@keyframes galaxyTwinkle {
+  0% { opacity: 0.4; }
+  100% { opacity: 0.9; }
+}
+
+/* 2. Premium Group Chat Names */
+.group-sender-name.premium-sender {
+  background: linear-gradient(90deg, #FFD700, #FFA500);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  font-weight: 900;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.3);
+}
+
+/* 3. Premium Message Glow Effect (For Plus Users) */
+.message-bubble.own.premium-glow {
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.4), inset 0 0 10px rgba(255, 215, 0, 0.1);
+  border: 1px solid rgba(255, 215, 0, 0.5);
+  animation: premiumPulse 2s infinite;
+}
+
+@keyframes premiumPulse {
+  0% { box-shadow: 0 0 10px rgba(255, 215, 0, 0.3), inset 0 0 5px rgba(255, 215, 0, 0.1); }
+  50% { box-shadow: 0 0 20px rgba(255, 215, 0, 0.6), inset 0 0 15px rgba(255, 215, 0, 0.2); }
+  100% { box-shadow: 0 0 10px rgba(255, 215, 0, 0.3), inset 0 0 5px rgba(255, 215, 0, 0.1); }
+}
