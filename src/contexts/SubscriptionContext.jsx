@@ -6,9 +6,11 @@ export const SubscriptionProvider = ({ children }) => {
   const [isEchoPlus, setIsEchoPlus] = useState(false); 
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   
+  // Customization States
   const [appTheme, setAppTheme] = useState('theme-default');
-  const [chatStyle, setChatStyle] = useState(''); 
-  const [ringStyle, setRingStyle] = useState('gold');
+  const [chatStyle, setChatStyle] = useState(''); // '', 'neon', 'glass', 'gold'
+  const [ringStyle, setRingStyle] = useState('gold'); // 'gold', 'neon', 'fire'
+  const [appIcon, setAppIcon] = useState('default'); // 'default', 'gold', 'neon'
 
   const upgradeToPlus = () => {
     setIsEchoPlus(true);
@@ -23,7 +25,7 @@ export const SubscriptionProvider = ({ children }) => {
   return (
     <SubscriptionContext.Provider value={{ 
       isEchoPlus, showUpgradeModal, setShowUpgradeModal, upgradeToPlus,
-      appTheme, setAppTheme, chatStyle, setChatStyle, ringStyle, setRingStyle
+      appTheme, setAppTheme, chatStyle, setChatStyle, ringStyle, setRingStyle, appIcon, setAppIcon
     }}>
       {children}
     </SubscriptionContext.Provider>
