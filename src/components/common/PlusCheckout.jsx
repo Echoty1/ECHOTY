@@ -10,7 +10,6 @@ const PlusCheckout = () => {
   const handlePayment = (e) => {
     e.preventDefault();
     setIsProcessing(true);
-    // Simulate Stripe processing delay
     setTimeout(() => {
       setIsProcessing(false);
       upgradeToPlus();
@@ -21,18 +20,15 @@ const PlusCheckout = () => {
   return (
     <div className="checkout-overlay" onClick={() => !isProcessing && setShowUpgradeModal(false)}>
       <div className="checkout-modal" onClick={e => e.stopPropagation()}>
-        
         <div className="checkout-header" style={{ textAlign: 'center' }}>
           <h2>⚡ Subscribe to <span className="gold-text">ECHO Plus</span></h2>
           <p style={{ color: '#aaa', marginTop: '5px' }}>$4.99 / month</p>
         </div>
-
         <form onSubmit={handlePayment} className="payment-form">
           <div className="input-group">
             <label>Email Address</label>
             <input type="email" placeholder="you@example.com" required />
           </div>
-          
           <div className="input-group">
             <label>Card Information</label>
             <input type="text" placeholder="Card number" maxLength="16" required />
@@ -41,12 +37,10 @@ const PlusCheckout = () => {
               <input type="text" placeholder="CVC" maxLength="3" required />
             </div>
           </div>
-
           <div className="input-group">
             <label>Name on Card</label>
             <input type="text" placeholder="Name" required />
           </div>
-
           <button type="submit" className="btn-pay" disabled={isProcessing}>
             {isProcessing ? "Processing..." : "Pay $4.99"}
           </button>
