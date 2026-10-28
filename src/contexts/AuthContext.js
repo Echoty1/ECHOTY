@@ -105,24 +105,9 @@ export const AuthProvider = ({ children }) => {
     }
 
     try {
-      // We don't sign out. We simply swap the current user in Firebase.
-      const authInstance = getAuth();
-      
-      // Create a custom token for the target user using their saved credentials
-      // Since we can't generate custom tokens on the client, we use a trick:
-      // We temporarily log them in using their email, but to avoid asking for a password,
-      // we use the saved session. 
-      
-      // IMPORTANT: For a seamless switch without re-entering password, 
-      // the only way on the free plan is to use the Firebase persistence.
-      // Since we can't do that natively, we will update the user state directly.
+      // Clear local plus status before switching so the next user loads fresh
+      localStorage.removeItem('echo_plus_status');
 
-      // 🔴 FIX: Use the saved email and a dummy password (if they had one)
-      // Actually, a cleaner way is to prompt them only if the token fails.
-
-      // Let's try to switch without a password. Firebase allows this if the token is in IndexedDB.
-      // But since we are doing a manual swap, let's redirect with a special flag.
-      
       sessionStorage.setItem('echo_switch_target_uid', account.uid);
       sessionStorage.setItem('echo_switch_target_email', account.email);
       
@@ -141,15 +126,9 @@ export const AuthProvider = ({ children }) => {
     const targetEmail = sessionStorage.getItem('echo_switch_target_email');
 
     if (targetUid && targetEmail) {
-       // Check if the current user is already the target
        if (currentUser?.uid === targetUid) {
-          // Success! Clear the flags.
           sessionStorage.removeItem('echo_switch_target_uid');
           sessionStorage.removeItem('echo_switch_target_email');
-       } else if (currentUser && currentUser.uid !== targetUid) {
-          // We need to switch. Because we can't use custom tokens on free plan,
-          // we use a fallback: prompt them to type the password once.
-          // BUT we can't do that here. So we just let the Login page handle it.
        }
     }
   }, [currentUser]);
@@ -161,6 +140,7 @@ export const AuthProvider = ({ children }) => {
       }
       await signOut(auth);
       localStorage.removeItem(SAVED_ACCOUNTS_KEY);
+      localStorage.removeItem('echo_plus_status'); // Clear plus cache
       sessionStorage.removeItem('echo_switch_target_email');
       sessionStorage.removeItem('echo_switch_target_uid');
       sessionStorage.removeItem('echo_adding_account');
@@ -246,6 +226,7 @@ export const AuthProvider = ({ children }) => {
           setCurrentUser(null);
           setUserProfile(null);
           setBanInfo({ isBanned: false });
+          localStorage.removeItem('echo_plus_status'); // Clear on logout
         }
       } catch (err) {
         console.error('[Auth] state change error:', err);
@@ -266,6 +247,7 @@ export const AuthProvider = ({ children }) => {
     try {
       if (currentUser?.uid) await cleanupPresence(currentUser.uid);
       await signOut(auth);
+      localStorage.removeItem('echo_plus_status'); // Clear on logout
     } catch (e) {
       console.error('[Auth] logout error:', e);
       throw e;
