@@ -18,7 +18,9 @@ import AvatarCustomizer from './AvatarCustomizer';
 import UsernameEditor from './UsernameEditor';
 import UsernamePill from '../../common/UsernamePill';
 import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid';
-import AccountSwitcher from '../../common/AccountSwitcher'; // <-- NEW IMPORT
+import AccountSwitcher from '../../common/AccountSwitcher'; 
+import { useSubscription } from '../../../contexts/SubscriptionContext'; // <-- NEW
+import PlusCustomizer from './PlusCustomizer'; // <-- NEW
 import './Profile.css';
 
 const getFastLocal = (key) => { try { const item = localStorage.getItem('echo_cache_' + key); return item ? JSON.parse(item) : null; } catch { return null; } };
@@ -33,8 +35,8 @@ const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
-  // Grab the Account Switcher functions from AuthContext
   const { user, getSavedAccounts, switchAccount, signOutAll } = useAuth();
+  const { isEchoPlus, setShowUpgradeModal, ringStyle } = useSubscription(); // <-- NEW
   
   const navigate = useNavigate();
   const { refreshProfile, profiles, fetchProfile } = useProfile();
@@ -47,7 +49,6 @@ const Profile = () => {
   const [uploading, setUploading] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // Account Switcher State
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [savedAccounts, setSavedAccounts] = useState([]);
 
@@ -77,7 +78,6 @@ const Profile = () => {
   const [unlockedGifs, setUnlockedGifs] = useState([]);
   const imageInputRef = useRef(null);
 
-  // Load saved accounts when switcher opens
   useEffect(() => {
     if (showSwitcher) {
       setSavedAccounts(getSavedAccounts());
@@ -179,7 +179,6 @@ const Profile = () => {
     } catch {}
   };
 
-  // ─── Account Switcher Handlers ───
   const handleSwitchAccount = async (account) => {
     try {
       await switchAccount(account);
@@ -221,7 +220,7 @@ const Profile = () => {
           <div className="snap-hero-overlay" />
           
           <div className="snap-avatar-wrapper">
-            <div className="snap-avatar-ring" />
+            <div className={`snap-avatar-ring ${isEchoPlus ? `plus-avatar-ring ${ringStyle}` : ''}`} />
             <div className="snap-avatar" onClick={() => setShowAvatarPicker(true)}>
               {loading ? <SkeletonBlock width="100%" height="100%" borderRadius="50%" /> : 
                isVideoFormat ? <video src={displayMediaUrl} autoPlay loop muted playsInline /> : 
@@ -239,7 +238,15 @@ const Profile = () => {
                 </div>
               </div>
             ) : (
-              <h1 className="snap-name">{profile?.name || 'User'}</h1>
+              <h1 className="snap-name">
+                {profile?.name || 'User'}
+                {isEchoPlus && (
+                  <svg className="verified-badge" viewBox="0 0 24 24" fill="none">
+                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="#FFD700" />
+                    <path d="M9 12L11 14L15 10" stroke="black" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                )}
+              </h1>
             )}
             
             {!editing && profile?.username && (
@@ -274,7 +281,16 @@ const Profile = () => {
               </>
             ) : (
               <>
-                {/* Account Switcher Button Added Here */}
+                {!isEchoPlus ? (
+                  <button className="btn-upgrade-plus" onClick={() => setShowUpgradeModal(true)} style={{ width: '100%', marginBottom: '10px' }}>
+                    ⚡ Upgrade to ECHO Plus
+                  </button>
+                ) : (
+                  <button className="btn-upgrade-plus" style={{ width: '100%', marginBottom: '10px', background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid #FFD700', boxShadow: 'none' }}>
+                    ⚡ ECHO Plus Member
+                  </button>
+                )}
+
                 <button 
                   className="snap-btn-secondary" 
                   onClick={() => setShowSwitcher(true)}
@@ -312,6 +328,9 @@ const Profile = () => {
           {activeTab === 'spotlight' && <ProfileSpotlightGrid uid={user?.uid} />}
           {activeTab === 'echoes' && <div className="empty-tab-state"><i className="fas fa-ghost" /><p>Saved Echoes will appear here.</p></div>}
         </div>
+
+        {/* PLUS CUSTOMIZER SECTION */}
+        <PlusCustomizer />
 
         {/* PREMIUM iOS BOTTOM SHEET FOR AVATAR PICKER */}
         {showAvatarPicker && (
@@ -381,7 +400,6 @@ const Profile = () => {
           </div>
         )}
 
-        {/* ACCOUNT SWITCHER OVERLAY */}
         <AccountSwitcher
           isOpen={showSwitcher}
           onClose={() => setShowSwitcher(false)}
