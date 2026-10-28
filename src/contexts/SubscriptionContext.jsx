@@ -1,5 +1,6 @@
+// src/contexts/SubscriptionContext.jsx
 import React, { createContext, useState, useContext, useEffect } from 'react';
-import { ref, update } from 'firebase/database';
+import { ref, update, onValue } from 'firebase/database';
 import { db } from '../services/firebase';
 import { useAuth } from '../hooks/useAuth';
 
@@ -7,27 +8,59 @@ const SubscriptionContext = createContext();
 
 export const SubscriptionProvider = ({ children }) => {
   const { user } = useAuth();
-  const [isEchoPlus, setIsEchoPlus] = useState(false); 
+  
+  // 1. Initialize from Local Storage for instant load (no flash of non-premium UI)
+  const [isEchoPlus, setIsEchoPlus] = useState(() => {
+    return localStorage.getItem('echo_plus_status') === 'true';
+  }); 
+  
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   
   // Customization States
   const [appTheme, setAppTheme] = useState('theme-default');
-  const [chatStyle, setChatStyle] = useState(''); // '', 'neon', 'glass', 'gold'
-  const [ringStyle, setRingStyle] = useState('gold'); // 'gold', 'neon', 'fire'
+  const [chatStyle, setChatStyle] = useState(''); 
+  const [ringStyle, setRingStyle] = useState('gold'); 
 
+  // 2. Fetch from Firebase when user logs in
+  useEffect(() => {
+    if (!user?.uid) return;
+    
+    const profileRef = ref(db, `profiles/${user.uid}`);
+    const unsub = onValue(profileRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.val();
+        if (data.isEchoPlus) {
+          setIsEchoPlus(true);
+          localStorage.setItem('echo_plus_status', 'true');
+          if (data.premiumChatStyle) setChatStyle(data.premiumChatStyle);
+          if (data.premiumRingStyle) setRingStyle(data.premiumRingStyle);
+        }
+      }
+    });
+    
+    return () => unsub();
+  }, [user?.uid]);
+
+  // 3. Save to Firebase AND Local Storage when upgrading
   const upgradeToPlus = async () => {
     setIsEchoPlus(true);
     setShowUpgradeModal(false);
+    localStorage.setItem('echo_plus_status', 'true'); // Save locally
+    
     if (user?.uid) {
-      await update(ref(db, `profiles/${user.uid}`), { 
-        isEchoPlus: true, 
-        premiumChatStyle: chatStyle, 
-        premiumRingStyle: ringStyle 
-      }).catch(console.error);
+      try {
+        await update(ref(db, `profiles/${user.uid}`), { 
+          isEchoPlus: true, 
+          premiumChatStyle: chatStyle || 'gold', 
+          premiumRingStyle: ringStyle || 'gold' 
+        });
+      } catch (e) {
+        console.error("Failed to save Plus status", e);
+      }
     }
   };
 
-  // Sync settings to Firebase whenever they change
+  // 4. Sync changes (e.g. if they change their bubble style)
   const syncPremiumSettings = async (newChatStyle, newRingStyle) => {
     if (!user?.uid || !isEchoPlus) return;
     try {
