@@ -808,8 +808,8 @@ const ChatView = () => {
       pending: true,
       senderName: currentUserProfile?.name || user.displayName || 'User',
       senderAvatar: currentUserProfile?.avatar || '',
-      senderIsPlus: isEchoPlus, // <-- Add to optimistic
-      senderChatStyle: myChatStyle, // <-- Add to optimistic
+      senderIsPlus: isEchoPlus,
+      senderChatStyle: myChatStyle,
     };
     if (replyToSave) optimisticMsg.replyTo = { messageId: replyToSave.messageId, senderName: replyToSave.senderName, messageType: replyToSave.messageType, textSnippet: replyToSave.textSnippet };
     if (currentNoteReply) optimisticMsg.replyToNote = { ...currentNoteReply };
@@ -829,8 +829,8 @@ const ChatView = () => {
       expiresAt: privateExpiresAt(Date.now(), tideTTL),
       senderName: currentUserProfile?.name || user.displayName || 'User',
       senderAvatar: currentUserProfile?.avatar || '',
-      senderIsPlus: isEchoPlus, // <-- Attach to DB
-      senderChatStyle: myChatStyle, // <-- Attach to DB
+      senderIsPlus: isEchoPlus,
+      senderChatStyle: myChatStyle,
     };
     if (replyToSave) msgData.replyTo = { messageId: replyToSave.messageId, senderName: replyToSave.senderName, messageType: replyToSave.messageType, textSnippet: replyToSave.textSnippet };
     if (currentNoteReply) msgData.replyToNote = { ...currentNoteReply };
@@ -1012,8 +1012,8 @@ const ChatView = () => {
       _file: file,
       senderName: currentUserProfile?.name || user.displayName || 'User',
       senderAvatar: currentUserProfile?.avatar || '',
-      senderIsPlus: isEchoPlus, // <-- Add
-      senderChatStyle: myChatStyle, // <-- Add
+      senderIsPlus: isEchoPlus,
+      senderChatStyle: myChatStyle,
     };
     if (currentReply) { optimisticMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet }; setReplyTo(null); }
     if (noteReply) { optimisticMsg.replyToNote = { ...noteReply }; setReplyToNote(null); }
@@ -1038,8 +1038,8 @@ const ChatView = () => {
         expiresAt: privateExpiresAt(Date.now(), tideTTL),
         senderName: currentUserProfile?.name || user.displayName || 'User',
         senderAvatar: currentUserProfile?.avatar || '',
-        senderIsPlus: isEchoPlus, // <-- Attach
-        senderChatStyle: myChatStyle, // <-- Attach
+        senderIsPlus: isEchoPlus,
+        senderChatStyle: myChatStyle,
       };
       if (currentReply) realMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet };
       if (noteReply) realMsg.replyToNote = { ...noteReply };
@@ -1148,8 +1148,8 @@ const ChatView = () => {
       _file: audioBlob,
       senderName: currentUserProfile?.name || user.displayName || 'User',
       senderAvatar: currentUserProfile?.avatar || '',
-      senderIsPlus: isEchoPlus, // <-- Add
-      senderChatStyle: myChatStyle, // <-- Add
+      senderIsPlus: isEchoPlus,
+      senderChatStyle: myChatStyle,
     };
     if (currentReply) { optimisticMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet }; setReplyTo(null); }
     if (noteReply) { optimisticMsg.replyToNote = { ...noteReply }; setReplyToNote(null); }
@@ -1178,8 +1178,8 @@ const ChatView = () => {
         expiresAt: privateExpiresAt(Date.now(), tideTTL),
         senderName: currentUserProfile?.name || user.displayName || 'User',
         senderAvatar: currentUserProfile?.avatar || '',
-        senderIsPlus: isEchoPlus, // <-- Attach
-        senderChatStyle: myChatStyle, // <-- Attach
+        senderIsPlus: isEchoPlus,
+        senderChatStyle: myChatStyle,
       };
       if (currentReply) realMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet };
       if (noteReply) realMsg.replyToNote = { ...noteReply };
