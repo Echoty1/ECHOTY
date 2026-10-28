@@ -19,8 +19,8 @@ import UsernameEditor from './UsernameEditor';
 import UsernamePill from '../../common/UsernamePill';
 import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid';
 import AccountSwitcher from '../../common/AccountSwitcher'; 
-import { useSubscription } from '../../../contexts/SubscriptionContext'; // <-- NEW
-import PlusCustomizer from './PlusCustomizer'; // <-- NEW
+import { useSubscription } from '../../../contexts/SubscriptionContext'; 
+import PlusCustomizer from './PlusCustomizer'; 
 import './Profile.css';
 
 const getFastLocal = (key) => { try { const item = localStorage.getItem('echo_cache_' + key); return item ? JSON.parse(item) : null; } catch { return null; } };
@@ -36,7 +36,7 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
   const { user, getSavedAccounts, switchAccount, signOutAll } = useAuth();
-  const { isEchoPlus, setShowUpgradeModal, ringStyle } = useSubscription(); // <-- NEW
+  const { isEchoPlus, setShowUpgradeModal, ringStyle } = useSubscription(); 
   
   const navigate = useNavigate();
   const { refreshProfile, profiles, fetchProfile } = useProfile();
@@ -281,26 +281,34 @@ const Profile = () => {
               </>
             ) : (
               <>
+                {/* Upgrade Button */}
                 {!isEchoPlus ? (
-                  <button className="btn-upgrade-plus" onClick={() => setShowUpgradeModal(true)} style={{ width: '100%', marginBottom: '10px' }}>
+                  <button className="btn-upgrade-plus" onClick={() => setShowUpgradeModal(true)} style={{ width: '100%' }}>
                     ⚡ Upgrade to ECHO Plus
                   </button>
                 ) : (
-                  <button className="btn-upgrade-plus" style={{ width: '100%', marginBottom: '10px', background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid #FFD700', boxShadow: 'none' }}>
+                  <button className="btn-upgrade-plus" style={{ width: '100%', background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid #FFD700', boxShadow: 'none' }}>
                     ⚡ ECHO Plus Member
                   </button>
                 )}
 
-                <button 
-                  className="snap-btn-secondary" 
-                  onClick={() => setShowSwitcher(true)}
-                  title="Switch Account"
-                  style={{ display: 'flex', alignItems: 'center', gap: '6px' }}
-                >
-                  <i className="fas fa-users" /> Accounts
-                </button>
-                <button className="snap-btn-secondary" onClick={() => setShowUsernameEditor(true)}><i className="fas fa-at" /> {profile?.username ? 'Change handle' : 'Set handle'}</button>
-                <button className="snap-btn-primary" onClick={() => setEditing(true)}><i className="fas fa-pen" /> Edit Profile</button>
+                {/* Standard Actions Wrapper */}
+                <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '8px' }}>
+                  <button 
+                    className="snap-btn-secondary" 
+                    onClick={() => setShowSwitcher(true)}
+                    title="Switch Account"
+                    style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
+                  >
+                    <i className="fas fa-users" /> Accounts
+                  </button>
+                  <button className="snap-btn-secondary" style={{ flex: 1 }} onClick={() => setShowUsernameEditor(true)}>
+                    <i className="fas fa-at" /> {profile?.username ? 'Change' : 'Set'}
+                  </button>
+                  <button className="snap-btn-primary" style={{ flex: 1 }} onClick={() => setEditing(true)}>
+                    <i className="fas fa-pen" /> Edit
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -361,63 +369,4 @@ const Profile = () => {
         )}
 
         {/* OTHER MODALS */}
-        <GifLibraryModal isOpen={showGifLibrary} onClose={() => setShowGifLibrary(false)} onSelect={handleGifSelect} ownedGifs={unlockedGifs} mode="profile" />
-        <UsernameEditor uid={user?.uid} currentUsername={profile?.username} isOpen={showUsernameEditor} onClose={() => setShowUsernameEditor(false)} />
-        
-        {showAvatarCustomizer && (
-          <div className="custom-modal-overlay" onClick={() => setShowAvatarCustomizer(false)}>
-            <div onClick={e => e.stopPropagation()}>
-              <AvatarCustomizer currentSkin={activeSkinObj} currentHair={activeHairStyle} currentMood={profile?.mood} onSave={handleSaveAvatar} onCancel={() => setShowAvatarCustomizer(false)} />
-            </div>
-          </div>
-        )}
-
-        {showEchowersModal && (
-          <div className="echowers-modal-overlay" onClick={() => setShowEchowersModal(false)}>
-            <div className="echowers-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="echowers-modal-header"><h3>Echowers</h3><button className="close-btn" onClick={() => setShowEchowersModal(false)}>✕</button></div>
-              <div className="echowers-tabs">
-                <button className={activeEchowersTab === 'followers' ? 'active' : ''} onClick={() => setActiveEchowersTab('followers')}>Echowers ({followerUids.length})</button>
-                <button className={activeEchowersTab === 'following' ? 'active' : ''} onClick={() => setActiveEchowersTab('following')}>Echowing ({followingUids.length})</button>
-              </div>
-              <div className="echowers-list">
-                {(activeEchowersTab === 'followers' ? followerUids : followingUids).length === 0 ? (
-                  <p className="empty-state">No one here yet.</p>
-                ) : (
-                  (activeEchowersTab === 'followers' ? followerUids : followingUids).map((uid) => {
-                    const p = profiles[uid] || { name: 'User', avatar: '' };
-                    return (
-                      <div key={uid} className="echower-item" onClick={() => navigate('/chat/' + uid)}>
-                        <Avatar src={p.avatar} name={p.name} size={50} />
-                        <div className="item-info"><strong>{p.name}</strong><span>{p.bio || 'No bio'}</span></div>
-                        <i className="fas fa-chevron-right" />
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-          </div>
-        )}
-
-        <AccountSwitcher
-          isOpen={showSwitcher}
-          onClose={() => setShowSwitcher(false)}
-          currentUser={{
-            name: profile?.name || user?.displayName || 'ECHO',
-            email: user?.email || 'user@echoty.xyz',
-            avatar: profile?.avatar || user?.photoURL || '',
-          }}
-          savedAccounts={savedAccounts}
-          onSwitchAccount={handleSwitchAccount}
-          onAddAccount={handleAddAccount}
-          onSignOutAll={handleSignOutAll}
-        />
-
-        {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
-      </div>
-    </React.Fragment>
-  );
-};
-
-export default Profile;
+        <GifLibrary
