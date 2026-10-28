@@ -1,10 +1,10 @@
 // src/components/pages/Redeem/RedeemPass.jsx
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ref, get, update, increment, runTransaction } from 'firebase/database';
-import { db } from '../../services/firebase';
-import { useAuth } from '../../hooks/useAuth';
-import { useSubscription } from '../../contexts/SubscriptionContext';
+import { ref, get, update, runTransaction } from 'firebase/database';
+import { db } from '../../../services/firebase'; // <-- FIXED: Added one more ../
+import { useAuth } from '../../../hooks/useAuth'; // <-- FIXED
+import { useSubscription } from '../../../contexts/SubscriptionContext'; // <-- FIXED
 import './RedeemPass.css';
 
 const RedeemPass = () => {
