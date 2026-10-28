@@ -559,3 +559,78 @@ body.theme-ocean { background: linear-gradient(135deg, #001f3f, #003366); color:
 .btn-pay:disabled { opacity: 0.7; cursor: not-allowed; }
 .secure-text { text-align: center; font-size: 0.75rem; color: #666; margin-top: 10px; }
 .btn-close { background: transparent; color: #888; border: none; margin-top: 15px; cursor: pointer; width: 100%; }
+/* =========================================
+   ECHO PLUS GLOBAL THEMES (Applies to body)
+   ========================================= */
+body.theme-default { background-color: #0A0A0F; color: #ffffff; }
+body.theme-midnight { background-color: #0a1128; color: #e0e0e0; }
+body.theme-amoled { background-color: #000000; color: #ffffff; }
+body.theme-ocean { background: linear-gradient(135deg, #001f3f, #003366); color: #ffffff; }
+
+/* =========================================
+   ECHO PLUS CHAT BUBBLE STYLES
+   ========================================= */
+/* Neon Style */
+.message-bubble.own.neon { background: transparent; border: 2px solid #00ffff; box-shadow: 0 0 10px rgba(0, 255, 255, 0.3); color: #00ffff; }
+.message-bubble.partner.neon { background: transparent; border: 2px solid #ff00ff; box-shadow: 0 0 10px rgba(255, 0, 255, 0.3); color: #ff00ff; }
+
+/* Glass Style */
+.message-bubble.own.glass { background: rgba(108, 60, 225, 0.4); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); }
+.message-bubble.partner.glass { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); }
+
+/* =========================================
+   ECHO PLUS PROFILE RINGS & UI
+   ========================================= */
+.plus-avatar-ring { padding: 4px; border-radius: 50%; }
+.plus-avatar-ring.gold { background: linear-gradient(135deg, #FFD700, #FFA500); box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
+.plus-avatar-ring.neon { background: linear-gradient(135deg, #00ffff, #ff00ff); box-shadow: 0 0 20px rgba(0, 255, 255, 0.5); }
+.plus-avatar-ring.fire { background: linear-gradient(135deg, #ff4500, #ff0000); box-shadow: 0 0 20px rgba(255, 69, 0, 0.6); }
+
+.verified-badge { width: 20px; height: 20px; margin-left: 8px; vertical-align: middle; }
+
+/* Upgrade Buttons */
+.btn-upgrade-plus {
+  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
+  color: #000; font-weight: 700; border: none; padding: 12px 24px;
+  border-radius: 20px; cursor: pointer; box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
+  transition: transform 0.2s, box-shadow 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;
+}
+.btn-upgrade-plus:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255, 215, 0, 0.5); }
+
+/* =========================================
+   PLUS CUSTOMIZER UI GRID
+   ========================================= */
+.plus-customizer { padding: 20px; background: var(--bg-secondary); border-radius: 16px; margin-top: 20px; border: 1px solid var(--border-color); }
+.customizer-title { color: #FFD700; margin-bottom: 20px; font-size: 1.2rem; text-align: center; }
+.custom-section { margin-bottom: 24px; }
+.custom-section h3 { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }
+
+.theme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.theme-card { background: var(--bg-input); border: 2px solid transparent; border-radius: 12px; padding: 10px; cursor: pointer; text-align: center; transition: 0.2s; }
+.theme-card.active { border-color: #FFD700; background: rgba(255, 215, 0, 0.1); }
+.theme-preview { height: 50px; border-radius: 8px; margin-bottom: 8px; }
+.theme-preview.default-preview { background: #0a0a0a; border: 1px solid #333; }
+.theme-preview.midnight-preview { background: #0a1128; }
+.theme-preview.amoled-preview { background: #000; border: 1px solid #222; }
+.theme-preview.ocean-preview { background: linear-gradient(135deg, #001f3f, #003366); }
+
+.option-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.pill-btn { background: var(--bg-input); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 20px; cursor: pointer; transition: 0.2s; }
+.pill-btn.active { background: #FFD700; color: #000; border-color: #FFD700; font-weight: bold; }
+
+/* =========================================
+   CHECKOUT MODAL
+   ========================================= */
+.checkout-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(10px); display: flex; justify-content: center; align-items: center; z-index: 10000; }
+.checkout-modal { background: #1a1a1a; border: 1px solid #333; border-radius: 16px; width: 90%; max-width: 400px; padding: 30px; color: white; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
+.gold-text { color: #FFD700; }
+.payment-form { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
+.input-group { display: flex; flex-direction: column; gap: 5px; text-align: left; }
+.input-group label { font-size: 0.85rem; color: #aaa; }
+.input-group input { background: #2a2a2a; border: 1px solid #444; border-radius: 8px; padding: 12px; color: white; outline: none; transition: border 0.2s; }
+.input-group input:focus { border-color: #FFD700; }
+.card-row { display: flex; gap: 10px; margin-top: 5px; }
+.btn-pay { background: linear-gradient(135deg, #FFD700, #FFA500); color: black; font-weight: bold; font-size: 1.1rem; padding: 15px; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; }
+.btn-pay:disabled { opacity: 0.7; cursor: not-allowed; }
+.secure-text { text-align: center; font-size: 0.75rem; color: #666; margin-top: 10px; }
+.btn-close { background: transparent; color: #888; border: none; margin-top: 15px; cursor: pointer; width: 100%; }
