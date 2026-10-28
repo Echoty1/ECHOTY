@@ -26,6 +26,7 @@ import StructuredData from '../../common/StructuredData';
 import ChatPreviewPopup from './ChatPreviewPopup';
 import NotesStrip from './NotesStrip';
 import NewGroupModal from './NewGroupModal';
+import PlusBadge from '../../common/PlusBadge'; // <-- NEW: Import Premium Badge
 
 const CHAT_CHUNK_SIZE = 20;
 const TYPING_FRESHNESS_MS = 4000;
@@ -161,6 +162,8 @@ const processChatItem = async (chat, user, onlineUsers) => {
       online: isOnline,
       ended: chat.ended === true,
       isGroup: false,
+      isEchoPlus: profile?.isEchoPlus || false, // <-- NEW: Pull Premium Status
+      premiumRingStyle: profile?.premiumRingStyle || 'gold', // <-- NEW
     };
   } catch (err) {
     let unreadCount = chat.unreadCount || 0;
@@ -181,6 +184,8 @@ const processChatItem = async (chat, user, onlineUsers) => {
       online: !!onlineUsers[chat.id],
       ended: chat.ended === true,
       isGroup: false,
+      isEchoPlus: false,
+      premiumRingStyle: 'gold',
     };
   }
 };
@@ -244,6 +249,8 @@ const processGroupItem = async (group, user) => {
       online: false,
       isDeleted: false,
       ended: false,
+      isEchoPlus: false,
+      premiumRingStyle: 'gold',
     };
   } catch (err) {
     console.warn('processGroupItem failed:', err);
@@ -272,6 +279,10 @@ const ChatItem = memo(
     const skin = skinId ? getSkinById(skinId) : null;
     const mood = profile.mood || chat.mood || 'neutral';
 
+    // NEW: Apply premium ring
+    const isPlus = chat.isEchoPlus;
+    const ringStyle = chat.premiumRingStyle || 'gold';
+
     return (
       <div
         className="chat-item regular-chat-item"
@@ -285,9 +296,11 @@ const ChatItem = memo(
         onContextMenu={(e) => e.preventDefault()}
         style={{ userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
       >
+        {/* Apply Plus ring to the container if they are Plus */}
         <div
-          className="chat-avatar"
+          className={`chat-avatar ${isPlus ? `plus-avatar-ring ${ringStyle}` : ''}`}
           onClick={(e) => { e.stopPropagation(); navigate(`/user/${chat.id}`); }}
+          style={isPlus ? { padding: '2px', borderRadius: '50%' } : {}} // Slight padding to show the ring
         >
           <Avatar key={chat.avatar} src={chat.avatar} name={chat.name} size={48} />
           <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
@@ -309,8 +322,9 @@ const ChatItem = memo(
         </div>
         <div className="chat-info">
           <div className="chat-title-row">
-            <span className="chat-name">
+            <span className="chat-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               {chat.name}
+              {isPlus && <PlusBadge size={14} />} {/* <-- NEW: Show Badge next to name */}
               {chat.isDeleted && <span className="archived-label"> (archived)</span>}
               {chat.ended && <span className="ended-badge">Ended</span>}
             </span>
@@ -719,6 +733,7 @@ const Chats = () => {
         mood: c.mood || 'happy', activeSkin: c.activeSkin || 'default',
         location: c.location || '',
         isOnline: !!onlineUsers[c.id], fromLocal: true,
+        isEchoPlus: c.isEchoPlus, premiumRingStyle: c.premiumRingStyle // <-- Keep Premium Data in Search
       }));
     if (localHits.length) { setResults(localHits); setIsSearching(false); }
 
@@ -738,6 +753,8 @@ const Chats = () => {
           activeSkin: u.activeSkin || 'default',
           location: u.location || [u.city, u.country].filter(Boolean).join(', ') || '',
           isOnline: !!onlineUsers[u.id],
+          isEchoPlus: u.isEchoPlus || false,
+          premiumRingStyle: u.premiumRingStyle || 'gold',
         }));
 
       const seen = new Set(localHits.map((x) => x.id));
@@ -847,12 +864,15 @@ const Chats = () => {
               <div className="hero-result-card" onClick={() => startChat(topResult)}>
                 <div className="hero-bg-glow" />
                 <div className="hero-content">
-                  <div className="hero-avatar-wrapper">
+                  <div className={`hero-avatar-wrapper ${topResult.isEchoPlus ? `plus-avatar-ring ${topResult.premiumRingStyle}` : ''}`}>
                     <Avatar src={topResult.avatar} name={topResult.name} size={90} />
                     {!!onlineUsers[topResult.id] && <span className="presence-dot online" />}
                   </div>
                   <div className="hero-info">
-                    <h2 className="hero-name">{topResult.name}</h2>
+                    <h2 className="hero-name" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
+                      {topResult.name}
+                      {topResult.isEchoPlus && <PlusBadge size={18} />} {/* <-- Badge in Hero */}
+                    </h2>
                     <div className="hero-meta">
                       <span className="hero-badge">{onlineUsers[topResult.id] ? '🟢 Online' : '⚫ Offline'}</span>
                       {topResult.location && <span className="hero-badge">📍 {topResult.location}</span>}
@@ -881,15 +901,23 @@ const Chats = () => {
               otherResults.map((person) => {
                 if (!person) return null;
                 const isOnline = !!onlineUsers[person.id];
+                const isPlus = person.isEchoPlus;
                 return (
                   <div key={person.id} className="chat-item regular-chat-item" onClick={() => startChat(person)}>
-                    <div className="chat-avatar" onClick={(e) => { e.stopPropagation(); navigate(`/user/${person.id}`); }}>
+                    <div 
+                      className={`chat-avatar ${isPlus ? `plus-avatar-ring ${person.premiumRingStyle}` : ''}`}
+                      onClick={(e) => { e.stopPropagation(); navigate(`/user/${person.id}`); }}
+                      style={isPlus ? { padding: '2px', borderRadius: '50%' } : {}}
+                    >
                       <Avatar src={person.avatar} name={person.name} size={48} />
                       <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
                     </div>
                     <div className="chat-info">
                       <div className="chat-title-row">
-                        <span className="chat-name">{person.name}</span>
+                        <span className="chat-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                          {person.name}
+                          {isPlus && <PlusBadge size={14} />} {/* <-- Badge in Search */}
+                        </span>
                         {person.location && <span className="chat-location-badge">📍 {person.location}</span>}
                       </div>
                       <div className="chat-last">{person.bio || person.status || 'Available on ECHO'}</div>
