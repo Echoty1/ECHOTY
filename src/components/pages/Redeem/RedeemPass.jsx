@@ -13,7 +13,7 @@ const RedeemPass = () => {
   const navigate = useNavigate();
   const location = useLocation();
   
-  const [status, setStatus] = useState('loading'); // loading, success, error, invalid
+  const [status, setStatus] = useState('loading'); 
   const [message, setMessage] = useState('');
 
   useEffect(() => {
@@ -23,7 +23,7 @@ const RedeemPass = () => {
 
       if (!senderUid) {
         setStatus('invalid');
-        setMessage('No Buddy Pass code found.');
+        setMessage('No Buddy Pass code found in the link.');
         return;
       }
 
@@ -40,13 +40,24 @@ const RedeemPass = () => {
       }
 
       try {
+        // 1. Try to fetch the sender's profile
         const senderRef = ref(db, `profiles/${senderUid}`);
         const senderSnap = await get(senderRef);
 
         if (!senderSnap.exists()) {
-          setStatus('invalid');
-          setMessage('Sender profile not found.');
-          return;
+           // FALLBACK: Check if they exist in the main users node
+           const userRef = ref(db, `users/${senderUid}`);
+           const userSnap = await get(userRef);
+           
+           if (!userSnap.exists()) {
+             setStatus('invalid');
+             setMessage('This link is invalid or the sender account was deleted.');
+             return;
+           }
+           // If they exist in users but not profiles, we can't verify if they are Plus.
+           setStatus('invalid');
+           setMessage('The sender has not set up their profile yet.');
+           return;
         }
 
         const senderData = senderSnap.val();
@@ -54,7 +65,7 @@ const RedeemPass = () => {
         // Check if sender is actually a Plus member
         if (!senderData.isEchoPlus) {
           setStatus('invalid');
-          setMessage('The sender is not an ECHO Plus member.');
+          setMessage('The person who sent this link is not an ECHO Plus member.');
           return;
         }
 
@@ -66,12 +77,12 @@ const RedeemPass = () => {
           return;
         }
 
-        // 1. Deduct pass from sender (Update directly instead of transaction to avoid permission errors)
+        // 2. Deduct pass from sender
         await update(ref(db, `profiles/${senderUid}`), {
           buddyPasses: passesLeft - 1
         });
 
-        // 2. Upgrade the receiver
+        // 3. Upgrade the receiver (You!)
         await update(ref(db, `profiles/${user.uid}`), {
           isEchoPlus: true,
           premiumChatStyle: senderData.premiumChatStyle || 'gold', 
@@ -79,7 +90,7 @@ const RedeemPass = () => {
           upgradedViaBuddyPass: senderUid,
         });
 
-        // 3. Update Local Context instantly
+        // 4. Update Local Context instantly
         await upgradeToPlus(); 
 
         setStatus('success');
@@ -92,8 +103,7 @@ const RedeemPass = () => {
       } catch (err) {
         console.error("Redeem error detailed:", err);
         setStatus('error');
-        // Show the exact error for debugging
-        setMessage(`Error: ${err.message || 'Something went wrong while redeeming your pass.'}`);
+        setMessage(`Error: ${err.message || 'Something went wrong. Check your internet connection.'}`);
       }
     };
 
