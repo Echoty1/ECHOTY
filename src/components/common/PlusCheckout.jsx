@@ -1,3 +1,4 @@
+// src/components/common/PlusCheckout.jsx
 import React, { useState } from 'react';
 import { useSubscription } from '../../contexts/SubscriptionContext';
 
@@ -10,9 +11,10 @@ const PlusCheckout = () => {
   const handlePayment = (e) => {
     e.preventDefault();
     setIsProcessing(true);
+    
     setTimeout(() => {
       setIsProcessing(false);
-      upgradeToPlus();
+      upgradeToPlus(); 
       alert("Payment Successful! Welcome to ECHO Plus ⚡");
     }, 2000);
   };
