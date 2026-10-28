@@ -9,7 +9,7 @@ import Toast from '../../Toast/Toast';
 const PlusCustomizer = () => {
   const { 
     appTheme, setAppTheme, chatStyle, setChatStyle, 
-    ringStyle, setRingStyle, profileBg, setProfileBg // New
+    ringStyle, setRingStyle, profileBg, setProfileBg
   } = useSubscription();
   
   const { user } = useAuth();
