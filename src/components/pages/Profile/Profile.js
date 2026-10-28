@@ -21,7 +21,7 @@ import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid'
 import AccountSwitcher from '../../common/AccountSwitcher'; 
 import { useSubscription } from '../../../contexts/SubscriptionContext'; 
 import PlusCustomizer from './PlusCustomizer'; 
-import PlusBadge from '../../common/PlusBadge'; // <-- NEW: Premium Badge
+import PlusBadge from '../../common/PlusBadge'; // <-- Premium Badge
 import './Profile.css';
 
 const getFastLocal = (key) => { try { const item = localStorage.getItem('echo_cache_' + key); return item ? JSON.parse(item) : null; } catch { return null; } };
@@ -37,12 +37,11 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
   const { user, getSavedAccounts, switchAccount, signOutAll } = useAuth();
-  const { isEchoPlus, setShowUpgradeModal, ringStyle } = useSubscription(); 
+  const { isEchoPlus, setShowUpgradeModal, ringStyle, profileBg } = useSubscription(); // <-- Added profileBg
   
   const navigate = useNavigate();
   const { refreshProfile, profiles, fetchProfile } = useProfile();
 
-  // State to toggle the ECHO Plus Popup
   const [showPlusPopup, setShowPlusPopup] = useState(false);
 
   const [activeTab, setActiveTab] = useState('spotlight');
@@ -220,7 +219,8 @@ const Profile = () => {
         <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={(e) => e.target.files[0] && handleUploadImage(e.target.files[0])} />
 
         <div className="snap-hero">
-          <div className="snap-hero-bg" style={{ backgroundImage: displayMediaUrl ? `url(${displayMediaUrl})` : 'var(--bg-card)' }} />
+          {/* NEW: Animated Premium Backgrounds */}
+          <div className={`snap-hero-bg ${isEchoPlus ? `premium-bg-${profileBg}` : ''}`} style={{ backgroundImage: displayMediaUrl ? `url(${displayMediaUrl})` : 'var(--bg-card)' }} />
           <div className="snap-hero-overlay" />
           
           <div className="snap-avatar-wrapper">
@@ -244,7 +244,7 @@ const Profile = () => {
             ) : (
               <h1 className="snap-name">
                 {profile?.name || 'User'}
-                {isEchoPlus && <PlusBadge size={22} />} {/* <-- NEW BADGE */}
+                {isEchoPlus && <PlusBadge size={22} />}
               </h1>
             )}
             
@@ -280,7 +280,6 @@ const Profile = () => {
               </>
             ) : (
               <>
-                {/* Upgrade or Status Button */}
                 {!isEchoPlus ? (
                   <button className="btn-upgrade-plus" onClick={() => setShowUpgradeModal(true)} style={{ width: '100%', marginBottom: '8px' }}>
                     ⚡ Upgrade to ECHO Plus
@@ -291,7 +290,6 @@ const Profile = () => {
                   </button>
                 )}
 
-                {/* Standard Actions Wrapper */}
                 <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
                   <button 
                     className="snap-btn-secondary" 
