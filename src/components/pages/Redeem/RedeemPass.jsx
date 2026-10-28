@@ -2,9 +2,9 @@
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ref, get, update, runTransaction } from 'firebase/database';
-import { db } from '../../../services/firebase'; // <-- FIXED: Added one more ../
-import { useAuth } from '../../../hooks/useAuth'; // <-- FIXED
-import { useSubscription } from '../../../contexts/SubscriptionContext'; // <-- FIXED
+import { db } from '../../../services/firebase'; 
+import { useAuth } from '../../../hooks/useAuth'; 
+import { useSubscription } from '../../../contexts/SubscriptionContext'; 
 import './RedeemPass.css';
 
 const RedeemPass = () => {
@@ -18,7 +18,6 @@ const RedeemPass = () => {
 
   useEffect(() => {
     const redeem = async () => {
-      // Get the code from URL (e.g., ?code=SENDER_UID)
       const queryParams = new URLSearchParams(location.search);
       const senderUid = queryParams.get('code');
 
@@ -29,7 +28,6 @@ const RedeemPass = () => {
       }
 
       if (!user) {
-        // If they aren't logged in, save the code and send them to login
         sessionStorage.setItem('pending_buddy_pass', senderUid);
         navigate('/login');
         return;
@@ -45,14 +43,22 @@ const RedeemPass = () => {
         const senderRef = ref(db, `profiles/${senderUid}`);
         const senderSnap = await get(senderRef);
 
-        if (!senderSnap.exists() || !senderSnap.val().isEchoPlus) {
+        if (!senderSnap.exists()) {
+          setStatus('invalid');
+          setMessage('Sender profile not found.');
+          return;
+        }
+
+        const senderData = senderSnap.val();
+        
+        // Check if sender is actually a Plus member
+        if (!senderData.isEchoPlus) {
           setStatus('invalid');
           setMessage('The sender is not an ECHO Plus member.');
           return;
         }
 
-        const senderData = senderSnap.val();
-        const passesLeft = senderData.buddyPasses ?? 5; // Default to 5 if not set
+        const passesLeft = senderData.buddyPasses ?? 5; 
 
         if (passesLeft <= 0) {
           setStatus('invalid');
@@ -60,37 +66,34 @@ const RedeemPass = () => {
           return;
         }
 
-        // 1. Deduct pass from sender safely
-        await runTransaction(ref(db, `profiles/${senderUid}/buddyPasses`), (current) => {
-          const count = current ?? 5;
-          if (count > 0) return count - 1;
-          return 0;
+        // 1. Deduct pass from sender (Update directly instead of transaction to avoid permission errors)
+        await update(ref(db, `profiles/${senderUid}`), {
+          buddyPasses: passesLeft - 1
         });
 
         // 2. Upgrade the receiver
         await update(ref(db, `profiles/${user.uid}`), {
           isEchoPlus: true,
-          premiumChatStyle: senderData.premiumChatStyle || 'gold', // Copy sender's style as a gift
+          premiumChatStyle: senderData.premiumChatStyle || 'gold', 
           premiumRingStyle: senderData.premiumRingStyle || 'gold',
           upgradedViaBuddyPass: senderUid,
         });
 
-        // 3. Update Local Context
+        // 3. Update Local Context instantly
         await upgradeToPlus(); 
 
         setStatus('success');
         setMessage('Welcome to ECHO Plus! You have unlocked Premium features for free.');
         
-        // Clear pending pass
         sessionStorage.removeItem('pending_buddy_pass');
         
-        // Redirect after 3 seconds
         setTimeout(() => navigate('/profile'), 3000);
 
       } catch (err) {
-        console.error("Redeem error:", err);
+        console.error("Redeem error detailed:", err);
         setStatus('error');
-        setMessage('Something went wrong while redeeming your pass.');
+        // Show the exact error for debugging
+        setMessage(`Error: ${err.message || 'Something went wrong while redeeming your pass.'}`);
       }
     };
 
@@ -120,7 +123,7 @@ const RedeemPass = () => {
           <>
             <div className="redeem-icon error">✕</div>
             <h2>Redemption Failed</h2>
-            <p>{message}</p>
+            <p style={{ fontSize: '13px', color: '#ff6b6b' }}>{message}</p>
             <button className="redeem-btn" onClick={() => navigate('/')}>Go Home</button>
           </>
         )}
