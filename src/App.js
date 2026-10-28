@@ -10,9 +10,10 @@ import { CacheProvider } from './contexts/CacheContext';
 import { CallProvider } from './contexts/CallContext';
 import { ThemeProvider } from './contexts/ThemeContext';
 
-// ─── NEW: ECHO Plus Imports ────────────────────────────────
+// ─── ECHO Plus Imports ────────────────────────────────
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
 import PlusCheckout from './components/common/PlusCheckout';
+import RedeemPass from './components/pages/Redeem/RedeemPass'; // <-- NEW
 
 import Home from './components/pages/Home/Home';
 import Chats from './components/pages/Chats/Chats';
@@ -408,6 +409,10 @@ function AppContent() {
           <Route path="/legal" element={<Legal />} />
           <Route path="/communities" element={<Communities />} />
           <Route path="/echodrop" element={<EchoDropPage />} />
+
+          {/* ─── ECHO PLUS BUDDY PASS ──────────────────────────────── */}
+          <Route path="/redeem" element={<RedeemPass />} />
+          {/* ────────────────────────────────────────────── */}
 
           {/* ─── Spotlight ──────────────────────────────── */}
           <Route path="/spotlight" element={<SpotlightFeed />} />
