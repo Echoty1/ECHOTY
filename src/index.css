@@ -3,7 +3,7 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent !important; /* Disable Android default touch feedback */
+  -webkit-tap-highlight-color: transparent !important;
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
@@ -20,7 +20,7 @@
 
 /* ─── Inputs: prevent zoom, improve tap size ─────────────────── */
 input, textarea, button {
-  font-size: 16px !important; /* Prevents iOS zoom on focus */
+  font-size: 16px !important;
   touch-action: manipulation;
 }
 
@@ -32,7 +32,6 @@ button, .clickable {
 
 /* ─── Theme Variables ─────────────────────────────────────────── */
 :root {
-  /* Default (dark) */
   --bg-primary: #0A0A0F;
   --bg-secondary: #12121A;
   --bg-card: rgba(18, 18, 26, 0.8);
@@ -46,7 +45,6 @@ button, .clickable {
   --scrollbar-track: transparent;
 }
 
-/* Dark theme (same as default, but explicit) */
 html.theme-dark {
   --bg-primary: #0A0A0F;
   --bg-secondary: #12121A;
@@ -59,7 +57,6 @@ html.theme-dark {
   --shadow-color: rgba(0, 0, 0, 0.3);
 }
 
-/* Light theme */
 html.theme-light {
   --bg-primary: #f5f5f5;
   --bg-secondary: #ffffff;
@@ -73,14 +70,12 @@ html.theme-light {
 }
 
 /* ─── Base Styles ────────────────────────────────────────────── */
-html,
-body,
-#root {
+html, body, #root {
   height: 100%;
   width: 100%;
-  overflow: hidden; /* no page scroll */
+  overflow: hidden;
   -webkit-tap-highlight-color: rgba(0, 0, 0, 0) !important;
-  touch-action: manipulation; /* Prevents zoom on double-tap */
+  touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
 }
 
@@ -91,476 +86,86 @@ body {
   transition: background 0.3s ease, color 0.3s ease;
 }
 
-/* Remove Android ripple/highlight on interactive elements */
-button,
-a,
-input,
-textarea,
-select,
-.clickable {
+button, a, input, textarea, select, .clickable {
   -webkit-tap-highlight-color: transparent !important;
   outline: none !important;
   box-shadow: none !important;
 }
 
-#root {
-  overflow: hidden;
-}
+#root { overflow: hidden; }
 
 /* ─── Scrollbars ─────────────────────────────────────────────── */
-* {
-  -webkit-overflow-scrolling: touch;
-}
-
-::-webkit-scrollbar {
-  width: 4px;
-}
-::-webkit-scrollbar-track {
-  background: var(--scrollbar-track);
-}
-::-webkit-scrollbar-thumb {
-  background: var(--scrollbar-thumb);
-  border-radius: 10px;
-}
+* { -webkit-overflow-scrolling: touch; }
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: var(--scrollbar-track); }
+::-webkit-scrollbar-thumb { background: var(--scrollbar-thumb); border-radius: 10px; }
 
 /* ─── Animations ─────────────────────────────────────────────── */
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
-
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
-
-.gradient-text {
-  background: linear-gradient(135deg, #6C3CE1, #EC4899);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-@keyframes echoFloat {
-  0%, 100% { transform: translateY(0px); }
-  50% { transform: translateY(-6px); }
-}
-
-@keyframes echoRingPulse {
-  0% { transform: scale(1); opacity: 0.4; }
-  100% { transform: scale(1.6); opacity: 0; }
-}
-
-@keyframes accessoryPop {
-  0% { transform: scale(0.5) rotate(-20deg); opacity: 0; }
-  100% { transform: scale(1) rotate(0deg); opacity: 1; }
-}
+@keyframes float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-10px); } }
+@keyframes shimmer { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+.gradient-text { background: linear-gradient(135deg, #6C3CE1, #EC4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+@keyframes echoFloat { 0%, 100% { transform: translateY(0px); } 50% { transform: translateY(-6px); } }
+@keyframes echoRingPulse { 0% { transform: scale(1); opacity: 0.4; } 100% { transform: scale(1.6); opacity: 0; } }
+@keyframes accessoryPop { 0% { transform: scale(0.5) rotate(-20deg); opacity: 0; } 100% { transform: scale(1) rotate(0deg); opacity: 1; } }
 
 /* ─── Toast ───────────────────────────────────────────────────── */
-.toast {
-  position: fixed;
-  bottom: 80px;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 12px 24px;
-  border-radius: 50px;
-  font-size: 14px;
-  font-weight: 500;
-  z-index: 99999;
-  animation: toastIn 0.3s ease;
-  background: var(--bg-secondary);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  box-shadow: 0 8px 30px var(--shadow-color);
-}
+.toast { position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%); padding: 12px 24px; border-radius: 50px; font-size: 14px; font-weight: 500; z-index: 99999; animation: toastIn 0.3s ease; background: var(--bg-secondary); color: var(--text-primary); border: 1px solid var(--border-color); box-shadow: 0 8px 30px var(--shadow-color); }
+.toast-success { border-color: #10B981; background: rgba(16, 185, 129, 0.15); color: #10B981; }
+@keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
 
-.toast-success {
-  border-color: #10B981;
-  background: rgba(16, 185, 129, 0.15);
-  color: #10B981;
-}
-
-@keyframes toastIn {
-  from { opacity: 0; transform: translateX(-50%) translateY(20px); }
-  to { opacity: 1; transform: translateX(-50%) translateY(0); }
-}
-
-body.hide-bottom-nav .bottom-nav-container {
-  display: none !important;
-}
+body.hide-bottom-nav .bottom-nav-container { display: none !important; }
 
 /* ─── Notification Bell & Dropdown ───────────────────────────── */
-.notification-bell-wrapper {
-  position: relative;
-}
+.notification-bell-wrapper { position: relative; }
+.notification-dropdown { position: absolute; top: 44px; right: 0; width: min(320px, calc(100vw - 32px)) !important; max-height: min(360px, calc(100vh - 120px)) !important; overflow-y: auto; background: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 12px 40px var(--shadow-color); padding: 8px 0; z-index: 9999 !important; right: 0; left: auto; }
+.notification-dropdown { position: fixed !important; top: 60px !important; right: 16px !important; width: min(320px, calc(100vw - 32px)) !important; max-height: min(360px, calc(100vh - 120px)) !important; overflow-y: auto; background: var(--bg-secondary); border-radius: 12px; border: 1px solid var(--border-color); box-shadow: 0 12px 40px var(--shadow-color); padding: 8px 0; z-index: 9999 !important; transform: none !important; left: auto !important; }
 
-/* Dropdown – base styles (overridden below) */
-.notification-dropdown {
-  position: absolute;
-  top: 44px;
-  right: 0;
-  width: min(320px, calc(100vw - 32px)) !important;
-  max-height: min(360px, calc(100vh - 120px)) !important;
-  overflow-y: auto;
-  background: var(--bg-secondary);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 12px 40px var(--shadow-color);
-  padding: 8px 0;
-  z-index: 9999 !important;
-  right: 0;
-  left: auto;
-}
-
-/* Override for fixed positioning */
-.notification-dropdown {
-  position: fixed !important;
-  top: 60px !important;
-  right: 16px !important;
-  width: min(320px, calc(100vw - 32px)) !important;
-  max-height: min(360px, calc(100vh - 120px)) !important;
-  overflow-y: auto;
-  background: var(--bg-secondary);
-  border-radius: 12px;
-  border: 1px solid var(--border-color);
-  box-shadow: 0 12px 40px var(--shadow-color);
-  padding: 8px 0;
-  z-index: 9999 !important;
-  transform: none !important;
-  left: auto !important;
-}
-
-/* ─── Mobile fine‑tuning ────────────────────────────────────── */
 @media (max-width: 480px) {
-  .notification-dropdown {
-    right: 8px !important;
-    top: 56px !important;
-    width: calc(100vw - 16px) !important;
-    max-height: calc(100vh - 100px) !important;
-    border-radius: 12px;
-  }
-
-  .notification-dropdown .notification-item-title {
-    font-size: 13px !important;
-  }
-  .notification-dropdown .notification-item-body {
-    font-size: 12px !important;
-  }
+  .notification-dropdown { right: 8px !important; top: 56px !important; width: calc(100vw - 16px) !important; max-height: calc(100vh - 100px) !important; border-radius: 12px; }
+  .notification-dropdown .notification-item-title { font-size: 13px !important; }
+  .notification-dropdown .notification-item-body { font-size: 12px !important; }
 }
 
-/* ─── Scrollbar for dropdown ────────────────────────────────── */
-.notification-dropdown::-webkit-scrollbar {
-  width: 4px;
-}
-.notification-dropdown::-webkit-scrollbar-track {
-  background: transparent;
-}
-.notification-dropdown::-webkit-scrollbar-thumb {
-  background: #6C3CE1;
-  border-radius: 4px;
-}
-
-/* ─── Notification items ────────────────────────────────────── */
-.notification-dropdown .notification-item {
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border-color);
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.notification-dropdown .notification-item:hover {
-  background: rgba(255, 255, 255, 0.04);
-}
-.notification-dropdown .notification-item.unread {
-  background: rgba(108, 60, 225, 0.08);
-}
-.notification-dropdown .notification-item .title {
-  color: var(--text-primary);
-  font-weight: 600;
-  font-size: 14px;
-}
-.notification-dropdown .notification-item .body {
-  color: var(--text-secondary);
-  font-size: 13px;
-  margin: 4px 0 0 0;
-  line-height: 1.3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 90%;
-}
-.notification-dropdown .notification-item .unread-dot {
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  background: #6C3CE1;
-  flex-shrink: 0;
-}
+.notification-dropdown::-webkit-scrollbar { width: 4px; }
+.notification-dropdown::-webkit-scrollbar-track { background: transparent; }
+.notification-dropdown::-webkit-scrollbar-thumb { background: #6C3CE1; border-radius: 4px; }
+.notification-dropdown .notification-item { padding: 10px 16px; border-bottom: 1px solid var(--border-color); cursor: pointer; transition: background 0.15s; }
+.notification-dropdown .notification-item:hover { background: rgba(255, 255, 255, 0.04); }
+.notification-dropdown .notification-item.unread { background: rgba(108, 60, 225, 0.08); }
+.notification-dropdown .notification-item .title { color: var(--text-primary); font-weight: 600; font-size: 14px; }
+.notification-dropdown .notification-item .body { color: var(--text-secondary); font-size: 13px; margin: 4px 0 0 0; line-height: 1.3; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 90%; }
+.notification-dropdown .notification-item .unread-dot { width: 8px; height: 8px; border-radius: 50%; background: #6C3CE1; flex-shrink: 0; }
 
 /* ─── Reusable Page Back Header ─────────────────────────────── */
-.page-back-header {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  background: var(--bg-primary);
-  padding: 10px 16px;
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  border-bottom: 1px solid var(--border-color);
-  backdrop-filter: blur(8px);
-  margin-bottom: 16px;
-}
-.page-back-btn {
-  background: none;
-  border: none;
-  color: var(--text-secondary);
-  font-size: 16px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 8px;
-  border-radius: 8px;
-  transition: background 0.2s, color 0.2s;
-}
-.page-back-btn:hover {
-  background: var(--bg-input);
-  color: var(--text-primary);
-}
-.page-back-title {
-  font-size: 18px;
-  font-weight: 700;
-  color: var(--text-primary);
-  flex: 1;
-}
-
-@keyframes slideUp {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-}
-
-/* ─── ECHOMOJI Bounce ───────────────────────────────────────── */
-@keyframes echoBounce {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-8px); }
-}
+.page-back-header { position: sticky; top: 0; z-index: 10; background: var(--bg-primary); padding: 10px 16px; display: flex; align-items: center; gap: 14px; border-bottom: 1px solid var(--border-color); backdrop-filter: blur(8px); margin-bottom: 16px; }
+.page-back-btn { background: none; border: none; color: var(--text-secondary); font-size: 16px; cursor: pointer; display: flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 8px; transition: background 0.2s, color 0.2s; }
+.page-back-btn:hover { background: var(--bg-input); color: var(--text-primary); }
+.page-back-title { font-size: 18px; font-weight: 700; color: var(--text-primary); flex: 1; }
+@keyframes slideUp { from { opacity: 0; transform: translateX(-50%) translateY(20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
+@keyframes echoBounce { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-8px); } }
 
 /* ─── Bottom Nav Wave Video Background ──────────────────────── */
+.bottom-nav-wave { position: fixed !important; bottom: 16px !important; left: 50% !important; transform: translateX(-50%) !important; z-index: 50 !important; background: rgba(10, 10, 15, 0.85) !important; backdrop-filter: blur(16px) !important; -webkit-backdrop-filter: blur(16px) !important; border: 1px solid var(--border-color) !important; border-radius: 28px !important; display: flex !important; flex-direction: column !important; align-items: center !important; justify-content: center !important; padding: 4px 0 !important; height: 72px !important; width: calc(100% - 16px) !important; max-width: 440px !important; box-shadow: 0 8px 40px var(--shadow-color) !important; overflow: hidden !important; touch-action: none !important; user-select: none !important; will-change: transform !important; }
+.wave-video-container { position: absolute !important; inset: 0 !important; z-index: 0 !important; overflow: hidden !important; border-radius: 28px !important; pointer-events: none !important; }
+.wave-video { width: 100% !important; height: 100% !important; object-fit: cover !important; opacity: 0.5 !important; transform: scale(1.05) !important; transition: opacity 0.3s ease !important; }
+html.theme-light .bottom-nav-wave { background: rgba(255, 255, 255, 0.92) !important; }
+html.theme-light .wave-video { opacity: 0.25 !important; }
 
-/* Main container – must be positioned relative for video overlay */
-.bottom-nav-wave {
-  position: fixed !important;
-  bottom: 16px !important;
-  left: 50% !important;
-  transform: translateX(-50%) !important;
-  z-index: 50 !important;
-  background: rgba(10, 10, 15, 0.85) !important;
-  backdrop-filter: blur(16px) !important;
-  -webkit-backdrop-filter: blur(16px) !important;
-  border: 1px solid var(--border-color) !important;
-  border-radius: 28px !important;
-  display: flex !important;
-  flex-direction: column !important;
-  align-items: center !important;
-  justify-content: center !important;
-  padding: 4px 0 !important;
-  height: 72px !important;
-  width: calc(100% - 16px) !important;
-  max-width: 440px !important;
-  box-shadow: 0 8px 40px var(--shadow-color) !important;
-  overflow: hidden !important;
-  touch-action: none !important;
-  user-select: none !important;
-  will-change: transform !important;
-}
-
-/* ─── Video Container ────────────────────────────────────────── */
-.wave-video-container {
-  position: absolute !important;
-  inset: 0 !important;
-  z-index: 0 !important;
-  overflow: hidden !important;
-  border-radius: 28px !important;
-  pointer-events: none !important;
-}
-
-.wave-video {
-  width: 100% !important;
-  height: 100% !important;
-  object-fit: cover !important;
-  opacity: 0.5 !important;
-  transform: scale(1.05) !important;
-  transition: opacity 0.3s ease !important;
-}
-
-/* ─── Light Theme ────────────────────────────────────────────── */
-html.theme-light .bottom-nav-wave {
-  background: rgba(255, 255, 255, 0.92) !important;
-}
-
-html.theme-light .wave-video {
-  opacity: 0.25 !important;
-}
-
-/* ═══════════════════════════════════════════════════════════════
-   ECHOMOJI ANIMATION KEYFRAMES
-   These power the animation prop on <ECHOMOJI />
-   ═══════════════════════════════════════════════════════════════ */
-
-/* Idle – gentle breathing */
-@keyframes echomoji-idle {
-  0%, 100% { transform: translateY(0) scale(1); }
-  50%      { transform: translateY(-3px) scale(1.01); }
-}
-
-/* Wave – right arm up + sway */
-@keyframes echomoji-wave {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  25%      { transform: translateY(-2px) rotate(-3deg); }
-  50%      { transform: translateY(-4px) rotate(3deg); }
-  75%      { transform: translateY(-2px) rotate(-3deg); }
-}
-
-/* Jump – big vertical hop */
-@keyframes echomoji-jump {
-  0%, 100% { transform: translateY(0) scale(1); }
-  25%      { transform: translateY(-2px) scale(1.02); }
-  50%      { transform: translateY(-10px) scale(1.05); }
-  75%      { transform: translateY(-2px) scale(1.02); }
-}
-
-/* Cry – small trembling shake */
-@keyframes echomoji-cry {
-  0%, 100% { transform: translateY(0) rotate(0deg); }
-  25%      { transform: translateY(1px) rotate(-1deg); }
-  50%      { transform: translateY(2px) rotate(1deg); }
-  75%      { transform: translateY(1px) rotate(-1deg); }
-}
-
-/* Dance – side-to-side groove */
-@keyframes echomoji-dance {
-  0%   { transform: rotate(-5deg) scale(1); }
-  25%  { transform: rotate(5deg) scale(1.05); }
-  50%  { transform: rotate(-5deg) scale(1); }
-  75%  { transform: rotate(5deg) scale(1.05); }
-  100% { transform: rotate(-5deg) scale(1); }
-}
-/* Chat Preview Popup animations */
-@keyframes chatPreviewIn {
-  0%   { opacity: 0; transform: scale(0.88) translateY(14px); }
-  60%  { opacity: 1; transform: scale(1.015) translateY(-2px); }
-  100% { opacity: 1; transform: scale(1) translateY(0); }
-}
-
-@keyframes chatPreviewOut {
-  0%   { opacity: 1; transform: scale(1) translateY(0); }
-  100% { opacity: 0; transform: scale(0.92) translateY(10px); }
-}
-/* Typing indicator dots */
-.typing-dot {
-  display: inline-block;
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: var(--text-secondary);
-  animation: typingBounce 1.2s infinite ease-in-out;
-}
-
-@keyframes typingBounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
-  30%           { transform: translateY(-4px); opacity: 1; }
-}
-@keyframes wallpaperSlideUp {
-  0%   { transform: translateY(100%); opacity: 0.6; }
-  100% { transform: translateY(0); opacity: 1; }
-}
-/* =========================================
-   ECHO PLUS THEMES (Applies to body)
-   ========================================= */
-body.theme-default { background-color: #0a0a0a; color: white; }
-body.theme-midnight { background-color: #0a1128; color: #e0e0e0; }
-body.theme-amoled { background-color: #000000; color: white; }
-body.theme-ocean { background: linear-gradient(135deg, #001f3f, #003366); color: white; }
+/* ECHOMOJI ANIMATIONS */
+@keyframes echomoji-idle { 0%, 100% { transform: translateY(0) scale(1); } 50% { transform: translateY(-3px) scale(1.01); } }
+@keyframes echomoji-wave { 0%, 100% { transform: translateY(0) rotate(0deg); } 25% { transform: translateY(-2px) rotate(-3deg); } 50% { transform: translateY(-4px) rotate(3deg); } 75% { transform: translateY(-2px) rotate(-3deg); } }
+@keyframes echomoji-jump { 0%, 100% { transform: translateY(0) scale(1); } 25% { transform: translateY(-2px) scale(1.02); } 50% { transform: translateY(-10px) scale(1.05); } 75% { transform: translateY(-2px) scale(1.02); } }
+@keyframes echomoji-cry { 0%, 100% { transform: translateY(0) rotate(0deg); } 25% { transform: translateY(1px) rotate(-1deg); } 50% { transform: translateY(2px) rotate(1deg); } 75% { transform: translateY(1px) rotate(-1deg); } }
+@keyframes echomoji-dance { 0% { transform: rotate(-5deg) scale(1); } 25% { transform: rotate(5deg) scale(1.05); } 50% { transform: rotate(-5deg) scale(1); } 75% { transform: rotate(5deg) scale(1.05); } 100% { transform: rotate(-5deg) scale(1); } }
+@keyframes chatPreviewIn { 0% { opacity: 0; transform: scale(0.88) translateY(14px); } 60% { opacity: 1; transform: scale(1.015) translateY(-2px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+@keyframes chatPreviewOut { 0% { opacity: 1; transform: scale(1) translateY(0); } 100% { opacity: 0; transform: scale(0.92) translateY(10px); } }
+.typing-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--text-secondary); animation: typingBounce 1.2s infinite ease-in-out; }
+@keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.4; } 30% { transform: translateY(-4px); opacity: 1; } }
+@keyframes wallpaperSlideUp { 0% { transform: translateY(100%); opacity: 0.6; } 100% { transform: translateY(0); opacity: 1; } }
 
 /* =========================================
-   ECHO PLUS CHAT BUBBLE STYLES
-   ========================================= */
-/* Neon Style */
-.message-bubble.outgoing.neon { background: transparent; border: 2px solid #00ffff; box-shadow: 0 0 10px rgba(0, 255, 255, 0.3); color: #00ffff; }
-.message-bubble.incoming.neon { background: transparent; border: 2px solid #ff00ff; box-shadow: 0 0 10px rgba(255, 0, 255, 0.3); color: #ff00ff; }
-
-/* Glass Style */
-.message-bubble.outgoing.glass { background: rgba(108, 60, 225, 0.4); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); }
-.message-bubble.incoming.glass { background: rgba(255, 255, 255, 0.1); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.2); }
-
-/* =========================================
-   ECHO PLUS PROFILE RINGS & UI
-   ========================================= */
-.plus-avatar-ring { padding: 4px; border-radius: 50%; }
-.plus-avatar-ring.gold { background: linear-gradient(135deg, #FFD700, #FFA500); box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
-.plus-avatar-ring.neon { background: linear-gradient(135deg, #00ffff, #ff00ff); box-shadow: 0 0 20px rgba(0, 255, 255, 0.5); }
-.plus-avatar-ring.fire { background: linear-gradient(135deg, #ff4500, #ff0000); box-shadow: 0 0 20px rgba(255, 69, 0, 0.6); }
-
-.verified-badge { width: 20px; height: 20px; margin-left: 8px; vertical-align: middle; }
-
-/* Upgrade Buttons */
-.btn-upgrade-plus {
-  background: linear-gradient(135deg, #FFD700 0%, #FFA500 100%);
-  color: #000; font-weight: 700; border: none; padding: 12px 24px;
-  border-radius: 20px; cursor: pointer; box-shadow: 0 4px 15px rgba(255, 215, 0, 0.3);
-  transition: transform 0.2s, box-shadow 0.2s; display: flex; align-items: center; justify-content: center; gap: 8px;
-}
-.btn-upgrade-plus:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(255, 215, 0, 0.5); }
-
-/* =========================================
-   PLUS CUSTOMIZER UI GRID
-   ========================================= */
-.plus-customizer { padding: 20px; background: var(--bg-secondary); border-radius: 16px; margin-top: 20px; border: 1px solid var(--border-color); }
-.customizer-title { color: #FFD700; margin-bottom: 20px; font-size: 1.2rem; text-align: center; }
-.custom-section { margin-bottom: 24px; }
-.custom-section h3 { font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 12px; text-transform: uppercase; letter-spacing: 1px; }
-
-.theme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
-.theme-card { background: var(--bg-input); border: 2px solid transparent; border-radius: 12px; padding: 10px; cursor: pointer; text-align: center; transition: 0.2s; }
-.theme-card.active { border-color: #FFD700; background: rgba(255, 215, 0, 0.1); }
-.theme-preview { height: 50px; border-radius: 8px; margin-bottom: 8px; }
-.theme-preview.default-preview { background: #0a0a0a; border: 1px solid #333; }
-.theme-preview.midnight-preview { background: #0a1128; }
-.theme-preview.amoled-preview { background: #000; border: 1px solid #222; }
-.theme-preview.ocean-preview { background: linear-gradient(135deg, #001f3f, #003366); }
-
-.option-row { display: flex; gap: 10px; flex-wrap: wrap; }
-.pill-btn { background: var(--bg-input); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 20px; cursor: pointer; transition: 0.2s; }
-.pill-btn.active { background: #FFD700; color: #000; border-color: #FFD700; font-weight: bold; }
-
-/* =========================================
-   CHECKOUT MODAL
-   ========================================= */
-.checkout-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(10px); display: flex; justify-content: center; align-items: center; z-index: 10000; }
-.checkout-modal { background: #1a1a1a; border: 1px solid #333; border-radius: 16px; width: 90%; max-width: 400px; padding: 30px; color: white; box-shadow: 0 20px 50px rgba(0,0,0,0.5); }
-.gold-text { color: #FFD700; }
-.payment-form { display: flex; flex-direction: column; gap: 15px; margin-top: 20px; }
-.input-group { display: flex; flex-direction: column; gap: 5px; text-align: left; }
-.input-group label { font-size: 0.85rem; color: #aaa; }
-.input-group input { background: #2a2a2a; border: 1px solid #444; border-radius: 8px; padding: 12px; color: white; outline: none; transition: border 0.2s; }
-.input-group input:focus { border-color: #FFD700; }
-.card-row { display: flex; gap: 10px; margin-top: 5px; }
-.btn-pay { background: linear-gradient(135deg, #FFD700, #FFA500); color: black; font-weight: bold; font-size: 1.1rem; padding: 15px; border: none; border-radius: 8px; cursor: pointer; margin-top: 10px; }
-.btn-pay:disabled { opacity: 0.7; cursor: not-allowed; }
-.secure-text { text-align: center; font-size: 0.75rem; color: #666; margin-top: 10px; }
-.btn-close { background: transparent; color: #888; border: none; margin-top: 15px; cursor: pointer; width: 100%; }
-/* =========================================
-   ECHO PLUS GLOBAL THEMES (Applies to body)
+   ECHO PLUS GLOBAL THEMES
    ========================================= */
 body.theme-default { background-color: #0A0A0F; color: #ffffff; }
 body.theme-midnight { background-color: #0a1128; color: #e0e0e0; }
