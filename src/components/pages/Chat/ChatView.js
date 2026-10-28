@@ -52,9 +52,9 @@ import { isBlocked as checkIsBlocked, unblockUser } from '../../../services/bloc
 import { sendPushToUser } from '../../../services/fcmService';
 import { hapticSend, hapticLight } from '../../../utils/haptics';
 import { isGroupChatId, chatIdToGroupId } from '../../../utils/groupId';
+import { useSubscription } from '../../../contexts/SubscriptionContext'; // <-- NEW
 import './ChatView.css';
 
-// ─── Batch 6: Mentions + Group roles ─────────────────────────
 import MentionAutocomplete from '../../common/MentionAutocomplete';
 import {
   parseMentions,
@@ -64,20 +64,12 @@ import {
   insertMention,
 } from '../../../utils/mentionParser';
 import { ROLE_LABELS } from '../../../utils/groupRoles';
-// ────────────────────────────────────────────────────────────
 
-// ─── Link preview imports ──────────────────────────────────────
 import LinkPreviewCard from './LinkPreviewCard';
 import { extractFirstUrl, fetchLinkPreview } from '../../../utils/linkPreview';
-// ────────────────────────────────────────────────────────────────
 
-// ─── Spotlight share card ───────────────────────────────────────
 import ChatSpotlightCard from './ChatSpotlightCard';
-// ────────────────────────────────────────────────────────────────
 
-/* ─────────────────────────────────────────────────────────────
-   Visual-viewport hook (unchanged)
-   ───────────────────────────────────────────────────────────── */
 const useVisualViewport = () => {
   useEffect(() => {
     const root = document.documentElement;
@@ -215,6 +207,7 @@ const ChatView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { getProfile, fetchProfile } = useProfile();
+  const { chatStyle } = useSubscription(); // <-- NEW
 
   useVisualViewport();
 
@@ -258,13 +251,11 @@ const ChatView = () => {
   const [activeMessageMenuId, setActiveMessageMenuId] = useState(null);
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
 
-  // ─── Batch 6: Mentions + Mute state ──────────────────────────
   const [mentionQuery, setMentionQuery] = useState(null);
   const [mentionSuggestions, setMentionSuggestions] = useState([]);
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStartIndex, setMentionStartIndex] = useState(-1);
   const [isMuted, setIsMuted] = useState(false);
-  // ─────────────────────────────────────────────────────────────
 
   const [replyToNote, setReplyToNote] = useState(null);
 
@@ -331,7 +322,6 @@ const ChatView = () => {
   const sendButtonRef = useRef(null);
   const noteReplyContext = useRef(null);
 
-  // ─── Group detection ─────────────────────────────────────────
   const isGroupChat = isGroupChatId(userId);
   const groupIdFromChat = isGroupChat ? chatIdToGroupId(userId) : null;
   const [groupData, setGroupData] = useState(null);
@@ -344,7 +334,6 @@ const ChatView = () => {
       });
       return () => unsub();
     }
-    // Regular 1-1 chat path
     if (!userId) return;
     const cached = getProfile(userId);
     if (cached) setPartnerProfile(cached);
@@ -441,7 +430,6 @@ const ChatView = () => {
 
   useEffect(() => () => { noteReplyContext.current = null; }, [userId]);
 
-  // ─── Typing indicator (1-1 only) ─────────────────────────────
   useEffect(() => {
     if (!user?.uid || !userId || isGroupChat) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -458,7 +446,6 @@ const ChatView = () => {
     return () => { unsub(); clearInterval(interval); };
   }, [user?.uid, userId, isGroupChat]);
 
-  // ─── Wallpaper (1-1 only) ────────────────────────────────────
   useEffect(() => {
     if (!user?.uid || !userId || isGroupChat) return;
     const cId = [user.uid, userId].sort().join('_');
@@ -469,7 +456,6 @@ const ChatView = () => {
     return () => { unsubWp(); unsubCw(); };
   }, [user?.uid, userId, isGroupChat]);
 
-  // ─── Pinned message ──────────────────────────────────────────
   useEffect(() => {
     if (!user?.uid || !userId) return;
     const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
@@ -478,7 +464,6 @@ const ChatView = () => {
     return () => unsub();
   }, [user?.uid, userId, isGroupChat]);
 
-  // ─── Batch 6: Group mute listener ────────────────────────────
   useEffect(() => {
     if (!user?.uid || !userId || !isGroupChat) return;
     const muteRef = ref(db, `userChats/${user.uid}/${userId}/muted`);
@@ -487,7 +472,6 @@ const ChatView = () => {
     });
     return () => unsub();
   }, [user?.uid, userId, isGroupChat]);
-  // ─────────────────────────────────────────────────────────────
 
   useEffect(() => {
     if (!user?.uid || !userId || isGroupChat) return undefined;
@@ -515,7 +499,6 @@ const ChatView = () => {
     } catch (err) { console.error('Failed to save custom wallpaper', err); }
   };
 
-  // ─── Batch 6: Mute toggle handler ────────────────────────────
   const handleToggleMute = async () => {
     if (!user?.uid || !userId || !isGroupChat) return;
     hapticLight();
@@ -531,7 +514,6 @@ const ChatView = () => {
       setTimeout(() => setToast(null), 2000);
     }
   };
-  // ─────────────────────────────────────────────────────────────
 
   const pruneExpired = async (list, cId) => {
     if (userId === ECHO_AI_ID) return list;
@@ -865,7 +847,6 @@ const ChatView = () => {
     flashSent(newMsgRef.key);
     if (getSoundEnabled()) playSentSound();
 
-    // ─── Batch 6: Notify @mentioned users (group only) ───
     if (isGroupChat && groupData?.members) {
       const mentioned = extractMentions(textToSend);
       const everyone = mentionsEveryone(textToSend);
@@ -899,9 +880,7 @@ const ChatView = () => {
         }).catch(() => {});
       });
     }
-    // ─────────────────────────────────────────────────────
 
-    // Update userChats (for both 1-1 and group)
     if (isGroupChat) {
       update(ref(db, `groups/${groupIdFromChat}`), {
         lastMessage: textToSend,
@@ -982,7 +961,8 @@ const ChatView = () => {
     }
     clearMessageCache(cId);
   };
-    const sendMediaMessage = async (retryMessageId = null) => {
+  
+  const sendMediaMessage = async (retryMessageId = null) => {
     let file = selectedFile;
     let caption = captionText.trim();
     let reply = replyTo;
@@ -1500,7 +1480,6 @@ const ChatView = () => {
     } else { setNewMessage((prev) => prev + emoji); setTimeout(() => inputRef.current?.focus(), 0); }
   };
 
-  // ─── Batch 6: Mention-aware keydown ──────────────────────────
   const handleKeyDown = (e) => {
     if (mentionQuery && mentionSuggestions.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -1547,7 +1526,6 @@ const ChatView = () => {
       handleSendText(e);
     }
   };
-  // ─────────────────────────────────────────────────────────────
 
   const renderPreviewOverlay = () => {
     if (!previewUrl) return null;
@@ -1792,7 +1770,7 @@ const ChatView = () => {
                 {msg.senderName || 'Member'}
               </div>
             )}
-            <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${msg.pending ? 'pending' : ''} ${isPinned ? 'pinned' : ''}`}>
+            <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${chatStyle} ${msg.pending ? 'pending' : ''} ${isPinned ? 'pinned' : ''}`}>
               {isPinned && (
                 <span className="message-pin-badge" title="Pinned">
                   <svg viewBox="0 0 24 24" width="11" height="11"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" fill="currentColor"/></svg>
@@ -1874,7 +1852,6 @@ const ChatView = () => {
       }
       content = shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}{inner}</>);
     } else {
-      // ─── Batch 6: Mention-highlighted text (group chats) ───
       content = shell(<>
         {replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}
         {noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}
@@ -1932,7 +1909,6 @@ const ChatView = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, userId, sendReadReceipts]);
 
-  // ─── Main message listener (works for both 1-1 and group) ────
   useEffect(() => {
     if (!user?.uid || !userId) { setLoadingMessages(false); return; }
     isMounted.current = true;
