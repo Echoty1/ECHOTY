@@ -21,6 +21,7 @@ import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid'
 import AccountSwitcher from '../../common/AccountSwitcher'; 
 import { useSubscription } from '../../../contexts/SubscriptionContext'; 
 import PlusCustomizer from './PlusCustomizer'; 
+import PlusBadge from '../../common/PlusBadge'; // <-- NEW: Premium Badge
 import './Profile.css';
 
 const getFastLocal = (key) => { try { const item = localStorage.getItem('echo_cache_' + key); return item ? JSON.parse(item) : null; } catch { return null; } };
@@ -40,6 +41,9 @@ const Profile = () => {
   
   const navigate = useNavigate();
   const { refreshProfile, profiles, fetchProfile } = useProfile();
+
+  // State to toggle the ECHO Plus Popup
+  const [showPlusPopup, setShowPlusPopup] = useState(false);
 
   const [activeTab, setActiveTab] = useState('spotlight');
   const [showGifLibrary, setShowGifLibrary] = useState(false);
@@ -240,12 +244,7 @@ const Profile = () => {
             ) : (
               <h1 className="snap-name">
                 {profile?.name || 'User'}
-                {isEchoPlus && (
-                  <svg className="verified-badge" viewBox="0 0 24 24" fill="none">
-                    <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" fill="#FFD700" />
-                    <path d="M9 12L11 14L15 10" stroke="black" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                )}
+                {isEchoPlus && <PlusBadge size={22} />} {/* <-- NEW BADGE */}
               </h1>
             )}
             
@@ -281,19 +280,19 @@ const Profile = () => {
               </>
             ) : (
               <>
-                {/* Upgrade Button */}
+                {/* Upgrade or Status Button */}
                 {!isEchoPlus ? (
-                  <button className="btn-upgrade-plus" onClick={() => setShowUpgradeModal(true)} style={{ width: '100%' }}>
+                  <button className="btn-upgrade-plus" onClick={() => setShowUpgradeModal(true)} style={{ width: '100%', marginBottom: '8px' }}>
                     ⚡ Upgrade to ECHO Plus
                   </button>
                 ) : (
-                  <button className="btn-upgrade-plus" style={{ width: '100%', background: 'rgba(255,215,0,0.1)', color: '#FFD700', border: '1px solid #FFD700', boxShadow: 'none' }}>
-                    ⚡ ECHO Plus Member
+                  <button className="btn-echo-plus-status" onClick={() => setShowPlusPopup(true)}>
+                    <i className="fas fa-crown" /> Edit My ECHO Plus Features
                   </button>
                 )}
 
                 {/* Standard Actions Wrapper */}
-                <div style={{ display: 'flex', gap: '8px', width: '100%', marginTop: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
                   <button 
                     className="snap-btn-secondary" 
                     onClick={() => setShowSwitcher(true)}
@@ -337,8 +336,20 @@ const Profile = () => {
           {activeTab === 'echoes' && <div className="empty-tab-state"><i className="fas fa-ghost" /><p>Saved Echoes will appear here.</p></div>}
         </div>
 
-        {/* PLUS CUSTOMIZER SECTION */}
-        <PlusCustomizer />
+        {/* ─── NEW: ECHO PLUS POPUP ─── */}
+        {showPlusPopup && (
+          <div className="echo-plus-popup-overlay" onClick={() => setShowPlusPopup(false)}>
+            <div className="echo-plus-popup-content" onClick={(e) => e.stopPropagation()}>
+              <div className="echo-plus-popup-header">
+                <h2><i className="fas fa-crown" style={{ color: '#FFD700' }} /> ECHO Plus Studio</h2>
+                <button className="close-btn" onClick={() => setShowPlusPopup(false)}>✕</button>
+              </div>
+              <div className="echo-plus-popup-body">
+                <PlusCustomizer />
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* PREMIUM iOS BOTTOM SHEET FOR AVATAR PICKER */}
         {showAvatarPicker && (
