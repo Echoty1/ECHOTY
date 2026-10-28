@@ -131,13 +131,14 @@
 
 .snap-actions-row {
   display: flex;
+  flex-direction: column;
   gap: 10px;
   justify-content: center;
+  width: 100%;
 }
 
 .snap-btn-primary, .snap-btn-secondary {
   flex: 1;
-  max-width: 160px;
   padding: 10px 16px;
   border-radius: 999px;
   font-size: 13px;
