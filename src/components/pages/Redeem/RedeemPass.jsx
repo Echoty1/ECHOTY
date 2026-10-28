@@ -1,7 +1,7 @@
 // src/components/pages/Redeem/RedeemPass.jsx
 import React, { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ref, get, update, runTransaction } from 'firebase/database';
+import { ref, get, update } from 'firebase/database';
 import { db } from '../../../services/firebase'; 
 import { useAuth } from '../../../hooks/useAuth'; 
 import { useSubscription } from '../../../contexts/SubscriptionContext'; 
@@ -65,12 +65,10 @@ const RedeemPass = () => {
           return;
         }
 
-        // Fix: Use update instead of transaction to avoid null issues
         await update(ref(db, `profiles/${senderUid}`), {
           buddyPasses: passesLeft - 1
         });
 
-        // Upgrade the receiver
         await update(ref(db, `profiles/${user.uid}`), {
           isEchoPlus: true,
           premiumChatStyle: senderData.premiumChatStyle || 'gold', 
