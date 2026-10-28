@@ -2,7 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useSubscription } from '../../../contexts/SubscriptionContext';
 import { useAuth } from '../../../hooks/useAuth';
-import { ref, get } from 'firebase/database';
+import { ref, get, update } from 'firebase/database'; // Import update
 import { db } from '../../../services/firebase';
 import Toast from '../../Toast/Toast';
 
@@ -16,17 +16,24 @@ const PlusCustomizer = () => {
   const [passes, setPasses] = useState(5);
   const [toast, setToast] = useState(null);
 
-  // Fetch current passes from DB
+  // Fetch current passes from DB, and initialize to 5 if missing
   useEffect(() => {
     if (!user?.uid) return;
-    get(ref(db, `profiles/${user.uid}/buddyPasses`)).then((snap) => {
+    
+    const fetchPasses = async () => {
+      const passRef = ref(db, `profiles/${user.uid}/buddyPasses`);
+      const snap = await get(passRef);
+      
       if (snap.exists()) {
         setPasses(snap.val());
       } else {
-        // If it doesn't exist, initialize to 5
+        // If the field doesn't exist, set it to 5 in the DB and update state
         setPasses(5);
+        await update(ref(db, `profiles/${user.uid}`), { buddyPasses: 5 });
       }
-    });
+    };
+    
+    fetchPasses();
   }, [user?.uid]);
 
   const handleCopyLink = () => {
@@ -81,7 +88,7 @@ const PlusCustomizer = () => {
         </div>
       </div>
 
-      {/* ─── NEW: BUDDY PASS SECTION ─── */}
+      {/* BUDDY PASS SECTION */}
       <div className="plus-section buddy-pass-section">
         <div className="plus-section-title">
           <i className="fas fa-ticket-alt" style={{ color: '#FFD700' }}/> Buddy Passes
