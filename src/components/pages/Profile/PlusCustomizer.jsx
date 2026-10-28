@@ -1,19 +1,64 @@
 // src/components/pages/Profile/PlusCustomizer.jsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSubscription } from '../../../contexts/SubscriptionContext';
+import { useAuth } from '../../../hooks/useAuth';
+import { ref, get } from 'firebase/database';
+import { db } from '../../../services/firebase';
+import Toast from '../../Toast/Toast';
 
 const PlusCustomizer = () => {
   const { 
     appTheme, setAppTheme, chatStyle, setChatStyle, 
     ringStyle, setRingStyle 
   } = useSubscription();
+  
+  const { user } = useAuth();
+  const [passes, setPasses] = useState(5);
+  const [toast, setToast] = useState(null);
+
+  // Fetch current passes from DB
+  useEffect(() => {
+    if (!user?.uid) return;
+    get(ref(db, `profiles/${user.uid}/buddyPasses`)).then((snap) => {
+      if (snap.exists()) {
+        setPasses(snap.val());
+      } else {
+        // If it doesn't exist, initialize to 5
+        setPasses(5);
+      }
+    });
+  }, [user?.uid]);
+
+  const handleCopyLink = () => {
+    if (!user?.uid || passes <= 0) return;
+    
+    // Generate the link
+    const link = `${window.location.origin}/redeem?code=${user.uid}`;
+    
+    navigator.clipboard.writeText(link).then(() => {
+      setToast({ message: 'Buddy Pass link copied!', type: 'success' });
+    }).catch(() => {
+      setToast({ message: 'Failed to copy link', type: 'error' });
+    });
+  };
 
   return (
     <>
       <div className="plus-section">
         <div className="plus-section-title"><i className="fas fa-palette" style={{ color: '#FFD700' }}/> App Theme</div>
         <div className="theme-grid">
-          {/* ... existing themes ... */}
+          <div className={`theme-card ${appTheme === 'theme-default' ? 'active' : ''}`} onClick={() => setAppTheme('theme-default')}>
+            <div className="theme-preview default-preview"></div><span>Default</span>
+          </div>
+          <div className={`theme-card ${appTheme === 'theme-midnight' ? 'active' : ''}`} onClick={() => setAppTheme('theme-midnight')}>
+            <div className="theme-preview midnight-preview"></div><span>Midnight</span>
+          </div>
+          <div className={`theme-card ${appTheme === 'theme-amoled' ? 'active' : ''}`} onClick={() => setAppTheme('theme-amoled')}>
+            <div className="theme-preview amoled-preview"></div><span>AMOLED</span>
+          </div>
+          <div className={`theme-card ${appTheme === 'theme-ocean' ? 'active' : ''}`} onClick={() => setAppTheme('theme-ocean')}>
+            <div className="theme-preview ocean-preview"></div><span>Ocean</span>
+          </div>
         </div>
       </div>
 
@@ -25,7 +70,6 @@ const PlusCustomizer = () => {
           <button className={`pill-btn ${chatStyle === 'glass' ? 'active' : ''}`} onClick={() => setChatStyle('glass')}>Glass</button>
           <button className={`pill-btn ${chatStyle === 'gold' ? 'active' : ''}`} onClick={() => setChatStyle('gold')}>Gold</button>
         </div>
-        <p style={{ fontSize: '11px', color: '#aaa', marginTop: '8px' }}>Your bubble style will be visible to the person you are chatting with.</p>
       </div>
 
       <div className="plus-section">
@@ -35,8 +79,35 @@ const PlusCustomizer = () => {
           <button className={`pill-btn ${ringStyle === 'neon' ? 'active' : ''}`} onClick={() => setRingStyle('neon')}>Neon</button>
           <button className={`pill-btn ${ringStyle === 'fire' ? 'active' : ''}`} onClick={() => setRingStyle('fire')}>Fire</button>
         </div>
-        <p style={{ fontSize: '11px', color: '#aaa', marginTop: '8px' }}>Your aura will be visible to everyone who visits your profile.</p>
       </div>
+
+      {/* ─── NEW: BUDDY PASS SECTION ─── */}
+      <div className="plus-section buddy-pass-section">
+        <div className="plus-section-title">
+          <i className="fas fa-ticket-alt" style={{ color: '#FFD700' }}/> Buddy Passes
+        </div>
+        
+        <div className="buddy-pass-display">
+          <div className="pass-count">{passes} <span>/ 5 left</span></div>
+          <p className="pass-desc">
+            Gift ECHO Plus to a friend. They join for free and you lose one pass.
+          </p>
+          
+          <button 
+            className={`btn-copy-pass ${passes <= 0 ? 'disabled' : ''}`}
+            onClick={handleCopyLink}
+            disabled={passes <= 0}
+          >
+            {passes <= 0 ? (
+              <>All Passes Used</>
+            ) : (
+              <><i className="fas fa-link" /> Copy Buddy Link</>
+            )}
+          </button>
+        </div>
+      </div>
+      
+      {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
     </>
   );
 };
