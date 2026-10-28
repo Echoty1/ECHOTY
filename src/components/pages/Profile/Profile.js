@@ -369,4 +369,63 @@ const Profile = () => {
         )}
 
         {/* OTHER MODALS */}
-        <GifLibrary
+        <GifLibraryModal isOpen={showGifLibrary} onClose={() => setShowGifLibrary(false)} onSelect={handleGifSelect} ownedGifs={unlockedGifs} mode="profile" />
+        <UsernameEditor uid={user?.uid} currentUsername={profile?.username} isOpen={showUsernameEditor} onClose={() => setShowUsernameEditor(false)} />
+        
+        {showAvatarCustomizer && (
+          <div className="custom-modal-overlay" onClick={() => setShowAvatarCustomizer(false)}>
+            <div onClick={e => e.stopPropagation()}>
+              <AvatarCustomizer currentSkin={activeSkinObj} currentHair={activeHairStyle} currentMood={profile?.mood} onSave={handleSaveAvatar} onCancel={() => setShowAvatarCustomizer(false)} />
+            </div>
+          </div>
+        )}
+
+        {showEchowersModal && (
+          <div className="echowers-modal-overlay" onClick={() => setShowEchowersModal(false)}>
+            <div className="echowers-modal" onClick={(e) => e.stopPropagation()}>
+              <div className="echowers-modal-header"><h3>Echowers</h3><button className="close-btn" onClick={() => setShowEchowersModal(false)}>✕</button></div>
+              <div className="echowers-tabs">
+                <button className={activeEchowersTab === 'followers' ? 'active' : ''} onClick={() => setActiveEchowersTab('followers')}>Echowers ({followerUids.length})</button>
+                <button className={activeEchowersTab === 'following' ? 'active' : ''} onClick={() => setActiveEchowersTab('following')}>Echowing ({followingUids.length})</button>
+              </div>
+              <div className="echowers-list">
+                {(activeEchowersTab === 'followers' ? followerUids : followingUids).length === 0 ? (
+                  <p className="empty-state">No one here yet.</p>
+                ) : (
+                  (activeEchowersTab === 'followers' ? followerUids : followingUids).map((uid) => {
+                    const p = profiles[uid] || { name: 'User', avatar: '' };
+                    return (
+                      <div key={uid} className="echower-item" onClick={() => navigate('/chat/' + uid)}>
+                        <Avatar src={p.avatar} name={p.name} size={50} />
+                        <div className="item-info"><strong>{p.name}</strong><span>{p.bio || 'No bio'}</span></div>
+                        <i className="fas fa-chevron-right" />
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <AccountSwitcher
+          isOpen={showSwitcher}
+          onClose={() => setShowSwitcher(false)}
+          currentUser={{
+            name: profile?.name || user?.displayName || 'ECHO',
+            email: user?.email || 'user@echoty.xyz',
+            avatar: profile?.avatar || user?.photoURL || '',
+          }}
+          savedAccounts={savedAccounts}
+          onSwitchAccount={handleSwitchAccount}
+          onAddAccount={handleAddAccount}
+          onSignOutAll={handleSignOutAll}
+        />
+
+        {toast && <Toast type={toast.type} message={toast.message} onClose={() => setToast(null)} />}
+      </div>
+    </React.Fragment>
+  );
+};
+
+export default Profile;
