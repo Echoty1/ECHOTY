@@ -98,6 +98,9 @@
   color: var(--text-primary);
   margin: 0 0 4px;
   letter-spacing: -0.3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .snap-username-wrap {
@@ -483,6 +486,123 @@
   font-family: inherit;
   text-align: center;
 }
+
+/* ─── ECHO PLUS STATUS BUTTON ─── */
+.btn-echo-plus-status {
+  width: 100%;
+  margin-bottom: 12px;
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.15), rgba(255, 165, 0, 0.05));
+  color: #FFD700;
+  border: 1px solid #FFD700;
+  box-shadow: 0 0 15px rgba(255, 215, 0, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  font-weight: 800;
+  font-size: 15px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.btn-echo-plus-status:hover {
+  background: linear-gradient(135deg, rgba(255, 215, 0, 0.25), rgba(255, 165, 0, 0.1));
+  box-shadow: 0 0 25px rgba(255, 215, 0, 0.4);
+  transform: translateY(-2px);
+}
+
+/* ─── ECHO PLUS POPUP MODAL ─── */
+.echo-plus-popup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(0, 0, 0, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  animation: fadeIn 0.2s ease;
+}
+
+.echo-plus-popup-content {
+  background: var(--bg-card);
+  border: 1px solid rgba(255, 215, 0, 0.3);
+  border-radius: 24px;
+  width: 100%;
+  max-width: 480px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(255, 215, 0, 0.15);
+  animation: slideUp 0.3s cubic-bezier(0.2, 1, 0.4, 1);
+}
+
+.echo-plus-popup-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  background: linear-gradient(to bottom, rgba(255, 215, 0, 0.1), transparent);
+  border-bottom: 1px solid rgba(255, 215, 0, 0.1);
+}
+
+.echo-plus-popup-header h2 {
+  color: #FFD700;
+  font-size: 20px;
+  font-weight: 900;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.echo-plus-popup-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* ─── CUSTOMIZER SECTIONS (Inside Popup) ─── */
+.plus-section {
+  margin-bottom: 24px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 16px;
+  padding: 16px;
+  border: 1px solid var(--border-color);
+}
+
+.plus-section-title {
+  font-size: 12px;
+  font-weight: 800;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* App Themes */
+.theme-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.theme-card { background: var(--bg-input); border: 2px solid transparent; border-radius: 12px; padding: 10px; cursor: pointer; text-align: center; transition: 0.2s; }
+.theme-card.active { border-color: #FFD700; background: rgba(255, 215, 0, 0.1); }
+.theme-preview { height: 50px; border-radius: 8px; margin-bottom: 8px; }
+.theme-preview.default-preview { background: #0a0a0a; border: 1px solid #333; }
+.theme-preview.midnight-preview { background: #0a1128; }
+.theme-preview.amoled-preview { background: #000; border: 1px solid #222; }
+.theme-preview.ocean-preview { background: linear-gradient(135deg, #001f3f, #003366); }
+
+/* Option Pill Buttons */
+.option-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.pill-btn { background: var(--bg-input); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 20px; cursor: pointer; transition: 0.2s; font-weight: 600; font-size: 13px; font-family: inherit; }
+.pill-btn.active { background: #FFD700; color: #000; border-color: #FFD700; font-weight: bold; box-shadow: 0 0 10px rgba(255,215,0,0.3); }
 
 @keyframes rotateRing { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
