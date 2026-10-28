@@ -8,6 +8,7 @@ import Avatar from '../../common/Avatar';
 import UsernamePill from '../../common/UsernamePill';
 import SEO from '../../common/SEO';
 import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid';
+import PlusBadge from '../../common/PlusBadge'; // <-- NEW: Show Badge
 import './UserProfile.css';
 
 const UserProfile = ({ uid: propUid, onClose }) => {
@@ -45,6 +46,10 @@ const UserProfile = ({ uid: propUid, onClose }) => {
 
   const profile = profiles[uid];
 
+  // Determine Premium Status
+  const isTargetPlus = profile?.isEchoPlus || false;
+  const targetRingStyle = profile?.premiumRingStyle || 'gold';
+
   const handleToggleEchower = async () => {
     if (!user || !uid) return;
     if (isFollowing) {
@@ -74,7 +79,6 @@ const UserProfile = ({ uid: propUid, onClose }) => {
       <SEO title={`${profile.name} on ECHO`} />
       
       <div className="snap-hero">
-        {/* THE PREMIUM BACK BUTTON */}
         <button className="snap-back-btn" onClick={handleBack} aria-label="Go back">
           <i className="fas fa-arrow-left" />
         </button>
@@ -83,14 +87,19 @@ const UserProfile = ({ uid: propUid, onClose }) => {
         <div className="snap-hero-overlay" />
         
         <div className="snap-avatar-wrapper">
-          <div className="snap-avatar-ring" />
+          {/* Apply the Aura/Ring if Target is Plus */}
+          <div className={`snap-avatar-ring ${isTargetPlus ? `plus-avatar-ring ${targetRingStyle}` : ''}`} />
           <div className="snap-avatar" style={{ cursor: 'default' }}>
             <Avatar src={profile.avatar} name={profile.name} size={100} />
           </div>
         </div>
 
         <div className="snap-info">
-          <h1 className="snap-name">{profile.name || 'User'}</h1>
+          <h1 className="snap-name">
+            {profile.name || 'User'}
+            {/* Show Plus Badge if Target is Plus */}
+            {isTargetPlus && <PlusBadge size={22} />} 
+          </h1>
           {profile.username && (
             <div className="snap-username-wrap">
               <UsernamePill uid={uid} username={profile.username} size="md" />
