@@ -21,7 +21,7 @@ import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid'
 import AccountSwitcher from '../../common/AccountSwitcher'; 
 import { useSubscription } from '../../../contexts/SubscriptionContext'; 
 import PlusCustomizer from './PlusCustomizer'; 
-import PlusBadge from '../../common/PlusBadge'; // <-- Premium Badge
+import PlusBadge from '../../common/PlusBadge';
 import './Profile.css';
 
 const getFastLocal = (key) => { try { const item = localStorage.getItem('echo_cache_' + key); return item ? JSON.parse(item) : null; } catch { return null; } };
@@ -37,7 +37,7 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
   const { user, getSavedAccounts, switchAccount, signOutAll } = useAuth();
-  const { isEchoPlus, setShowUpgradeModal, ringStyle, profileBg } = useSubscription(); // <-- Added profileBg
+  const { isEchoPlus, setShowUpgradeModal, ringStyle, profileBg } = useSubscription(); 
   
   const navigate = useNavigate();
   const { refreshProfile, profiles, fetchProfile } = useProfile();
@@ -219,7 +219,6 @@ const Profile = () => {
         <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={(e) => e.target.files[0] && handleUploadImage(e.target.files[0])} />
 
         <div className="snap-hero">
-          {/* NEW: Animated Premium Backgrounds */}
           <div className={`snap-hero-bg ${isEchoPlus ? `premium-bg-${profileBg}` : ''}`} style={{ backgroundImage: displayMediaUrl ? `url(${displayMediaUrl})` : 'var(--bg-card)' }} />
           <div className="snap-hero-overlay" />
           
@@ -334,7 +333,6 @@ const Profile = () => {
           {activeTab === 'echoes' && <div className="empty-tab-state"><i className="fas fa-ghost" /><p>Saved Echoes will appear here.</p></div>}
         </div>
 
-        {/* ─── NEW: ECHO PLUS POPUP ─── */}
         {showPlusPopup && (
           <div className="echo-plus-popup-overlay" onClick={() => setShowPlusPopup(false)}>
             <div className="echo-plus-popup-content" onClick={(e) => e.stopPropagation()}>
@@ -349,7 +347,6 @@ const Profile = () => {
           </div>
         )}
 
-        {/* PREMIUM iOS BOTTOM SHEET FOR AVATAR PICKER */}
         {showAvatarPicker && (
           <div className="ios-sheet-overlay" onClick={() => setShowAvatarPicker(false)}>
             <div className="ios-sheet-content" onClick={(e) => e.stopPropagation()}>
@@ -377,7 +374,6 @@ const Profile = () => {
           </div>
         )}
 
-        {/* OTHER MODALS */}
         <GifLibraryModal isOpen={showGifLibrary} onClose={() => setShowGifLibrary(false)} onSelect={handleGifSelect} ownedGifs={unlockedGifs} mode="profile" />
         <UsernameEditor uid={user?.uid} currentUsername={profile?.username} isOpen={showUsernameEditor} onClose={() => setShowUsernameEditor(false)} />
         
