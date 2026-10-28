@@ -207,7 +207,7 @@ const ChatView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { getProfile, fetchProfile } = useProfile();
-  const { chatStyle } = useSubscription(); // <-- NEW
+  const { chatStyle, isEchoPlus } = useSubscription(); // <-- NEW: Get premium status
 
   useVisualViewport();
 
@@ -2302,14 +2302,27 @@ const ChatView = () => {
               groupedMessages.map((entry) => renderMessage(entry))
             )}
             {isAILoading && (<div className="message-bubble partner"><div className="typing-indicator"><span></span><span></span><span></span></div></div>)}
+            
+            {/* PREMIUM TYPING INDICATOR */}
             {partnerIsTyping && !isGroupChat && (
-              <div className="typing-indicator-container">
-                <div className="typing-echomoji-wrapper">
-                  <ECHOMOJI mood={partnerProfile?.mood || 'happy'} skin={partnerProfile?.activeSkin ? getSkinById(partnerProfile.activeSkin) : null} size={44} interactive={false} animated={false} />
-                </div>
-                <div className="typing-dots-row">
-                  <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
-                </div>
+              <div className={`typing-indicator-container ${isEchoPlus ? 'premium-typing' : ''}`}>
+                {isEchoPlus ? (
+                  <div className="premium-typing-content">
+                    <div className="premium-typing-aura">
+                       <ECHOMOJI mood="happy" skin={partnerProfile?.activeSkin ? getSkinById(partnerProfile.activeSkin) : null} size={30} interactive={false} animated={true} />
+                    </div>
+                    <span className="premium-typing-text">Echoing...</span>
+                  </div>
+                ) : (
+                  <>
+                    <div className="typing-echomoji-wrapper">
+                      <ECHOMOJI mood={partnerProfile?.mood || 'happy'} skin={partnerProfile?.activeSkin ? getSkinById(partnerProfile.activeSkin) : null} size={44} interactive={false} animated={false} />
+                    </div>
+                    <div className="typing-dots-row">
+                      <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
+                    </div>
+                  </>
+                )}
               </div>
             )}
             <div ref={messagesEndRef} />
