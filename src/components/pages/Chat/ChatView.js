@@ -53,6 +53,7 @@ import { sendPushToUser } from '../../../services/fcmService';
 import { hapticSend, hapticLight } from '../../../utils/haptics';
 import { isGroupChatId, chatIdToGroupId } from '../../../utils/groupId';
 import { useSubscription } from '../../../contexts/SubscriptionContext'; // <-- NEW
+import PlusBadge from '../../common/PlusBadge'; // <-- NEW
 import './ChatView.css';
 
 import MentionAutocomplete from '../../common/MentionAutocomplete';
@@ -207,7 +208,7 @@ const ChatView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { getProfile, fetchProfile } = useProfile();
-  const { chatStyle, isEchoPlus } = useSubscription(); // <-- NEW: Get premium status
+  const { chatStyle: myChatStyle, isEchoPlus } = useSubscription(); // <-- Get current user's premium style
 
   useVisualViewport();
 
@@ -807,6 +808,8 @@ const ChatView = () => {
       pending: true,
       senderName: currentUserProfile?.name || user.displayName || 'User',
       senderAvatar: currentUserProfile?.avatar || '',
+      senderIsPlus: isEchoPlus, // <-- Add to optimistic
+      senderChatStyle: myChatStyle, // <-- Add to optimistic
     };
     if (replyToSave) optimisticMsg.replyTo = { messageId: replyToSave.messageId, senderName: replyToSave.senderName, messageType: replyToSave.messageType, textSnippet: replyToSave.textSnippet };
     if (currentNoteReply) optimisticMsg.replyToNote = { ...currentNoteReply };
@@ -826,6 +829,8 @@ const ChatView = () => {
       expiresAt: privateExpiresAt(Date.now(), tideTTL),
       senderName: currentUserProfile?.name || user.displayName || 'User',
       senderAvatar: currentUserProfile?.avatar || '',
+      senderIsPlus: isEchoPlus, // <-- Attach to DB
+      senderChatStyle: myChatStyle, // <-- Attach to DB
     };
     if (replyToSave) msgData.replyTo = { messageId: replyToSave.messageId, senderName: replyToSave.senderName, messageType: replyToSave.messageType, textSnippet: replyToSave.textSnippet };
     if (currentNoteReply) msgData.replyToNote = { ...currentNoteReply };
@@ -1007,6 +1012,8 @@ const ChatView = () => {
       _file: file,
       senderName: currentUserProfile?.name || user.displayName || 'User',
       senderAvatar: currentUserProfile?.avatar || '',
+      senderIsPlus: isEchoPlus, // <-- Add
+      senderChatStyle: myChatStyle, // <-- Add
     };
     if (currentReply) { optimisticMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet }; setReplyTo(null); }
     if (noteReply) { optimisticMsg.replyToNote = { ...noteReply }; setReplyToNote(null); }
@@ -1031,6 +1038,8 @@ const ChatView = () => {
         expiresAt: privateExpiresAt(Date.now(), tideTTL),
         senderName: currentUserProfile?.name || user.displayName || 'User',
         senderAvatar: currentUserProfile?.avatar || '',
+        senderIsPlus: isEchoPlus, // <-- Attach
+        senderChatStyle: myChatStyle, // <-- Attach
       };
       if (currentReply) realMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet };
       if (noteReply) realMsg.replyToNote = { ...noteReply };
@@ -1139,6 +1148,8 @@ const ChatView = () => {
       _file: audioBlob,
       senderName: currentUserProfile?.name || user.displayName || 'User',
       senderAvatar: currentUserProfile?.avatar || '',
+      senderIsPlus: isEchoPlus, // <-- Add
+      senderChatStyle: myChatStyle, // <-- Add
     };
     if (currentReply) { optimisticMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet }; setReplyTo(null); }
     if (noteReply) { optimisticMsg.replyToNote = { ...noteReply }; setReplyToNote(null); }
@@ -1167,6 +1178,8 @@ const ChatView = () => {
         expiresAt: privateExpiresAt(Date.now(), tideTTL),
         senderName: currentUserProfile?.name || user.displayName || 'User',
         senderAvatar: currentUserProfile?.avatar || '',
+        senderIsPlus: isEchoPlus, // <-- Attach
+        senderChatStyle: myChatStyle, // <-- Attach
       };
       if (currentReply) realMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet };
       if (noteReply) realMsg.replyToNote = { ...noteReply };
@@ -1730,6 +1743,11 @@ const ChatView = () => {
 
     const showSenderName = isGroupChat && !isOwn && groupTop && !isSystem;
 
+    // NEW: Determine the style of the bubble based on WHO sent it
+    // If you sent it -> your style. If they sent it -> their style.
+    const senderIsPlus = msg.senderIsPlus || (isOwn && isEchoPlus);
+    const appliedStyle = isOwn ? myChatStyle : (senderIsPlus ? msg.senderChatStyle : '');
+
     const shell = (inner) => {
       const row = (
         <div
@@ -1766,11 +1784,12 @@ const ChatView = () => {
           )}
           <div className={`message-stack ${isOwn ? 'own' : 'partner'}`} style={{ position: 'relative', marginBottom: msg.reactions && Object.keys(msg.reactions).length > 0 ? '14px' : 0 }}>
             {showSenderName && (
-              <div className="group-sender-name" style={{ color: senderColor(msg.senderId) }}>
+              <div className="group-sender-name" style={{ color: senderColor(msg.senderId), display: 'flex', alignItems: 'center', gap: '4px' }}>
                 {msg.senderName || 'Member'}
+                {senderIsPlus && <PlusBadge size={14} />} {/* <-- PREMIUM BADGE NEXT TO NAME */}
               </div>
             )}
-            <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${chatStyle} ${msg.pending ? 'pending' : ''} ${isPinned ? 'pinned' : ''}`}>
+            <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${appliedStyle} ${msg.pending ? 'pending' : ''} ${isPinned ? 'pinned' : ''}`}>
               {isPinned && (
                 <span className="message-pin-badge" title="Pinned">
                   <svg viewBox="0 0 24 24" width="11" height="11"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" fill="currentColor"/></svg>
