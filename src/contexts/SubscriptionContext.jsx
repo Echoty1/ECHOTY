@@ -1,6 +1,6 @@
 // src/contexts/SubscriptionContext.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { ref, onValue } from 'firebase/database';
+import { ref, onValue, update } from 'firebase/database';
 import { db } from '../services/firebase'; 
 import { useAuth } from '../hooks/useAuth'; 
 
@@ -18,11 +18,12 @@ export const SubscriptionProvider = ({ children }) => {
   const { user, loading: authLoading } = useAuth();
   const [isPlus, setIsPlus] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [ringStyle, setRingStyle] = useState('gold');
-  const [profileBg, setProfileBg] = useState('gold');
+  
+  // These match exactly what PlusCustomizer expects
+  const [chatStyle, setChatStyle] = useState('gold');
+  const [auraStyle, setAuraStyle] = useState('gold');
 
   useEffect(() => {
-    // Wait for auth to finish loading
     if (authLoading) return;
 
     if (!user) {
@@ -33,16 +34,14 @@ export const SubscriptionProvider = ({ children }) => {
 
     const profileRef = ref(db, `profiles/${user.uid}`);
     
-    // Listen to real-time updates for the user's profile
     const unsubscribe = onValue(profileRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        console.log("SubscriptionContext DB Check:", data.isEchoPlus); // Debug log
-        
-        // Update states
         setIsPlus(data.isEchoPlus === true); 
-        if (data.premiumRingStyle) setRingStyle(data.premiumRingStyle);
-        if (data.premiumChatStyle) setProfileBg(data.premiumChatStyle);
+        
+        // Load their saved styles from Firebase
+        if (data.premiumChatStyle) setChatStyle(data.premiumChatStyle);
+        if (data.premiumRingStyle) setAuraStyle(data.premiumRingStyle);
       } else {
         setIsPlus(false);
       }
@@ -55,14 +54,32 @@ export const SubscriptionProvider = ({ children }) => {
     return () => unsubscribe();
   }, [user, authLoading]);
 
+  const upgradeToPlus = async () => {
+    if (!user) return;
+    try {
+      setIsPlus(true); 
+      const profileRef = ref(db, `profiles/${user.uid}`);
+      await update(profileRef, {
+        isEchoPlus: true,
+        premiumChatStyle: chatStyle, 
+        premiumRingStyle: auraStyle
+      });
+    } catch (error) {
+      console.error("Failed to upgrade to Plus:", error);
+      setIsPlus(false); 
+      throw error;
+    }
+  };
+
   return (
     <SubscriptionContext.Provider value={{ 
       isPlus, 
       loading, 
-      ringStyle, 
-      setRingStyle,
-      profileBg, 
-      setProfileBg
+      upgradeToPlus,
+      chatStyle, 
+      setChatStyle,
+      auraStyle, 
+      setAuraStyle
     }}>
       {children}
     </SubscriptionContext.Provider>
