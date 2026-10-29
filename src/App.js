@@ -12,8 +12,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 
 // ─── ECHO Plus Imports ────────────────────────────────
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
-import PlusCheckout from './components/common/PlusCheckout';
-import RedeemPass from './components/pages/Redeem/RedeemPass'; // <-- NEW
+import RedeemPass from './components/pages/Redeem/RedeemPass'; 
 
 import Home from './components/pages/Home/Home';
 import Chats from './components/pages/Chats/Chats';
@@ -30,7 +29,7 @@ import Settings from './components/pages/Other/Settings';
 import About from './components/pages/Other/About';
 import CoinPurchase from './components/pages/CoinPurchase/CoinPurchase';
 import Login from './components/Auth/Login';
-import VerifyEmailScreen from './components/Auth/VerifyEmailScreen';
+// REMOVED: VerifyEmailScreen import
 import Navbar from './components/Layout/Navbar';
 import BottomNav from './components/Layout/BottomNav';
 import NetworkStatus from './components/common/NetworkStatus';
@@ -102,12 +101,7 @@ function ScrollToTop() {
 function LoadingScreen() {
   const isMobile = window.innerWidth <= 480;
   return (
-    <div
-      style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
-        height: '100vh', background: 'var(--bg-primary)', position: 'relative', overflow: 'hidden', transition: 'background 0.3s ease',
-      }}
-    >
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary)', position: 'relative', overflow: 'hidden', transition: 'background 0.3s ease' }}>
       <div style={{ position: 'absolute', width: '240px', height: '240px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.3, animation: 'echoRingPulse 2.5s ease-out infinite' }} />
       <div style={{ position: 'absolute', width: '320px', height: '320px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.2, animation: 'echoRingPulse 3s ease-out infinite 0.5s' }} />
       <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.1, animation: 'echoRingPulse 3.5s ease-out infinite 1s' }} />
@@ -138,7 +132,6 @@ function AppContent() {
   const { fetchProfile } = useProfile();
 
   useGlobalMessageListener();
-
   const { done: onboardingDone, completeOnboarding } = useOnboarding();
   useAppBadge();
 
@@ -149,13 +142,13 @@ function AppContent() {
   const [appVersion] = useState(process.env.REACT_APP_VERSION || '1.0');
   const showLoading = loading || !minTimePassed;
   const isSpotlightRoute = pathname.startsWith('/spotlight');
+  
   const showHappr =
     Boolean(user) && !showLoading && !banInfo?.isBanned &&
     (pathname === '/' || pathname === '/chats' || pathname === '/communities' || pathname === '/shop' || pathname === '/other' || pathname === '/echodrop');
 
-  // ─── INSTANTS STATE (ALWAYS SHOW INTRO) ───
   const [showInstantsIntro, setShowInstantsIntro] = useState(false);
-  const [pendingAction, setPendingAction] = useState(null); // 'view' or 'record'
+  const [pendingAction, setPendingAction] = useState(null); 
   const [pendingStoryViewer, setPendingStoryViewer] = useState(null);
   const [showRecorder, setShowRecorder] = useState(false);
   
@@ -353,19 +346,13 @@ function AppContent() {
     }
   }, []);
 
-  if (!showLoading && user && banInfo?.isBanned) {
-    return <BanScreen />;
-  }
+  if (!showLoading && user && banInfo?.isBanned) return <BanScreen />;
   if (showLoading) return <LoadingScreen />;
   if (!user) return <Login />;
-
-  if (user.emailVerified === false) {
-    return <VerifyEmailScreen />;
-  }
-
-  if (!onboardingDone) {
-    return <OnboardingFlow onComplete={completeOnboarding} />;
-  }
+  
+  // REMOVED: if (user.emailVerified === false) return <VerifyEmailScreen />;
+  
+  if (!onboardingDone) return <OnboardingFlow onComplete={completeOnboarding} />;
 
   return (
     <>
@@ -396,9 +383,7 @@ function AppContent() {
           <Route path="/group/:chatId/info" element={<GroupInfoPage />} />
           <Route path="/join/:code" element={<GroupInvitePage />} />
           <Route path="/profile" element={<Profile />} />
-          
           <Route path="/user/:uid" element={<UserProfile />} />
-
           <Route path="/other" element={<Other />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/bookmarks" element={<Bookmarks />} />
@@ -409,27 +394,18 @@ function AppContent() {
           <Route path="/legal" element={<Legal />} />
           <Route path="/communities" element={<Communities />} />
           <Route path="/echodrop" element={<EchoDropPage />} />
-
-          {/* ─── ECHO PLUS BUDDY PASS ──────────────────────────────── */}
           <Route path="/redeem" element={<RedeemPass />} />
-          {/* ────────────────────────────────────────────── */}
 
-          {/* ─── Spotlight ──────────────────────────────── */}
           <Route path="/spotlight" element={<SpotlightFeed />} />
           <Route path="/spotlight/upload" element={<SpotlightUpload />} />
           <Route path="/spotlight/history" element={<SpotlightHistory />} />
-          {/* ────────────────────────────────────────────── */}
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </div>
       <BottomNav />
       
-      {/* ─── INSTANTS OVERLAYS ─── */}
-      {showInstantsIntro && (
-        <InstantsIntro onStart={handleIntroStart} />
-      )}
-
+      {showInstantsIntro && <InstantsIntro onStart={handleIntroStart} />}
       {pendingStoryViewer && !showInstantsIntro && (
         <StoryViewer 
           stories={pendingStoryViewer.stories} 
@@ -440,21 +416,10 @@ function AppContent() {
           onFinished={() => { setPendingStoryViewer(null); }}
         />
       )}
+      {showRecorder && <StoryRecorder userId={user?.uid} onClose={() => setShowRecorder(false)} />}
 
-      {showRecorder && (
-        <StoryRecorder 
-          userId={user?.uid} 
-          onClose={() => setShowRecorder(false)} 
-        />
-      )}
-      {/* ────────────────────────── */}
-
-      {showUpdatePopup && (
-        <UpdatePopup currentVersion={appVersion} onClose={() => setShowUpdatePopup(false)} />
-      )}
-      {showInstallPopup && (
-        <InstallPopup playStoreUrl={playStoreUrl} onClose={handleInstallPopupClose} />
-      )}
+      {showUpdatePopup && <UpdatePopup currentVersion={appVersion} onClose={() => setShowUpdatePopup(false)} />}
+      {showInstallPopup && <InstallPopup playStoreUrl={playStoreUrl} onClose={handleInstallPopupClose} />}
       <InstallBanner playStoreUrl={playStoreUrl} />
     </>
   );
@@ -473,11 +438,9 @@ function App() {
             <ProfileProvider>
               <CacheProvider>
                 <CallProvider>
-                  {/* ECHO Plus wraps the app to share upgrade state */}
                   <SubscriptionProvider>
                     <ScrollRestoration />
                     <AppContent />
-                    <PlusCheckout />
                   </SubscriptionProvider>
                 </CallProvider>
               </CacheProvider>
