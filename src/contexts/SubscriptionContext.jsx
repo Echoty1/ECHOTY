@@ -20,10 +20,13 @@ export const SubscriptionProvider = ({ children }) => {
   const [profileBg, setProfileBgState] = useState('default');
   const [chatStyle, setChatStyleState] = useState('standard');
   const [ringStyle, setRingStyleState] = useState('gold');
-  
   const [profileMusic, setProfileMusicState] = useState('');
   const [badgeText, setBadgeTextState] = useState('');
   const [ghostMode, setGhostModeState] = useState(false);
+  
+  // NEW FEATURES
+  const [accentColor, setAccentColorState] = useState('default');
+  const [profileViews, setProfileViewsState] = useState(0);
 
   useEffect(() => {
     if (authLoading) return;
@@ -43,10 +46,12 @@ export const SubscriptionProvider = ({ children }) => {
         if (data.premiumProfileBg) setProfileBgState(data.premiumProfileBg);
         if (data.premiumChatStyle) setChatStyleState(data.premiumChatStyle);
         if (data.premiumRingStyle) setRingStyleState(data.premiumRingStyle);
-        
         if (data.premiumMusic) setProfileMusicState(data.premiumMusic);
         if (data.premiumBadgeText) setBadgeTextState(data.premiumBadgeText);
         if (data.ghostMode) setGhostModeState(data.ghostMode);
+        
+        if (data.premiumAccentColor) setAccentColorState(data.premiumAccentColor);
+        if (data.profileViews) setProfileViewsState(data.profileViews);
       } else {
         setIsPlus(false);
       }
@@ -59,10 +64,11 @@ export const SubscriptionProvider = ({ children }) => {
   const setProfileBg = async (val) => { setProfileBgState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumProfileBg: val }); };
   const setChatStyle = async (val) => { setChatStyleState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumChatStyle: val }); };
   const setRingStyle = async (val) => { setRingStyleState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumRingStyle: val }); };
-  
   const setProfileMusic = async (val) => { setProfileMusicState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumMusic: val }); };
   const setBadgeText = async (val) => { setBadgeTextState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumBadgeText: val }); };
   const setGhostMode = async (val) => { setGhostModeState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { ghostMode: val }); };
+  
+  const setAccentColor = async (val) => { setAccentColorState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumAccentColor: val }); };
 
   return (
     <SubscriptionContext.Provider value={{ 
@@ -72,7 +78,9 @@ export const SubscriptionProvider = ({ children }) => {
       ringStyle, setRingStyle,
       profileMusic, setProfileMusic,
       badgeText, setBadgeText,
-      ghostMode, setGhostMode
+      ghostMode, setGhostMode,
+      accentColor, setAccentColor,
+      profileViews
     }}>
       {children}
     </SubscriptionContext.Provider>
