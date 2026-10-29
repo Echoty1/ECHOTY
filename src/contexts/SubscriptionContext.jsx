@@ -50,7 +50,6 @@ export const SubscriptionProvider = ({ children }) => {
     return () => unsubscribe();
   }, [user, authLoading]);
 
-  // Auto-save functions
   const setProfileBg = async (val) => {
     setProfileBgState(val);
     if (user) await update(ref(db, `profiles/${user.uid}`), { premiumProfileBg: val });
