@@ -1,6 +1,6 @@
 // src/components/pages/Profile/Profile.js
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom'; // Added useLocation
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../../hooks/useAuth';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { db } from '../../../services/firebase';
@@ -22,7 +22,7 @@ import AccountSwitcher from '../../common/AccountSwitcher';
 import { useSubscription } from '../../../contexts/SubscriptionContext'; 
 import PlusCustomizer from './PlusCustomizer'; 
 import PlusBadge from '../../common/PlusBadge';
-import PlusCheckout from '../../common/PlusCheckout'; // Ensure this is imported
+import PlusCheckout from '../../common/PlusCheckout'; 
 import './Profile.css';
 
 const getFastLocal = (key) => { try { const item = localStorage.getItem('echo_cache_' + key); return item ? JSON.parse(item) : null; } catch { return null; } };
@@ -38,13 +38,13 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
   const { user, getSavedAccounts, switchAccount, signOutAll } = useAuth();
-  const { isEchoPlus, ringStyle, profileBg } = useSubscription(); 
+  // Destructure isPlus and rename it to avoid conflict
+  const { isPlus: isEchoPlus, ringStyle, profileBg } = useSubscription(); 
   
   const navigate = useNavigate();
-  const location = useLocation(); // Added location hook
+  const location = useLocation(); 
   const { refreshProfile, profiles, fetchProfile } = useProfile();
 
-  // We keep this local state for the checkout modal
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showPlusPopup, setShowPlusPopup] = useState(false);
 
@@ -85,18 +85,12 @@ const Profile = () => {
   const [unlockedGifs, setUnlockedGifs] = useState([]);
   const imageInputRef = useRef(null);
 
-  useEffect(() => {
-    if (showSwitcher) {
-      setSavedAccounts(getSavedAccounts());
-    }
-  }, [showSwitcher, getSavedAccounts]);
-
   // Catch the Selar redirect and upgrade the user!
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
     const paymentStatus = queryParams.get('payment');
 
-    if (paymentStatus === 'success' && user && !isEchoPlus) {
+    if (paymentStatus === 'success' && user) {
       const autoUpgrade = async () => {
         try {
           await update(ref(db, 'profiles/' + user.uid), { 
@@ -115,7 +109,13 @@ const Profile = () => {
       };
       autoUpgrade();
     }
-  }, [location.search, user, isEchoPlus]);
+  }, [location.search, user]);
+
+  useEffect(() => {
+    if (showSwitcher) {
+      setSavedAccounts(getSavedAccounts());
+    }
+  }, [showSwitcher, getSavedAccounts]);
 
   useEffect(() => {
     if (!user?.uid) return;
