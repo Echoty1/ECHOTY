@@ -19,13 +19,13 @@ export const SubscriptionProvider = ({ children }) => {
   const [isPlus, setIsPlus] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  // These match exactly what PlusCustomizer expects
-  const [chatStyle, setChatStyle] = useState('gold');
+  const [profileBg, setProfileBg] = useState('default');
+  const [chatStyle, setChatStyle] = useState('standard');
   const [auraStyle, setAuraStyle] = useState('gold');
+  const [ringStyle, setRingStyle] = useState('gold');
 
   useEffect(() => {
     if (authLoading) return;
-
     if (!user) {
       setIsPlus(false);
       setLoading(false);
@@ -39,35 +39,29 @@ export const SubscriptionProvider = ({ children }) => {
         const data = snapshot.val();
         setIsPlus(data.isEchoPlus === true); 
         
-        // Load their saved styles from Firebase
+        if (data.premiumProfileBg) setProfileBg(data.premiumProfileBg);
         if (data.premiumChatStyle) setChatStyle(data.premiumChatStyle);
-        if (data.premiumRingStyle) setAuraStyle(data.premiumRingStyle);
+        if (data.premiumRingStyle) {
+          setAuraStyle(data.premiumRingStyle);
+          setRingStyle(data.premiumRingStyle);
+        }
       } else {
         setIsPlus(false);
       }
-      setLoading(false);
-    }, (error) => {
-      console.error("Error fetching subscription data:", error);
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, [user, authLoading]);
 
-  const upgradeToPlus = async () => {
+  // This function saves the changes to Firebase so other users can see them!
+  const updatePlusFeature = async (feature, value) => {
     if (!user) return;
     try {
-      setIsPlus(true); 
       const profileRef = ref(db, `profiles/${user.uid}`);
-      await update(profileRef, {
-        isEchoPlus: true,
-        premiumChatStyle: chatStyle, 
-        premiumRingStyle: auraStyle
-      });
+      await update(profileRef, { [`premium${feature}`]: value });
     } catch (error) {
-      console.error("Failed to upgrade to Plus:", error);
-      setIsPlus(false); 
-      throw error;
+      console.error("Failed to save plus feature:", error);
     }
   };
 
@@ -75,11 +69,11 @@ export const SubscriptionProvider = ({ children }) => {
     <SubscriptionContext.Provider value={{ 
       isPlus, 
       loading, 
-      upgradeToPlus,
-      chatStyle, 
-      setChatStyle,
-      auraStyle, 
-      setAuraStyle
+      updatePlusFeature,
+      profileBg, setProfileBg: (val) => { setProfileBg(val); updatePlusFeature('ProfileBg', val); },
+      chatStyle, setChatStyle: (val) => { setChatStyle(val); updatePlusFeature('ChatStyle', val); },
+      auraStyle, setAuraStyle: (val) => { setAuraStyle(val); updatePlusFeature('RingStyle', val); },
+      ringStyle, setRingStyle: (val) => { setRingStyle(val); updatePlusFeature('RingStyle', val); }
     }}>
       {children}
     </SubscriptionContext.Provider>
