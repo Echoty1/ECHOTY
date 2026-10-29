@@ -17,12 +17,10 @@ export const SubscriptionProvider = ({ children }) => {
   const [isPlus, setIsPlus] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  // Existing
   const [profileBg, setProfileBgState] = useState('default');
   const [chatStyle, setChatStyleState] = useState('standard');
   const [ringStyle, setRingStyleState] = useState('gold');
   
-  // NEW FEATURES
   const [profileMusic, setProfileMusicState] = useState('');
   const [badgeText, setBadgeTextState] = useState('');
   const [ghostMode, setGhostModeState] = useState(false);
@@ -46,7 +44,6 @@ export const SubscriptionProvider = ({ children }) => {
         if (data.premiumChatStyle) setChatStyleState(data.premiumChatStyle);
         if (data.premiumRingStyle) setRingStyleState(data.premiumRingStyle);
         
-        // New fields
         if (data.premiumMusic) setProfileMusicState(data.premiumMusic);
         if (data.premiumBadgeText) setBadgeTextState(data.premiumBadgeText);
         if (data.ghostMode) setGhostModeState(data.ghostMode);
@@ -59,12 +56,10 @@ export const SubscriptionProvider = ({ children }) => {
     return () => unsubscribe();
   }, [user, authLoading]);
 
-  // Save Functions
   const setProfileBg = async (val) => { setProfileBgState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumProfileBg: val }); };
   const setChatStyle = async (val) => { setChatStyleState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumChatStyle: val }); };
   const setRingStyle = async (val) => { setRingStyleState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumRingStyle: val }); };
   
-  // New Save Functions
   const setProfileMusic = async (val) => { setProfileMusicState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumMusic: val }); };
   const setBadgeText = async (val) => { setBadgeTextState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumBadgeText: val }); };
   const setGhostMode = async (val) => { setGhostModeState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { ghostMode: val }); };
