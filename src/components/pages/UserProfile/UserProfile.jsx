@@ -9,6 +9,8 @@ import UsernamePill from '../../common/UsernamePill';
 import SEO from '../../common/SEO';
 import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid';
 import PlusBadge from '../../common/PlusBadge'; 
+import { db } from '../../../services/firebase';
+import { ref, get, update } from 'firebase/database';
 import './UserProfile.css';
 
 const UserProfile = ({ uid: propUid, onClose }) => {
@@ -50,6 +52,17 @@ const UserProfile = ({ uid: propUid, onClose }) => {
   const targetRingStyle = profile?.premiumRingStyle || 'gold';
   const targetProfileBg = profile?.premiumProfileBg || 'default';
   const targetBadgeText = profile?.premiumBadgeText || '';
+  const targetAccentColor = profile?.premiumAccentColor || 'default';
+
+  // Increment view count
+  useEffect(() => {
+    if (!uid || !user || user.uid === uid || profile?.ghostMode) return;
+    const profileRef = ref(db, `profiles/${uid}/profileViews`);
+    get(profileRef).then((snap) => {
+      const currentViews = snap.val() || 0;
+      update(ref(db, `profiles/${uid}`), { profileViews: currentViews + 1 });
+    });
+  }, [uid, user, profile?.ghostMode]);
 
   const getSpotifyEmbed = (url) => {
     if (!url) return null;
@@ -91,7 +104,7 @@ const UserProfile = ({ uid: propUid, onClose }) => {
   const memberSince = profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Recently';
 
   return (
-    <div className={`profile-page snap-profile ${onClose ? 'profile-overlay-mode' : ''}`}>
+    <div className={`profile-page snap-profile ${onClose ? 'profile-overlay-mode' : ''} ${isTargetPlus && targetAccentColor !== 'default' ? `profile-accent-${targetAccentColor}` : ''}`}>
       <SEO title={`${profile.name} on ECHO`} />
       
       <div className="snap-hero">
@@ -110,10 +123,9 @@ const UserProfile = ({ uid: propUid, onClose }) => {
         </div>
 
         <div className="snap-info">
-          <h1 className="snap-name">
+          <h1 className={`snap-name ${isTargetPlus && targetAccentColor !== 'default' ? `snap-name-accent-${targetAccentColor}` : ''}`}>
             {profile.name || 'User'}
 
-            {/* Show CUSTOM BADGE if they have one, otherwise show default CROWN */}
             {isTargetPlus && targetBadgeText ? (
               <span style={{ fontSize: '12px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 8px', borderRadius: '8px', marginLeft: '8px', fontWeight: 'bold', border: '1px solid rgba(255,215,0,0.3)' }}>
                 {targetBadgeText}
@@ -137,7 +149,6 @@ const UserProfile = ({ uid: propUid, onClose }) => {
       <div className="snap-bio-section">
         <p className="snap-bio">{profile.bio || 'No bio yet.'}</p>
 
-        {/* PROFILE MUSIC PLAYER */}
         {isTargetPlus && musicEmbedUrl && (
           <div style={{ marginTop: '16px', marginBottom: '16px', borderRadius: '12px', overflow: 'hidden', width: '100%' }}>
             <iframe 
@@ -178,6 +189,12 @@ const UserProfile = ({ uid: propUid, onClose }) => {
         <div className="snap-stat-btn">
           <strong>{echowingCount}</strong><span>Echowing</span>
         </div>
+        {/* Show Views only if Plus */}
+        {isTargetPlus && (
+          <div className="snap-stat-btn">
+            <strong>{profile.profileViews || 0}</strong><span>Views</span>
+          </div>
+        )}
       </div>
 
       <div className="snap-tabs">
