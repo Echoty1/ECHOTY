@@ -84,7 +84,6 @@ const Profile = () => {
   const [unlockedGifs, setUnlockedGifs] = useState([]);
   const imageInputRef = useRef(null);
 
-  // Catch the Selar redirect and upgrade the user!
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
     const paymentStatus = queryParams.get('payment');
@@ -96,6 +95,7 @@ const Profile = () => {
             isEchoPlus: true,
             premiumChatStyle: 'gold', 
             premiumRingStyle: 'gold',
+            premiumProfileBg: 'gold',
             planStartedAt: Date.now()
           });
           
@@ -248,7 +248,7 @@ const Profile = () => {
         <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={(e) => e.target.files[0] && handleUploadImage(e.target.files[0])} />
 
         <div className="snap-hero">
-          {/* The key fix: if isEchoPlus is true, we remove the inline background image so the CSS class applies */}
+          {/* The inline style is removed if isEchoPlus is true so the CSS classes take over */}
           <div 
             className={`snap-hero-bg ${isEchoPlus ? `premium-bg-${profileBg}` : ''}`} 
             style={{ backgroundImage: (!isEchoPlus && displayMediaUrl) ? `url(${displayMediaUrl})` : 'none' }} 
