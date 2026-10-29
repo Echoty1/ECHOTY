@@ -91,10 +91,9 @@ const PlusCustomizer = () => {
         </div>
       </div>
 
-      {/* NEW: CUSTOM BADGE */}
       <div className="plus-section">
         <div className="plus-section-title"><i className="fas fa-certificate" style={{ color: '#FFD700' }}/> Custom Profile Badge</div>
-        <p style={{ fontSize: '12px', color: '#aaa', marginBottom: '10px' }}>Show a custom title next to your name (e.g., "👑 OG", "⚡ Dev").</p>
+        <p style={{ fontSize: '12px', color: '#aaa', marginBottom: '10px' }}>Show a custom title next to your name.</p>
         <div style={{ display: 'flex', gap: '8px' }}>
           <input 
             type="text" 
@@ -108,10 +107,9 @@ const PlusCustomizer = () => {
         </div>
       </div>
 
-      {/* NEW: PROFILE MUSIC */}
       <div className="plus-section">
         <div className="plus-section-title"><i className="fas fa-music" style={{ color: '#FFD700' }}/> Profile Music</div>
-        <p style={{ fontSize: '12px', color: '#aaa', marginBottom: '10px' }}>Paste a Spotify or YouTube link to play on your profile.</p>
+        <p style={{ fontSize: '12px', color: '#aaa', marginBottom: '10px' }}>Paste a Spotify link to play on your profile.</p>
         <div style={{ display: 'flex', gap: '8px' }}>
           <input 
             type="url" 
@@ -124,7 +122,6 @@ const PlusCustomizer = () => {
         </div>
       </div>
 
-      {/* NEW: GHOST MODE */}
       <div className="plus-section">
         <div className="plus-section-title"><i className="fas fa-ghost" style={{ color: '#FFD700' }}/> Ghost Mode</div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
