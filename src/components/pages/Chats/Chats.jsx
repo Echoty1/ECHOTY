@@ -26,7 +26,7 @@ import StructuredData from '../../common/StructuredData';
 import ChatPreviewPopup from './ChatPreviewPopup';
 import NotesStrip from './NotesStrip';
 import NewGroupModal from './NewGroupModal';
-import PlusBadge from '../../common/PlusBadge'; // <-- NEW: Import Premium Badge
+import PlusBadge from '../../common/PlusBadge';
 
 const CHAT_CHUNK_SIZE = 20;
 const TYPING_FRESHNESS_MS = 4000;
@@ -94,7 +94,6 @@ const loadPartnerData = async (partnerId) => {
   }
 };
 
-// ─── Process a single chat item ─────────────────────────────────
 const processChatItem = async (chat, user, onlineUsers) => {
   try {
     const profile = await loadPartnerData(chat.id);
@@ -162,8 +161,9 @@ const processChatItem = async (chat, user, onlineUsers) => {
       online: isOnline,
       ended: chat.ended === true,
       isGroup: false,
-      isEchoPlus: profile?.isEchoPlus || false, // <-- NEW: Pull Premium Status
-      premiumRingStyle: profile?.premiumRingStyle || 'gold', // <-- NEW
+      isEchoPlus: profile?.isEchoPlus || false,
+      premiumRingStyle: profile?.premiumRingStyle || 'gold',
+      premiumBadgeText: profile?.premiumBadgeText || '', // <-- NEW
     };
   } catch (err) {
     let unreadCount = chat.unreadCount || 0;
@@ -186,21 +186,19 @@ const processChatItem = async (chat, user, onlineUsers) => {
       isGroup: false,
       isEchoPlus: false,
       premiumRingStyle: 'gold',
+      premiumBadgeText: '',
     };
   }
 };
 
-// ─── Process a group item ───────────────────────────────────────
 const processGroupItem = async (group, user) => {
   try {
-    // Fetch fresh group metadata
     const groupSnap = await get(ref(db, `groups/${group.groupId}`));
     if (!groupSnap.exists()) return null;
 
     const groupData = groupSnap.val();
     const chatId = groupIdToChatId(group.groupId);
 
-    // Fetch last message info from userChats if exists
     let lastMessage = groupData.lastMessage || 'Group created';
     let lastSenderId = groupData.lastSenderId || '';
     let lastUpdated = groupData.lastUpdated || groupData.createdAt || Date.now();
@@ -251,6 +249,7 @@ const processGroupItem = async (group, user) => {
       ended: false,
       isEchoPlus: false,
       premiumRingStyle: 'gold',
+      premiumBadgeText: '',
     };
   } catch (err) {
     console.warn('processGroupItem failed:', err);
@@ -258,7 +257,6 @@ const processGroupItem = async (group, user) => {
   }
 };
 
-// ─── Sorting function ──────────────────────────────────────────
 const sortNonAIChats = (chats) => {
   const online = chats.filter((c) => c.online === true);
   const offline = chats.filter((c) => c.online === false);
@@ -267,7 +265,6 @@ const sortNonAIChats = (chats) => {
   return [...onlineSorted, ...offlineSorted];
 };
 
-// ─── Chat Item (1-1) ───────────────────────────────────────────
 const ChatItem = memo(
   ({ chat, onStartChat, onLongPressStart, onLongPressEnd, onLongPressCancel, partnerIsTyping }) => {
     const { profiles } = useProfile();
@@ -279,9 +276,9 @@ const ChatItem = memo(
     const skin = skinId ? getSkinById(skinId) : null;
     const mood = profile.mood || chat.mood || 'neutral';
 
-    // NEW: Apply premium ring
     const isPlus = chat.isEchoPlus;
     const ringStyle = chat.premiumRingStyle || 'gold';
+    const badgeText = chat.premiumBadgeText;
 
     return (
       <div
@@ -296,11 +293,10 @@ const ChatItem = memo(
         onContextMenu={(e) => e.preventDefault()}
         style={{ userSelect: 'none', WebkitUserSelect: 'none', WebkitTouchCallout: 'none' }}
       >
-        {/* Apply Plus ring to the container if they are Plus */}
         <div
           className={`chat-avatar ${isPlus ? `plus-avatar-ring ${ringStyle}` : ''}`}
           onClick={(e) => { e.stopPropagation(); navigate(`/user/${chat.id}`); }}
-          style={isPlus ? { padding: '2px', borderRadius: '50%' } : {}} // Slight padding to show the ring
+          style={isPlus ? { padding: '2px', borderRadius: '50%' } : {}}
         >
           <Avatar key={chat.avatar} src={chat.avatar} name={chat.name} size={48} />
           <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
@@ -324,7 +320,12 @@ const ChatItem = memo(
           <div className="chat-title-row">
             <span className="chat-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               {chat.name}
-              {isPlus && <PlusBadge size={14} />} {/* <-- NEW: Show Badge next to name */}
+              {isPlus && <PlusBadge size={14} />}
+              {isPlus && badgeText && (
+                <span style={{ fontSize: '10px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 6px', borderRadius: '6px', fontWeight: 'bold' }}>
+                  {badgeText}
+                </span>
+              )}
               {chat.isDeleted && <span className="archived-label"> (archived)</span>}
               {chat.ended && <span className="ended-badge">Ended</span>}
             </span>
@@ -344,7 +345,6 @@ const ChatItem = memo(
   }
 );
 
-// ─── Group Chat Item ───────────────────────────────────────────
 const GroupChatItem = memo(({ chat, onStartChat }) => {
   const hasUnread = chat.unreadCount > 0;
   return (
@@ -367,7 +367,6 @@ const GroupChatItem = memo(({ chat, onStartChat }) => {
   );
 });
 
-// ─── Error Boundary ────────────────────────────────────────────
 class NotesBoundary extends React.Component {
   constructor(props) { super(props); this.state = { hasError: false }; }
   static getDerivedStateFromError() { return { hasError: true }; }
@@ -375,7 +374,6 @@ class NotesBoundary extends React.Component {
   render() { return this.state.hasError ? null : this.props.children; }
 }
 
-// ─── Main Chats Component ──────────────────────────────────────
 const Chats = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -423,7 +421,6 @@ const Chats = () => {
   const isDemoUser = user?.uid === DEMO_UID;
   const isSupportUser = user?.uid === SUPPORT_UID;
 
-  // Cache restore
   useEffect(() => {
     if (!user?.uid) return;
     const loadCached = async () => {
@@ -449,7 +446,6 @@ const Chats = () => {
     loadCached();
   }, [user?.uid, isDemoUser, isSupportUser]);
 
-  // Chat-read + unread-cleared + list-update events
   useEffect(() => {
     const handleChatRead = (event) => {
       const { userId } = event.detail;
@@ -485,7 +481,6 @@ const Chats = () => {
     };
   }, []);
 
-  // Presence
   useEffect(() => {
     if (!user) return;
     const presenceRef = ref(db, 'presence/online');
@@ -502,7 +497,6 @@ const Chats = () => {
     };
   }, [user]);
 
-  // userChats listener
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -558,7 +552,6 @@ const Chats = () => {
     };
   }, [user?.uid, onlineUsers, cacheKey, isDemoUser, isSupportUser]);
 
-  // Groups listener
   useEffect(() => {
     if (!user?.uid) return;
 
@@ -581,7 +574,6 @@ const Chats = () => {
     };
   }, [user?.uid]);
 
-  // Typing listeners
   useEffect(() => {
     if (!user?.uid || !recentChats.length) return;
 
@@ -643,7 +635,6 @@ const Chats = () => {
     };
   }, []);
 
-  // Long-press handlers
   const handleLongPressStart = useCallback((e, chat) => {
     if (chat.id === 'echo_ai_assistant') return;
     if (chat.isGroup) return;
@@ -712,7 +703,6 @@ const Chats = () => {
     inputRef.current?.focus();
   };
 
-  // Search
   const performSearch = async (queryText) => {
     const trimmed = queryText.trim().toLowerCase();
     if (trimmed.length < 1) {
@@ -733,7 +723,7 @@ const Chats = () => {
         mood: c.mood || 'happy', activeSkin: c.activeSkin || 'default',
         location: c.location || '',
         isOnline: !!onlineUsers[c.id], fromLocal: true,
-        isEchoPlus: c.isEchoPlus, premiumRingStyle: c.premiumRingStyle // <-- Keep Premium Data in Search
+        isEchoPlus: c.isEchoPlus, premiumRingStyle: c.premiumRingStyle, premiumBadgeText: c.premiumBadgeText
       }));
     if (localHits.length) { setResults(localHits); setIsSearching(false); }
 
@@ -755,6 +745,7 @@ const Chats = () => {
           isOnline: !!onlineUsers[u.id],
           isEchoPlus: u.isEchoPlus || false,
           premiumRingStyle: u.premiumRingStyle || 'gold',
+          premiumBadgeText: u.premiumBadgeText || '',
         }));
 
       const seen = new Set(localHits.map((x) => x.id));
@@ -792,11 +783,9 @@ const Chats = () => {
   const safeResults = Array.isArray(results) ? results : [];
   const isSearchActive = searchQuery.trim().length > 0;
 
-  // Merge groups + 1-1 for the recent list (groups first if recently active)
   const allChatsSorted = [...safeGroupChats, ...safeRecentChats]
     .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
-  // Hero match
   const trimmedSearch = searchQuery.trim().toLowerCase();
   let topResult = null;
   let otherResults = safeResults;
@@ -871,7 +860,12 @@ const Chats = () => {
                   <div className="hero-info">
                     <h2 className="hero-name" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                       {topResult.name}
-                      {topResult.isEchoPlus && <PlusBadge size={18} />} {/* <-- Badge in Hero */}
+                      {topResult.isEchoPlus && <PlusBadge size={18} />}
+                      {topResult.isEchoPlus && topResult.premiumBadgeText && (
+                        <span style={{ fontSize: '12px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 8px', borderRadius: '8px', fontWeight: 'bold' }}>
+                          {topResult.premiumBadgeText}
+                        </span>
+                      )}
                     </h2>
                     <div className="hero-meta">
                       <span className="hero-badge">{onlineUsers[topResult.id] ? '🟢 Online' : '⚫ Offline'}</span>
@@ -916,7 +910,12 @@ const Chats = () => {
                       <div className="chat-title-row">
                         <span className="chat-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           {person.name}
-                          {isPlus && <PlusBadge size={14} />} {/* <-- Badge in Search */}
+                          {isPlus && <PlusBadge size={14} />}
+                          {isPlus && person.premiumBadgeText && (
+                            <span style={{ fontSize: '10px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 6px', borderRadius: '6px', fontWeight: 'bold' }}>
+                              {person.premiumBadgeText}
+                            </span>
+                          )}
                         </span>
                         {person.location && <span className="chat-location-badge">📍 {person.location}</span>}
                       </div>
