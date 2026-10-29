@@ -26,21 +26,24 @@ export const SubscriptionProvider = ({ children }) => {
   const [accentColor, setAccentColorState] = useState('default');
   const [profileViews, setProfileViewsState] = useState(0);
 
-  // THIS IS THE CRITICAL FIX
   useEffect(() => {
     if (authLoading) return;
+
     if (!user) {
       setIsPlus(false);
       setLoading(false);
       return;
     }
 
-    // Force fresh fetch on every mount
     const profileRef = ref(db, `profiles/${user.uid}`);
+    
+    // Listen to Firebase in real-time
     const unsubscribe = onValue(profileRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
+        console.log("SUB DEBUG: isEchoPlus from DB =", data.isEchoPlus);
         setIsPlus(data.isEchoPlus === true); 
+        
         setProfileBgState(data.premiumProfileBg || 'default');
         setChatStyleState(data.premiumChatStyle || 'standard');
         setRingStyleState(data.premiumRingStyle || 'gold');
