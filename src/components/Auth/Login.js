@@ -5,14 +5,12 @@ import { useAuth } from '../../hooks/useAuth';
 import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
-  sendEmailVerification,
   sendPasswordResetEmail,
   signOut,
 } from 'firebase/auth';
 import { auth, db } from '../../services/firebase';
 import { ref, set, get, push, serverTimestamp } from 'firebase/database';
 import { friendlyAuthError } from '../../utils/authErrors';
-import { armEmailGate } from '../../utils/emailGate';
 import { isNativeApp, signInWithGoogle } from '../../utils/nativeAuth';
 
 const DEMO_EMAIL = 'demo@echoty.xyz';
@@ -156,7 +154,6 @@ const Login = () => {
 
   const errorRef = useRef(null);
 
-  // ─── Auto-Login Switch Logic ───
   useEffect(() => {
     const isAddingAccount = sessionStorage.getItem('echo_adding_account') === 'true';
     const switchTargetEmail = sessionStorage.getItem('echo_switch_target_email');
@@ -168,7 +165,6 @@ const Login = () => {
     if (switchTargetEmail) {
       setEmail(switchTargetEmail);
       
-      // Retrieve the saved password for instant login
       const savedPasswords = JSON.parse(localStorage.getItem('echo_saved_passwords') || '{}');
       const savedPass = savedPasswords[switchTargetEmail];
 
@@ -176,10 +172,7 @@ const Login = () => {
         setPassword(savedPass);
         setInfo(`Switching to ${switchTargetEmail}...`);
         
-        // 🔴 FORCE FIREBASE TO FORGET OLD SESSION
-        // This prevents the "bounce back" to the previous account
         signOut(auth).then(() => {
-          // Auto-submit after signing out
           setTimeout(() => {
             const form = document.querySelector('.echo-auth-form');
             if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
@@ -263,7 +256,6 @@ const Login = () => {
     setBusy(true);
     try {
       if (isSignup) {
-        armEmailGate();
         const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
         const newUid = cred.user.uid;
         const derivedName = deriveNameFromEmail(email);
@@ -281,14 +273,8 @@ const Login = () => {
         } catch (perr) {
           console.warn('[Signup] profile write failed:', perr?.message || perr);
         }
-        try {
-          await sendEmailVerification(cred.user, {
-            url: window.location.origin + '/',
-            handleCodeInApp: false,
-          });
-        } catch (verr) {
-          console.warn('[Signup] verification email failed:', verr?.message || verr);
-        }
+        
+        // REMOVED: sendEmailVerification(cred.user)
         
         sessionStorage.removeItem('echo_adding_account');
         sessionStorage.removeItem('echo_switch_target_email');
@@ -303,15 +289,9 @@ const Login = () => {
         cred.user.uid === DEMO_UID || email.trim().toLowerCase() === DEMO_EMAIL;
 
       if (!isDemo && !cred.user.emailVerified) {
-        try {
-          await sendEmailVerification(cred.user, {
-            url: window.location.origin + '/',
-            handleCodeInApp: false,
-          });
-        } catch (_) {}
+        // REMOVED: sendEmailVerification
       }
 
-      // 🔴 SAVE THE PASSWORD FOR INSTANT SWITCHING
       const savedPasswords = JSON.parse(localStorage.getItem('echo_saved_passwords') || '{}');
       savedPasswords[email.trim().toLowerCase()] = password;
       localStorage.setItem('echo_saved_passwords', JSON.stringify(savedPasswords));
