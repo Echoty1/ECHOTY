@@ -32,9 +32,21 @@
 /* ─── PREMIUM BACKGROUNDS ─── */
 .premium-bg-default { background-color: var(--bg-card); }
 .premium-bg-aurora { background: linear-gradient(135deg, #a78bfa, #ec4899); }
-.premium-bg-matrix { background: #000; background-image: linear-gradient(rgba(0,255,0,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,0,0.1) 1px, transparent 1px); background-size: 20px 20px; }
+.premium-bg-matrix { 
+  background: #000; 
+  background-image: linear-gradient(rgba(0,255,0,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,0,0.1) 1px, transparent 1px); 
+  background-size: 20px 20px; 
+}
 .premium-bg-galaxy { background: radial-gradient(circle at top right, #2c1654, #000); }
-.premium-bg-gold { background: linear-gradient(135deg, #FFD700, #B8860B); }
+.premium-bg-gold { 
+  background: linear-gradient(135deg, #FFD700, #B8860B); 
+  animation: goldGlow 3s infinite alternate;
+}
+
+@keyframes goldGlow {
+  from { filter: blur(20px) brightness(0.6); }
+  to { filter: blur(20px) brightness(0.9); }
+}
 
 .snap-hero-overlay {
   position: absolute;
@@ -62,7 +74,12 @@
 .plus-avatar-ring.gold { border: 3px solid #FFD700; box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
 .plus-avatar-ring.neon { border: 3px solid #00F0FF; box-shadow: 0 0 20px rgba(0, 240, 255, 0.5); }
 .plus-avatar-ring.fire { border: 3px solid #FF4500; box-shadow: 0 0 20px rgba(255, 69, 0, 0.5); }
-.plus-avatar-ring.rainbow { border: 3px solid; border-image: linear-gradient(to right, red, orange, yellow, green, blue, indigo, violet) 1; }
+.plus-avatar-ring.rainbow { 
+  border: 3px solid; 
+  border-image: linear-gradient(to right, red, orange, yellow, green, blue, indigo, violet) 1; 
+  border-radius: 50%;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+}
 
 .snap-avatar {
   width: 100px;
@@ -114,6 +131,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
 }
 
 .snap-username-wrap {
