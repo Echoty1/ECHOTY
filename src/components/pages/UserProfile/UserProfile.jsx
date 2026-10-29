@@ -8,7 +8,7 @@ import Avatar from '../../common/Avatar';
 import UsernamePill from '../../common/UsernamePill';
 import SEO from '../../common/SEO';
 import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid';
-import PlusBadge from '../../common/PlusBadge'; // <-- NEW: Show Badge
+import PlusBadge from '../../common/PlusBadge'; 
 import './UserProfile.css';
 
 const UserProfile = ({ uid: propUid, onClose }) => {
@@ -46,9 +46,10 @@ const UserProfile = ({ uid: propUid, onClose }) => {
 
   const profile = profiles[uid];
 
-  // Determine Premium Status
+  // Determine Premium Status and Styles for the person being viewed
   const isTargetPlus = profile?.isEchoPlus || false;
   const targetRingStyle = profile?.premiumRingStyle || 'gold';
+  const targetProfileBg = profile?.premiumProfileBg || 'default';
 
   const handleToggleEchower = async () => {
     if (!user || !uid) return;
@@ -83,11 +84,12 @@ const UserProfile = ({ uid: propUid, onClose }) => {
           <i className="fas fa-arrow-left" />
         </button>
         
-        <div className="snap-hero-bg" style={{ backgroundImage: coverImage ? `url(${coverImage})` : 'var(--bg-card)' }} />
+        {/* Apply the Target's Background */}
+        <div className={`snap-hero-bg ${isTargetPlus ? `premium-bg-${targetProfileBg}` : ''}`} style={{ backgroundImage: coverImage ? `url(${coverImage})` : 'var(--bg-card)' }} />
         <div className="snap-hero-overlay" />
         
         <div className="snap-avatar-wrapper">
-          {/* Apply the Aura/Ring if Target is Plus */}
+          {/* Apply the Target's Aura/Ring if they are Plus */}
           <div className={`snap-avatar-ring ${isTargetPlus ? `plus-avatar-ring ${targetRingStyle}` : ''}`} />
           <div className="snap-avatar" style={{ cursor: 'default' }}>
             <Avatar src={profile.avatar} name={profile.name} size={100} />
