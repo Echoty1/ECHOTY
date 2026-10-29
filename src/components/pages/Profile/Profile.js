@@ -38,7 +38,7 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
   const { user, getSavedAccounts, switchAccount, signOutAll } = useAuth();
-  const { isPlus: isEchoPlus, ringStyle, profileBg } = useSubscription(); 
+  const { isPlus: isEchoPlus, ringStyle, profileBg, badgeText, accentColor } = useSubscription(); 
   
   const navigate = useNavigate();
   const location = useLocation(); 
@@ -244,11 +244,10 @@ const Profile = () => {
     <React.Fragment>
       <SEO title="Profile - ECHO" />
       <StructuredData />
-      <div className="profile-page snap-profile">
+      <div className={`profile-page snap-profile ${isEchoPlus && accentColor !== 'default' ? `profile-accent-${accentColor}` : ''}`}>
         <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={(e) => e.target.files[0] && handleUploadImage(e.target.files[0])} />
 
         <div className="snap-hero">
-          {/* The inline style is removed if isEchoPlus is true so the CSS classes take over */}
           <div 
             className={`snap-hero-bg ${isEchoPlus ? `premium-bg-${profileBg}` : ''}`} 
             style={{ backgroundImage: (!isEchoPlus && displayMediaUrl) ? `url(${displayMediaUrl})` : 'none' }} 
@@ -274,9 +273,16 @@ const Profile = () => {
                 </div>
               </div>
             ) : (
-              <h1 className="snap-name">
+              <h1 className={`snap-name ${isEchoPlus && accentColor !== 'default' ? `snap-name-accent-${accentColor}` : ''}`}>
                 {profile?.name || 'User'}
-                {isEchoPlus && <PlusBadge size={22} />}
+
+                {isEchoPlus && badgeText ? (
+                  <span style={{ fontSize: '12px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 8px', borderRadius: '8px', marginLeft: '8px', fontWeight: 'bold', border: '1px solid rgba(255,215,0,0.3)' }}>
+                    {badgeText}
+                  </span>
+                ) : isEchoPlus ? (
+                  <PlusBadge size={22} />
+                ) : null}
               </h1>
             )}
             
