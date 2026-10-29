@@ -23,8 +23,6 @@ export const SubscriptionProvider = ({ children }) => {
   const [profileMusic, setProfileMusicState] = useState('');
   const [badgeText, setBadgeTextState] = useState('');
   const [ghostMode, setGhostModeState] = useState(false);
-  
-  // NEW FEATURES
   const [accentColor, setAccentColorState] = useState('default');
   const [profileViews, setProfileViewsState] = useState(0);
 
@@ -49,7 +47,6 @@ export const SubscriptionProvider = ({ children }) => {
         if (data.premiumMusic) setProfileMusicState(data.premiumMusic);
         if (data.premiumBadgeText) setBadgeTextState(data.premiumBadgeText);
         if (data.ghostMode) setGhostModeState(data.ghostMode);
-        
         if (data.premiumAccentColor) setAccentColorState(data.premiumAccentColor);
         if (data.profileViews) setProfileViewsState(data.profileViews);
       } else {
@@ -67,7 +64,6 @@ export const SubscriptionProvider = ({ children }) => {
   const setProfileMusic = async (val) => { setProfileMusicState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumMusic: val }); };
   const setBadgeText = async (val) => { setBadgeTextState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumBadgeText: val }); };
   const setGhostMode = async (val) => { setGhostModeState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { ghostMode: val }); };
-  
   const setAccentColor = async (val) => { setAccentColorState(val); if (user) await update(ref(db, `profiles/${user.uid}`), { premiumAccentColor: val }); };
 
   return (
