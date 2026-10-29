@@ -38,8 +38,8 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
   const { user, getSavedAccounts, switchAccount, signOutAll } = useAuth();
-  // Destructure isPlus and rename it to avoid conflict
-  const { isPlus: isEchoPlus, ringStyle, profileBg } = useSubscription(); 
+  // CHANGED: Destructure auraStyle and chatStyle to match the context
+  const { isPlus: isEchoPlus, auraStyle, chatStyle } = useSubscription(); 
   
   const navigate = useNavigate();
   const location = useLocation(); 
@@ -249,11 +249,13 @@ const Profile = () => {
         <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={(e) => e.target.files[0] && handleUploadImage(e.target.files[0])} />
 
         <div className="snap-hero">
-          <div className={`snap-hero-bg ${isEchoPlus ? `premium-bg-${profileBg}` : ''}`} style={{ backgroundImage: displayMediaUrl ? `url(${displayMediaUrl})` : 'var(--bg-card)' }} />
+          {/* CHANGED: Replaced profileBg with chatStyle */}
+          <div className={`snap-hero-bg ${isEchoPlus ? `premium-bg-${chatStyle}` : ''}`} style={{ backgroundImage: displayMediaUrl ? `url(${displayMediaUrl})` : 'var(--bg-card)' }} />
           <div className="snap-hero-overlay" />
           
           <div className="snap-avatar-wrapper">
-            <div className={`snap-avatar-ring ${isEchoPlus ? `plus-avatar-ring ${ringStyle}` : ''}`} />
+            {/* CHANGED: Replaced ringStyle with auraStyle */}
+            <div className={`snap-avatar-ring ${isEchoPlus ? `plus-avatar-ring ${auraStyle}` : ''}`} />
             <div className="snap-avatar" onClick={() => setShowAvatarPicker(true)}>
               {loading ? <SkeletonBlock width="100%" height="100%" borderRadius="50%" /> : 
                isVideoFormat ? <video src={displayMediaUrl} autoPlay loop muted playsInline /> : 
