@@ -1,6 +1,6 @@
 // src/contexts/SubscriptionContext.jsx
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { ref, onValue, update } from 'firebase/database';
+import { ref, onValue } from 'firebase/database';
 import { db } from '../services/firebase'; 
 import { useAuth } from '../hooks/useAuth'; 
 
@@ -15,13 +15,16 @@ export const useSubscription = () => {
 };
 
 export const SubscriptionProvider = ({ children }) => {
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [isPlus, setIsPlus] = useState(false);
   const [loading, setLoading] = useState(true);
   const [ringStyle, setRingStyle] = useState('gold');
   const [profileBg, setProfileBg] = useState('gold');
 
   useEffect(() => {
+    // Wait for auth to finish loading
+    if (authLoading) return;
+
     if (!user) {
       setIsPlus(false);
       setLoading(false);
@@ -30,10 +33,14 @@ export const SubscriptionProvider = ({ children }) => {
 
     const profileRef = ref(db, `profiles/${user.uid}`);
     
+    // Listen to real-time updates for the user's profile
     const unsubscribe = onValue(profileRef, (snapshot) => {
       if (snapshot.exists()) {
         const data = snapshot.val();
-        setIsPlus(data.isEchoPlus || false); 
+        console.log("SubscriptionContext DB Check:", data.isEchoPlus); // Debug log
+        
+        // Update states
+        setIsPlus(data.isEchoPlus === true); 
         if (data.premiumRingStyle) setRingStyle(data.premiumRingStyle);
         if (data.premiumChatStyle) setProfileBg(data.premiumChatStyle);
       } else {
@@ -46,31 +53,12 @@ export const SubscriptionProvider = ({ children }) => {
     });
 
     return () => unsubscribe();
-  }, [user]);
-
-  const upgradeToPlus = async () => {
-    if (!user) return;
-    try {
-      setIsPlus(true); 
-      
-      const profileRef = ref(db, `profiles/${user.uid}`);
-      await update(profileRef, {
-        isEchoPlus: true,
-        premiumChatStyle: profileBg, 
-        premiumRingStyle: ringStyle
-      });
-    } catch (error) {
-      console.error("Failed to upgrade to Plus:", error);
-      setIsPlus(false); 
-      throw error;
-    }
-  };
+  }, [user, authLoading]);
 
   return (
     <SubscriptionContext.Provider value={{ 
       isPlus, 
       loading, 
-      upgradeToPlus,
       ringStyle, 
       setRingStyle,
       profileBg, 
