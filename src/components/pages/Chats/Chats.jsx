@@ -320,12 +320,16 @@ const ChatItem = memo(
           <div className="chat-title-row">
             <span className="chat-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               {chat.name}
-              {isPlus && <PlusBadge size={14} />}
-              {isPlus && badgeText && (
-                <span style={{ fontSize: '10px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 6px', borderRadius: '6px', fontWeight: 'bold' }}>
+              
+              {/* Show CUSTOM BADGE if they have one, otherwise show default CROWN */}
+              {isPlus && badgeText ? (
+                <span style={{ fontSize: '10px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 6px', borderRadius: '6px', fontWeight: 'bold', border: '1px solid rgba(255,215,0,0.3)' }}>
                   {badgeText}
                 </span>
-              )}
+              ) : isPlus ? (
+                <PlusBadge size={14} />
+              ) : null}
+
               {chat.isDeleted && <span className="archived-label"> (archived)</span>}
               {chat.ended && <span className="ended-badge">Ended</span>}
             </span>
@@ -860,12 +864,13 @@ const Chats = () => {
                   <div className="hero-info">
                     <h2 className="hero-name" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px' }}>
                       {topResult.name}
-                      {topResult.isEchoPlus && <PlusBadge size={18} />}
-                      {topResult.isEchoPlus && topResult.premiumBadgeText && (
-                        <span style={{ fontSize: '12px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 8px', borderRadius: '8px', fontWeight: 'bold' }}>
+                      {topResult.isEchoPlus && topResult.premiumBadgeText ? (
+                        <span style={{ fontSize: '12px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 8px', borderRadius: '8px', fontWeight: 'bold', border: '1px solid rgba(255,215,0,0.3)' }}>
                           {topResult.premiumBadgeText}
                         </span>
-                      )}
+                      ) : topResult.isEchoPlus ? (
+                        <PlusBadge size={18} />
+                      ) : null}
                     </h2>
                     <div className="hero-meta">
                       <span className="hero-badge">{onlineUsers[topResult.id] ? '🟢 Online' : '⚫ Offline'}</span>
@@ -910,12 +915,13 @@ const Chats = () => {
                       <div className="chat-title-row">
                         <span className="chat-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                           {person.name}
-                          {isPlus && <PlusBadge size={14} />}
-                          {isPlus && person.premiumBadgeText && (
-                            <span style={{ fontSize: '10px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 6px', borderRadius: '6px', fontWeight: 'bold' }}>
+                          {isPlus && person.premiumBadgeText ? (
+                            <span style={{ fontSize: '10px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 6px', borderRadius: '6px', fontWeight: 'bold', border: '1px solid rgba(255,215,0,0.3)' }}>
                               {person.premiumBadgeText}
                             </span>
-                          )}
+                          ) : isPlus ? (
+                            <PlusBadge size={14} />
+                          ) : null}
                         </span>
                         {person.location && <span className="chat-location-badge">📍 {person.location}</span>}
                       </div>
