@@ -38,7 +38,6 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
   const { user, getSavedAccounts, switchAccount, signOutAll } = useAuth();
-  // Destructure using the names the Customizer expects
   const { isPlus: isEchoPlus, ringStyle, profileBg } = useSubscription(); 
   
   const navigate = useNavigate();
@@ -249,7 +248,11 @@ const Profile = () => {
         <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={(e) => e.target.files[0] && handleUploadImage(e.target.files[0])} />
 
         <div className="snap-hero">
-          <div className={`snap-hero-bg ${isEchoPlus ? `premium-bg-${profileBg}` : ''}`} style={{ backgroundImage: displayMediaUrl ? `url(${displayMediaUrl})` : 'var(--bg-card)' }} />
+          {/* The key fix: if isEchoPlus is true, we remove the inline background image so the CSS class applies */}
+          <div 
+            className={`snap-hero-bg ${isEchoPlus ? `premium-bg-${profileBg}` : ''}`} 
+            style={{ backgroundImage: (!isEchoPlus && displayMediaUrl) ? `url(${displayMediaUrl})` : 'none' }} 
+          />
           <div className="snap-hero-overlay" />
           
           <div className="snap-avatar-wrapper">
@@ -363,7 +366,6 @@ const Profile = () => {
           {activeTab === 'echoes' && <div className="empty-tab-state"><i className="fas fa-ghost" /><p>Saved Echoes will appear here.</p></div>}
         </div>
 
-        {/* ACTUAL PLUS CHECKOUT MODAL LINKED TO SELAR */}
         <PlusCheckout 
           isOpen={showUpgradeModal} 
           onClose={() => setShowUpgradeModal(false)} 
