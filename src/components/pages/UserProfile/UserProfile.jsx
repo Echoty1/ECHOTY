@@ -46,10 +46,26 @@ const UserProfile = ({ uid: propUid, onClose }) => {
 
   const profile = profiles[uid];
 
-  // Determine Premium Status and Styles for the person being viewed
   const isTargetPlus = profile?.isEchoPlus || false;
   const targetRingStyle = profile?.premiumRingStyle || 'gold';
   const targetProfileBg = profile?.premiumProfileBg || 'default';
+  const targetBadgeText = profile?.premiumBadgeText || '';
+
+  // Helper to embed Spotify safely
+  const getSpotifyEmbed = (url) => {
+    if (!url) return null;
+    try {
+      if (url.includes('spotify.com/track/')) {
+        const trackId = url.split('track/')[1].split('?')[0];
+        return `https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0`;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  };
+
+  const musicEmbedUrl = getSpotifyEmbed(profile?.premiumMusic);
 
   const handleToggleEchower = async () => {
     if (!user || !uid) return;
@@ -84,12 +100,10 @@ const UserProfile = ({ uid: propUid, onClose }) => {
           <i className="fas fa-arrow-left" />
         </button>
         
-        {/* Apply the Target's Background */}
         <div className={`snap-hero-bg ${isTargetPlus ? `premium-bg-${targetProfileBg}` : ''}`} style={{ backgroundImage: coverImage ? `url(${coverImage})` : 'var(--bg-card)' }} />
         <div className="snap-hero-overlay" />
         
         <div className="snap-avatar-wrapper">
-          {/* Apply the Target's Aura/Ring if they are Plus */}
           <div className={`snap-avatar-ring ${isTargetPlus ? `plus-avatar-ring ${targetRingStyle}` : ''}`} />
           <div className="snap-avatar" style={{ cursor: 'default' }}>
             <Avatar src={profile.avatar} name={profile.name} size={100} />
@@ -99,8 +113,12 @@ const UserProfile = ({ uid: propUid, onClose }) => {
         <div className="snap-info">
           <h1 className="snap-name">
             {profile.name || 'User'}
-            {/* Show Plus Badge if Target is Plus */}
             {isTargetPlus && <PlusBadge size={22} />} 
+            {isTargetPlus && targetBadgeText && (
+              <span style={{ fontSize: '12px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 8px', borderRadius: '8px', marginLeft: '8px', fontWeight: 'bold' }}>
+                {targetBadgeText}
+              </span>
+            )}
           </h1>
           {profile.username && (
             <div className="snap-username-wrap">
@@ -116,6 +134,22 @@ const UserProfile = ({ uid: propUid, onClose }) => {
 
       <div className="snap-bio-section">
         <p className="snap-bio">{profile.bio || 'No bio yet.'}</p>
+
+        {/* PROFILE MUSIC PLAYER */}
+        {isTargetPlus && musicEmbedUrl && (
+          <div style={{ marginTop: '16px', marginBottom: '16px', borderRadius: '12px', overflow: 'hidden', width: '100%' }}>
+            <iframe 
+              style={{ borderRadius: '12px' }}
+              src={musicEmbedUrl} 
+              width="100%" 
+              height="80" 
+              frameBorder="0" 
+              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" 
+              loading="lazy"
+              title="Profile Music"
+            ></iframe>
+          </div>
+        )}
         
         {user?.uid !== uid && (
           <div className="snap-actions-row">
