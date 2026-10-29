@@ -51,7 +51,6 @@ const UserProfile = ({ uid: propUid, onClose }) => {
   const targetProfileBg = profile?.premiumProfileBg || 'default';
   const targetBadgeText = profile?.premiumBadgeText || '';
 
-  // Helper to embed Spotify safely
   const getSpotifyEmbed = (url) => {
     if (!url) return null;
     try {
@@ -113,12 +112,15 @@ const UserProfile = ({ uid: propUid, onClose }) => {
         <div className="snap-info">
           <h1 className="snap-name">
             {profile.name || 'User'}
-            {isTargetPlus && <PlusBadge size={22} />} 
-            {isTargetPlus && targetBadgeText && (
-              <span style={{ fontSize: '12px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 8px', borderRadius: '8px', marginLeft: '8px', fontWeight: 'bold' }}>
+
+            {/* Show CUSTOM BADGE if they have one, otherwise show default CROWN */}
+            {isTargetPlus && targetBadgeText ? (
+              <span style={{ fontSize: '12px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 8px', borderRadius: '8px', marginLeft: '8px', fontWeight: 'bold', border: '1px solid rgba(255,215,0,0.3)' }}>
                 {targetBadgeText}
               </span>
-            )}
+            ) : isTargetPlus ? (
+              <PlusBadge size={22} />
+            ) : null}
           </h1>
           {profile.username && (
             <div className="snap-username-wrap">
