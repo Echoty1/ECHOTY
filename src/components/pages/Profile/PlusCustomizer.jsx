@@ -50,6 +50,7 @@ const PlusCustomizer = () => {
           <button className={`pill-btn ${profileBg === 'aurora' ? 'active' : ''}`} onClick={() => setProfileBg('aurora')}>Aurora</button>
           <button className={`pill-btn ${profileBg === 'matrix' ? 'active' : ''}`} onClick={() => setProfileBg('matrix')}>Matrix</button>
           <button className={`pill-btn ${profileBg === 'galaxy' ? 'active' : ''}`} onClick={() => setProfileBg('galaxy')}>Galaxy</button>
+          <button className={`pill-btn ${profileBg === 'gold' ? 'active' : ''}`} onClick={() => setProfileBg('gold')}>Gold</button>
         </div>
       </div>
 
@@ -87,6 +88,7 @@ const PlusCustomizer = () => {
           <button className={`pill-btn ${ringStyle === 'gold' ? 'active' : ''}`} onClick={() => setRingStyle('gold')}>Gold</button>
           <button className={`pill-btn ${ringStyle === 'neon' ? 'active' : ''}`} onClick={() => setRingStyle('neon')}>Neon</button>
           <button className={`pill-btn ${ringStyle === 'fire' ? 'active' : ''}`} onClick={() => setRingStyle('fire')}>Fire</button>
+          <button className={`pill-btn ${ringStyle === 'rainbow' ? 'active' : ''}`} onClick={() => setRingStyle('rainbow')}>Rainbow</button>
         </div>
       </div>
 
