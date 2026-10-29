@@ -1,6 +1,6 @@
 // src/components/pages/Profile/Profile.js
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom'; // Added useLocation
 import { useAuth } from '../../../hooks/useAuth';
 import { useProfile } from '../../../contexts/ProfileContext';
 import { db } from '../../../services/firebase';
@@ -22,6 +22,7 @@ import AccountSwitcher from '../../common/AccountSwitcher';
 import { useSubscription } from '../../../contexts/SubscriptionContext'; 
 import PlusCustomizer from './PlusCustomizer'; 
 import PlusBadge from '../../common/PlusBadge';
+import PlusCheckout from '../../common/PlusCheckout'; // Ensure this is imported
 import './Profile.css';
 
 const getFastLocal = (key) => { try { const item = localStorage.getItem('echo_cache_' + key); return item ? JSON.parse(item) : null; } catch { return null; } };
@@ -37,11 +38,14 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
   const { user, getSavedAccounts, switchAccount, signOutAll } = useAuth();
-  const { isEchoPlus, setShowUpgradeModal, ringStyle, profileBg } = useSubscription(); 
+  const { isEchoPlus, ringStyle, profileBg } = useSubscription(); 
   
   const navigate = useNavigate();
+  const location = useLocation(); // Added location hook
   const { refreshProfile, profiles, fetchProfile } = useProfile();
 
+  // We keep this local state for the checkout modal
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [showPlusPopup, setShowPlusPopup] = useState(false);
 
   const [activeTab, setActiveTab] = useState('spotlight');
@@ -86,6 +90,32 @@ const Profile = () => {
       setSavedAccounts(getSavedAccounts());
     }
   }, [showSwitcher, getSavedAccounts]);
+
+  // Catch the Selar redirect and upgrade the user!
+  useEffect(() => {
+    const queryParams = new URLSearchParams(location.search);
+    const paymentStatus = queryParams.get('payment');
+
+    if (paymentStatus === 'success' && user && !isEchoPlus) {
+      const autoUpgrade = async () => {
+        try {
+          await update(ref(db, 'profiles/' + user.uid), { 
+            isEchoPlus: true,
+            premiumChatStyle: 'gold', 
+            premiumRingStyle: 'gold',
+            planStartedAt: Date.now()
+          });
+          
+          setToast({ message: 'Welcome to ECHO Plus! ⚡ Payment Confirmed.', type: 'success' });
+          window.history.replaceState({}, document.title, "/profile"); 
+        } catch (err) {
+          console.error("Auto-upgrade failed", err);
+          setToast({ message: 'Payment received, but profile update failed. Contact support.', type: 'error' });
+        }
+      };
+      autoUpgrade();
+    }
+  }, [location.search, user, isEchoPlus]);
 
   useEffect(() => {
     if (!user?.uid) return;
@@ -332,6 +362,12 @@ const Profile = () => {
           {activeTab === 'spotlight' && <ProfileSpotlightGrid uid={user?.uid} />}
           {activeTab === 'echoes' && <div className="empty-tab-state"><i className="fas fa-ghost" /><p>Saved Echoes will appear here.</p></div>}
         </div>
+
+        {/* ACTUAL PLUS CHECKOUT MODAL LINKED TO SELAR */}
+        <PlusCheckout 
+          isOpen={showUpgradeModal} 
+          onClose={() => setShowUpgradeModal(false)} 
+        />
 
         {showPlusPopup && (
           <div className="echo-plus-popup-overlay" onClick={() => setShowPlusPopup(false)}>
