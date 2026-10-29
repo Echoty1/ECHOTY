@@ -7,7 +7,7 @@ const PlusCheckout = ({ isOpen, onClose }) => {
 
   if (!isOpen) return null;
 
-  // 🔴 YOUR SELAR LINK IS NOW HERE
+  // 🔴 YOUR SELAR LINK IS HERE
   const SELAR_BASE_URL = "https://selar.com/i73a04310z"; 
   
   // We pass the user's UID and Email to Selar so we know exactly who paid
@@ -27,7 +27,8 @@ const PlusCheckout = ({ isOpen, onClose }) => {
         <p style={{ color: '#aaa', marginBottom: '30px', fontSize: '14px' }}>Unlock premium rings, chat styles, and exclusive features.</p>
         
         <div style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '12px', marginBottom: '24px' }}>
-          <h3 style={{ fontSize: '32px', margin: '0', color: '#fff' }}>₦5,000<span style={{ fontSize: '16px', color: '#aaa' }}> / month</span></h3>
+          {/* CHANGED PRICE TO 1,000 NAIRA */}
+          <h3 style={{ fontSize: '32px', margin: '0', color: '#fff' }}>₦1,000<span style={{ fontSize: '16px', color: '#aaa' }}> / month</span></h3>
           <p style={{ color: '#aaa', fontSize: '12px', marginTop: '5px' }}>(Approx. $5 USD)</p>
         </div>
 
