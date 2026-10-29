@@ -19,10 +19,9 @@ export const SubscriptionProvider = ({ children }) => {
   const [isPlus, setIsPlus] = useState(false);
   const [loading, setLoading] = useState(true);
   
-  const [profileBg, setProfileBg] = useState('default');
-  const [chatStyle, setChatStyle] = useState('standard');
-  const [auraStyle, setAuraStyle] = useState('gold');
-  const [ringStyle, setRingStyle] = useState('gold');
+  const [profileBg, setProfileBgState] = useState('default');
+  const [chatStyle, setChatStyleState] = useState('standard');
+  const [ringStyle, setRingStyleState] = useState('gold');
 
   useEffect(() => {
     if (authLoading) return;
@@ -39,12 +38,9 @@ export const SubscriptionProvider = ({ children }) => {
         const data = snapshot.val();
         setIsPlus(data.isEchoPlus === true); 
         
-        if (data.premiumProfileBg) setProfileBg(data.premiumProfileBg);
-        if (data.premiumChatStyle) setChatStyle(data.premiumChatStyle);
-        if (data.premiumRingStyle) {
-          setAuraStyle(data.premiumRingStyle);
-          setRingStyle(data.premiumRingStyle);
-        }
+        if (data.premiumProfileBg) setProfileBgState(data.premiumProfileBg);
+        if (data.premiumChatStyle) setChatStyleState(data.premiumChatStyle);
+        if (data.premiumRingStyle) setRingStyleState(data.premiumRingStyle);
       } else {
         setIsPlus(false);
       }
@@ -54,26 +50,28 @@ export const SubscriptionProvider = ({ children }) => {
     return () => unsubscribe();
   }, [user, authLoading]);
 
-  // This function saves the changes to Firebase so other users can see them!
-  const updatePlusFeature = async (feature, value) => {
-    if (!user) return;
-    try {
-      const profileRef = ref(db, `profiles/${user.uid}`);
-      await update(profileRef, { [`premium${feature}`]: value });
-    } catch (error) {
-      console.error("Failed to save plus feature:", error);
-    }
+  // Auto-save functions
+  const setProfileBg = async (val) => {
+    setProfileBgState(val);
+    if (user) await update(ref(db, `profiles/${user.uid}`), { premiumProfileBg: val });
+  };
+
+  const setChatStyle = async (val) => {
+    setChatStyleState(val);
+    if (user) await update(ref(db, `profiles/${user.uid}`), { premiumChatStyle: val });
+  };
+
+  const setRingStyle = async (val) => {
+    setRingStyleState(val);
+    if (user) await update(ref(db, `profiles/${user.uid}`), { premiumRingStyle: val });
   };
 
   return (
     <SubscriptionContext.Provider value={{ 
-      isPlus, 
-      loading, 
-      updatePlusFeature,
-      profileBg, setProfileBg: (val) => { setProfileBg(val); updatePlusFeature('ProfileBg', val); },
-      chatStyle, setChatStyle: (val) => { setChatStyle(val); updatePlusFeature('ChatStyle', val); },
-      auraStyle, setAuraStyle: (val) => { setAuraStyle(val); updatePlusFeature('RingStyle', val); },
-      ringStyle, setRingStyle: (val) => { setRingStyle(val); updatePlusFeature('RingStyle', val); }
+      isPlus, loading,
+      profileBg, setProfileBg,
+      chatStyle, setChatStyle,
+      ringStyle, setRingStyle
     }}>
       {children}
     </SubscriptionContext.Provider>
