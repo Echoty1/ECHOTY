@@ -10,24 +10,25 @@ const PlusCustomizer = () => {
   const { 
     chatStyle, setChatStyle, 
     ringStyle, setRingStyle, 
-    profileBg, setProfileBg
+    profileBg, setProfileBg,
+    profileMusic, setProfileMusic,
+    badgeText, setBadgeText,
+    ghostMode, setGhostMode
   } = useSubscription();
   
   const { user } = useAuth();
   const [passes, setPasses] = useState(5);
   const [toast, setToast] = useState(null);
+  const [musicInput, setMusicInput] = useState(profileMusic || '');
+  const [badgeInput, setBadgeInput] = useState(badgeText || '');
 
   useEffect(() => {
     if (!user?.uid) return;
     const fetchPasses = async () => {
       const passRef = ref(db, `profiles/${user.uid}/buddyPasses`);
       const snap = await get(passRef);
-      if (snap.exists()) {
-        setPasses(snap.val());
-      } else {
-        setPasses(5);
-        await update(ref(db, `profiles/${user.uid}`), { buddyPasses: 5 });
-      }
+      if (snap.exists()) setPasses(snap.val());
+      else { setPasses(5); await update(ref(db, `profiles/${user.uid}`), { buddyPasses: 5 }); }
     };
     fetchPasses();
   }, [user?.uid]);
@@ -42,51 +43,112 @@ const PlusCustomizer = () => {
     });
   };
 
+  const saveMusic = () => {
+    setProfileMusic(musicInput);
+    setToast({ message: 'Profile music saved!', type: 'success' });
+  };
+
+  const saveBadge = () => {
+    if (badgeInput.length > 15) {
+      return setToast({ message: 'Badge text is too long (max 15 chars).', type: 'error' });
+    }
+    setBadgeText(badgeInput);
+    setToast({ message: 'Custom badge saved!', type: 'success' });
+  };
+
   return (
     <>
       <div className="plus-section">
         <div className="plus-section-title"><i className="fas fa-image" style={{ color: '#FFD700' }}/> Profile Background</div>
         <div className="option-row">
-          <button className={`pill-btn ${profileBg === 'default' ? 'active' : ''}`} onClick={() => setProfileBg('default')}>Default</button>
-          <button className={`pill-btn ${profileBg === 'aurora' ? 'active' : ''}`} onClick={() => setProfileBg('aurora')}>Aurora</button>
-          <button className={`pill-btn ${profileBg === 'matrix' ? 'active' : ''}`} onClick={() => setProfileBg('matrix')}>Matrix</button>
-          <button className={`pill-btn ${profileBg === 'galaxy' ? 'active' : ''}`} onClick={() => setProfileBg('galaxy')}>Galaxy</button>
-          <button className={`pill-btn ${profileBg === 'gold' ? 'active' : ''}`} onClick={() => setProfileBg('gold')}>Gold</button>
+          {['default', 'aurora', 'matrix', 'galaxy', 'gold'].map(bg => (
+            <button key={bg} className={`pill-btn ${profileBg === bg ? 'active' : ''}`} onClick={() => setProfileBg(bg)}>
+              {bg.charAt(0).toUpperCase() + bg.slice(1)}
+            </button>
+          ))}
         </div>
       </div>
 
       <div className="plus-section">
         <div className="plus-section-title"><i className="fas fa-comment-dots" style={{ color: '#FFD700' }}/> Chat Bubble Style</div>
         <div className="option-row">
-          <button className={`pill-btn ${chatStyle === '' ? 'active' : ''}`} onClick={() => setChatStyle('')}>Standard</button>
-          <button className={`pill-btn ${chatStyle === 'neon' ? 'active' : ''}`} onClick={() => setChatStyle('neon')}>Neon</button>
-          <button className={`pill-btn ${chatStyle === 'glass' ? 'active' : ''}`} onClick={() => setChatStyle('glass')}>Glass</button>
-          <button className={`pill-btn ${chatStyle === 'gold' ? 'active' : ''}`} onClick={() => setChatStyle('gold')}>Gold</button>
+          {['', 'neon', 'glass', 'gold'].map(style => (
+            <button key={style || 'standard'} className={`pill-btn ${chatStyle === style ? 'active' : ''}`} onClick={() => setChatStyle(style)}>
+              {style === '' ? 'Standard' : style.charAt(0).toUpperCase() + style.slice(1)}
+            </button>
+          ))}
         </div>
       </div>
 
       <div className="plus-section">
         <div className="plus-section-title"><i className="fas fa-ring" style={{ color: '#FFD700' }}/> Profile Aura</div>
         <div className="option-row">
-          <button className={`pill-btn ${ringStyle === 'gold' ? 'active' : ''}`} onClick={() => setRingStyle('gold')}>Gold</button>
-          <button className={`pill-btn ${ringStyle === 'neon' ? 'active' : ''}`} onClick={() => setRingStyle('neon')}>Neon</button>
-          <button className={`pill-btn ${ringStyle === 'fire' ? 'active' : ''}`} onClick={() => setRingStyle('fire')}>Fire</button>
-          <button className={`pill-btn ${ringStyle === 'rainbow' ? 'active' : ''}`} onClick={() => setRingStyle('rainbow')}>Rainbow</button>
+          {['gold', 'neon', 'fire', 'rainbow'].map(aura => (
+            <button key={aura} className={`pill-btn ${ringStyle === aura ? 'active' : ''}`} onClick={() => setRingStyle(aura)}>
+              {aura.charAt(0).toUpperCase() + aura.slice(1)}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* NEW: CUSTOM BADGE */}
+      <div className="plus-section">
+        <div className="plus-section-title"><i className="fas fa-certificate" style={{ color: '#FFD700' }}/> Custom Profile Badge</div>
+        <p style={{ fontSize: '12px', color: '#aaa', marginBottom: '10px' }}>Show a custom title next to your name (e.g., "👑 OG", "⚡ Dev").</p>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input 
+            type="text" 
+            value={badgeInput} 
+            onChange={(e) => setBadgeInput(e.target.value)} 
+            placeholder="e.g. 👑 Founder" 
+            maxLength={15}
+            style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: '#fff' }}
+          />
+          <button onClick={saveBadge} className="pill-btn active">Save</button>
+        </div>
+      </div>
+
+      {/* NEW: PROFILE MUSIC */}
+      <div className="plus-section">
+        <div className="plus-section-title"><i className="fas fa-music" style={{ color: '#FFD700' }}/> Profile Music</div>
+        <p style={{ fontSize: '12px', color: '#aaa', marginBottom: '10px' }}>Paste a Spotify or YouTube link to play on your profile.</p>
+        <div style={{ display: 'flex', gap: '8px' }}>
+          <input 
+            type="url" 
+            value={musicInput} 
+            onChange={(e) => setMusicInput(e.target.value)} 
+            placeholder="https://open.spotify.com/track/..." 
+            style={{ flex: 1, padding: '10px', borderRadius: '8px', background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: '#fff' }}
+          />
+          <button onClick={saveMusic} className="pill-btn active">Save</button>
+        </div>
+      </div>
+
+      {/* NEW: GHOST MODE */}
+      <div className="plus-section">
+        <div className="plus-section-title"><i className="fas fa-ghost" style={{ color: '#FFD700' }}/> Ghost Mode</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <p style={{ fontSize: '12px', color: '#aaa', margin: 0, flex: 1 }}>Hide your view when checking other profiles.</p>
+          <button 
+            onClick={() => setGhostMode(!ghostMode)} 
+            style={{ 
+              background: ghostMode ? '#FFD700' : 'var(--bg-input)', 
+              color: ghostMode ? '#000' : '#fff', 
+              border: 'none', padding: '8px 16px', borderRadius: '20px', 
+              fontWeight: 'bold', cursor: 'pointer', transition: '0.2s' 
+            }}
+          >
+            {ghostMode ? 'ON' : 'OFF'}
+          </button>
         </div>
       </div>
 
       <div className="plus-section buddy-pass-section">
-        <div className="plus-section-title">
-          <i className="fas fa-ticket-alt" style={{ color: '#FFD700' }}/> Buddy Passes
-        </div>
+        <div className="plus-section-title"><i className="fas fa-ticket-alt" style={{ color: '#FFD700' }}/> Buddy Passes</div>
         <div className="buddy-pass-display">
           <div className="pass-count">{passes} <span>/ 5 left</span></div>
           <p className="pass-desc">Gift ECHO Plus to a friend. They join for free and you lose one pass.</p>
-          <button 
-            className={`btn-copy-pass ${passes <= 0 ? 'disabled' : ''}`}
-            onClick={handleCopyLink}
-            disabled={passes <= 0}
-          >
+          <button className={`btn-copy-pass ${passes <= 0 ? 'disabled' : ''}`} onClick={handleCopyLink} disabled={passes <= 0}>
             {passes <= 0 ? <>All Passes Used</> : <><i className="fas fa-link" /> Copy Buddy Link</>}
           </button>
         </div>
