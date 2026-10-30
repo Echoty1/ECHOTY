@@ -202,6 +202,25 @@ const MessageReceipt = ({ msg, isMe }) => {
   return <span className="message-receipt sent" title="Sent">✓</span>;
 };
 
+const useIsDesktopPointer = () => {
+  const [isDesktop, setIsDesktop] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return window.matchMedia?.('(hover: hover) and (pointer: fine)').matches ?? false;
+  });
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(hover: hover) and (pointer: fine)');
+    const onChange = (e) => setIsDesktop(e.matches);
+    if (mq.addEventListener) mq.addEventListener('change', onChange);
+    else mq.addListener(onChange);
+    return () => {
+      if (mq.removeEventListener) mq.removeEventListener('change', onChange);
+      else mq.removeListener(onChange);
+    };
+  }, []);
+  return isDesktop;
+};
+
 const ChatView = () => {
   const { userId } = useParams();
   const { user } = useAuth();
@@ -211,6 +230,7 @@ const ChatView = () => {
   const { chatStyle: myChatStyle, isEchoPlus } = useSubscription(); 
 
   useVisualViewport();
+  const isDesktop = useIsDesktopPointer();
 
   const { settings: userSettings } = useUserSettings(user?.uid);
   const partnerPrivacy = useUserPrivacy(userId);
@@ -301,6 +321,11 @@ const ChatView = () => {
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false, title: '', message: '', confirmText: 'Confirm', cancelText: 'Cancel', onConfirm: null,
   });
+
+  // ═══════════════════════════════════════════════════════════
+  // ★ NEW: Right-click context menu state (Telegram-style on PC)
+  // ═══════════════════════════════════════════════════════════
+  const [contextMenu, setContextMenu] = useState(null); // { x, y, msgId } | null
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -482,6 +507,27 @@ const ChatView = () => {
       .catch(() => {});
     return () => { mounted = false; };
   }, [user?.uid, userId, isGroupChat]);
+
+  // ═══════════════════════════════════════════════════════════
+  // ★ NEW: Close context menu on outside click / Escape / scroll
+  // ═══════════════════════════════════════════════════════════
+  useEffect(() => {
+    if (!contextMenu) return;
+    const close = () => setContextMenu(null);
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    window.addEventListener('click', close);
+    window.addEventListener('contextmenu', close);
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    return () => {
+      window.removeEventListener('click', close);
+      window.removeEventListener('contextmenu', close);
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+    };
+  }, [contextMenu]);
 
   const handleWallpaperSelect = async (id) => {
     setWallpaperId(id);
@@ -1292,11 +1338,13 @@ const ChatView = () => {
     setReplyTo({ messageId: msg.id, senderName, messageType: msg.type || 'text', textSnippet, originalMessage: msg });
     setNewMessage('');
     setActiveMessageMenuId(null);
+    setContextMenu(null);
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [user, partnerProfile, currentUserProfile, location.state?.userName, isGroupChat]);
 
   const handleReact = useCallback((messageId) => {
     setActiveMessageMenuId(null);
+    setContextMenu(null);
     const msgElement = messageRefs.current[messageId];
     if (!msgElement) {
       setReactionPickerAnchor({ top: window.innerHeight / 2, left: window.innerWidth / 2, flipped: false });
@@ -1348,6 +1396,7 @@ const ChatView = () => {
 
   const handleTouchStart = (msg, e) => {
     if (selectMode) return;
+    if (isDesktop) return;
     if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
     setPressedMsgId(msg.id);
     touchTimerRef.current = setTimeout(() => {
@@ -1374,6 +1423,7 @@ const ChatView = () => {
     if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
     setPressedMsgId(null);
     if (selectMode) return;
+    if (isDesktop) return;
     const now = Date.now();
     const lastTap = lastTapRef.current;
     if (lastTap.msgId === msg.id && now - lastTap.time < 300) { handleReactionSelect('heart', msg.id); lastTapRef.current = { time: 0, msgId: null }; }
@@ -1385,12 +1435,33 @@ const ChatView = () => {
     setPressedMsgId(null);
   };
 
+  // ═══════════════════════════════════════════════════════════
+  // ★ NEW: Right-click handler (Telegram-style)
+  // ═══════════════════════════════════════════════════════════
+  const handleMessageContextMenu = useCallback((e, msgId) => {
+    if (selectMode) return;
+    if (!isDesktop) return; // mobile uses long-press / tap flow
+    e.preventDefault();
+    e.stopPropagation();
+    setActiveMessageMenuId(null);
+
+    const menuWidth = 210;
+    const menuHeight = 320; // rough upper bound; browser will clamp visually
+    const padding = 8;
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - padding);
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - padding);
+    setContextMenu({ x: Math.max(padding, x), y: Math.max(padding, y), msgId });
+  }, [selectMode, isDesktop]);
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
   const handleEditMessage = (msg) => {
     if (msg.senderId !== user?.uid) return;
     if (msg.type === 'media' && msg.mediaType === 'audio') return;
     if (msg.type === 'media') { setEditingMediaMessage(msg); return; }
     setEditingMessage(msg);
     setActiveMessageMenuId(null);
+    setContextMenu(null);
   };
 
   const saveEditedMessage = async (newText) => {
@@ -1420,6 +1491,7 @@ const ChatView = () => {
   const handleDeleteMessage = (msgId) => {
     setDeletingMessageId(msgId);
     setActiveMessageMenuId(null);
+    setContextMenu(null);
     openConfirmModal({ title: 'Delete Message', message: 'Are you sure you want to delete this message? This action cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', onConfirm: () => confirmDeleteMessage(msgId) });
   };
 
@@ -1440,12 +1512,14 @@ const ChatView = () => {
     try { await navigator.clipboard.writeText(text); setToast({ message: 'Copied to clipboard', type: 'success' }); }
     catch (_) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); setToast({ message: 'Copied to clipboard', type: 'success' }); }
     setActiveMessageMenuId(null);
+    setContextMenu(null);
   };
 
   const handlePinMessage = async (msg) => {
     if (!user?.uid || !userId) return;
     const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
     setActiveMessageMenuId(null);
+    setContextMenu(null);
     try {
       const currentlyPinned = pinnedMessageId === msg.id;
       await set(ref(db, `chats/${cId}/pinnedMessageId`), currentlyPinned ? null : msg.id);
@@ -1603,6 +1677,7 @@ const ChatView = () => {
       const result = await saveToEchoArchive(user.uid, { ...msg, senderName, senderAvatar }, { chatId: cId, source: 'chat', partnerId: userId, senderName, senderAvatar });
       if (result?.ok) { await update(ref(db, `${isGroupChat ? `groups/${groupIdFromChat}` : `chats/${cId}`}/messages/${msg.id}`), { pinned: true }).catch(() => {}); const rows = await listEchoArchive(user.uid); const map = {}; rows.forEach((row) => { if (row.message?.id) map[row.message.id] = row.archiveId; }); setBookmarkedIds(map); }
     } catch (_) {}
+    setContextMenu(null);
   };
 
   const renderTide = (msg) => {
@@ -1713,6 +1788,114 @@ const ChatView = () => {
     });
   }, [messages]);
 
+  const renderContextMenu = () => {
+    if (!contextMenu) return null;
+    const msg = messages.find((m) => m.id === contextMenu.msgId);
+    if (!msg) return null;
+    const isOwn = String(msg.senderId || '') === String(user?.uid || '');
+    const isAi = msg.senderId === ECHO_AI_ID;
+    const allowEdit = isOwn && userId !== ECHO_AI_ID && msg.type !== 'audio';
+    const allowDelete = isOwn || (userId === ECHO_AI_ID && isAi);
+    const isPinned = pinnedMessageId === msg.id;
+    const textToCopy = msg.type === 'media' ? msg.mediaUrl || msg.caption || '' : msg.text || '';
+
+    return (
+      <div
+        className="chat-context-menu"
+        style={{ top: contextMenu.y, left: contextMenu.x }}
+        onClick={(e) => e.stopPropagation()}
+        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
+        role="menu"
+      >
+        <button
+          type="button"
+          className="ctx-item"
+          onClick={() => handleReact(msg.id)}
+          role="menuitem"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" fill="currentColor" /></svg>
+          React
+        </button>
+        <button
+          type="button"
+          className="ctx-item"
+          onClick={() => handleReply(msg)}
+          role="menuitem"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" fill="currentColor" /></svg>
+          Reply
+        </button>
+        {textToCopy && (
+          <button
+            type="button"
+            className="ctx-item"
+            onClick={() => handleCopy(msg)}
+            role="menuitem"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" fill="currentColor" /></svg>
+            Copy
+          </button>
+        )}
+        {allowEdit && (
+          <button
+            type="button"
+            className="ctx-item"
+            onClick={() => handleEditMessage(msg)}
+            role="menuitem"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor" /></svg>
+            Edit
+          </button>
+        )}
+        <button
+          type="button"
+          className="ctx-item"
+          onClick={() => handlePinMessage(msg)}
+          role="menuitem"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" fill="currentColor" /></svg>
+          {isPinned ? 'Unpin' : 'Pin'}
+        </button>
+        <button
+          type="button"
+          className="ctx-item"
+          onClick={() => saveMessageToArchive(msg)}
+          role="menuitem"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" fill="currentColor" /></svg>
+          {bookmarkedIds[msg.id] ? 'Remove from archive' : 'Save to archive'}
+        </button>
+        <button
+          type="button"
+          className="ctx-item"
+          onClick={() => {
+            setSelectMode(true);
+            setSelectedIds(new Set([msg.id]));
+            setContextMenu(null);
+          }}
+          role="menuitem"
+        >
+          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 5h2V3c-1.1 0-2 .9-2 2zm0 8h2v-2H3v2zm4 8h2v-2H7v2zM3 9h2V7H3v2zm10-6h-2v2h2V3zm6 0v2h2c0-1.1-.9-2-2-2zM5 21v-2H3c0 1.1.9 2 2 2zm-2-4h2v-2H3v2zM9 3H7v2h2V3zm2 18h2v-2h-2v2zm8-8h2v-2h-2v2zm0 8c1.1 0 2-.9 2-2h-2v2zm0-12h2V7h-2v2zm0 8h2v-2h-2v2zm-4 4h2v-2h-2v2zm0-16h2V3h-2v2zM7 17h10V7H7v10zm2-8h6v6H9V9z" fill="currentColor" /></svg>
+          Select
+        </button>
+        {allowDelete && (
+          <>
+            <div className="ctx-divider" />
+            <button
+              type="button"
+              className="ctx-item danger"
+              onClick={() => handleDeleteMessage(msg.id)}
+              role="menuitem"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor" /></svg>
+              Delete
+            </button>
+          </>
+        )}
+      </div>
+    );
+  };
+
   const renderMessage = (entry) => {
     const { msg, groupTop, groupBottom, isSystem } = entry;
 
@@ -1750,7 +1933,7 @@ const ChatView = () => {
     const shell = (inner) => {
       const row = (
         <div
-          className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${justSent ? 'just-sent' : ''} ${justArrived ? 'just-arrived' : ''} ${isPressed ? 'pressed' : ''} ${groupTop ? 'group-top' : 'group-mid'} ${groupBottom ? 'group-bottom' : 'group-mid'} ${isSelected ? 'selected' : ''} ${selectMode ? 'select-mode' : ''}`}
+          className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${justSent ? 'just-sent' : ''} ${justArrived ? 'just-arrived' : ''} ${isPressed ? 'pressed' : ''} ${groupTop ? 'group-top' : 'group-mid'} ${groupBottom ? 'group-bottom' : 'group-mid'} ${isSelected ? 'selected' : ''} ${selectMode ? 'select-mode' : ''} ${isDesktop ? 'on-desktop-context' : ''}`}
           ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
           onClick={() => {
             if (selectMode) {
@@ -1761,15 +1944,12 @@ const ChatView = () => {
               });
               return;
             }
+            if (isDesktop) return; // desktop uses right-click only
             setActiveMessageMenuId(activeMessageMenuId === msg.id ? null : msg.id);
           }}
-          onContextMenu={(e) => {
-            e.preventDefault();
-            if (selectMode) return;
-            setActiveMessageMenuId(msg.id);
-          }}
-          onMouseEnter={() => { if (!selectMode) setActiveMessageMenuId(msg.id); }}
-          onMouseLeave={() => setActiveMessageMenuId(null)}
+          onContextMenu={(e) => handleMessageContextMenu(e, msg.id)}
+          onMouseEnter={() => { if (!selectMode && !isDesktop) setActiveMessageMenuId(msg.id); }}
+          onMouseLeave={() => { if (!isDesktop) setActiveMessageMenuId(null); }}
           onTouchStart={(e) => handleTouchStart(msg, e)}
           onTouchEnd={() => handleTouchEnd(msg)}
           onTouchMove={handleTouchMove}
@@ -1802,7 +1982,7 @@ const ChatView = () => {
               {renderTide(msg)}
             </div>
             {renderReactions(msg.reactions, msg.id, isOwn)}
-            {!selectMode && activeMessageMenuId === msg.id && <div className="message-inline-menu-wrapper" onClick={(e) => e.stopPropagation()}>{renderInlineActions(msg)}</div>}
+            {!selectMode && !isDesktop && activeMessageMenuId === msg.id && <div className="message-inline-menu-wrapper" onClick={(e) => e.stopPropagation()}>{renderInlineActions(msg)}</div>}
           </div>
         </div>
       );
@@ -2162,15 +2342,6 @@ const ChatView = () => {
       },
     });
   };
-{isGroupChat && (
-  <button
-    className={`chat-header-mute-btn ${isMuted ? 'muted' : ''}`}
-    onClick={handleToggleMute}
-    title={isMuted ? 'Unmute' : 'Mute'}
-  >
-    <i className={`fas ${isMuted ? 'fa-bell-slash' : 'fa-bell'}`} />
-  </button>
-)}
 
   return (
     <>
@@ -2556,6 +2727,8 @@ const ChatView = () => {
         {showWallpaperPicker && (
           <WallpaperPicker current={wallpaperId} currentCustom={customWallpaper} onSelect={handleWallpaperSelect} onSelectCustom={handleCustomWallpaperSelect} onClose={() => setShowWallpaperPicker(false)} />
         )}
+
+        {renderContextMenu()}
 
         <ConfirmModal isOpen={confirmModal.isOpen} onClose={closeConfirmModal} onConfirm={confirmModal.onConfirm} title={confirmModal.title} message={confirmModal.message} confirmText={confirmModal.confirmText} cancelText={confirmModal.cancelText} />
         <Modal isOpen={fileSizeError} onClose={() => setFileSizeError(false)} title="File Too Large" message="The file you tried to upload exceeds the 20 MB limit. Please choose a smaller file." type="error" />
