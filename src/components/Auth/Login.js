@@ -4,22 +4,15 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
 import {
   signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  sendPasswordResetEmail,
-  signOut,
+  OAuthProvider,
+  signInWithPopup,
 } from 'firebase/auth';
 import { auth, db } from '../../services/firebase';
 import { ref, set, get, push, serverTimestamp } from 'firebase/database';
-import emailjs from '@emailjs/browser';
 import { friendlyAuthError } from '../../utils/authErrors';
 import { isNativeApp, signInWithGoogle } from '../../utils/nativeAuth';
 
-// 🔴 REPLACE THESE WITH YOUR EMAILJS CREDENTIALS
-const EMAILJS_SERVICE_ID = 'service_xxxxxxx';
-const EMAILJS_TEMPLATE_ID = 'template_xxxxxxx';
-const EMAILJS_PUBLIC_KEY = 'YOUR_PUBLIC_KEY';
-
-// 🔴 REPLACE WITH YOUR UID
+// 🔴 REPLACE WITH YOUR UID (This is who new users will auto-follow)
 const MALIK_UID = 'TMMx1najgiM1WUhSpc74DoIS83E3';
 
 const DEMO_EMAIL = 'demo@echoty.xyz';
@@ -27,49 +20,6 @@ const DEMO_PASSWORD = 'demodemo';
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 const SUPPORT_UID = '5cSp1OLz30d8dghM3wvXUCdMl2QK2';
 const DEMO_AVATAR = 'https://echoty.xyz/videos/library/Animation Smile GIF.gif';
-
-const withAuthRetry = async (fn, tries = 3) => {
-  let last;
-  for (let i = 0; i < tries; i += 1) {
-    try {
-      return await fn();
-    } catch (err) {
-      last = err;
-      const code = err?.code || '';
-      const retryable =
-        code === 'auth/network-request-failed' || code === 'auth/too-many-requests';
-      if (!retryable || i === tries - 1) throw err;
-      await new Promise((r) => setTimeout(r, 600 * (i + 1)));
-    }
-  }
-  throw last;
-};
-
-const getPasswordStrength = (pw) => {
-  if (!pw) return { score: 0, label: '', color: 'transparent' };
-  let score = 0;
-  if (pw.length >= 8) score += 1;
-  if (pw.length >= 12) score += 1;
-  if (/[A-Z]/.test(pw)) score += 1;
-  if (/[0-9]/.test(pw)) score += 1;
-  if (/[^A-Za-z0-9]/.test(pw)) score += 1;
-  if (score <= 1) return { score, label: 'Weak', color: '#EF4444' };
-  if (score <= 3) return { score, label: 'Fair', color: '#F59E0B' };
-  if (score <= 4) return { score, label: 'Good', color: '#10B981' };
-  return { score, label: 'Strong', color: '#10B981' };
-};
-
-const deriveNameFromEmail = (rawEmail) => {
-  const email = String(rawEmail || '').trim().toLowerCase();
-  if (!email) return '';
-  const local = email.split('@')[0];
-  const cleaned = local.replace(/[._-]+/g, ' ').trim();
-  if (!cleaned) return '';
-  return cleaned
-    .split(/\s+/)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
-};
 
 const MiniChatPreview = () => (
   <div className="echo-preview">
@@ -145,54 +95,21 @@ const Login = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [otpInput, setOtpInput] = useState('');
-  const [generatedOtp, setGeneratedOtp] = useState('');
-  
-  const [showPassword, setShowPassword] = useState(false);
-  const [isSignup, setIsSignup] = useState(false);
-  const [step, setStep] = useState('email'); // 'email' | 'otp'
-  
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
   const [isRedirecting, setIsRedirecting] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
-  const [termsAccepted, setTermsAccepted] = useState(false);
   const [errorShake, setErrorShake] = useState(false);
-  const [focusedField, setFocusedField] = useState(null);
 
   const native = isNativeApp();
-  const passwordStrength = getPasswordStrength(password);
   const errorRef = useRef(null);
 
-  // ─── Auto-Switch Logic ───
   useEffect(() => {
     const isAddingAccount = sessionStorage.getItem('echo_adding_account') === 'true';
     const switchTargetEmail = sessionStorage.getItem('echo_switch_target_email');
 
     if (user && !isAddingAccount && !switchTargetEmail) {
       navigate('/');
-    }
-
-    if (switchTargetEmail) {
-      setEmail(switchTargetEmail);
-      const savedPasswords = JSON.parse(localStorage.getItem('echo_saved_passwords') || '{}');
-      const savedPass = savedPasswords[switchTargetEmail];
-
-      if (savedPass) {
-        setPassword(savedPass);
-        setInfo(`Switching to ${switchTargetEmail}...`);
-        signOut(auth).then(() => {
-          setTimeout(() => {
-            const form = document.querySelector('.echo-auth-form');
-            if (form) form.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-          }, 300);
-        }).catch((err) => console.error("Sign out error:", err));
-      } else {
-        setInfo(`Please enter the password for ${switchTargetEmail}.`);
-      }
     }
   }, [user, navigate]);
 
@@ -210,14 +127,70 @@ const Login = () => {
     }
   }, [error]);
 
+  // ─── Shared Setup for New Users ───
+  const setupNewUser = async (newUid, name, avatar, email) => {
+    const profileRef = ref(db, `profiles/${newUid}`);
+    const profileSnap = await get(profileRef);
+
+    if (!profileSnap.exists()) {
+      // 1. Create Profile
+      await set(profileRef, {
+        name: name || 'User',
+        username: '',
+        avatar: avatar || '',
+        bio: '',
+        mood: 'happy',
+        email: email || '',
+        isVerified: true,
+        createdAt: serverTimestamp(),
+        lastActive: serverTimestamp(),
+      });
+
+      // 2. Auto-Follow & Welcome Message
+      await set(ref(db, `echowing/${newUid}/${MALIK_UID}`), true);
+      await set(ref(db, `echowers/${MALIK_UID}/${newUid}`), true);
+
+      const chatId = [newUid, MALIK_UID].sort().join('_');
+      const messagesRef = ref(db, `chats/${chatId}/messages`);
+      const welcomeMsgRef = push(messagesRef);
+      await set(welcomeMsgRef, {
+        senderId: MALIK_UID,
+        receiverId: newUid,
+        type: 'text',
+        text: 'Hey! Welcome to ECHO 👋. Feel free to explore and message me if you need anything!',
+        timestamp: serverTimestamp(),
+        isRead: false,
+      });
+
+      await set(ref(db, `userChats/${newUid}/${MALIK_UID}`), {
+        id: MALIK_UID,
+        partnerName: 'Malik',
+        lastMessage: 'Hey! Welcome to ECHO 👋...',
+        lastSenderId: MALIK_UID,
+        lastUpdated: Date.now(),
+        unreadCount: 1,
+      });
+    }
+  };
+
+  // ─── Google Login ───
   const handleGoogle = async () => {
     if (busy || isRedirecting) return;
     setError('');
     setInfo('');
     setBusy(true);
     if (native) setIsRedirecting(true);
+    
     try {
-      await signInWithGoogle();
+      const result = await signInWithGoogle();
+      if (result && result.user) {
+        await setupNewUser(
+          result.user.uid, 
+          result.user.displayName, 
+          result.user.photoURL, 
+          result.user.email
+        );
+      }
       sessionStorage.removeItem('echo_adding_account');
       sessionStorage.removeItem('echo_switch_target_email');
     } catch (err) {
@@ -237,128 +210,37 @@ const Login = () => {
     setIsRedirecting(false);
   };
 
-  const generateCode = () => Math.floor(100000 + Math.random() * 900000).toString();
-
-  // ─── Step 1: Send the Email ───
-  const handleSendOtp = async (e) => {
-    e.preventDefault();
+  // ─── Apple Login ───
+  const handleApple = async () => {
+    if (busy || isRedirecting) return;
     setError('');
     setInfo('');
-
-    if (isSignup) {
-      if (password.length < 8) return setError('Password must be at least 8 characters.');
-      if (!termsAccepted) return setError('Please accept the Terms of Service and Privacy Policy.');
-    }
-
     setBusy(true);
-    const code = generateCode();
-
-    try {
-      await emailjs.send(
-        EMAILJS_SERVICE_ID,
-        EMAILJS_TEMPLATE_ID,
-        { to_email: email.trim(), otp: code },
-        EMAILJS_PUBLIC_KEY
-      );
-
-      setGeneratedOtp(code);
-      setStep('otp');
-      setInfo(`A 6-digit code has been sent to ${email}. Check your inbox.`);
-    } catch (err) {
-      console.error('EmailJS Error:', err);
-      setError('Failed to send email. Please try again.');
-    }
-    setBusy(false);
-  };
-
-  // ─── Step 2: Verify Code & Create Account ───
-  const handleVerifyAndAuth = async (e) => {
-    e.preventDefault();
-    setError('');
-    if (otpInput !== generatedOtp) return setError('Incorrect code. Please try again.');
     
-    setBusy(true);
     try {
-      if (isSignup) {
-        // Create Account
-        const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-        const newUid = cred.user.uid;
-        const derivedName = deriveNameFromEmail(email);
+      const provider = new OAuthProvider('apple.com');
+      provider.addScope('email');
+      provider.addScope('name');
 
-        // Setup Profile
-        await set(ref(db, `profiles/${newUid}`), {
-          name: derivedName,
-          username: '',
-          avatar: '',
-          bio: '',
-          mood: 'neutral',
-          email: email.trim().toLowerCase(),
-          isVerified: true,
-          createdAt: serverTimestamp(),
-          lastActive: serverTimestamp(),
-        });
-
-        // Auto-Follow & Welcome Message
-        await set(ref(db, `echowing/${newUid}/${MALIK_UID}`), true);
-        await set(ref(db, `echowers/${MALIK_UID}/${newUid}`), true);
-
-        const chatId = [newUid, MALIK_UID].sort().join('_');
-        const messagesRef = ref(db, `chats/${chatId}/messages`);
-        const welcomeMsgRef = push(messagesRef);
-        await set(welcomeMsgRef, {
-          senderId: MALIK_UID,
-          receiverId: newUid,
-          type: 'text',
-          text: 'Hey! Welcome to ECHO 👋. Feel free to explore and message me if you need anything!',
-          timestamp: serverTimestamp(),
-          isRead: false,
-        });
-
-        await set(ref(db, `userChats/${newUid}/${MALIK_UID}`), {
-          id: MALIK_UID,
-          partnerName: 'Malik',
-          lastMessage: 'Hey! Welcome to ECHO 👋...',
-          lastSenderId: MALIK_UID,
-          lastUpdated: Date.now(),
-          unreadCount: 1,
-        });
-
-      } else {
-        // Login
-        const cred = await withAuthRetry(() => signInWithEmailAndPassword(auth, email.trim(), password));
-        const savedPasswords = JSON.parse(localStorage.getItem('echo_saved_passwords') || '{}');
-        savedPasswords[email.trim().toLowerCase()] = password;
-        localStorage.setItem('echo_saved_passwords', JSON.stringify(savedPasswords));
+      const result = await signInWithPopup(auth, provider);
+      
+      if (result && result.user) {
+        const name = result.user.displayName || 'Apple User';
+        const email = result.user.email || '';
+        const avatar = result.user.photoURL || '';
+        
+        await setupNewUser(result.user.uid, name, avatar, email);
       }
-
+      
       sessionStorage.removeItem('echo_adding_account');
       sessionStorage.removeItem('echo_switch_target_email');
-
     } catch (err) {
       setError(friendlyAuthError(err));
     }
     setBusy(false);
   };
 
-  const handleForgotPassword = async () => {
-    setError('');
-    setInfo('');
-    if (!email.trim()) {
-      setError('Type your email above, then tap Forgot password.');
-      return;
-    }
-    setBusy(true);
-    try {
-      await sendPasswordResetEmail(auth, email.trim(), {
-        url: window.location.origin + '/',
-      });
-      setInfo('Password reset email sent. Open it and choose a new password, then log in.');
-    } catch (err) {
-      setError(friendlyAuthError(err));
-    }
-    setBusy(false);
-  };
-
+  // ─── Demo Login ───
   const handleDemoLogin = async () => {
     setError('');
     setInfo('');
@@ -402,18 +284,11 @@ const Login = () => {
       sessionStorage.removeItem('echo_switch_target_email');
     } catch (err) {
       setError(friendlyAuthError(err));
-      setBusy(false);
     }
+    setBusy(false);
   };
 
   const locked = busy || isRedirecting;
-
-  const switchMode = (signup) => {
-    setError('');
-    setInfo('');
-    setIsSignup(signup);
-    setStep('email');
-  };
 
   return (
     <div className="echo-auth-root">
@@ -474,13 +349,9 @@ const Login = () => {
           </div>
 
           <div className="echo-auth-header">
-            <h2 className="echo-auth-title">
-              {step === 'otp' ? 'Verify Your Email' : (isSignup ? 'Create your account' : 'Welcome back')}
-            </h2>
+            <h2 className="echo-auth-title">Join the conversation</h2>
             <p className="echo-auth-sub">
-              {step === 'otp' 
-                ? `We sent a code to ${email}` 
-                : (isSignup ? 'Join ECHO in less than a minute.' : 'Sign in to continue your conversations.')}
+              Sign in securely with your Google or Apple account.
             </p>
           </div>
 
@@ -497,151 +368,42 @@ const Login = () => {
             </div>
           )}
 
-          {step === 'email' ? (
-            <>
-              <button type="button" onClick={handleGoogle} disabled={locked} className="echo-auth-btn echo-auth-btn-google">
-                <svg viewBox="0 0 48 48" width="18" height="18">
-                  <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
-                  <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
-                  <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
-                  <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
-                </svg>
-                <span>Continue with Google</span>
-              </button>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '24px' }}>
+            <button
+              type="button"
+              onClick={handleGoogle}
+              disabled={locked}
+              className="echo-auth-btn echo-auth-btn-google"
+              style={{ padding: '16px', fontSize: '16px' }}
+            >
+              <svg viewBox="0 0 48 48" width="22" height="22">
+                <path fill="#FFC107" d="M43.611,20.083H42V20H24v8h11.303c-1.649,4.657-6.08,8-11.303,8c-6.627,0-12-5.373-12-12c0-6.627,5.373-12,12-12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C12.955,4,4,12.955,4,24c0,11.045,8.955,20,20,20c11.045,0,20-8.955,20-20C44,22.659,43.862,21.35,43.611,20.083z" />
+                <path fill="#FF3D00" d="M6.306,14.691l6.571,4.819C14.655,15.108,18.961,12,24,12c3.059,0,5.842,1.154,7.961,3.039l5.657-5.657C34.046,6.053,29.268,4,24,4C16.318,4,9.656,8.337,6.306,14.691z" />
+                <path fill="#4CAF50" d="M24,44c5.166,0,9.86-1.977,13.409-5.192l-6.19-5.238C29.211,35.091,26.715,36,24,36c-5.202,0-9.619-3.317-11.283-7.946l-6.522,5.025C9.505,39.556,16.227,44,24,44z" />
+                <path fill="#1976D2" d="M43.611,20.083H42V20H24v8h11.303c-0.792,2.237-2.231,4.166-4.087,5.571l6.19,5.238C36.971,39.205,44,34,44,24C44,22.659,43.862,21.35,43.611,20.083z" />
+              </svg>
+              <span>Continue with Google</span>
+            </button>
 
-              <div className="echo-auth-divider"><span>or use email</span></div>
-
-              <form className="echo-auth-form" onSubmit={handleSendOtp} noValidate>
-                <div className="echo-auth-field">
-                  <label className="echo-auth-label">Email</label>
-                  <div className={`echo-auth-input-wrap ${focusedField === 'email' ? 'focused' : ''}`}>
-                    <input
-                      type="email"
-                      placeholder="you@gmail.com"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      onFocus={() => setFocusedField('email')}
-                      onBlur={() => setFocusedField(null)}
-                      disabled={locked}
-                      autoComplete="email"
-                      required
-                      className="echo-auth-input"
-                    />
-                  </div>
-                </div>
-
-                <div className="echo-auth-field">
-                  <div className="echo-auth-label-row">
-                    <label className="echo-auth-label">Password</label>
-                    {!isSignup && (
-                      <button type="button" disabled={busy} onClick={handleForgotPassword} className="echo-auth-link">Forgot?</button>
-                    )}
-                  </div>
-                  <div className={`echo-auth-input-wrap ${focusedField === 'password' ? 'focused' : ''}`}>
-                    <input
-                      type={showPassword ? 'text' : 'password'}
-                      placeholder={isSignup ? 'At least 8 characters' : '••••••••'}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      onFocus={() => setFocusedField('password')}
-                      onBlur={() => setFocusedField(null)}
-                      disabled={locked}
-                      autoComplete={isSignup ? 'new-password' : 'current-password'}
-                      required
-                      className="echo-auth-input"
-                    />
-                    <button type="button" tabIndex={-1} onClick={() => setShowPassword(!showPassword)} className="echo-auth-eye">
-                      {showPassword ? (
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                          <line x1="1" y1="1" x2="23" y2="23" />
-                        </svg>
-                      ) : (
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                          <circle cx="12" cy="12" r="3" />
-                        </svg>
-                      )}
-                    </button>
-                  </div>
-
-                  {isSignup && password && (
-                    <div className="echo-auth-strength">
-                      <div className="echo-auth-strength-bar">
-                        <div className="echo-auth-strength-fill" style={{ width: `${(passwordStrength.score / 5) * 100}%`, background: passwordStrength.color }} />
-                      </div>
-                      <span className="echo-auth-strength-label" style={{ color: passwordStrength.color }}>
-                        {passwordStrength.label}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {!isSignup ? (
-                  <label className="echo-auth-checkbox-row">
-                    <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
-                    <span className="echo-auth-checkbox-mark" />
-                    <span>Keep me signed in</span>
-                  </label>
-                ) : (
-                  <label className="echo-auth-checkbox-row">
-                    <input type="checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} />
-                    <span className="echo-auth-checkbox-mark" />
-                    <span>I agree to the <a href="/legal" target="_blank" rel="noopener noreferrer" className="echo-auth-link-inline">Terms</a> &amp; <a href="/legal" target="_blank" rel="noopener noreferrer" className="echo-auth-link-inline">Privacy Policy</a></span>
-                  </label>
-                )}
-
-                <button type="submit" disabled={locked} className="echo-auth-btn echo-auth-btn-primary">
-                  {busy ? (
-                    <>
-                      <span className="echo-auth-spinner" />
-                      <span>Sending code…</span>
-                    </>
-                  ) : (
-                    <span>Continue</span>
-                  )}
-                </button>
-              </form>
-
-              <div className="echo-auth-switch">
-                {isSignup ? (
-                  <>
-                    <span>Already have an account?</span>
-                    <button type="button" onClick={() => switchMode(false)} className="echo-auth-link">Sign in</button>
-                  </>
-                ) : (
-                  <>
-                    <span>New to ECHO?</span>
-                    <button type="button" onClick={() => switchMode(true)} className="echo-auth-link">Create account</button>
-                  </>
-                )}
-              </div>
-            </>
-          ) : (
-            <form className="echo-auth-form" onSubmit={handleVerifyAndAuth}>
-              <div className="echo-auth-field">
-                <label className="echo-auth-label">6-Digit Code</label>
-                <div className="echo-auth-input-wrap">
-                  <input
-                    type="text"
-                    placeholder="123456"
-                    value={otpInput}
-                    onChange={(e) => setOtpInput(e.target.value)}
-                    className="echo-auth-input"
-                    style={{ letterSpacing: '6px', textAlign: 'center', fontSize: '20px' }}
-                    maxLength={6}
-                    required
-                  />
-                </div>
-              </div>
-              <button type="submit" disabled={locked} className="echo-auth-btn echo-auth-btn-primary">
-                {busy ? 'Verifying...' : 'Verify & Enter'}
-              </button>
-              <button type="button" onClick={() => setStep('email')} className="echo-auth-btn echo-auth-btn-secondary" style={{ marginTop: '12px' }}>
-                Back to Email
-              </button>
-            </form>
-          )}
+            <button
+              type="button"
+              onClick={handleApple}
+              disabled={locked}
+              className="echo-auth-btn"
+              style={{ 
+                background: '#000', 
+                color: '#fff', 
+                border: '1px solid #333',
+                padding: '16px', 
+                fontSize: '16px' 
+              }}
+            >
+              <svg viewBox="0 0 24 24" width="22" height="22" fill="currentColor">
+                <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.59 9.05 7.31c1.35.07 2.29.74 3.08.8 1.18-.24 2.31-.93 3.57-.84 1.51.12 2.65.72 3.4 1.8-3.12 1.87-2.38 5.98.48 7.13-.57 1.5-1.31 2.99-2.54 4.09zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+              </svg>
+              <span>Continue with Apple</span>
+            </button>
+          </div>
 
           <div className="echo-auth-demo">
             <button type="button" onClick={handleDemoLogin} disabled={locked} className="echo-auth-btn echo-auth-btn-demo">
@@ -1222,18 +984,6 @@ const AUTH_STYLES = `
   }
   .echo-auth-spinner-lg { width: 42px; height: 42px; border-width: 3px; }
   @keyframes echoAuthSpin { to { transform: rotate(360deg); } }
-
-  .echo-auth-verify { text-align: center; padding: 8px 4px; }
-  .echo-auth-verify-icon {
-    display: grid; place-items: center;
-    width: 68px; height: 68px;
-    margin: 0 auto 20px;
-    border-radius: 50%;
-    background: rgba(108,60,225,0.12);
-    border: 1px solid rgba(108,60,225,0.35);
-    color: #A78BFA;
-  }
-  .echo-auth-verify .echo-auth-title { margin-top: 4px; }
 
   .echo-auth-footer {
     margin-top: 32px; font-size: 12px;
