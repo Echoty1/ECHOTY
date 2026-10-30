@@ -6,6 +6,7 @@
   padding-bottom: 100px;
   max-width: 600px;
   margin: 0 auto;
+  transition: box-shadow 0.3s ease, border-top 0.3s ease;
 }
 
 /* ─── HERO SECTION ─── */
@@ -29,23 +30,58 @@
   z-index: 0;
 }
 
-/* ─── PREMIUM BACKGROUNDS ─── */
-.premium-bg-default { background-color: var(--bg-card); }
-.premium-bg-aurora { background: linear-gradient(135deg, #a78bfa, #ec4899); }
-.premium-bg-matrix { 
-  background: #000; 
-  background-image: linear-gradient(rgba(0,255,0,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(0,255,0,0.1) 1px, transparent 1px); 
-  background-size: 20px 20px; 
-}
-.premium-bg-galaxy { background: radial-gradient(circle at top right, #2c1654, #000); }
-.premium-bg-gold { 
-  background: linear-gradient(135deg, #FFD700, #B8860B); 
-  animation: goldGlow 3s infinite alternate;
+/* ─── FIXED: Premium backgrounds skip blur so patterns are visible ─── */
+.snap-hero-bg[class*="premium-bg-"] {
+  filter: brightness(0.85);
+  transform: scale(1);
 }
 
-@keyframes goldGlow {
-  from { filter: blur(20px) brightness(0.6); }
-  to { filter: blur(20px) brightness(0.9); }
+/* ─── PREMIUM BACKGROUNDS ─── */
+.premium-bg-default { background-color: var(--bg-card); }
+
+.premium-bg-aurora {
+  background: linear-gradient(135deg, #a78bfa, #ec4899, #3b82f6);
+  background-size: 300% 300%;
+  animation: auroraMove 10s ease infinite;
+}
+
+.premium-bg-matrix {
+  background: #000;
+  background-image:
+    linear-gradient(rgba(0, 255, 0, 0.15) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 0, 0.15) 1px, transparent 1px);
+  background-size: 20px 20px;
+  animation: matrixScroll 5s linear infinite;
+}
+
+.premium-bg-galaxy {
+  background: radial-gradient(circle at top right, #2c1654, #000, #001f3f);
+  animation: galaxyPulse 6s ease-in-out infinite;
+}
+
+.premium-bg-gold {
+  background: linear-gradient(135deg, #ffd700, #b8860b, #ffd700);
+  background-size: 300% 300%;
+  animation: goldShimmer 4s ease infinite;
+}
+
+@keyframes auroraMove {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes matrixScroll {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 20px; }
+}
+@keyframes galaxyPulse {
+  0%, 100% { filter: brightness(0.8); }
+  50%      { filter: brightness(1.2); }
+}
+@keyframes goldShimmer {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
 
 .snap-hero-overlay {
@@ -71,14 +107,50 @@
 }
 
 /* ─── PREMIUM RINGS / AURAS ─── */
-.plus-avatar-ring.gold { border: 3px solid #FFD700; box-shadow: 0 0 20px rgba(255, 215, 0, 0.5); }
-.plus-avatar-ring.neon { border: 3px solid #00F0FF; box-shadow: 0 0 20px rgba(0, 240, 255, 0.5); }
-.plus-avatar-ring.fire { border: 3px solid #FF4500; box-shadow: 0 0 20px rgba(255, 69, 0, 0.5); }
-.plus-avatar-ring.rainbow { 
-  border: 3px solid; 
-  border-image: linear-gradient(to right, red, orange, yellow, green, blue, indigo, violet) 1; 
-  border-radius: 50%;
-  box-shadow: 0 0 20px rgba(255, 255, 255, 0.3);
+.plus-avatar-ring.gold {
+  border: 3px solid #FFD700;
+  box-shadow: 0 0 20px rgba(255, 215, 0, 0.6);
+  animation: ringPulseGold 2s infinite alternate;
+}
+.plus-avatar-ring.neon {
+  border: 3px solid #00F0FF;
+  box-shadow: 0 0 20px rgba(0, 240, 255, 0.6);
+  animation: ringPulseNeon 2s infinite alternate;
+}
+.plus-avatar-ring.fire {
+  border: 3px solid #FF4500;
+  box-shadow: 0 0 20px rgba(255, 69, 0, 0.6);
+  animation: ringPulseFire 1.5s infinite alternate;
+}
+
+/* ─── FIXED: rainbow ring was a square (border-image kills border-radius). Now a rotating conic gradient. ─── */
+.plus-avatar-ring.rainbow {
+  border: 3px solid transparent;
+  background: conic-gradient(
+    from 0deg,
+    #ff0000, #ff7f00, #ffff00, #00ff00,
+    #0000ff, #4b0082, #9400d3, #ff0000
+  );
+  background-clip: padding-box;
+  box-shadow: 0 0 20px rgba(255, 255, 255, 0.4);
+  animation: rotateRing 4s linear infinite;
+}
+
+@keyframes ringPulseGold {
+  from { box-shadow: 0 0 10px rgba(255, 215, 0, 0.4); }
+  to   { box-shadow: 0 0 30px rgba(255, 215, 0, 0.9); }
+}
+@keyframes ringPulseNeon {
+  from { box-shadow: 0 0 10px rgba(0, 240, 255, 0.4); }
+  to   { box-shadow: 0 0 30px rgba(0, 240, 255, 0.9); }
+}
+@keyframes ringPulseFire {
+  from { box-shadow: 0 0 10px rgba(255, 69, 0, 0.4); }
+  to   { box-shadow: 0 0 30px rgba(255, 69, 0, 0.9); }
+}
+@keyframes rotateRing {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
 }
 
 .snap-avatar {
@@ -132,6 +204,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
+  transition: color 0.3s ease, text-shadow 0.3s ease;
 }
 
 .snap-username-wrap {
@@ -635,7 +708,15 @@
 .pill-btn { background: var(--bg-input); color: var(--text-secondary); border: 1px solid var(--border-color); padding: 8px 16px; border-radius: 20px; cursor: pointer; transition: 0.2s; font-weight: 600; font-size: 13px; font-family: inherit; }
 .pill-btn.active { background: #FFD700; color: #000; border-color: #FFD700; font-weight: bold; box-shadow: 0 0 10px rgba(255,215,0,0.3); }
 
-@keyframes rotateRing { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+
+/* ─── FIXED: ECHO Plus accent colors (match Profile.js + UserProfile.jsx class names) ─── */
+.profile-page.profile-accent-gold   { border-top: 3px solid #FFD700; box-shadow: inset 0 0 100px rgba(255, 215, 0, 0.10); }
+.profile-page.profile-accent-neon   { border-top: 3px solid #00F0FF; box-shadow: inset 0 0 100px rgba(0, 240, 255, 0.10); }
+.profile-page.profile-accent-purple { border-top: 3px solid #6C3CE1; box-shadow: inset 0 0 100px rgba(108, 60, 225, 0.15); }
+
+.snap-name.snap-name-accent-gold   { color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
+.snap-name.snap-name-accent-neon   { color: #00F0FF; text-shadow: 0 0 10px rgba(0, 240, 255, 0.5); }
+.snap-name.snap-name-accent-purple { color: #6C3CE1; text-shadow: 0 0 10px rgba(108, 60, 225, 0.5); }
