@@ -52,8 +52,9 @@ import { isBlocked as checkIsBlocked, unblockUser } from '../../../services/bloc
 import { sendPushToUser } from '../../../services/fcmService';
 import { hapticSend, hapticLight } from '../../../utils/haptics';
 import { isGroupChatId, chatIdToGroupId } from '../../../utils/groupId';
-import { useSubscription } from '../../../contexts/SubscriptionContext'; 
-import PlusBadge from '../../common/PlusBadge'; 
+// ★ ECHO Plus
+import { useSubscription } from '../../../contexts/SubscriptionContext';
+import PlusBadge from '../../common/PlusBadge';
 import './ChatView.css';
 
 import MentionAutocomplete from '../../common/MentionAutocomplete';
@@ -204,20 +205,34 @@ const MessageReceipt = ({ msg, isMe }) => {
 
 const useIsDesktopPointer = () => {
   const [isDesktop, setIsDesktop] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.matchMedia?.('(hover: hover) and (pointer: fine)').matches ?? false;
+    if (typeof window === 'undefined' || !window.matchMedia) return false;
+    const fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    const wide = window.matchMedia('(min-width: 821px)').matches;
+    return Boolean(fine || wide);
   });
+
   useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return;
-    const mq = window.matchMedia('(hover: hover) and (pointer: fine)');
-    const onChange = (e) => setIsDesktop(e.matches);
-    if (mq.addEventListener) mq.addEventListener('change', onChange);
-    else mq.addListener(onChange);
+    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
+
+    const mqFine = window.matchMedia('(hover: hover) and (pointer: fine)');
+    const mqWide = window.matchMedia('(min-width: 821px)');
+    const onChange = () => setIsDesktop(Boolean(mqFine.matches || mqWide.matches));
+
+    if (mqFine.addEventListener) mqFine.addEventListener('change', onChange);
+    else mqFine.addListener(onChange);
+
+    if (mqWide.addEventListener) mqWide.addEventListener('change', onChange);
+    else mqWide.addListener(onChange);
+
     return () => {
-      if (mq.removeEventListener) mq.removeEventListener('change', onChange);
-      else mq.removeListener(onChange);
+      if (mqFine.removeEventListener) mqFine.removeEventListener('change', onChange);
+      else mqFine.removeListener(onChange);
+
+      if (mqWide.removeEventListener) mqWide.removeEventListener('change', onChange);
+      else mqWide.removeListener(onChange);
     };
   }, []);
+
   return isDesktop;
 };
 
@@ -227,7 +242,7 @@ const ChatView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { getProfile, fetchProfile } = useProfile();
-  const { chatStyle: myChatStyle, isEchoPlus } = useSubscription(); 
+  const { chatStyle: myChatStyle, isEchoPlus } = useSubscription();
 
   useVisualViewport();
   const isDesktop = useIsDesktopPointer();
@@ -322,10 +337,7 @@ const ChatView = () => {
     isOpen: false, title: '', message: '', confirmText: 'Confirm', cancelText: 'Cancel', onConfirm: null,
   });
 
-  // ═══════════════════════════════════════════════════════════
-  // ★ NEW: Right-click context menu state (Telegram-style on PC)
-  // ═══════════════════════════════════════════════════════════
-  const [contextMenu, setContextMenu] = useState(null); // { x, y, msgId } | null
+  const [contextMenu, setContextMenu] = useState(null); 
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -508,9 +520,6 @@ const ChatView = () => {
     return () => { mounted = false; };
   }, [user?.uid, userId, isGroupChat]);
 
-  // ═══════════════════════════════════════════════════════════
-  // ★ NEW: Close context menu on outside click / Escape / scroll
-  // ═══════════════════════════════════════════════════════════
   useEffect(() => {
     if (!contextMenu) return;
     const close = () => setContextMenu(null);
@@ -719,7 +728,7 @@ const ChatView = () => {
   };
   const flashArrived = (id) => {
     if (!id) return;
-    justArrivedIdsRef.current.add(id);
+       justArrivedIdsRef.current.add(id);
     setTimeout(() => { justArrivedIdsRef.current.delete(id); setMessages((prev) => [...prev]); }, 700);
   };
   const triggerSendRipple = () => {
@@ -1012,7 +1021,7 @@ const ChatView = () => {
     }
     clearMessageCache(cId);
   };
-  
+
   const sendMediaMessage = async (retryMessageId = null) => {
     let file = selectedFile;
     let caption = captionText.trim();
@@ -1435,22 +1444,22 @@ const ChatView = () => {
     setPressedMsgId(null);
   };
 
-  // ═══════════════════════════════════════════════════════════
-  // ★ NEW: Right-click handler (Telegram-style)
-  // ═══════════════════════════════════════════════════════════
+  // ★ ECHO Plus — right-click handler (Telegram-style, desktop only)
   const handleMessageContextMenu = useCallback((e, msgId) => {
-    if (selectMode) return;
-    if (!isDesktop) return; // mobile uses long-press / tap flow
+    if (selectMode || !isDesktop) return;
     e.preventDefault();
     e.stopPropagation();
     setActiveMessageMenuId(null);
 
-    const menuWidth = 210;
-    const menuHeight = 320; // rough upper bound; browser will clamp visually
+    const menuWidth = 230;
+    const menuHeight = 390;
     const padding = 8;
-    const x = Math.min(e.clientX, window.innerWidth - menuWidth - padding);
-    const y = Math.min(e.clientY, window.innerHeight - menuHeight - padding);
-    setContextMenu({ x: Math.max(padding, x), y: Math.max(padding, y), msgId });
+    const maxX = Math.max(padding, window.innerWidth - menuWidth - padding);
+    const maxY = Math.max(padding, window.innerHeight - menuHeight - padding);
+    const x = Math.min(Math.max(padding, e.clientX), maxX);
+    const y = Math.min(Math.max(padding, e.clientY), maxY);
+
+    setContextMenu({ x, y, msgId });
   }, [selectMode, isDesktop]);
 
   const closeContextMenu = useCallback(() => setContextMenu(null), []);
@@ -1801,92 +1810,165 @@ const ChatView = () => {
 
     return (
       <div
-        className="chat-context-menu"
-        style={{ top: contextMenu.y, left: contextMenu.x }}
+        className="chat-context-menu echo-liquid-context-menu"
+        style={{
+          position: 'fixed',
+          top: contextMenu.y,
+          left: contextMenu.x,
+          zIndex: 99999,
+          width: 244,
+          maxWidth: 'calc(100vw - 20px)',
+          maxHeight: 'min(430px, calc(100vh - 20px))',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          padding: 7,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 3,
+          boxSizing: 'border-box',
+          color: '#eef2ff',
+          background: 'linear-gradient(145deg, rgba(35,34,49,.97), rgba(19,20,31,.97))',
+          border: '1px solid rgba(255,255,255,.14)',
+          borderRadius: 17,
+          boxShadow: '0 18px 55px rgba(0,0,0,.52), inset 0 1px 0 rgba(255,255,255,.08)',
+          backdropFilter: 'blur(24px) saturate(165%)',
+          WebkitBackdropFilter: 'blur(24px) saturate(165%)',
+        }}
         onClick={(e) => e.stopPropagation()}
         onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
         role="menu"
+        aria-label="Message actions"
       >
-        <button
-          type="button"
-          className="ctx-item"
-          onClick={() => handleReact(msg.id)}
-          role="menuitem"
-        >
+        <style>{`
+          .echo-liquid-context-menu {
+            box-sizing: border-box !important;
+            width: 244px !important;
+            max-width: calc(100vw - 20px) !important;
+            max-height: min(430px, calc(100vh - 20px)) !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
+            padding: 7px !important;
+            display: flex !important;
+            flex-direction: column !important;
+            gap: 3px !important;
+            color: #eef2ff !important;
+            background: linear-gradient(145deg, rgba(35, 34, 49, .96), rgba(19, 20, 31, .96)) !important;
+            border: 1px solid rgba(255,255,255,.13) !important;
+            border-radius: 17px !important;
+            box-shadow: 0 18px 55px rgba(0,0,0,.48), 0 3px 12px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.08) !important;
+            -webkit-backdrop-filter: blur(24px) saturate(165%) !important;
+            backdrop-filter: blur(24px) saturate(165%) !important;
+            animation: echoLiquidMenuIn .16s cubic-bezier(.2,.8,.2,1) both !important;
+            transform-origin: top left !important;
+            scrollbar-width: thin !important;
+            scrollbar-color: rgba(160,150,210,.35) transparent !important;
+          }
+          .echo-liquid-context-menu .ctx-item {
+            appearance: none !important;
+            -webkit-appearance: none !important;
+            box-sizing: border-box !important;
+            width: 100% !important;
+            min-height: 39px !important;
+            flex: 0 0 auto !important;
+            display: flex !important;
+            align-items: center !important;
+            gap: 12px !important;
+            padding: 0 12px !important;
+            margin: 0 !important;
+            border: 1px solid transparent !important;
+            border-radius: 11px !important;
+            background: transparent !important;
+            color: #e9eaf4 !important;
+            font: 500 13.5px/1.2 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
+            text-align: left !important;
+            white-space: nowrap !important;
+            cursor: pointer !important;
+            transition: background .16s ease, color .16s ease, border-color .16s ease, transform .16s ease !important;
+          }
+          .echo-liquid-context-menu .ctx-item svg {
+            width: 17px !important;
+            height: 17px !important;
+            flex: 0 0 17px !important;
+            color: #aeb4cc !important;
+            opacity: .94 !important;
+          }
+          .echo-liquid-context-menu .ctx-item:hover,
+          .echo-liquid-context-menu .ctx-item:focus-visible {
+            outline: none !important;
+            color: #fff !important;
+            background: linear-gradient(100deg, rgba(103,82,220,.28), rgba(67,128,230,.16)) !important;
+            border-color: rgba(153,139,255,.19) !important;
+          }
+          .echo-liquid-context-menu .ctx-item:hover svg,
+          .echo-liquid-context-menu .ctx-item:focus-visible svg {
+            color: #b9aaff !important;
+          }
+          .echo-liquid-context-menu .ctx-item:active {
+            transform: scale(.985) !important;
+            background: rgba(120,103,235,.28) !important;
+          }
+          .echo-liquid-context-menu .ctx-item.danger {
+            color: #ff858f !important;
+          }
+          .echo-liquid-context-menu .ctx-item.danger svg {
+            color: #ff858f !important;
+          }
+          .echo-liquid-context-menu .ctx-item.danger:hover {
+            color: #fff !important;
+            background: rgba(235,75,94,.17) !important;
+            border-color: rgba(255,105,120,.18) !important;
+          }
+          .echo-liquid-context-menu .ctx-divider {
+            height: 1px !important;
+            min-height: 1px !important;
+            margin: 4px 7px !important;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,.16), transparent) !important;
+          }
+          @keyframes echoLiquidMenuIn {
+            from { opacity: 0; transform: translateY(5px) scale(.97); }
+            to { opacity: 1; transform: translateY(0) scale(1); }
+          }
+          @media (prefers-reduced-motion: reduce) {
+            .echo-liquid-context-menu { animation: none !important; }
+            .echo-liquid-context-menu .ctx-item { transition: none !important; }
+          }
+        `}</style>
+        <button type="button" className="ctx-item" onClick={() => handleReact(msg.id)} role="menuitem">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" fill="currentColor" /></svg>
           React
         </button>
-        <button
-          type="button"
-          className="ctx-item"
-          onClick={() => handleReply(msg)}
-          role="menuitem"
-        >
+        <button type="button" className="ctx-item" onClick={() => handleReply(msg)} role="menuitem">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" fill="currentColor" /></svg>
           Reply
         </button>
         {textToCopy && (
-          <button
-            type="button"
-            className="ctx-item"
-            onClick={() => handleCopy(msg)}
-            role="menuitem"
-          >
+          <button type="button" className="ctx-item" onClick={() => handleCopy(msg)} role="menuitem">
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" fill="currentColor" /></svg>
             Copy
           </button>
         )}
         {allowEdit && (
-          <button
-            type="button"
-            className="ctx-item"
-            onClick={() => handleEditMessage(msg)}
-            role="menuitem"
-          >
+          <button type="button" className="ctx-item" onClick={() => handleEditMessage(msg)} role="menuitem">
             <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor" /></svg>
             Edit
           </button>
         )}
-        <button
-          type="button"
-          className="ctx-item"
-          onClick={() => handlePinMessage(msg)}
-          role="menuitem"
-        >
+        <button type="button" className="ctx-item" onClick={() => handlePinMessage(msg)} role="menuitem">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" fill="currentColor" /></svg>
           {isPinned ? 'Unpin' : 'Pin'}
         </button>
-        <button
-          type="button"
-          className="ctx-item"
-          onClick={() => saveMessageToArchive(msg)}
-          role="menuitem"
-        >
+        <button type="button" className="ctx-item" onClick={() => saveMessageToArchive(msg)} role="menuitem">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" fill="currentColor" /></svg>
           {bookmarkedIds[msg.id] ? 'Remove from archive' : 'Save to archive'}
         </button>
-        <button
-          type="button"
-          className="ctx-item"
-          onClick={() => {
-            setSelectMode(true);
-            setSelectedIds(new Set([msg.id]));
-            setContextMenu(null);
-          }}
-          role="menuitem"
-        >
+        <button type="button" className="ctx-item" onClick={() => { setSelectMode(true); setSelectedIds(new Set([msg.id])); setContextMenu(null); }} role="menuitem">
           <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 5h2V3c-1.1 0-2 .9-2 2zm0 8h2v-2H3v2zm4 8h2v-2H7v2zM3 9h2V7H3v2zm10-6h-2v2h2V3zm6 0v2h2c0-1.1-.9-2-2-2zM5 21v-2H3c0 1.1.9 2 2 2zm-2-4h2v-2H3v2zM9 3H7v2h2V3zm2 18h2v-2h-2v2zm8-8h2v-2h-2v2zm0 8c1.1 0 2-.9 2-2h-2v2zm0-12h2V7h-2v2zm0 8h2v-2h-2v2zm-4 4h2v-2h-2v2zm0-16h2V3h-2v2zM7 17h10V7H7v10zm2-8h6v6H9V9z" fill="currentColor" /></svg>
           Select
         </button>
         {allowDelete && (
           <>
             <div className="ctx-divider" />
-            <button
-              type="button"
-              className="ctx-item danger"
-              onClick={() => handleDeleteMessage(msg.id)}
-              role="menuitem"
-            >
+            <button type="button" className="ctx-item danger" onClick={() => handleDeleteMessage(msg.id)} role="menuitem">
               <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor" /></svg>
               Delete
             </button>
@@ -1926,7 +2008,7 @@ const ChatView = () => {
 
     const showSenderName = isGroupChat && !isOwn && groupTop && !isSystem;
 
-    // Determine the style of the bubble based on WHO sent it
+    // ★ ECHO Plus — apply premium bubble style based on WHO sent it
     const senderIsPlus = msg.senderIsPlus || (isOwn && isEchoPlus);
     const appliedStyle = isOwn ? myChatStyle : (senderIsPlus ? msg.senderChatStyle : '');
 
@@ -1944,12 +2026,16 @@ const ChatView = () => {
               });
               return;
             }
-            if (isDesktop) return; // desktop uses right-click only
+            if (isDesktop) return; // Desktop uses the native right-click context menu.
             setActiveMessageMenuId(activeMessageMenuId === msg.id ? null : msg.id);
           }}
           onContextMenu={(e) => handleMessageContextMenu(e, msg.id)}
-          onMouseEnter={() => { if (!selectMode && !isDesktop) setActiveMessageMenuId(msg.id); }}
-          onMouseLeave={() => { if (!isDesktop) setActiveMessageMenuId(null); }}
+          onMouseEnter={() => {
+            if (!selectMode && !isDesktop) setActiveMessageMenuId(msg.id);
+          }}
+          onMouseLeave={() => {
+            if (!isDesktop) setActiveMessageMenuId(null);
+          }}
           onTouchStart={(e) => handleTouchStart(msg, e)}
           onTouchEnd={() => handleTouchEnd(msg)}
           onTouchMove={handleTouchMove}
@@ -2305,8 +2391,7 @@ const ChatView = () => {
 
   const bulkCopy = async () => {
     const arr = [...selectedIds].map((id) => messages.find((m) => m.id === id)).filter(Boolean);
-    const text = arr.map((m) => (m.type === 'media' ? m.mediaUrl || m.caption || '' : m.text || '')).join('\n');
-    try { await navigator.clipboard.writeText(text); setToast({ message: `Copied ${arr.length} message${arr.length !== 1 ? 's' : ''}`, type: 'success' }); }
+    const text = arr.map((m) => (m.type === 'media' ? m.mediaUrl || m.caption || '' : m.text || '')).join('\n');    try { await navigator.clipboard.writeText(text); setToast({ message: `Copied ${arr.length} message${arr.length !== 1 ? 's' : ''}`, type: 'success' }); }
     catch (_) { setToast({ message: 'Copy failed', type: 'error' }); }
     exitSelectMode();
   };
@@ -2491,8 +2576,7 @@ const ChatView = () => {
               groupedMessages.map((entry) => renderMessage(entry))
             )}
             {isAILoading && (<div className="message-bubble partner"><div className="typing-indicator"><span></span><span></span><span></span></div></div>)}
-            
-            {/* PREMIUM TYPING INDICATOR */}
+
             {partnerIsTyping && !isGroupChat && (
               <div className={`typing-indicator-container ${isEchoPlus ? 'premium-typing' : ''}`}>
                 {isEchoPlus ? (
@@ -2728,6 +2812,7 @@ const ChatView = () => {
           <WallpaperPicker current={wallpaperId} currentCustom={customWallpaper} onSelect={handleWallpaperSelect} onSelectCustom={handleCustomWallpaperSelect} onClose={() => setShowWallpaperPicker(false)} />
         )}
 
+        {/* ★ ECHO Plus — right-click context menu (Telegram-style) */}
         {renderContextMenu()}
 
         <ConfirmModal isOpen={confirmModal.isOpen} onClose={closeConfirmModal} onConfirm={confirmModal.onConfirm} title={confirmModal.title} message={confirmModal.message} confirmText={confirmModal.confirmText} cancelText={confirmModal.cancelText} />
