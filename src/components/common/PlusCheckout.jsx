@@ -1,55 +1,237 @@
-// src/components/common/PlusCheckout.jsx
+// src/components/pages/Profile/PlusCheckout.jsx
 import React from 'react';
-import { useAuth } from '../../hooks/useAuth';
 
 const PlusCheckout = ({ isOpen, onClose }) => {
-  const { user } = useAuth();
-
   if (!isOpen) return null;
 
-  // 🔴 YOUR SELAR LINK IS HERE
-  const SELAR_BASE_URL = "https://selar.com/i73a04310z"; 
-  
-  // We pass the user's UID and Email to Selar so we know exactly who paid
-  const checkoutUrl = `${SELAR_BASE_URL}?ref=${user?.uid}&email=${encodeURIComponent(user?.email || '')}`;
-
-  const handlePay = () => {
-    // Redirect to Selar checkout
-    window.location.href = checkoutUrl;
+  const handleUpgrade = () => {
+    // Redirect to Stripe Checkout (implement backend endpoint)
+    window.location.href = '/api/create-checkout-session';
   };
 
   return (
-    <div className="checkout-overlay" onClick={onClose} style={{ zIndex: 999999, position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      <div className="checkout-modal" onClick={e => e.stopPropagation()} style={{ padding: '30px', textAlign: 'center', maxWidth: '400px', width: '90%', background: '#1a1a1a', borderRadius: '16px', border: '1px solid #333' }}>
-        
-        <div style={{ fontSize: '40px', marginBottom: '10px' }}>⚡</div>
-        <h2 style={{ fontSize: '24px', marginBottom: '10px', color: '#fff' }}>Upgrade to <span style={{ color: '#FFD700' }}>ECHO Plus</span></h2>
-        <p style={{ color: '#aaa', marginBottom: '30px', fontSize: '14px' }}>Unlock premium rings, chat styles, and exclusive features.</p>
-        
-        <div style={{ background: 'rgba(255,255,255,0.05)', padding: '20px', borderRadius: '12px', marginBottom: '24px' }}>
-          {/* CHANGED PRICE TO 1,000 NAIRA */}
-          <h3 style={{ fontSize: '32px', margin: '0', color: '#fff' }}>₦1,000<span style={{ fontSize: '16px', color: '#aaa' }}> / month</span></h3>
-          <p style={{ color: '#aaa', fontSize: '12px', marginTop: '5px' }}>(Approx. $5 USD)</p>
-        </div>
+    <div className="ios-sheet-overlay" onClick={onClose}>
+      <div
+        className="ios-sheet-content"
+        onClick={(e) => e.stopPropagation()}
+        style={{ maxHeight: '90vh', overflowY: 'auto' }}
+      >
+        <div className="ios-sheet-handle" />
 
-        <button 
-          onClick={handlePay} 
-          style={{ 
-            width: '100%', padding: '16px', borderRadius: '12px', border: 'none', 
-            background: '#FFD700', color: '#000', fontSize: '16px', fontWeight: 'bold', 
-            cursor: 'pointer', marginBottom: '16px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '8px'
+        <h2
+          style={{
+            color: '#FFD700',
+            textAlign: 'center',
+            margin: '0 0 8px 0',
+            fontSize: '24px',
           }}
         >
-          Pay with Card or Transfer <i className="fas fa-arrow-right"></i>
-        </button>
-        
-        <p style={{ fontSize: '12px', color: '#666' }}>Secured by Selar. Cancel anytime.</p>
-        
-        <button 
-          onClick={onClose} 
-          style={{ marginTop: '20px', background: 'transparent', border: 'none', color: '#ff6b6b', cursor: 'pointer', fontSize: '14px' }}
+          ⚡ Upgrade to ECHO Plus
+        </h2>
+        <p
+          style={{
+            color: 'var(--text-secondary)',
+            textAlign: 'center',
+            margin: '0 0 20px 0',
+            fontSize: '14px',
+          }}
         >
-          Cancel
+          Unleash your true potential and stand out.
+        </p>
+
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '12px',
+            marginBottom: '24px',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              background: 'var(--bg-input)',
+              padding: '12px 16px',
+              borderRadius: '16px',
+            }}
+          >
+            <span style={{ fontSize: '24px' }}>👀</span>
+            <div>
+              <strong
+                style={{
+                  display: 'block',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px',
+                }}
+              >
+                See Who Viewed You
+              </strong>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Know exactly who is checking you out.
+              </span>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              background: 'var(--bg-input)',
+              padding: '12px 16px',
+              borderRadius: '16px',
+            }}
+          >
+            <span style={{ fontSize: '24px' }}>👻</span>
+            <div>
+              <strong
+                style={{
+                  display: 'block',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px',
+                }}
+              >
+                Ghost Mode
+              </strong>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                View profiles without leaving a trace.
+              </span>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              background: 'var(--bg-input)',
+              padding: '12px 16px',
+              borderRadius: '16px',
+            }}
+          >
+            <span style={{ fontSize: '24px' }}>💬</span>
+            <div>
+              <strong
+                style={{
+                  display: 'block',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px',
+                }}
+              >
+                Premium Chat Bubbles
+              </strong>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Holographic, Neon, and Gold styles.
+              </span>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              background: 'var(--bg-input)',
+              padding: '12px 16px',
+              borderRadius: '16px',
+            }}
+          >
+            <span style={{ fontSize: '24px' }}>🪙</span>
+            <div>
+              <strong
+                style={{
+                  display: 'block',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px',
+                }}
+              >
+                500 Free Coins Monthly
+              </strong>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Spend them on gifts, skins, and auras.
+              </span>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              background: 'var(--bg-input)',
+              padding: '12px 16px',
+              borderRadius: '16px',
+            }}
+          >
+            <span style={{ fontSize: '24px' }}>🎨</span>
+            <div>
+              <strong
+                style={{
+                  display: 'block',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px',
+                }}
+              >
+                Exclusive ECHOMOJI Skins
+              </strong>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Unlock premium looks for your avatar.
+              </span>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '16px',
+              background: 'var(--bg-input)',
+              padding: '12px 16px',
+              borderRadius: '16px',
+            }}
+          >
+            <span style={{ fontSize: '24px' }}>✨</span>
+            <div>
+              <strong
+                style={{
+                  display: 'block',
+                  color: 'var(--text-primary)',
+                  fontSize: '14px',
+                }}
+              >
+                Golden Rings & Auras
+              </strong>
+              <span style={{ fontSize: '12px', color: 'var(--text-muted)' }}>
+                Flex your status on your profile.
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div
+          style={{
+            textAlign: 'center',
+            color: '#fff',
+            fontSize: '20px',
+            fontWeight: 700,
+            marginBottom: '16px',
+          }}
+        >
+          $4.99 / month
+        </div>
+
+        <button className="btn-upgrade-plus" onClick={handleUpgrade} style={{ width: '100%' }}>
+          Subscribe Now
+        </button>
+
+        <button
+          className="ios-sheet-cancel"
+          onClick={onClose}
+          style={{ marginTop: '12px', width: '100%' }}
+        >
+          Not Now
         </button>
       </div>
     </div>
