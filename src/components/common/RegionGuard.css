@@ -1,0 +1,77 @@
+/* src/components/common/RegionGuard.css */
+.region-loading-screen {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-primary, #0a0a0a);
+  color: var(--text-primary, #fff);
+  gap: 16px;
+}
+
+.region-spinner {
+  width: 42px;
+  height: 42px;
+  border: 3px solid rgba(255, 255, 255, 0.15);
+  border-top-color: #6C3CE1;
+  border-radius: 50%;
+  animation: regionSpin 0.8s linear infinite;
+}
+
+@keyframes regionSpin {
+  to { transform: rotate(360deg); }
+}
+
+.region-banned-screen {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  color: #fff;
+  padding: 24px;
+  text-align: center;
+}
+
+.banned-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+}
+
+.region-banned-screen h1 {
+  font-size: 28px;
+  font-weight: 800;
+  margin-bottom: 12px;
+  color: #EF4444;
+}
+
+.region-banned-screen p {
+  font-size: 16px;
+  color: #A0A0B0;
+  margin-bottom: 8px;
+  max-width: 400px;
+  line-height: 1.5;
+}
+
+.banned-subtext {
+  font-size: 13px !important;
+  color: #666 !important;
+  margin-top: 16px !important;
+}
+
+.banned-btn {
+  margin-top: 24px;
+  padding: 12px 24px;
+  background: #fff;
+  color: #000;
+  text-decoration: none;
+  border-radius: 99px;
+  font-weight: 700;
+  transition: transform 0.2s;
+}
+
+.banned-btn:hover {
+  transform: scale(1.05);
+}
