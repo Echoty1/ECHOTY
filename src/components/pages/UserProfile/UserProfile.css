@@ -1,305 +1,526 @@
-/* src/components/pages/UserProfile/UserProfile.css */
+// src/App.js
+import React, { useEffect, useState } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { ref, get } from 'firebase/database';
+import { isAndroid, isIOS } from 'react-device-detect';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ProfileProvider, useProfile } from './contexts/ProfileContext';
+import { PresenceProvider } from './contexts/PresenceContext';
+import { CacheProvider } from './contexts/CacheContext';
+import { CallProvider } from './contexts/CallContext';
+import { ThemeProvider } from './contexts/ThemeContext';
 
-/* ─── PROFILE OVERLAY (SNAPCHAT SLIDE UP) ─── */
-.profile-overlay-mode {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: var(--bg-primary);
-  overflow-y: auto;
-  animation: snapSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+// ─── ECHO Plus Imports ────────────────────────────────
+import { SubscriptionProvider } from './contexts/SubscriptionContext';
+import RedeemPass from './components/pages/Redeem/RedeemPass'; 
+
+// ─── Geo-Block & 404 Imports ───
+import CountryBlockScreen from './components/Auth/CountryBlockScreen';
+import NotFound from './components/pages/NotFound/NotFound';
+
+import Home from './components/pages/Home/Home';
+import Chats from './components/pages/Chats/Chats';
+import ChatView from './components/pages/Chat/ChatView';
+import EchoAI from './components/pages/Chat/EchoAI';
+import GroupInfoPage from './components/pages/Chat/GroupInfo';
+import GroupInvitePage from './components/pages/Chat/GroupInvitePage';
+import Profile from './components/pages/Profile/Profile';
+import UserProfile from './components/pages/UserProfile/UserProfile';
+import Other from './components/pages/Other/Other';
+import Bookmarks from './components/pages/Other/Bookmarks';
+import DesktopInstallPrompt from './components/common/DesktopInstallPrompt';
+import Settings from './components/pages/Other/Settings';
+import About from './components/pages/Other/About';
+import CoinPurchase from './components/pages/CoinPurchase/CoinPurchase';
+import Login from './components/Auth/Login';
+import Navbar from './components/Layout/Navbar';
+import BottomNav from './components/Layout/BottomNav';
+import NetworkStatus from './components/common/NetworkStatus';
+import ScrollRestoration from './components/common/ScrollRestoration';
+import UpdatePopup from './components/UpdatePopup/UpdatePopup';
+import InstallPopup from './components/InstallPopup/InstallPopup';
+import Communities from './components/pages/Communities/Communities';
+import InstallBanner from './components/common/InstallBanner';
+import { cleanAllCachedMessages } from './services/messageCleanup';
+import { getChatList } from './services/indexedDBService';
+import { db } from './services/firebase';
+import Shop from './components/pages/Shop/Shop';
+import AdminPanel from './components/pages/Admin/AdminPanel';
+import BanScreen from './components/BanScreen/BanScreen';
+import { APP_VERSION } from './version';
+import Legal from './components/pages/Other/Legal';
+import EchoDropPage from './components/pages/EchoDrop/EchoDropPage';
+import MessageNotifier from './components/common/MessageNotifier';
+import { useGlobalMessageListener } from './hooks/useGlobalMessageListener';
+import { unlockAudio } from './services/notificationService';
+
+// ─── Onboarding + App Badge ────────────────────────────────
+import OnboardingFlow from './components/Onboarding/OnboardingFlow';
+import { useOnboarding } from './hooks/useOnboarding';
+import { useAppBadge } from './hooks/useAppBadge';
+
+// ─── Spotlight & Instants ──────────────────────────────────
+import SpotlightFeed from './pages/Spotlight/SpotlightFeed';
+import SpotlightUpload from './pages/Spotlight/SpotlightUpload';
+import SpotlightHistory from './pages/Spotlight/SpotlightHistory';
+import './pages/Spotlight/Spotlight.css';
+
+import InstantsIntro from './components/Stories/InstantsIntro'; 
+import StoryViewer from './components/Stories/StoryViewer';
+import StoryRecorder from './components/Stories/StoryRecorder'; 
+
+const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
+
+// ─── BAN SYSTEM (Edit this to add/remove blocks) ───
+const BLOCKED_COUNTRIES = ['IL']; 
+const BLOCKED_REGIONS = [
+  { country: 'NG', state: ' ondo' } // Ban Lagos, Nigeria
+];
+
+const schemaData = {
+  '@context': 'https://schema.org',
+  '@type': 'Organization',
+  name: 'Echo',
+  alternateName: 'Echoty',
+  url: 'https://echoty.xyz',
+  logo: 'https://echoty.xyz/logo.png',
+  description: 'Discover, connect, and echo with animated avatars.',
+  founder: {
+    '@type': 'Person',
+    name: 'Lawal Abdulmalik',
+    jobTitle: 'Founder & CEO',
+  },
+  ceo: {
+    '@type': 'Person',
+    name: 'Lawal Abdulmalik',
+  },
+  sameAs: ['https://echoty.xyz'],
+};
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    const container = document.getElementById('main-content');
+    if (container) container.scrollTop = 0;
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
 }
 
-@keyframes snapSlideUp {
-  from { transform: translateY(100%); opacity: 0.5; }
-  to { transform: translateY(0); opacity: 1; }
+function LoadingScreen() {
+  const isMobile = window.innerWidth <= 480;
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: 'var(--bg-primary)', position: 'relative', overflow: 'hidden', transition: 'background 0.3s ease' }}>
+      <div style={{ position: 'absolute', width: '240px', height: '240px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.3, animation: 'echoRingPulse 2.5s ease-out infinite' }} />
+      <div style={{ position: 'absolute', width: '320px', height: '320px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.2, animation: 'echoRingPulse 3s ease-out infinite 0.5s' }} />
+      <div style={{ position: 'absolute', width: '400px', height: '400px', borderRadius: '50%', border: '2px solid var(--border-color)', opacity: 0.1, animation: 'echoRingPulse 3.5s ease-out infinite 1s' }} />
+      <div style={{ width: '100px', height: '100px', marginBottom: '20px', animation: 'echoFloat 2.5s ease-in-out infinite', position: 'relative', zIndex: 2 }}>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" style={{ width: '100%', height: '100%' }}>
+          <rect width="512" height="512" rx="96" fill="var(--bg-secondary)" />
+          <path d="M 120 120 H 280 V 176 H 180 V 228 H 260 V 284 H 180 V 336 H 280 V 392 H 120 Z" fill="#6C3CE1" />
+          <path d="M 320 160 A 140 140 0 0 1 320 352" stroke="#6C3CE1" strokeWidth="36" fill="none" strokeLinecap="round" />
+          <path d="M 370 200 A 90 90 0 0 1 370 312" stroke="#EC4899" strokeWidth="32" strokeOpacity="0.6" fill="none" strokeLinecap="round" />
+        </svg>
+      </div>
+      <div style={{ fontSize: isMobile ? '32px' : '40px', fontWeight: 900, background: 'linear-gradient(135deg, #6C3CE1, #EC4899)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', letterSpacing: isMobile ? '4px' : '8px', zIndex: 2, fontFamily: 'Inter, sans-serif', whiteSpace: 'nowrap' }}>
+        ECHO
+      </div>
+      <div style={{ color: 'var(--text-muted)', fontSize: isMobile ? '10px' : '13px', letterSpacing: isMobile ? '4px' : '8px', textTransform: 'uppercase', marginTop: '2px', zIndex: 2, whiteSpace: 'nowrap' }}>
+        Discover. Connect. Echo.
+      </div>
+      <div style={{ width: '200px', height: '3px', background: 'var(--bg-input)', borderRadius: '4px', marginTop: '30px', overflow: 'hidden', zIndex: 2 }}>
+        <div style={{ height: '100%', width: '200%', background: 'linear-gradient(90deg, #6C3CE1, #EC4899, #6C3CE1)', borderRadius: '4px', animation: 'shimmer 1.8s ease-in-out infinite' }} />
+      </div>
+    </div>
+  );
 }
 
-.profile-overlay-mode .snap-hero {
-  border-radius: 24px 24px 0 0;
-  margin-top: 12px; /* Gives that floating card feel */
-  background: var(--bg-primary);
+function AppContent() {
+  const { pathname } = useLocation();
+  const { user, loading, banInfo } = useAuth();
+  const { fetchProfile } = useProfile();
+
+  useGlobalMessageListener();
+  const { done: onboardingDone, completeOnboarding } = useOnboarding();
+  useAppBadge();
+
+  const [minTimePassed, setMinTimePassed] = useState(false);
+  const [showUpdatePopup, setShowUpdatePopup] = useState(false);
+  const [showInstallPopup, setShowInstallPopup] = useState(false);
+  const [playStoreUrl, setPlayStoreUrl] = useState('');
+  const [appVersion] = useState(process.env.REACT_APP_VERSION || '1.0');
+  const showLoading = loading || !minTimePassed;
+  const isSpotlightRoute = pathname.startsWith('/spotlight');
+  
+  // ─── GEO-BLOCK STATE ───
+  const [geoBlocked, setGeoBlocked] = useState(false);
+  const [isGeoChecking, setIsGeoChecking] = useState(true);
+  const [blockReason, setBlockReason] = useState('');
+  const [blockedCountryName, setBlockedCountryName] = useState('');
+
+  // ─── GEO-CHECK EFFECT (Direct Code Bans) ───
+  useEffect(() => {
+    const checkRegion = async () => {
+      try {
+        // 1. Get Location Data
+        let locationData;
+        try {
+          const res = await fetch('https://ipwho.is/');
+          locationData = await res.json();
+          if (!locationData.success) throw new Error('ipwho failed');
+        } catch {
+          const fallbackRes = await fetch('https://ipapi.co/json/');
+          locationData = await fallbackRes.json();
+        }
+
+        const countryCode = (locationData.country_code || '').toUpperCase();
+        const regionName = locationData.region || '';
+        const countryName = locationData.country || countryCode;
+
+        if (!countryCode) throw new Error('No country detected');
+
+        // 2. Check if the country is in the blocked list
+        if (BLOCKED_COUNTRIES.includes(countryCode)) {
+          setBlockReason(`ECHO is currently unavailable in ${countryName}.`);
+          setBlockedCountryName(countryName);
+          setGeoBlocked(true);
+          return;
+        }
+
+        // 3. Check if the specific state is in the blocked regions list
+        const isStateBlocked = BLOCKED_REGIONS.some(
+          (region) => region.country === countryCode && region.state.toLowerCase() === regionName.toLowerCase()
+        );
+
+        if (isStateBlocked) {
+          setBlockReason(`ECHO is currently unavailable in ${regionName}, ${countryName}.`);
+          setBlockedCountryName(`${regionName}, ${countryName}`);
+          setGeoBlocked(true);
+        }
+
+      } catch (err) {
+        console.error('Geo-check failed:', err);
+      } finally {
+        setIsGeoChecking(false);
+      }
+    };
+    checkRegion();
+  }, []);
+
+  const showHappr =
+    Boolean(user) && !showLoading && !banInfo?.isBanned &&
+    (pathname === '/' || pathname === '/chats' || pathname === '/communities' || pathname === '/shop' || pathname === '/other' || pathname === '/echodrop');
+
+  const [showInstantsIntro, setShowInstantsIntro] = useState(false);
+  const [pendingAction, setPendingAction] = useState(null); 
+  const [pendingStoryViewer, setPendingStoryViewer] = useState(null);
+  const [showRecorder, setShowRecorder] = useState(false);
+  
+  const handleOpenStory = (stories, userObj) => {
+    setShowInstantsIntro(true);
+    setPendingAction('view');
+    setPendingStoryViewer({ stories, userObj });
+  };
+
+  const handleOpenRecorder = () => {
+    setShowInstantsIntro(true);
+    setPendingAction('record');
+  };
+
+  const handleIntroStart = () => {
+    setShowInstantsIntro(false);
+    if (pendingAction === 'record') {
+      setShowRecorder(true);
+    }
+    setPendingAction(null);
+  };
+
+  useEffect(() => {
+    const prime = () => unlockAudio();
+    window.addEventListener('touchstart', prime, { once: true, passive: true });
+    window.addEventListener('touchend', prime, { once: true, passive: true });
+    window.addEventListener('pointerdown', prime, { once: true });
+    window.addEventListener('click', prime, { once: true });
+    window.addEventListener('keydown', prime, { once: true });
+    return () => {
+      window.removeEventListener('touchstart', prime);
+      window.removeEventListener('touchend', prime);
+      window.removeEventListener('pointerdown', prime);
+      window.removeEventListener('click', prime);
+      window.removeEventListener('keydown', prime);
+    };
+  }, []);
+
+  useEffect(() => {
+    const src = 'https://myhappr.com/widget.js';
+    if (document.querySelector(`script[src="${src}"]`)) return undefined;
+    const script = document.createElement('script');
+    script.src = src;
+    script.async = true;
+    script.setAttribute('data-username', 'echoty');
+    script.setAttribute('data-color', '#9D5EFF');
+    script.setAttribute('data-button-color', '#9D5EFF');
+    script.setAttribute('data-text-color', '#FFFFFF');
+    script.setAttribute('data-radius', '8px');
+    script.setAttribute('data-text', 'Support ECHO');
+    script.setAttribute('data-title', 'Keep the Echo Alive');
+    script.setAttribute('data-theme', 'light');
+    script.setAttribute('data-card-bg', '#FFFFFF');
+    script.setAttribute('data-card-text', '#09090b');
+    document.body.appendChild(script);
+    if (!document.getElementById('echo-happr-style')) {
+      const css = document.createElement('style');
+      css.id = 'echo-happr-style';
+      css.textContent =
+        'body.echo-support-visible [class*="myhappr"],body.echo-support-visible [id*="myhappr"],body.echo-support-visible iframe[src*="myhappr"]{bottom:96px!important;z-index:80!important;}body:not(.echo-support-visible) [class*="myhappr"],body:not(.echo-support-visible) [id*="myhappr"],body:not(.echo-support-visible) iframe[src*="myhappr"]{display:none!important;}';
+      document.head.appendChild(css);
+    }
+    return undefined;
+  }, []);
+
+  useEffect(() => {
+    document.body.classList.toggle('echo-support-visible', showHappr);
+    return () => document.body.classList.remove('echo-support-visible');
+  }, [showHappr]);
+
+  useEffect(() => {
+    const key = 'echo_v';
+    const saved = localStorage.getItem(key);
+    const current = String(APP_VERSION);
+    if (saved && saved !== current) {
+      localStorage.setItem(key, current);
+      window.location.reload();
+    } else if (!saved) {
+      localStorage.setItem(key, current);
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMinTimePassed(true), 2000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const cleanLocalStorage = () => {
+    try {
+      const keys = Object.keys(localStorage);
+      const toRemove = keys.filter((key) => (
+        key.startsWith('echo_cache_') ||
+        key.startsWith('echo_small_') ||
+        key.startsWith('echo_cache_v2_') ||
+        key.startsWith('echo_small_v2_') ||
+        key.startsWith('echocache_v2_')
+      )).filter((key) => {
+        const essential = [
+          'echo_has_recovered_', 'echo_app_version', 'echo_changelog_version',
+          'echo_install_popup_dismissed_until', 'echo_update_shown', 'firebase:host',
+          'seen_instants_intro'
+        ];
+        return !essential.some((e) => key.startsWith(e));
+      });
+      toRemove.forEach((key) => localStorage.removeItem(key));
+    } catch (_) {}
+  };
+
+  useEffect(() => {
+    if (user) cleanLocalStorage();
+  }, [user]);
+
+  useEffect(() => {
+    const fetchConfig = async () => {
+      try {
+        const snapshot = await get(ref(db, 'appConfig'));
+        if (snapshot.exists()) {
+          const data = snapshot.val();
+          if (data.version?.playStoreUrl) setPlayStoreUrl(data.version.playStoreUrl);
+        }
+      } catch (_) {}
+    };
+    fetchConfig();
+  }, []);
+
+  useEffect(() => {
+    if (!isAndroid && !isIOS) return;
+    if (!playStoreUrl || !minTimePassed) return;
+    const dismissedUntil = localStorage.getItem('install_popup_dismissed_until');
+    if (dismissedUntil && Date.now() < parseInt(dismissedUntil, 10)) return;
+    if (sessionStorage.getItem('install_popup_shown')) return;
+    setShowInstallPopup(true);
+    sessionStorage.setItem('install_popup_shown', 'true');
+  }, [playStoreUrl, minTimePassed]);
+
+  const handleInstallPopupClose = () => {
+    const until = Date.now() + 5 * 24 * 60 * 60 * 1000;
+    localStorage.setItem('install_popup_dismissed_until', String(until));
+    setShowInstallPopup(false);
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    if (!isAndroid && !isIOS) return;
+    const checkForUpdate = async () => {
+      try {
+        const snapshot = await get(ref(db, 'appConfig/version'));
+        if (!snapshot.exists()) return;
+        const data = snapshot.val();
+        let latestVersion = data?.latest ?? '1.0';
+        if (typeof latestVersion === 'number') latestVersion = String(latestVersion);
+        if (typeof latestVersion !== 'string') return;
+        const currentVersion = typeof appVersion === 'string' ? appVersion : '1.0';
+        const currentParts = currentVersion.split('.').map(Number);
+        const latestParts = latestVersion.split('.').map(Number);
+        let needsUpdate = false;
+        for (let i = 0; i < Math.max(currentParts.length, latestParts.length); i += 1) {
+          const c = currentParts[i] || 0;
+          const l = latestParts[i] || 0;
+          if (l > c) { needsUpdate = true; break; }
+          if (l < c) break;
+        }
+        if (needsUpdate) {
+          const lastShown = localStorage.getItem('echo_update_shown');
+          if (lastShown !== latestVersion) {
+            setShowUpdatePopup(true);
+            localStorage.setItem('echo_update_shown', latestVersion);
+          }
+        }
+      } catch (_) {}
+    };
+    checkForUpdate();
+  }, [user, appVersion]);
+
+  useEffect(() => {
+    if (user?.uid) {
+      fetchProfile(user.uid);
+      const cleanup = async () => {
+        try {
+          const chatList = await getChatList(user.uid);
+          if (chatList && chatList.length > 0) {
+            await cleanAllCachedMessages(user.uid, chatList);
+          }
+        } catch (_) {}
+      };
+      cleanup();
+    }
+  }, [user?.uid, fetchProfile]);
+
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then((registration) => {
+        registration.update();
+      }).catch(() => {});
+    }
+  }, []);
+
+  // ─── BLOCK LOGIC ───
+  if (isGeoChecking) {
+    return <LoadingScreen />;
+  }
+  
+  if (geoBlocked) {
+    return <CountryBlockScreen countryName={blockedCountryName} countryCode="" customMessage={blockReason} />;
+  }
+
+  if (!showLoading && user && banInfo?.isBanned) return <BanScreen />;
+  if (showLoading) return <LoadingScreen />;
+  if (!user) return <Login />;
+  
+  if (!onboardingDone) return <OnboardingFlow onComplete={completeOnboarding} />;
+
+  return (
+    <>
+      {!isSpotlightRoute && <Navbar />}
+      <MessageNotifier />
+      <NetworkStatus />
+      <DesktopInstallPrompt />
+      <ScrollToTop />
+      <div
+        id="main-content"
+        style={{
+          paddingTop: isSpotlightRoute ? 0 : '60px',
+          paddingBottom: isSpotlightRoute ? 0 : '72px',
+          height: '100vh',
+          overflowY: 'auto',
+          overflowX: 'hidden',
+          background: 'var(--bg-primary)',
+          maxWidth: isSpotlightRoute ? '100%' : '1400px',
+          margin: '0 auto',
+          width: '100%',
+        }}
+      >
+        <Routes>
+          <Route path="/" element={<Home onOpenRecorder={handleOpenRecorder} onOpenStory={handleOpenStory} />} />
+          <Route path="/chats" element={<Chats />} />
+          <Route path="/chat/echo_ai_assistant" element={<EchoAI />} />
+          <Route path="/chat/:userId" element={<ChatView />} />
+          <Route path="/group/:chatId/info" element={<GroupInfoPage />} />
+          <Route path="/join/:code" element={<GroupInvitePage />} />
+          <Route path="/profile" element={<Profile />} />
+          <Route path="/user/:uid" element={<UserProfile />} />
+          <Route path="/other" element={<Other />} />
+          <Route path="/settings" element={<Settings />} />
+          <Route path="/bookmarks" element={<Bookmarks />} />
+          <Route path="/coins" element={<CoinPurchase />} />
+          <Route path="/about" element={<About />} />
+          <Route path="/control" element={<AdminPanel />} />
+          <Route path="/shop" element={<Shop />} />
+          <Route path="/legal" element={<Legal />} />
+          <Route path="/communities" element={<Communities />} />
+          <Route path="/echodrop" element={<EchoDropPage />} />
+          <Route path="/redeem" element={<RedeemPass />} />
+
+          <Route path="/spotlight" element={<SpotlightFeed />} />
+          <Route path="/spotlight/upload" element={<SpotlightUpload />} />
+          <Route path="/spotlight/history" element={<SpotlightHistory />} />
+
+          <Route path="*" element={<NotFound />} />
+        </Routes>
+      </div>
+      <BottomNav />
+      
+      {showInstantsIntro && <InstantsIntro onStart={handleIntroStart} />}
+      {pendingStoryViewer && !showInstantsIntro && (
+        <StoryViewer 
+          stories={pendingStoryViewer.stories} 
+          ownerName={pendingStoryViewer.userObj?.name}
+          ownerAvatar={pendingStoryViewer.userObj?.avatar}
+          viewerId={user?.uid}
+          onClose={() => setPendingStoryViewer(null)}
+          onFinished={() => { setPendingStoryViewer(null); }}
+        />
+      )}
+      {showRecorder && <StoryRecorder userId={user?.uid} onClose={() => setShowRecorder(false)} />}
+
+      {showUpdatePopup && <UpdatePopup currentVersion={appVersion} onClose={() => setShowUpdatePopup(false)} />}
+      {showInstallPopup && <InstallPopup playStoreUrl={playStoreUrl} onClose={handleInstallPopupClose} />}
+      <InstallBanner playStoreUrl={playStoreUrl} />
+    </>
+  );
 }
 
-/* ─── MAIN LAYOUT ─── */
-.snap-profile {
-  background: var(--bg-primary);
-  min-height: 100vh;
-  padding-bottom: 100px;
-  max-width: 600px;
-  margin: 0 auto;
+function App() {
+  return (
+    <BrowserRouter>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaData) }}
+      />
+      <ThemeProvider>
+        <AuthProvider>
+          <PresenceProvider>
+            <ProfileProvider>
+              <CacheProvider>
+                <CallProvider>
+                  <SubscriptionProvider>
+                    <ScrollRestoration />
+                    <AppContent />
+                  </SubscriptionProvider>
+                </CallProvider>
+              </CacheProvider>
+            </ProfileProvider>
+          </PresenceProvider>
+        </AuthProvider>
+      </ThemeProvider>
+    </BrowserRouter>
+  );
 }
 
-/* ─── HERO SECTION ─── */
-.snap-hero {
-  position: relative;
-  height: 220px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  align-items: center;
-  overflow: hidden;
-}
-
-/* PREMIUM GLASS BACK BUTTON */
-.snap-back-btn {
-  position: absolute;
-  top: 16px;
-  left: 16px;
-  width: 42px;
-  height: 42px;
-  border-radius: 50%;
-  background: rgba(0, 0, 0, 0.45);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #fff;
-  z-index: 10;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  font-size: 16px;
-  transition: transform 0.15s ease, background 0.15s ease;
-}
-
-.snap-back-btn:hover { background: rgba(0, 0, 0, 0.7); }
-.snap-back-btn:active { transform: scale(0.9); }
-
-.snap-hero-bg {
-  position: absolute;
-  inset: 0;
-  background-size: cover;
-  background-position: center;
-  filter: blur(25px) brightness(0.6);
-  transform: scale(1.15);
-  z-index: 0;
-}
-
-.snap-hero-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(to top, var(--bg-primary) 0%, rgba(10, 10, 15, 0.4) 50%, transparent 100%);
-  z-index: 1;
-}
-
-.snap-avatar-wrapper {
-  position: relative;
-  z-index: 2;
-  margin-bottom: 12px;
-}
-
-.snap-avatar-ring {
-  position: absolute;
-  inset: -4px;
-  border-radius: 50%;
-  background: conic-gradient(from 0deg, #6C3CE1, #EC4899, #6C3CE1);
-  animation: rotateRing 4s linear infinite;
-  z-index: 0;
-  box-shadow: 0 0 20px rgba(236, 72, 153, 0.4);
-}
-
-.snap-avatar {
-  width: 104px;
-  height: 104px;
-  border-radius: 50%;
-  overflow: hidden;
-  border: 4px solid var(--bg-primary);
-  position: relative;
-  z-index: 1;
-  background: var(--bg-input);
-}
-
-.snap-avatar img, .snap-avatar video {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.snap-info {
-  position: relative;
-  z-index: 2;
-  text-align: center;
-  padding: 0 16px;
-}
-
-.snap-name {
-  font-size: 24px;
-  font-weight: 800;
-  color: var(--text-primary);
-  margin: 0 0 4px;
-  letter-spacing: -0.4px;
-}
-
-.snap-username-wrap {
-  display: flex;
-  justify-content: center;
-  margin-bottom: 6px;
-}
-
-.snap-meta {
-  display: flex;
-  gap: 12px;
-  justify-content: center;
-  font-size: 12px;
-  color: var(--text-muted);
-  font-weight: 600;
-}
-.snap-meta i { font-size: 10px; margin-right: 4px; }
-
-/* ─── BIO & ACTIONS ─── */
-.snap-bio-section {
-  padding: 16px 20px 20px;
-  text-align: center;
-}
-
-.snap-bio {
-  font-size: 14.5px;
-  color: var(--text-secondary);
-  line-height: 1.5;
-  margin: 0 0 16px;
-}
-
-.snap-actions-row {
-  display: flex;
-  gap: 10px;
-  justify-content: center;
-}
-
-.snap-btn-primary, .snap-btn-secondary {
-  flex: 1;
-  max-width: 160px;
-  padding: 12px 16px;
-  border-radius: 999px;
-  font-size: 14px;
-  font-weight: 700;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  border: none;
-  font-family: inherit;
-  transition: transform 0.15s ease, box-shadow 0.2s ease;
-}
-.snap-btn-primary:active, .snap-btn-secondary:active { transform: scale(0.95); }
-
-.snap-btn-primary {
-  background: linear-gradient(135deg, #6C3CE1, #EC4899);
-  color: #fff;
-  box-shadow: 0 4px 14px rgba(108,60,225,0.35);
-}
-.snap-btn-primary:hover { box-shadow: 0 6px 20px rgba(108,60,225,0.5); }
-
-.snap-btn-secondary {
-  background: var(--bg-input);
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-}
-.snap-btn-secondary.following {
-  color: #10B981;
-  border-color: rgba(16,185,129,0.3);
-  background: rgba(16,185,129,0.1);
-}
-
-/* ─── STATS ROW ─── */
-.snap-stats-row {
-  display: flex;
-  border-top: 1px solid var(--border-color);
-  border-bottom: 1px solid var(--border-color);
-}
-
-.snap-stat-btn {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 16px 8px;
-  background: transparent;
-  border: none;
-  border-right: 1px solid var(--border-color);
-  cursor: pointer;
-  font-family: inherit;
-  transition: background 0.15s ease;
-}
-.snap-stat-btn:last-child { border-right: none; }
-
-.snap-stat-btn strong {
-  font-size: 17px;
-  font-weight: 800;
-  color: var(--text-primary);
-  display: block;
-  line-height: 1.1;
-}
-
-.snap-stat-btn span {
-  font-size: 11px;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  font-weight: 700;
-  margin-top: 4px;
-}
-
-/* ─── TABS ─── */
-.snap-tabs {
-  display: flex;
-  border-bottom: 1px solid var(--border-color);
-  margin-top: 4px;
-}
-
-.snap-tab {
-  flex: 1;
-  padding: 16px;
-  background: transparent;
-  border: none;
-  border-bottom: 2px solid transparent;
-  color: var(--text-muted);
-  font-size: 13px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.snap-tab i { margin-right: 6px; font-size: 12px; }
-.snap-tab.active {
-  color: var(--text-primary);
-  border-bottom-color: #6C3CE1;
-}
-
-.snap-content-area {
-  padding: 2px; /* Tighter grid padding */
-}
-
-/* ─── LOADING & ERROR ─── */
-.user-profile-page.loading,
-.user-profile-page.error {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  min-height: 100vh;
-  padding: 80px 24px;
-  gap: 16px;
-  color: var(--text-secondary);
-}
-
-.user-profile-page.is-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  background: var(--bg-primary);
-}
-
-.user-profile-spinner {
-  width: 36px;
-  height: 36px;
-  border-radius: 50%;
-  border: 3px solid var(--border-color);
-  border-top-color: #6C3CE1;
-  animation: user-profile-spin 0.9s linear infinite;
-}
-
-@keyframes user-profile-spin { to { transform: rotate(360deg); } }
-@keyframes rotateRing { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+export default App;
