@@ -71,8 +71,8 @@ import StoryRecorder from './components/Stories/StoryRecorder';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
-// 🔴 BLOCKED COUNTRIES (Nigeria is currently blocked)
-const BLOCKED_COUNTRIES = [ ]; 
+// 🔴 COUNTRIES BLOCKED: Nigeria (NG) and Israel (IL)
+const BLOCKED_COUNTRIES = [  'IL']; 
 
 const schemaData = {
   '@context': 'https://schema.org',
@@ -383,7 +383,7 @@ function AppContent() {
   }
   
   if (countryCode && BLOCKED_COUNTRIES.includes(countryCode)) {
-    return <CountryBlockScreen countryName={countryName} />;
+    return <CountryBlockScreen countryName={countryName} countryCode={countryCode} />;
   }
 
   if (!showLoading && user && banInfo?.isBanned) return <BanScreen />;
@@ -438,7 +438,6 @@ function AppContent() {
           <Route path="/spotlight/upload" element={<SpotlightUpload />} />
           <Route path="/spotlight/history" element={<SpotlightHistory />} />
 
-          {/* 🔴 CHANGED: Now shows the 404 page instead of redirecting to home */}
           <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
