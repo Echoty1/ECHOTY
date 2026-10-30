@@ -14,8 +14,9 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
 import RedeemPass from './components/pages/Redeem/RedeemPass'; 
 
-// ─── Country Block Component ───
+// ─── Geo-Block & 404 Imports ───
 import CountryBlockScreen from './components/Auth/CountryBlockScreen';
+import NotFound from './components/pages/NotFound/NotFound';
 
 import Home from './components/pages/Home/Home';
 import Chats from './components/pages/Chats/Chats';
@@ -70,8 +71,8 @@ import StoryRecorder from './components/Stories/StoryRecorder';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
-// 🔴 BLOCKED COUNTRIES (I added 'NG' for Nigeria)
-const BLOCKED_COUNTRIES = [ ]; 
+// 🔴 BLOCKED COUNTRIES (Nigeria is currently blocked)
+const BLOCKED_COUNTRIES = ['NG', 'KP', 'IR', 'SY']; 
 
 const schemaData = {
   '@context': 'https://schema.org',
@@ -157,7 +158,6 @@ function AppContent() {
   useEffect(() => {
     const checkCountry = async () => {
       try {
-        // ipwho.is is free and needs no API key
         const res = await fetch('https://ipwho.is/');
         const data = await res.json();
         
@@ -438,7 +438,8 @@ function AppContent() {
           <Route path="/spotlight/upload" element={<SpotlightUpload />} />
           <Route path="/spotlight/history" element={<SpotlightHistory />} />
 
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* 🔴 CHANGED: Now shows the 404 page instead of redirecting to home */}
+          <Route path="*" element={<NotFound />} />
         </Routes>
       </div>
       <BottomNav />
