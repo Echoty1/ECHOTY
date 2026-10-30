@@ -72,7 +72,7 @@ import StoryRecorder from './components/Stories/StoryRecorder';
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 // 🔴 BLOCKED COUNTRIES (Nigeria is currently blocked)
-const BLOCKED_COUNTRIES = ['NG', 'KP', 'IR', 'SY']; 
+const BLOCKED_COUNTRIES = [ ]; 
 
 const schemaData = {
   '@context': 'https://schema.org',
