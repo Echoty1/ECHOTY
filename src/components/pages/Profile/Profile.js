@@ -18,11 +18,11 @@ import AvatarCustomizer from './AvatarCustomizer';
 import UsernameEditor from './UsernameEditor';
 import UsernamePill from '../../common/UsernamePill';
 import ProfileSpotlightGrid from '../../../pages/Spotlight/ProfileSpotlightGrid';
-import AccountSwitcher from '../../common/AccountSwitcher'; 
-import { useSubscription } from '../../../contexts/SubscriptionContext'; 
-import PlusCustomizer from './PlusCustomizer'; 
+import AccountSwitcher from '../../common/AccountSwitcher';
+import { useSubscription } from '../../../contexts/SubscriptionContext';
+import PlusCustomizer from './PlusCustomizer';
 import PlusBadge from '../../common/PlusBadge';
-import PlusCheckout from '../../common/PlusCheckout'; 
+import PlusCheckout from '../../common/PlusCheckout'; // ★ Fixed import path back to common folder
 import './Profile.css';
 
 const getFastLocal = (key) => { try { const item = localStorage.getItem('echo_cache_' + key); return item ? JSON.parse(item) : null; } catch { return null; } };
@@ -38,10 +38,11 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
   const { user, getSavedAccounts, switchAccount, signOutAll } = useAuth();
-  const { isPlus: isEchoPlus, ringStyle, profileBg, badgeText, accentColor } = useSubscription(); 
-  
+  // ★ ECHO Plus subscription state
+  const { isPlus: isEchoPlus, ringStyle, profileBg, badgeText, accentColor, ghostMode } = useSubscription();
+
   const navigate = useNavigate();
-  const location = useLocation(); 
+  const location = useLocation();
   const { refreshProfile, profiles, fetchProfile } = useProfile();
 
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
@@ -61,12 +62,9 @@ const Profile = () => {
   const NAME_MAX_LENGTH = 25;
   const BIO_MAX_LENGTH = 130;
 
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [activeField, setActiveField] = useState(null);
   const nameInputRef = useRef(null);
   const bioInputRef = useRef(null);
 
-  const isDemoUser = user?.uid === DEMO_UID;
   const [showEchowersModal, setShowEchowersModal] = useState(false);
   const [followerUids, setFollowerUids] = useState([]);
   const [followingUids, setFollowingUids] = useState([]);
@@ -84,6 +82,7 @@ const Profile = () => {
   const [unlockedGifs, setUnlockedGifs] = useState([]);
   const imageInputRef = useRef(null);
 
+  // ── Stripe return handler ──────────────────────────────────────────────
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
     const paymentStatus = queryParams.get('payment');
@@ -91,16 +90,16 @@ const Profile = () => {
     if (paymentStatus === 'success' && user) {
       const autoUpgrade = async () => {
         try {
-          await update(ref(db, 'profiles/' + user.uid), { 
+          await update(ref(db, 'profiles/' + user.uid), {
             isEchoPlus: true,
-            premiumChatStyle: 'gold', 
+            premiumChatStyle: 'gold',
             premiumRingStyle: 'gold',
             premiumProfileBg: 'gold',
             planStartedAt: Date.now()
           });
-          
+
           setToast({ message: 'Welcome to ECHO Plus! ⚡ Payment Confirmed.', type: 'success' });
-          window.history.replaceState({}, document.title, "/profile"); 
+          window.history.replaceState({}, document.title, "/profile");
         } catch (err) {
           console.error("Auto-upgrade failed", err);
           setToast({ message: 'Payment received, but profile update failed. Contact support.', type: 'error' });
@@ -116,10 +115,11 @@ const Profile = () => {
     }
   }, [showSwitcher, getSavedAccounts]);
 
+  // ── Real-time profile + skins + echowers ───────────────────────────────
   useEffect(() => {
     if (!user?.uid) return;
     let isMounted = true;
-    
+
     const unsubSkin = onValue(ref(db, 'userSkins/' + user.uid), (snap) => {
       if (!isMounted) return;
       const data = snap.val() || {};
@@ -156,6 +156,7 @@ const Profile = () => {
     return () => { isMounted = false; unsubSkin(); unsubProfile(); unsubFollowers(); unsubFollowing(); };
   }, [user?.uid, editing, fetchProfile]);
 
+  // ── Handlers ───────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!user || !editData.name?.trim()) return;
     try {
@@ -232,6 +233,7 @@ const Profile = () => {
     }
   };
 
+  // ── Derived ────────────────────────────────────────────────────────────
   const currentMediaUrl = (editing ? editData.videoUrl : profile?.videoUrl) || (editing ? editData.avatar : profile?.avatar);
   const cachedMediaUrl = useCachedImage(currentMediaUrl, null);
   const displayMediaUrl = cachedMediaUrl || currentMediaUrl;
@@ -248,18 +250,20 @@ const Profile = () => {
         <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={(e) => e.target.files[0] && handleUploadImage(e.target.files[0])} />
 
         <div className="snap-hero">
-          <div 
-            className={`snap-hero-bg ${isEchoPlus ? `premium-bg-${profileBg}` : ''}`} 
-            style={{ backgroundImage: (!isEchoPlus && displayMediaUrl) ? `url(${displayMediaUrl})` : 'none' }} 
+          {/* ★ FIXED: Apply inline image ONLY when NOT Plus, so premium-bg-* shows correctly */}
+          <div
+            className={`snap-hero-bg ${isEchoPlus ? `premium-bg-${profileBg || 'default'}` : ''}`}
+            style={(!isEchoPlus && displayMediaUrl) ? { backgroundImage: `url(${displayMediaUrl})` } : undefined}
           />
           <div className="snap-hero-overlay" />
-          
+
           <div className="snap-avatar-wrapper">
-            <div className={`snap-avatar-ring ${isEchoPlus ? `plus-avatar-ring ${ringStyle}` : ''}`} />
+            {/* ★ FIXED: ringStyle fallback to 'gold' */}
+            <div className={`snap-avatar-ring ${isEchoPlus ? `plus-avatar-ring ${ringStyle || 'gold'}` : ''}`} />
             <div className="snap-avatar" onClick={() => setShowAvatarPicker(true)}>
-              {loading ? <SkeletonBlock width="100%" height="100%" borderRadius="50%" /> : 
-               isVideoFormat ? <video src={displayMediaUrl} autoPlay loop muted playsInline /> : 
-               displayMediaUrl ? <img src={displayMediaUrl} alt="Avatar" /> : 
+              {loading ? <SkeletonBlock width="100%" height="100%" borderRadius="50%" /> :
+               isVideoFormat ? <video src={displayMediaUrl} autoPlay loop muted playsInline /> :
+               displayMediaUrl ? <img src={displayMediaUrl} alt="Avatar" /> :
                <Avatar src={null} name={editData?.name || profile?.name || 'User'} size={100} />}
               <div className="avatar-overlay">Change</div>
             </div>
@@ -285,7 +289,7 @@ const Profile = () => {
                 ) : null}
               </h1>
             )}
-            
+
             {!editing && profile?.username && (
               <div className="snap-username-wrap">
                 <UsernamePill uid={user?.uid} username={profile.username} size="md" />
@@ -328,9 +332,15 @@ const Profile = () => {
                   </button>
                 )}
 
+                {isEchoPlus && ghostMode && (
+                  <div style={{ marginTop: '6px', marginBottom: '8px', fontSize: '12px', color: '#34C759', textAlign: 'center', width: '100%' }}>
+                    👻 Ghost Mode is ON — you're invisible
+                  </div>
+                )}
+
                 <div style={{ display: 'flex', gap: '8px', width: '100%' }}>
-                  <button 
-                    className="snap-btn-secondary" 
+                  <button
+                    className="snap-btn-secondary"
                     onClick={() => setShowSwitcher(true)}
                     title="Switch Account"
                     style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
@@ -372,9 +382,9 @@ const Profile = () => {
           {activeTab === 'echoes' && <div className="empty-tab-state"><i className="fas fa-ghost" /><p>Saved Echoes will appear here.</p></div>}
         </div>
 
-        <PlusCheckout 
-          isOpen={showUpgradeModal} 
-          onClose={() => setShowUpgradeModal(false)} 
+        <PlusCheckout
+          isOpen={showUpgradeModal}
+          onClose={() => setShowUpgradeModal(false)}
         />
 
         {showPlusPopup && (
@@ -396,16 +406,16 @@ const Profile = () => {
             <div className="ios-sheet-content" onClick={(e) => e.stopPropagation()}>
               <div className="ios-sheet-handle" />
               <h3 className="ios-sheet-title">Change Profile Photo</h3>
-              
+
               <div className="ios-sheet-actions">
                 <button className="ios-sheet-btn" onClick={() => { setShowAvatarPicker(false); imageInputRef.current?.click(); }}>
                   <i className="fas fa-image" style={{ color: '#007AFF' }} /> Upload Image
                 </button>
-                
+
                 <button className="ios-sheet-btn" onClick={() => { setShowAvatarPicker(false); setShowGifLibrary(true); }}>
                   <i className="fas fa-photo-video" style={{ color: '#34C759' }} /> Choose from Library
                 </button>
-                
+
                 <button className="ios-sheet-btn" onClick={() => { setShowAvatarPicker(false); setShowAvatarCustomizer(true); }}>
                   <i className="fas fa-magic" style={{ color: '#AF52DE' }} /> Customize ECHOMOJI
                 </button>
@@ -420,7 +430,7 @@ const Profile = () => {
 
         <GifLibraryModal isOpen={showGifLibrary} onClose={() => setShowGifLibrary(false)} onSelect={handleGifSelect} ownedGifs={unlockedGifs} mode="profile" />
         <UsernameEditor uid={user?.uid} currentUsername={profile?.username} isOpen={showUsernameEditor} onClose={() => setShowUsernameEditor(false)} />
-        
+
         {showAvatarCustomizer && (
           <div className="custom-modal-overlay" onClick={() => setShowAvatarCustomizer(false)}>
             <div onClick={e => e.stopPropagation()}>
@@ -477,4 +487,4 @@ const Profile = () => {
   );
 };
 
-export default Profile;
+export default Profile;4
