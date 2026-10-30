@@ -2706,14 +2706,14 @@ body.light .echo-reaction-emoji:hover {
   cursor: pointer;
   font-family: inherit;
 }
+
 /* ═══════════════════════════════════════════════════════════════
    ★ Media Preview Overlay — upgraded composer
    ═══════════════════════════════════════════════════════════════ */
 
 .media-preview-overlay {
   position: fixed;
-  inset: 0;
-  z-index: 999999;
+  inset: 0;  z-index: 999999;
   background: rgba(0, 0, 0, 0.75);
   backdrop-filter: blur(18px);
   -webkit-backdrop-filter: blur(18px);
@@ -3259,4 +3259,57 @@ body.light .link-preview-skeleton-line {
   flex: 1;
   display: flex;
   align-items: center;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ★ ECHO PLUS — Premium Chat Bubbles
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 1. Neon Style */
+.message-bubble.neon {
+  background: rgba(0, 0, 0, 0.6) !important;
+  border: 2px solid #00f3ff !important;
+  box-shadow: 0 0 15px rgba(0, 243, 255, 0.5), inset 0 0 10px rgba(0, 243, 255, 0.2) !important;
+  color: #00f3ff !important;
+  text-shadow: 0 0 5px rgba(0, 243, 255, 0.5);
+}
+.message-bubble.neon .message-text { color: #00f3ff; }
+
+/* 2. Glass Style */
+.message-bubble.glass {
+  background: rgba(255, 255, 255, 0.15) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.4) !important;
+  color: #ffffff !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2) !important;
+}
+
+/* 3. Gold Style */
+.message-bubble.gold {
+  background: linear-gradient(135deg, #FFD700, #FFA500) !important;
+  color: #000000 !important;
+  font-weight: 600 !important;
+  border: none !important;
+  box-shadow: 0 4px 20px rgba(255, 215, 0, 0.4) !important;
+}
+.message-bubble.gold .message-text { color: #000000; }
+.message-bubble.gold .message-meta-time { color: rgba(0, 0, 0, 0.6) !important; }
+
+/* 4. Holographic Style */
+.message-bubble.holographic {
+  background: linear-gradient(45deg, #ff9a9e, #fecfef, #a1c4fd, #c2e9fb) !important;
+  background-size: 400% 400% !important;
+  animation: holoGradient 4s ease infinite !important;
+  color: #000000 !important;
+  font-weight: 600 !important;
+  border: none !important;
+  box-shadow: 0 4px 20px rgba(200, 200, 255, 0.5) !important;
+}
+.message-bubble.holographic .message-text { color: #000000; }
+
+@keyframes holoGradient {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
 }
