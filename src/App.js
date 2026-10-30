@@ -14,6 +14,9 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
 import RedeemPass from './components/pages/Redeem/RedeemPass'; 
 
+// ─── Country Block Component ───
+import CountryBlockScreen from './components/Auth/CountryBlockScreen';
+
 import Home from './components/pages/Home/Home';
 import Chats from './components/pages/Chats/Chats';
 import ChatView from './components/pages/Chat/ChatView';
@@ -29,7 +32,6 @@ import Settings from './components/pages/Other/Settings';
 import About from './components/pages/Other/About';
 import CoinPurchase from './components/pages/CoinPurchase/CoinPurchase';
 import Login from './components/Auth/Login';
-// REMOVED: VerifyEmailScreen import
 import Navbar from './components/Layout/Navbar';
 import BottomNav from './components/Layout/BottomNav';
 import NetworkStatus from './components/common/NetworkStatus';
@@ -67,6 +69,9 @@ import StoryViewer from './components/Stories/StoryViewer';
 import StoryRecorder from './components/Stories/StoryRecorder'; 
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
+
+// 🔴 BLOCKED COUNTRIES (I added 'NG' for Nigeria)
+const BLOCKED_COUNTRIES = [ ]; 
 
 const schemaData = {
   '@context': 'https://schema.org',
@@ -143,6 +148,32 @@ function AppContent() {
   const showLoading = loading || !minTimePassed;
   const isSpotlightRoute = pathname.startsWith('/spotlight');
   
+  // ─── GEO-BLOCK STATE ───
+  const [countryCode, setCountryCode] = useState(null);
+  const [isGeoChecking, setIsGeoChecking] = useState(true);
+  const [countryName, setCountryName] = useState('');
+
+  // ─── GEO-CHECK EFFECT ───
+  useEffect(() => {
+    const checkCountry = async () => {
+      try {
+        // ipwho.is is free and needs no API key
+        const res = await fetch('https://ipwho.is/');
+        const data = await res.json();
+        
+        if (data && data.country_code) {
+          setCountryCode(data.country_code);
+          setCountryName(data.country || data.country_code);
+        }
+      } catch (err) {
+        console.error('Geo-check failed:', err);
+      } finally {
+        setIsGeoChecking(false);
+      }
+    };
+    checkCountry();
+  }, []);
+
   const showHappr =
     Boolean(user) && !showLoading && !banInfo?.isBanned &&
     (pathname === '/' || pathname === '/chats' || pathname === '/communities' || pathname === '/shop' || pathname === '/other' || pathname === '/echodrop');
@@ -346,11 +377,18 @@ function AppContent() {
     }
   }, []);
 
+  // ─── BLOCK LOGIC ───
+  if (isGeoChecking) {
+    return <LoadingScreen />;
+  }
+  
+  if (countryCode && BLOCKED_COUNTRIES.includes(countryCode)) {
+    return <CountryBlockScreen countryName={countryName} />;
+  }
+
   if (!showLoading && user && banInfo?.isBanned) return <BanScreen />;
   if (showLoading) return <LoadingScreen />;
   if (!user) return <Login />;
-  
-  // REMOVED: if (user.emailVerified === false) return <VerifyEmailScreen />;
   
   if (!onboardingDone) return <OnboardingFlow onComplete={completeOnboarding} />;
 
