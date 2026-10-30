@@ -1,26 +1,24 @@
 // src/components/pages/Chats/NewGroupModal.jsx
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../../../hooks/useAuth';
-import { useProfile } from '../../../contexts/ProfileContext';
 import { useGroupActions } from '../../../hooks/useGroups';
-import { listenToMyEchowers } from '../../../services/echowerService';
 import { GROUP_EMOJIS, validateGroupName } from '../../../utils/groupId';
 import { hapticLight, hapticSuccess, hapticError } from '../../../utils/haptics';
+import { searchProfiles } from '../../../services/searchService';
 import Avatar from '../../common/Avatar';
 import './NewGroupModal.css';
 
 const NewGroupModal = ({ isOpen, onClose, onCreated }) => {
   const { user } = useAuth();
-  const { profiles, fetchProfile } = useProfile();
   const { create, loading: creating, error } = useGroupActions(user?.uid);
 
   const [step, setStep] = useState('members'); // 'members' | 'details'
-  const [selectedUids, setSelectedUids] = useState(new Set());
+  const [selectedUsers, setSelectedUsers] = useState([]); // Array of { id, name, avatar, username }
   const [groupName, setGroupName] = useState('');
   const [groupEmoji, setGroupEmoji] = useState('👥');
-  const [friends, setFriends] = useState([]);
-  const [loadingFriends, setLoadingFriends] = useState(true);
-  const [search, setSearch] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
   const [localError, setLocalError] = useState(null);
   const nameInputRef = useRef(null);
 
@@ -28,78 +26,57 @@ const NewGroupModal = ({ isOpen, onClose, onCreated }) => {
   useEffect(() => {
     if (isOpen) {
       setStep('members');
-      setSelectedUids(new Set());
+      setSelectedUsers([]);
       setGroupName('');
       setGroupEmoji('👥');
-      setSearch('');
+      setSearchQuery('');
+      setSearchResults([]);
       setLocalError(null);
     }
   }, [isOpen]);
 
-  // Load followers as potential members
+  // Global Search Effect
   useEffect(() => {
     if (!isOpen || !user?.uid) return;
-    let cancelled = false;
-
-    setLoadingFriends(true);
-    const unsub = listenToMyEchowers(user.uid, async (uids) => {
-      if (cancelled) return;
-      const list = (uids || []).filter((uid) => uid && uid !== user.uid && uid !== 'echo_ai_assistant');
-
-      // Hydrate profiles
-      const hydrated = await Promise.all(
-        list.map(async (uid) => {
-          let profile = profiles[uid];
-          if (!profile?.name) {
-            try { await fetchProfile(uid); } catch {}
-            profile = profiles[uid];
-          }
-          return {
-            uid,
-            name: profile?.name || 'User',
-            avatar: profile?.avatar || '',
-            bio: profile?.bio || '',
-            username: profile?.username || '',
-          };
-        })
-      );
-
-      if (!cancelled) {
-        setFriends(hydrated);
-        setLoadingFriends(false);
+    
+    const delayDebounceFn = setTimeout(async () => {
+      const trimmed = searchQuery.trim();
+      if (trimmed.length < 2) {
+        setSearchResults([]);
+        return;
       }
-    });
 
-    return () => {
-      cancelled = true;
-      try { unsub(); } catch {}
-    };
-  }, [isOpen, user?.uid, profiles, fetchProfile]);
+      setIsSearching(true);
+      try {
+        const res = await searchProfiles(trimmed, user.uid, 20);
+        const raw = Array.isArray(res) ? res : Array.isArray(res?.results) ? res.results : [];
+        
+        // Filter out users already selected
+        const filtered = raw.filter((u) => !selectedUsers.find((m) => m.id === u.id));
+        setSearchResults(filtered);
+      } catch (err) {
+        console.error("Search failed:", err);
+      } finally {
+        setIsSearching(false);
+      }
+    }, 400);
 
-  const filteredFriends = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return friends;
-    return friends.filter((f) => {
-      const name = (f.name || '').toLowerCase();
-      const uname = (f.username || '').toLowerCase();
-      return name.includes(q) || uname.includes(q);
-    });
-  }, [friends, search]);
+    return () => clearTimeout(delayDebounceFn);
+  }, [searchQuery, selectedUsers, user?.uid, isOpen]);
 
-  if (!isOpen) return null;
-
-  const toggleMember = (uid) => {
+  const toggleUser = (profile) => {
     hapticLight();
-    setSelectedUids((prev) => {
-      const next = new Set(prev);
-      if (next.has(uid)) next.delete(uid);
-      else next.add(uid);
-      return next;
-    });
+    if (selectedUsers.find((u) => u.id === profile.id)) {
+      setSelectedUsers(selectedUsers.filter((u) => u.id !== profile.id));
+    } else {
+      setSelectedUsers([...selectedUsers, profile]);
+    }
+    setSearchQuery('');
+    setSearchResults([]);
   };
 
   const goToDetails = () => {
-    if (selectedUids.size < 1) {
+    if (selectedUsers.length < 1) {
       setLocalError('Pick at least 1 other member');
       hapticError();
       return;
@@ -124,7 +101,10 @@ const NewGroupModal = ({ isOpen, onClose, onCreated }) => {
       return;
     }
     hapticLight();
-    const result = await create(validation.normalized, groupEmoji, Array.from(selectedUids));
+    
+    const memberIds = selectedUsers.map(u => u.id);
+    const result = await create(validation.normalized, groupEmoji, memberIds);
+    
     if (result.ok) {
       hapticSuccess();
       onCreated?.(result.groupId);
@@ -135,9 +115,7 @@ const NewGroupModal = ({ isOpen, onClose, onCreated }) => {
     }
   };
 
-  const selectedFriends = Array.from(selectedUids)
-    .map((uid) => friends.find((f) => f.uid === uid))
-    .filter(Boolean);
+  if (!isOpen) return null;
 
   return (
     <div className="new-group-overlay" onClick={(e) => { if (e.target === e.currentTarget) onClose?.(); }}>
@@ -153,15 +131,15 @@ const NewGroupModal = ({ isOpen, onClose, onCreated }) => {
               </button>
             </div>
 
-            {selectedUids.size > 0 && (
+            {selectedUsers.length > 0 && (
               <div className="new-group-selected-strip">
-                {selectedFriends.slice(0, 10).map((f) => (
-                  <div key={f.uid} className="new-group-selected-chip" onClick={() => toggleMember(f.uid)}>
-                    <Avatar src={f.avatar} name={f.name} size={32} />
-                    <button className="chip-remove" aria-label={`Remove ${f.name}`}>×</button>
+                {selectedUsers.slice(0, 10).map((u) => (
+                  <div key={u.id} className="new-group-selected-chip" onClick={() => toggleUser(u)}>
+                    <Avatar src={u.avatar} name={u.name} size={32} />
+                    <button className="chip-remove" aria-label={`Remove ${u.name}`}>×</button>
                   </div>
                 ))}
-                <span className="new-group-selected-count">{selectedUids.size} selected</span>
+                <span className="new-group-selected-count">{selectedUsers.length} selected</span>
               </div>
             )}
 
@@ -170,42 +148,37 @@ const NewGroupModal = ({ isOpen, onClose, onCreated }) => {
               <input
                 type="text"
                 className="new-group-search"
-                placeholder="Search friends..."
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search anyone on ECHO..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
 
             <div className="new-group-friends-list">
-              {loadingFriends ? (
-                <div className="new-group-empty">Loading friends...</div>
-              ) : filteredFriends.length === 0 ? (
+              {isSearching ? (
+                <div className="new-group-empty">Searching...</div>
+              ) : searchResults.length === 0 ? (
                 <div className="new-group-empty">
-                  <div className="new-group-empty-icon">👥</div>
-                  <p>{search ? 'No matches' : 'No friends yet'}</p>
-                  <span>{search ? 'Try a different name' : 'Follow people to add them to a group'}</span>
+                  <div className="new-group-empty-icon">🔍</div>
+                  <p>{searchQuery ? 'No matches' : 'Search by name or username'}</p>
+                  <span>{searchQuery ? 'Try a different name' : 'Type at least 2 characters to start'}</span>
                 </div>
               ) : (
-                filteredFriends.map((friend) => {
-                  const isSelected = selectedUids.has(friend.uid);
+                searchResults.map((profile) => {
                   return (
                     <button
-                      key={friend.uid}
+                      key={profile.id}
                       type="button"
-                      className={`new-group-friend ${isSelected ? 'selected' : ''}`}
-                      onClick={() => toggleMember(friend.uid)}
+                      className="new-group-friend"
+                      onClick={() => toggleUser(profile)}
                     >
-                      <Avatar src={friend.avatar} name={friend.name} size={46} />
+                      <Avatar src={profile.avatar} name={profile.name} size={46} />
                       <div className="new-group-friend-info">
-                        <strong>{friend.name}</strong>
-                        {friend.username && <span>@{friend.username}</span>}
+                        <strong>{profile.name || 'User'}</strong>
+                        {profile.username && <span>@{profile.username}</span>}
                       </div>
-                      <div className={`new-group-check ${isSelected ? 'checked' : ''}`}>
-                        {isSelected && (
-                          <svg viewBox="0 0 24 24" width="14" height="14">
-                            <path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" fill="currentColor" />
-                          </svg>
-                        )}
+                      <div className="new-group-check">
+                        <i className="fas fa-plus" style={{ color: '#6C3CE1' }} />
                       </div>
                     </button>
                   );
@@ -222,9 +195,9 @@ const NewGroupModal = ({ isOpen, onClose, onCreated }) => {
               <button
                 className="new-group-btn primary"
                 onClick={goToDetails}
-                disabled={selectedUids.size < 1}
+                disabled={selectedUsers.length < 1}
               >
-                Next {selectedUids.size > 0 && `(${selectedUids.size})`}
+                Next {selectedUsers.length > 0 && `(${selectedUsers.length})`}
               </button>
             </div>
           </>
@@ -247,7 +220,7 @@ const NewGroupModal = ({ isOpen, onClose, onCreated }) => {
               <div className="new-group-preview-info">
                 <span className="new-group-preview-name">{groupName || 'Untitled Group'}</span>
                 <span className="new-group-preview-count">
-                  {selectedUids.size + 1} member{selectedUids.size + 1 !== 1 ? 's' : ''}
+                  {selectedUsers.length + 1} member{selectedUsers.length + 1 !== 1 ? 's' : ''}
                 </span>
               </div>
             </div>
