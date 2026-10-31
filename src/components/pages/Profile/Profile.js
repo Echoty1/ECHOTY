@@ -22,7 +22,7 @@ import AccountSwitcher from '../../common/AccountSwitcher';
 import { useSubscription } from '../../../contexts/SubscriptionContext';
 import PlusCustomizer from './PlusCustomizer';
 import PlusBadge from '../../common/PlusBadge';
-import PlusCheckout from '../../common/PlusCheckout'; // ★ Fixed import path back to common folder
+import PlusCheckout from '../../common/PlusCheckout';
 import './Profile.css';
 
 const getFastLocal = (key) => { try { const item = localStorage.getItem('echo_cache_' + key); return item ? JSON.parse(item) : null; } catch { return null; } };
@@ -38,7 +38,6 @@ const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
 const Profile = () => {
   const { user, getSavedAccounts, switchAccount, signOutAll } = useAuth();
-  // ★ ECHO Plus subscription state
   const { isPlus: isEchoPlus, ringStyle, profileBg, badgeText, accentColor, ghostMode } = useSubscription();
 
   const navigate = useNavigate();
@@ -82,7 +81,7 @@ const Profile = () => {
   const [unlockedGifs, setUnlockedGifs] = useState([]);
   const imageInputRef = useRef(null);
 
-  // ── Stripe return handler ──────────────────────────────────────────────
+  // ── Stripe return handler ──
   useEffect(() => {
     const queryParams = new URLSearchParams(location.search);
     const paymentStatus = queryParams.get('payment');
@@ -115,7 +114,7 @@ const Profile = () => {
     }
   }, [showSwitcher, getSavedAccounts]);
 
-  // ── Real-time profile + skins + echowers ───────────────────────────────
+  // ── Real-time profile + skins + echowers ──
   useEffect(() => {
     if (!user?.uid) return;
     let isMounted = true;
@@ -156,7 +155,7 @@ const Profile = () => {
     return () => { isMounted = false; unsubSkin(); unsubProfile(); unsubFollowers(); unsubFollowing(); };
   }, [user?.uid, editing, fetchProfile]);
 
-  // ── Handlers ───────────────────────────────────────────────────────────
+  // ── Handlers ──
   const handleSave = async () => {
     if (!user || !editData.name?.trim()) return;
     try {
@@ -233,7 +232,7 @@ const Profile = () => {
     }
   };
 
-  // ── Derived ────────────────────────────────────────────────────────────
+  // ── Derived ──
   const currentMediaUrl = (editing ? editData.videoUrl : profile?.videoUrl) || (editing ? editData.avatar : profile?.avatar);
   const cachedMediaUrl = useCachedImage(currentMediaUrl, null);
   const displayMediaUrl = cachedMediaUrl || currentMediaUrl;
@@ -241,6 +240,19 @@ const Profile = () => {
   const currentSkinId = activeSkinId || profile?.activeSkin;
   const activeSkinObj = useMemo(() => (currentSkinId ? getSkinById(currentSkinId) : null), [currentSkinId]);
   const memberSince = profile?.createdAt ? new Date(profile.createdAt).toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : 'Recently';
+
+  // ★ Added Spotify Embed for Owner
+  const getSpotifyEmbed = (url) => {
+    if (!url) return null;
+    try {
+      if (url.includes('spotify.com/track/')) {
+        const trackId = url.split('track/')[1].split('?')[0];
+        return `https://open.spotify.com/embed/track/${trackId}?utm_source=generator&theme=0`;
+      }
+      return null;
+    } catch { return null; }
+  };
+  const musicEmbedUrl = getSpotifyEmbed(profile?.premiumMusic);
 
   return (
     <React.Fragment>
@@ -250,7 +262,6 @@ const Profile = () => {
         <input type="file" ref={imageInputRef} accept="image/png, image/jpeg, image/webp" style={{ display: 'none' }} onChange={(e) => e.target.files[0] && handleUploadImage(e.target.files[0])} />
 
         <div className="snap-hero">
-          {/* ★ FIXED: Apply inline image ONLY when NOT Plus, so premium-bg-* shows correctly */}
           <div
             className={`snap-hero-bg ${isEchoPlus ? `premium-bg-${profileBg || 'default'}` : ''}`}
             style={(!isEchoPlus && displayMediaUrl) ? { backgroundImage: `url(${displayMediaUrl})` } : undefined}
@@ -258,7 +269,6 @@ const Profile = () => {
           <div className="snap-hero-overlay" />
 
           <div className="snap-avatar-wrapper">
-            {/* ★ FIXED: ringStyle fallback to 'gold' */}
             <div className={`snap-avatar-ring ${isEchoPlus ? `plus-avatar-ring ${ringStyle || 'gold'}` : ''}`} />
             <div className="snap-avatar" onClick={() => setShowAvatarPicker(true)}>
               {loading ? <SkeletonBlock width="100%" height="100%" borderRadius="50%" /> :
@@ -312,6 +322,22 @@ const Profile = () => {
             </div>
           ) : (
             <p className="snap-bio">{profile?.bio || 'No bio yet.'}</p>
+          )}
+
+          {/* ★ Music Embed for Owner */}
+          {isEchoPlus && musicEmbedUrl && (
+            <div style={{ marginTop: '16px', marginBottom: '16px', borderRadius: '12px', overflow: 'hidden', width: '100%' }}>
+              <iframe
+                style={{ borderRadius: '12px' }}
+                src={musicEmbedUrl}
+                width="100%"
+                height="80"
+                frameBorder="0"
+                allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+                loading="lazy"
+                title="Profile Music"
+              ></iframe>
+            </div>
           )}
 
           <div className="snap-actions-row">
@@ -378,7 +404,7 @@ const Profile = () => {
         </div>
 
         <div className="snap-content-area">
-          {activeTab === 'spotlight' && <ProfileSpotlightGrid uid={user?.uid} />}
+          {activeTab === 'spotlight' && <ProfileSpotlightGrid uid={user?.uid} isOwner={true} />}
           {activeTab === 'echoes' && <div className="empty-tab-state"><i className="fas fa-ghost" /><p>Saved Echoes will appear here.</p></div>}
         </div>
 
@@ -487,4 +513,4 @@ const Profile = () => {
   );
 };
 
-export default Profile;4
+export default Profile;
