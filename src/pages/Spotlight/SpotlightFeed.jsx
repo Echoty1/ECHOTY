@@ -29,7 +29,7 @@ import {
 } from '../../services/spotlightService';
 
 import UserProfile from '../../components/pages/UserProfile/UserProfile';
-import SpotlightAdSlide from './SpotlightAdSlide'; // ★ Import the Ad Slide
+import SpotlightAdSlide from './SpotlightAdSlide';
 
 const PULL_THRESHOLD = 80;
 const UNDO_WINDOW_MS = 5000;
@@ -167,7 +167,7 @@ const SpotlightFeed = () => {
         if (!cancelled) setSearchSuggestions(res);
       });
     }, 220);
-    return () =>      { cancelled = true; clearTimeout(t); };
+    return () => { cancelled = true; clearTimeout(t); };
   }, [searchQuery, searchOpen]);
 
   useEffect(() => {
@@ -887,7 +887,7 @@ const SpotlightFeed = () => {
               {/* ★ MONETAG AD SLIDE - Injected after the 2nd post */}
               {i === 1 && (
                 <SpotlightAdSlide 
-                  adUrl="YOUR_MONETAG_DIRECT_LINK_HERE" 
+                  adUrl="https://uplcm.com/4/12162797" 
                   title="Play ECHO Games and Win Big!"
                   description="Install now and get a bonus of 500 Coins on your first deposit."
                   ctaText="Play Now"
@@ -946,7 +946,7 @@ const SpotlightFeed = () => {
         currentUser={user}
         onClose={() => setOptionsFor(null)}
         onToast={setToast}
-        onConfirmDelete={handleConfirmDelete}
+               onConfirmDelete={handleConfirmDelete}
       />
 
       <SpotlightNotifications
