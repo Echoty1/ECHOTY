@@ -27,7 +27,6 @@ const HomeSkeleton = () => (
         <div className="skeleton-block" style={{ width: 28, height: 28, borderRadius: '50%' }} />
         <div className="skeleton-block" style={{ width: 90, height: 24, borderRadius: 8 }} />
       </div>
-
       <section className="home-section">
         <div className="section-header">
           <div className="skeleton-block" style={{ width: 110, height: 20, borderRadius: 8 }} />
@@ -43,7 +42,6 @@ const HomeSkeleton = () => (
           ))}
         </div>
       </section>
-
       <div className="skeleton-block" style={{ width: '100%', height: 52, borderRadius: 14 }} />
     </div>
   </div>
@@ -495,9 +493,9 @@ const Home = ({ onOpenRecorder, onOpenStory }) => {
             currentUserId={user?.uid}
             users={onlineUsers}
             ownStory={null}
-            onAddStory={onOpenRecorder} // Passed from App.js
+            onAddStory={onOpenRecorder}
             onViewStories={(stories, ownerId) => {
-              onOpenStory(stories, ownerId); // Passed from App.js
+              onOpenStory(stories, ownerId);
             }}
           />
         </div>
