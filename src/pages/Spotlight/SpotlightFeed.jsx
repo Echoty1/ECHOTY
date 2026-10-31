@@ -28,8 +28,8 @@ import {
   fetchPostsByHashtag,
 } from '../../services/spotlightService';
 
-// IMPORT the new overlay component
 import UserProfile from '../../components/pages/UserProfile/UserProfile';
+import SpotlightAdSlide from './SpotlightAdSlide'; // ★ Import the Ad Slide
 
 const PULL_THRESHOLD = 80;
 const UNDO_WINDOW_MS = 5000;
@@ -60,9 +60,7 @@ const SpotlightFeed = () => {
   const location = useLocation();
   const [params] = useSearchParams();
 
-  // NEW STATE: Holds the UID of the user whose profile is being viewed
   const [viewingUser, setViewingUser] = useState(null);
-
   const [posts, setPosts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -87,7 +85,6 @@ const SpotlightFeed = () => {
   const [toast, setToast] = useState(null);
   const [myProfile, setMyProfile] = useState(null);
 
-  // Feed tabs + search
   const [feedTab, setFeedTab] = useState('foryou');
   const [echoing, setEchoing] = useState([]);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -170,7 +167,7 @@ const SpotlightFeed = () => {
         if (!cancelled) setSearchSuggestions(res);
       });
     }, 220);
-    return () => { cancelled = true; clearTimeout(t); };
+    return () =>      { cancelled = true; clearTimeout(t); };
   }, [searchQuery, searchOpen]);
 
   useEffect(() => {
@@ -302,6 +299,20 @@ const SpotlightFeed = () => {
   }, [applyFilters]);
 
   useEffect(() => {
+    if (!focusPostId || posts.length === 0) return;
+
+    const targetIdx = posts.findIndex((p) => p.id === focusPostId);
+    if (targetIdx >= 0) {
+      setActiveIndex(targetIdx);
+      const container = containerRef.current;
+      if (container) {
+        const h = container.clientHeight || 1;
+        container.scrollTo({ top: targetIdx * h, behavior: 'auto' });
+      }
+    }
+  }, [focusPostId, posts.length]);
+
+  useEffect(() => {
     if (!freshPostId) return;
     setActiveIndex(0);
     requestAnimationFrame(() => {
@@ -410,7 +421,7 @@ const SpotlightFeed = () => {
         setNotifsOpen(false);
         setHashtagSheet(null);
         setSearchOpen(false);
-        setViewingUser(null); // Close profile overlay on Escape
+        setViewingUser(null);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -422,11 +433,7 @@ const SpotlightFeed = () => {
     else delete videoRefs.current[postId];
   }, []);
 
-  // ─── THIS IS THE MAGIC FIX ───────────────────────────────────
-  // Instead of navigating away, we set viewingUser to open the overlay
   const handleOpenProfile = (uid) => setViewingUser(uid);
-  // ─────────────────────────────────────────────────────────────
-
   const handleOpenOptions = useCallback((post) => setOptionsFor(post), []);
 
   const handleConfirmDelete = useCallback(async (post) => {
@@ -858,23 +865,36 @@ const SpotlightFeed = () => {
           </div>
         ) : (
           posts.map((post, i) => (
-            <div key={post.id} className="spotlight-slide" data-index={i}>
-              <SpotlightPost
-                post={post}
-                isActive={i === activeIndex}
-                currentUser={user}
-                currentProfile={myProfile}
-                muted={muted}
-                onToggleMute={() => setMuted((m) => !m)}
-                onOpenComments={(p) => setCommentsFor(p)}
-                onOpenShare={(p) => setShareFor(p)}
-                onOpenOptions={handleOpenOptions}
-                onOpenProfile={handleOpenProfile}
-                onRegisterVideo={handleRegisterVideo}
-                autoAdvance={autoAdvance}
-                onEnded={scrollToNextPost}
-              />
-            </div>
+            <React.Fragment key={post.id}>
+              <div className="spotlight-slide" data-index={i}>
+                <SpotlightPost
+                  post={post}
+                  isActive={i === activeIndex}
+                  currentUser={user}
+                  currentProfile={myProfile}
+                  muted={muted}
+                  onToggleMute={() => setMuted((m) => !m)}
+                  onOpenComments={(p) => setCommentsFor(p)}
+                  onOpenShare={(p) => setShareFor(p)}
+                  onOpenOptions={handleOpenOptions}
+                  onOpenProfile={handleOpenProfile}
+                  onRegisterVideo={handleRegisterVideo}
+                  autoAdvance={autoAdvance}
+                  onEnded={scrollToNextPost}
+                />
+              </div>
+
+              {/* ★ MONETAG AD SLIDE - Injected after the 2nd post */}
+              {i === 1 && (
+                <SpotlightAdSlide 
+                  adUrl="YOUR_MONETAG_DIRECT_LINK_HERE" 
+                  title="Play ECHO Games and Win Big!"
+                  description="Install now and get a bonus of 500 Coins on your first deposit."
+                  ctaText="Play Now"
+                  imageUrl="https://images.unsplash.com/photo-1614680376573-df3480f0c6ff?q=80&w=1000&auto=format&fit=crop"
+                />
+              )}
+            </React.Fragment>
           ))
         )}
       </div>
@@ -934,7 +954,7 @@ const SpotlightFeed = () => {
         uid={user?.uid}
         onClose={() => setNotifsOpen(false)}
         onOpenPost={(id) => navigate(`/spotlight?focus=${id}`)}
-        onOpenProfile={(uid) => setViewingUser(uid)} // Updates to use the overlay!
+        onOpenProfile={(uid) => setViewingUser(uid)}
         onOpenHistory={() => {
           setNotifsOpen(false);
           navigate('/spotlight/history');
@@ -948,11 +968,9 @@ const SpotlightFeed = () => {
         onPickPost={(id) => navigate(`/spotlight?focus=${id}`)}
       />
 
-      {/* ─── THE NEW OVERLAY MODAL ──────────────────────── */}
       {viewingUser && (
         <UserProfile uid={viewingUser} onClose={() => setViewingUser(null)} />
       )}
-      {/* ────────────────────────────────────────────────────── */}
 
       {showUndoToast && (
         <div className="spotlight-undo-toast">
