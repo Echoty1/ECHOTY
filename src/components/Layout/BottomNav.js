@@ -32,10 +32,6 @@ const isOnlineValue = (val) => {
   return false;
 };
 
-/**
- * LiquidBlob — physics-driven indicator.
- * Hooke's law spring + velocity-based deformation.
- */
 const LiquidBlob = ({ targetX, targetW, dragging, dragX }) => {
   const blobRef = useRef(null);
   const pos = useRef(0);
@@ -53,7 +49,6 @@ const LiquidBlob = ({ targetX, targetW, dragging, dragX }) => {
   const MAX_STRETCH = 40;
 
   useEffect(() => {
-    // Snap on first real target so blob doesn't fly in from 0
     if (!initialized.current && Number.isFinite(targetX) && targetX > 0) {
       pos.current = targetX;
       w.current = targetW;
@@ -69,29 +64,25 @@ const LiquidBlob = ({ targetX, targetW, dragging, dragX }) => {
       const dt = Math.min(32, now - last) / 16.67;
       last = now;
 
-      // ── Guard: if target invalid, freeze in place, don't drift
       const validTarget = Number.isFinite(targetX) && targetX > 0;
       const target = validTarget
         ? dragging && dragX != null
           ? dragX
           : targetX
-        : pos.current; // hold
+        : pos.current; 
 
       const targetWidth = validTarget ? targetW : w.current;
 
-      // Spring X
       const dx = target - pos.current;
       const forceX = dx * STIFFNESS;
       vel.current = (vel.current + forceX) * DAMPING;
       pos.current += vel.current * dt;
 
-      // Spring width
       const dw = targetWidth - w.current;
       const forceW = dw * W_STIFFNESS;
       wVel.current = (wVel.current + forceW) * W_DAMPING;
       w.current += wVel.current * dt;
 
-      // Velocity → stretch
       const vAbs = Math.abs(vel.current);
       const desiredStretch = Math.min(MAX_STRETCH, vAbs * STRETCH_FACTOR);
       stretch.current += (desiredStretch - stretch.current) * 0.3;
@@ -102,7 +93,6 @@ const LiquidBlob = ({ targetX, targetW, dragging, dragX }) => {
       if (blobRef.current) {
         const el = blobRef.current;
         if (!validTarget && !initialized.current) {
-          // No valid target yet — hide blob
           el.style.opacity = '0';
         } else {
           el.style.opacity = '1';
@@ -175,7 +165,6 @@ const BottomNav = () => {
 
   const isSupport = user?.uid === SUPPORT_UID;
 
-  // ====================== TABS ======================
   const baseTabs = useMemo(() => {
     if (isSupport) {
       return [
@@ -211,7 +200,6 @@ const BottomNav = () => {
   const rightTabs = sideTabs.slice(Math.ceil(sideTabs.length / 2));
   const hasPulse = unreadChatsCount > 0 || onlineCount > 0;
 
-  // ─── Compute blob target from active tab ───
   const computeTarget = useCallback(() => {
     const el = tabRefs.current[activeTab?.id];
     const parent = navRef.current;
@@ -219,27 +207,22 @@ const BottomNav = () => {
     const elRect = el.getBoundingClientRect();
     const parentRect = parent.getBoundingClientRect();
 
-    // Guard: if the nav or tab has zero size, we can't measure
     if (elRect.width === 0 || parentRect.width === 0) return;
 
     const nextX = elRect.left - parentRect.left + elRect.width / 2;
     const nextW = elRect.width;
 
-    // Only update if changed — prevents spring micro-jitter
     setBlobTargetX((prev) => (Math.abs(prev - nextX) < 0.5 ? prev : nextX));
     setBlobTargetW((prev) => (Math.abs(prev - nextW) < 0.5 ? prev : nextW));
   }, [activeTab?.id]);
 
-  // Re-measure on tab change + route change, one frame after layout settles
   useEffect(() => {
     const raf = requestAnimationFrame(() => {
-      // Double RAF for slow layouts (Spotlight fullscreen, sheets, etc.)
       requestAnimationFrame(() => computeTarget());
     });
     return () => cancelAnimationFrame(raf);
   }, [computeTarget, location.pathname, activeIndex]);
 
-  // Re-measure on nav resize (covers rotation, sheets, layout shifts)
   useEffect(() => {
     if (!navRef.current) return;
     const observer = new ResizeObserver(() => computeTarget());
@@ -247,7 +230,6 @@ const BottomNav = () => {
     return () => observer.disconnect();
   }, [computeTarget]);
 
-  // Fallback: also listen to window resize
   useEffect(() => {
     const onResize = () => computeTarget();
     window.addEventListener('resize', onResize);
@@ -321,7 +303,6 @@ const BottomNav = () => {
     return () => mo.disconnect();
   }, []);
 
-  // Reset blob when nav is hidden so it doesn't drift while offscreen
   useEffect(() => {
     if (liveHidden) {
       setBlobTargetX(0);
@@ -656,6 +637,7 @@ const BottomNav = () => {
         key={tab.id}
         ref={(el) => { tabRefs.current[tab.id] = el; }}
         type="button"
+        id={`nav-${tab.id}`}
         className={`echo-v-tab ${leavingId === tab.id ? 'is-leaving' : ''}`}
         onClick={() => onTabClick(tab)}
       >
@@ -812,6 +794,7 @@ const BottomNav = () => {
           <button
             key={swingKey}
             type="button"
+            id="nav-center"
             className={`echo-v-tab center ${hasPulse ? 'has-pulse' : ''} ${
               pulseFlash ? 'pulse-flash' : ''
             }`}
@@ -845,4 +828,4 @@ const BottomNav = () => {
   );
 };
 
-export default BottomNav;
+export default BottomNav;  
