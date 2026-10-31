@@ -53,6 +53,7 @@ import EchoDropPage from './components/pages/EchoDrop/EchoDropPage';
 import MessageNotifier from './components/common/MessageNotifier';
 import { useGlobalMessageListener } from './hooks/useGlobalMessageListener';
 import { unlockAudio } from './services/notificationService';
+import AIGuide from './components/common/AIGuide'; // ★ NEW AI GUIDE
 
 // ─── Onboarding + App Badge ────────────────────────────────
 import OnboardingFlow from './components/Onboarding/OnboardingFlow';
@@ -71,8 +72,11 @@ import StoryRecorder from './components/Stories/StoryRecorder';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
-// 🔴 COUNTRIES BLOCKED: Nigeria (NG) and Israel (IL)
-const BLOCKED_COUNTRIES = [  'IL']; 
+// ─── BAN SYSTEM (Edit this to add/remove blocks) ───
+const BLOCKED_COUNTRIES = ['IL']; 
+const BLOCKED_REGIONS = [
+  { country: 'NG', state: 'ondo' } 
+];
 
 const schemaData = {
   '@context': 'https://schema.org',
@@ -149,29 +153,74 @@ function AppContent() {
   const showLoading = loading || !minTimePassed;
   const isSpotlightRoute = pathname.startsWith('/spotlight');
   
-  // ─── GEO-BLOCK STATE ───
-  const [countryCode, setCountryCode] = useState(null);
-  const [isGeoChecking, setIsGeoChecking] = useState(true);
-  const [countryName, setCountryName] = useState('');
+  // ─── AI GUIDE STATE ───
+  const [runAIGuide, setRunAIGuide] = useState(false);
 
-  // ─── GEO-CHECK EFFECT ───
   useEffect(() => {
-    const checkCountry = async () => {
+    // For now, we removed the localStorage check so it runs for everyone on every load.
+    if (user) {
+      const timer = setTimeout(() => {
+        setRunAIGuide(true);
+      }, 2000);
+      return () => clearTimeout(timer);
+    }
+  }, [user]);
+
+  const handleGuideComplete = () => {
+    setRunAIGuide(false);
+    // We are not saving to localStorage right now so it runs again next time
+  };
+
+  // ─── GEO-BLOCK STATE ───
+  const [geoBlocked, setGeoBlocked] = useState(false);
+  const [isGeoChecking, setIsGeoChecking] = useState(true);
+  const [blockReason, setBlockReason] = useState('');
+  const [blockedCountryName, setBlockedCountryName] = useState('');
+
+  // ─── GEO-CHECK EFFECT (Direct Code Bans) ───
+  useEffect(() => {
+    const checkRegion = async () => {
       try {
-        const res = await fetch('https://ipwho.is/');
-        const data = await res.json();
-        
-        if (data && data.country_code) {
-          setCountryCode(data.country_code);
-          setCountryName(data.country || data.country_code);
+        let locationData;
+        try {
+          const res = await fetch('https://ipwho.is/');
+          locationData = await res.json();
+          if (!locationData.success) throw new Error('ipwho failed');
+        } catch {
+          const fallbackRes = await fetch('https://ipapi.co/json/');
+          locationData = await fallbackRes.json();
         }
+
+        const countryCode = (locationData.country_code || '').toUpperCase();
+        const regionName = locationData.region || '';
+        const countryName = locationData.country || countryCode;
+
+        if (!countryCode) throw new Error('No country detected');
+
+        if (BLOCKED_COUNTRIES.includes(countryCode)) {
+          setBlockReason(`ECHO is currently unavailable in ${countryName}.`);
+          setBlockedCountryName(countryName);
+          setGeoBlocked(true);
+          return;
+        }
+
+        const isStateBlocked = BLOCKED_REGIONS.some(
+          (region) => region.country === countryCode && region.state.toLowerCase() === regionName.toLowerCase()
+        );
+
+        if (isStateBlocked) {
+          setBlockReason(`ECHO is currently unavailable in ${regionName}, ${countryName}.`);
+          setBlockedCountryName(`${regionName}, ${countryName}`);
+          setGeoBlocked(true);
+        }
+
       } catch (err) {
         console.error('Geo-check failed:', err);
       } finally {
         setIsGeoChecking(false);
       }
     };
-    checkCountry();
+    checkRegion();
   }, []);
 
   const showHappr =
@@ -382,8 +431,8 @@ function AppContent() {
     return <LoadingScreen />;
   }
   
-  if (countryCode && BLOCKED_COUNTRIES.includes(countryCode)) {
-    return <CountryBlockScreen countryName={countryName} countryCode={countryCode} />;
+  if (geoBlocked) {
+    return <CountryBlockScreen countryName={blockedCountryName} countryCode="" customMessage={blockReason} />;
   }
 
   if (!showLoading && user && banInfo?.isBanned) return <BanScreen />;
@@ -459,6 +508,9 @@ function AppContent() {
       {showUpdatePopup && <UpdatePopup currentVersion={appVersion} onClose={() => setShowUpdatePopup(false)} />}
       {showInstallPopup && <InstallPopup playStoreUrl={playStoreUrl} onClose={handleInstallPopupClose} />}
       <InstallBanner playStoreUrl={playStoreUrl} />
+
+      {/* ★ NEW: AI GUIDE */}
+      <AIGuide run={runAIGuide} onComplete={handleGuideComplete} />
     </>
   );
 }
@@ -490,4 +542,4 @@ function App() {
   );
 }
 
-export default App;
+export default App;a
