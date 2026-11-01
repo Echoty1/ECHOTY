@@ -5,17 +5,34 @@ const AIGuide = ({ run, onComplete }) => {
   const [isVisible, setIsVisible] = useState(false);
   const [hasStarted, setHasStarted] = useState(false);
   const [isReturningUser, setIsReturningUser] = useState(false);
-  
+
   const [displayText, setDisplayText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isClicking, setIsClicking] = useState(false);
-  
+
   const cursorRef = useRef(null);
   const bubbleRef = useRef(null);
   const pos = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
   const target = useRef({ x: window.innerWidth / 2, y: window.innerHeight / 2 });
   const velocity = useRef({ x: 0, y: 0 });
   const animFrame = useRef(null);
+  const isClickingRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const tourCancelledRef = useRef(false);
+
+  // Keep ref in sync so the physics loop doesn't need to restart
+  useEffect(() => {
+    isClickingRef.current = isClicking;
+  }, [isClicking]);
+
+  // Track mount state for async safety
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      tourCancelledRef.current = true;
+    };
+  }, []);
 
   // ── 0. Check if returning user ──
   useEffect(() => {
@@ -23,6 +40,9 @@ const AIGuide = ({ run, onComplete }) => {
       const hasToured = localStorage.getItem('echo_ai_tour_completed');
       setIsReturningUser(!!hasToured);
       setIsVisible(true);
+      setHasStarted(false);
+      setDisplayText('');
+      tourCancelledRef.current = false;
     } else {
       setIsVisible(false);
       window.speechSynthesis.cancel();
@@ -30,7 +50,7 @@ const AIGuide = ({ run, onComplete }) => {
     return () => window.speechSynthesis.cancel();
   }, [run]);
 
-  // ── 1. iOS 27 Fluid Spring Physics ──
+  // ── 1. Fluid Spring Physics (stable — no isClicking dep) ──
   useEffect(() => {
     let lastTime = performance.now();
     const updatePhysics = (time) => {
@@ -46,69 +66,101 @@ const AIGuide = ({ run, onComplete }) => {
       pos.current.x += velocity.current.x * dt;
       pos.current.y += velocity.current.y * dt;
 
-      if (cursorRef.current && bubbleRef.current) {
-        cursorRef.current.style.transform = `translate3d(${pos.current.x}px, ${pos.current.y}px, 0) translate(-50%, -50%) scale(${isClicking ? 0.85 : 1})`;
+      const scale = isClickingRef.current ? 0.85 : 1;
+      if (cursorRef.current) {
+        cursorRef.current.style.transform = `translate3d(${pos.current.x}px, ${pos.current.y}px, 0) translate(-50%, -50%) scale(${scale})`;
+      }
+      if (bubbleRef.current) {
         bubbleRef.current.style.transform = `translate3d(${pos.current.x + 35}px, ${pos.current.y + 35}px, 0)`;
       }
       animFrame.current = requestAnimationFrame(updatePhysics);
     };
     animFrame.current = requestAnimationFrame(updatePhysics);
     return () => cancelAnimationFrame(animFrame.current);
-  }, [isClicking]);
+  }, []); // ✅ stable
 
-  // ── 2. Typewriter Effect ──
+  // ── 2. Typewriter Effect (mount-safe) ──
   const typeText = async (text) => {
+    if (!isMountedRef.current) return;
     setIsTyping(true);
     setDisplayText('');
     for (let i = 0; i < text.length; i++) {
+      if (!isMountedRef.current || tourCancelledRef.current) return;
       setDisplayText((prev) => prev + text[i]);
-      await new Promise(r => setTimeout(r, 25)); 
+      await new Promise(r => setTimeout(r, 25));
     }
-    setIsTyping(false);
+    if (isMountedRef.current) setIsTyping(false);
   };
 
-  // ── 3. Voice Engine ──
+  // ── 3. Voice Engine (handles async voice loading) ──
   const speak = (text) => {
     return new Promise((resolve) => {
-      const fallbackTimer = setTimeout(resolve, 6000);
-      if (!('speechSynthesis' in window)) {
-        clearTimeout(fallbackTimer);
-        return resolve();
-      }
-      
-      window.speechSynthesis.cancel();
-      const voices = window.speechSynthesis.getVoices();
-      const bestVoice = voices.find(v => v.name.includes('Google US English')) || 
-                        voices.find(v => v.name.includes('Samantha')) || 
-                        voices.find(v => v.lang === 'en-US');
+      if (!('speechSynthesis' in window)) return resolve();
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      if (bestVoice) utterance.voice = bestVoice;
-      utterance.rate = 1.0; 
-      utterance.pitch = 1.05;
-      
-      utterance.onend = () => {
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
         clearTimeout(fallbackTimer);
-        setTimeout(resolve, 1000); 
+        setTimeout(resolve, 1000);
       };
-      utterance.onerror = () => {
-        clearTimeout(fallbackTimer);
-        resolve();
+      const fallbackTimer = setTimeout(() => { settled = true; resolve(); }, 6000);
+
+      window.speechSynthesis.cancel();
+
+      const startSpeech = () => {
+        const voices = window.speechSynthesis.getVoices();
+        const bestVoice =
+          voices.find(v => v.name.includes('Google US English')) ||
+          voices.find(v => v.name.includes('Samantha')) ||
+          voices.find(v => v.lang === 'en-US');
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        if (bestVoice) utterance.voice = bestVoice;
+        utterance.rate = 1.0;
+        utterance.pitch = 1.05;
+
+        utterance.onend = finish;
+        utterance.onerror = () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(fallbackTimer);
+          resolve();
+        };
+
+        window.speechSynthesis.speak(utterance);
       };
-      
-      window.speechSynthesis.speak(utterance);
+
+      // If voices aren't ready yet, wait once for the event
+      if (window.speechSynthesis.getVoices().length === 0) {
+        const onVoices = () => {
+          window.speechSynthesis.removeEventListener('voiceschanged', onVoices);
+          startSpeech();
+        };
+        window.speechSynthesis.addEventListener('voiceschanged', onVoices, { once: true });
+        // Safety: if voices never load, start anyway
+        setTimeout(() => {
+          window.speechSynthesis.removeEventListener('voiceschanged', onVoices);
+          if (!settled) startSpeech();
+        }, 1500);
+      } else {
+        startSpeech();
+      }
     });
   };
 
-  // ── 4. Wait for Element (With Smart Timeout) ──
+  // ── 4. Wait for Element ──
   const waitForElement = (selectorFn, timeout = 3000) => {
     return new Promise((resolve) => {
-      let el = typeof selectorFn === 'function' ? selectorFn() : document.querySelector(selectorFn);
+      const find = () =>
+        typeof selectorFn === 'function' ? selectorFn() : document.querySelector(selectorFn);
+
+      let el = find();
       if (el) return resolve(el);
 
       const start = Date.now();
       const interval = setInterval(() => {
-        el = typeof selectorFn === 'function' ? selectorFn() : document.querySelector(selectorFn);
+        el = find();
         if (el) {
           clearInterval(interval);
           resolve(el);
@@ -123,12 +175,15 @@ const AIGuide = ({ run, onComplete }) => {
   const scrollToElement = async (el) => {
     if (!el) return;
     el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    await new Promise(r => setTimeout(r, 600)); 
+    await new Promise(r => setTimeout(r, 600));
   };
 
-  // ── 5. Execute a Step ──
+  // ── 5. Execute a Step (with proper style cleanup) ──
   const executeStep = async (step) => {
+    if (!isMountedRef.current || tourCancelledRef.current) return;
+
     const el = await waitForElement(step.selector, 3000);
+    if (!isMountedRef.current || tourCancelledRef.current) return;
 
     if (el) {
       await scrollToElement(el);
@@ -138,38 +193,50 @@ const AIGuide = ({ run, onComplete }) => {
       target.current = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     }
 
-    await new Promise(r => setTimeout(r, 800)); 
+    await new Promise(r => setTimeout(r, 800));
+    if (!isMountedRef.current || tourCancelledRef.current) return;
 
     typeText(step.text);
     await speak(step.text);
+    if (!isMountedRef.current || tourCancelledRef.current) return;
 
     if (el && step.action) {
       setIsClicking(true);
+
+      // Save original inline styles so we can restore them
+      const originalTransition = el.style.transition;
+      const originalBoxShadow = el.style.boxShadow;
+
       el.style.transition = 'box-shadow 0.3s';
       el.style.boxShadow = '0 0 0 4px #6C3CE1, 0 0 20px rgba(108, 60, 225, 0.6)';
-      
-      await step.action(el);
-      
-      setTimeout(() => { 
-        setIsClicking(false); 
-        el.style.boxShadow = 'none'; 
-      }, 400);
 
-      await new Promise(r => setTimeout(r, 1500)); 
+      try {
+        await step.action(el);
+      } finally {
+        setTimeout(() => {
+          if (!isMountedRef.current) return;
+          setIsClicking(false);
+          el.style.boxShadow = originalBoxShadow;
+          el.style.transition = originalTransition;
+        }, 400);
+      }
+
+      await new Promise(r => setTimeout(r, 1500));
     }
   };
 
   // ── 6. The Master Script ──
   const runTour = async () => {
     setHasStarted(true);
-    await new Promise(r => setTimeout(r, 800)); 
+    await new Promise(r => setTimeout(r, 800));
+    if (!isMountedRef.current || tourCancelledRef.current) return;
 
     const forceClick = async (el) => {
       if (!el) return;
       const rect = el.getBoundingClientRect();
       const x = rect.left + rect.width / 2;
       const y = rect.top + rect.height / 2;
-      
+
       const eventOptions = { bubbles: true, cancelable: true, clientX: x, clientY: y };
       el.dispatchEvent(new PointerEvent('pointerdown', eventOptions));
       el.dispatchEvent(new MouseEvent('mousedown', eventOptions));
@@ -178,102 +245,123 @@ const AIGuide = ({ run, onComplete }) => {
       el.dispatchEvent(new MouseEvent('click', eventOptions));
     };
 
-    const findNav = (text) => () => Array.from(document.querySelectorAll('button')).find(b => b.textContent.includes(text) && b.closest('.echo-v-nav'));
-    const findBackBtn = () => () => document.querySelector('.chat-back-btn, .back-btn, button[aria-label="Go back"]') || Array.from(document.querySelectorAll('button')).find(b => b.innerHTML.includes('fa-arrow-left'));
-    const findInput = (placeholder) => () => document.querySelector(`input[placeholder*="${placeholder}"], textarea[placeholder*="${placeholder}"], input[type="text"]`);
+    const findNav = (text) => () =>
+      Array.from(document.querySelectorAll('button'))
+        .find(b => b.textContent.includes(text) && b.closest('.echo-v-nav'));
+
+    const findBackBtn = () => () =>
+      document.querySelector('.chat-back-btn, .back-btn, button[aria-label="Go back"]') ||
+      Array.from(document.querySelectorAll('button')).find(b => b.innerHTML.includes('fa-arrow-left'));
+
+    const findInput = (placeholder) => () =>
+      document.querySelector(
+        `input[placeholder*="${placeholder}"], textarea[placeholder*="${placeholder}"]`
+      );
 
     const script = [
       // ── HOME ──
       { selector: '.home-container', text: "Welcome to ECHO! Let me give you a quick tour." },
-      { 
-        selector: '.go-live-btn', 
+      {
+        selector: '.go-live-btn',
         text: "Here you can go live. I won't click it now, but you can tap it anytime.",
         action: async (el) => {
           el.style.transform = 'scale(1.05)';
-          setTimeout(() => el.style.transform = 'scale(1)', 500);
+          setTimeout(() => { el.style.transform = 'scale(1)'; }, 500);
         }
       },
       { selector: 'body', text: "Let's check your messages." },
-      { 
-        selector: findNav('Chats'), 
+      {
+        selector: findNav('Chats'),
         text: "Opening your Chats...",
         action: forceClick
       },
 
       // ── CHATS ──
       { selector: '.chat-list', text: "This is your inbox." },
-      { 
-        selector: findInput('Search'), 
-        text: "Let me click the search bar.", 
+      {
+        selector: findInput('Search'),
+        text: "Let me click the search bar.",
         action: forceClick
       },
-      { 
-        selector: findInput('Search'), 
-        text: "I'm typing Malik now.", 
+      {
+        selector: findInput('Search'),
+        text: "I'm typing Malik now.",
         action: async (el) => {
           el.focus();
-          const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, "value").set;
+          const nativeSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 'value'
+          ).set;
           nativeSetter.call(el, 'Malik');
           el.dispatchEvent(new Event('input', { bubbles: true }));
         }
       },
-      { 
-        selector: () => Array.from(document.querySelectorAll('div, a, button')).find(e => e.textContent.includes('Malik') && e.textContent.length < 30), 
-        text: "There he is. Opening the chat...", 
+      {
+        selector: () => Array.from(document.querySelectorAll('div, a, button'))
+          .find(e => e.textContent.includes('Malik') && e.textContent.length < 30),
+        text: "There he is. Opening the chat...",
         action: forceClick
       },
-      
-      // --- INSIDE CHAT ---
-      { 
-        selector: () => document.querySelector('input[placeholder*="Message"], textarea[placeholder*="Message"], .chat-input'), 
-        text: "This is where you type your messages and send voice notes or media.", 
+
+      // ── INSIDE CHAT ──
+      {
+        selector: () => document.querySelector(
+          'input[placeholder*="Message"], textarea[placeholder*="Message"], .chat-input'
+        ),
+        text: "This is where you type your messages and send voice notes or media.",
         action: async (el) => {
           el.style.transform = 'scale(1.02)';
-          setTimeout(() => el.style.transform = 'scale(1)', 500);
+          setTimeout(() => { el.style.transform = 'scale(1)'; }, 500);
         }
       },
-      { 
-        selector: findBackBtn(), 
-        text: "Let's go back and continue the tour.", 
-        action: forceClick 
+      {
+        selector: findBackBtn(),
+        text: "Let's go back and continue the tour.",
+        action: forceClick
       },
 
       // ── OTHER / PROFILE ──
-      { 
-        selector: findNav('Other'), 
-        text: "Let's head to the Other tab.", 
-        action: forceClick 
+      {
+        selector: findNav('Other'),
+        text: "Let's head to the Other tab.",
+        action: forceClick
       },
-      { 
-        selector: () => Array.from(document.querySelectorAll('button, div[role="button"]')).find(e => e.textContent.includes('Profile')), 
-        text: "Opening your Profile...", 
-        action: forceClick 
+      {
+        selector: () => Array.from(document.querySelectorAll('button, div[role="button"]'))
+          .find(e => e.textContent.includes('Profile')),
+        text: "Opening your Profile...",
+        action: forceClick
       },
       { selector: '.snap-avatar', text: "You can change your avatar by tapping here." },
-      { 
-        selector: '.btn-upgrade-plus', 
+      {
+        selector: '.btn-upgrade-plus',
         text: "Tap here to get ECHO Plus for premium features.",
         action: async (el) => {
           el.style.transform = 'scale(1.02)';
-          setTimeout(() => el.style.transform = 'scale(1)', 500);
+          setTimeout(() => { el.style.transform = 'scale(1)'; }, 500);
         }
       },
       { selector: 'body', text: "That's the tour! Enjoy ECHO." }
     ];
 
     for (let i = 0; i < script.length; i++) {
+      if (!isMountedRef.current || tourCancelledRef.current) return;
       await executeStep(script[i]);
-      await new Promise(r => setTimeout(r, 500)); 
+      if (!isMountedRef.current || tourCancelledRef.current) return;
+      await new Promise(r => setTimeout(r, 500));
     }
 
     // ★ Mark the user as having completed the tour
     localStorage.setItem('echo_ai_tour_completed', 'true');
-    setIsVisible(false);
-    onComplete();
+    if (isMountedRef.current) {
+      setIsVisible(false);
+      onComplete();
+    }
   };
 
   const handleSkip = () => {
     if (!isReturningUser) return; // Block new users from skipping
+    tourCancelledRef.current = true;
+    window.speechSynthesis.cancel();
     localStorage.setItem('echo_ai_tour_completed', 'true');
     setIsVisible(false);
     onComplete();
@@ -284,11 +372,11 @@ const AIGuide = ({ run, onComplete }) => {
   // ── START SCREEN ──
   if (!hasStarted) {
     return (
-      <div 
+      <div
         style={{ position: 'fixed', inset: 0, zIndex: 999999, background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(15px)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'auto' }}
         onClick={handleSkip}
       >
-        <div 
+        <div
           style={{ background: 'rgba(30, 30, 35, 0.98)', padding: '40px', borderRadius: '32px', border: '1px solid rgba(255,255,255,0.1)', textAlign: 'center', maxWidth: '400px', width: 'calc(100% - 40px)', boxShadow: '0 30px 60px rgba(0,0,0,0.6)' }}
           onClick={(e) => e.stopPropagation()}
         >
@@ -297,12 +385,12 @@ const AIGuide = ({ run, onComplete }) => {
             {isReturningUser ? 'Need a refresher?' : 'Meet Echo'}
           </h2>
           <p style={{ color: '#a0a0ab', fontSize: '15px', lineHeight: 1.5, marginBottom: '30px' }}>
-            {isReturningUser 
+            {isReturningUser
               ? "I notice you've been here before. Would you like a quick refresher tour of ECHO, or skip to the app?"
               : "I'm your AI buddy. I'll give you a quick tour of ECHO and show you how everything works."}
           </p>
-          
-          <button 
+
+          <button
             onClick={runTour}
             style={{ background: 'linear-gradient(135deg, #6C3CE1, #EC4899)', color: '#fff', border: 'none', padding: '18px 32px', borderRadius: '99px', fontSize: '16px', fontWeight: '700', cursor: 'pointer', boxShadow: '0 10px 25px rgba(108,60,225,0.4)', width: '100%', transition: 'transform 0.2s', marginBottom: isReturningUser ? '10px' : '0' }}
             onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.02)'}
@@ -312,7 +400,7 @@ const AIGuide = ({ run, onComplete }) => {
           </button>
 
           {isReturningUser && (
-            <button 
+            <button
               onClick={handleSkip}
               style={{ background: 'transparent', color: '#a0a0ab', border: '1px solid rgba(255,255,255,0.1)', padding: '16px 32px', borderRadius: '99px', fontSize: '15px', fontWeight: '600', cursor: 'pointer', width: '100%', transition: 'background 0.2s' }}
               onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
@@ -330,7 +418,7 @@ const AIGuide = ({ run, onComplete }) => {
   // ── ACTIVE TOUR ──
   return (
     <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 999999, overflow: 'hidden' }}>
-      
+
       {/* The AI Cursor */}
       <div
         ref={cursorRef}
@@ -353,7 +441,6 @@ const AIGuide = ({ run, onComplete }) => {
         }}
       >
         ✨
-        
         {isClicking && (
           <div style={{
             position: 'absolute',
@@ -391,22 +478,22 @@ const AIGuide = ({ run, onComplete }) => {
       >
         {displayText}
         {isTyping && <span className="blinking-cursor">|</span>}
-        
-        <div style={{ 
-          position: 'absolute', 
-          bottom: '-8px', 
-          left: '20px', 
-          width: '16px', 
-          height: '16px', 
-          background: 'rgba(15, 15, 20, 0.85)', 
-          transform: 'rotate(45deg)', 
-          borderBottom: '1px solid rgba(255,255,255,0.12)', 
+
+        <div style={{
+          position: 'absolute',
+          bottom: '-8px',
+          left: '20px',
+          width: '16px',
+          height: '16px',
+          background: 'rgba(15, 15, 20, 0.85)',
+          transform: 'rotate(45deg)',
+          borderBottom: '1px solid rgba(255,255,255,0.12)',
           borderRight: '1px solid rgba(255,255,255,0.12)',
           backdropFilter: 'blur(30px) saturate(200%)',
           WebkitBackdropFilter: 'blur(30px) saturate(200%)',
         }} />
       </div>
-      
+
       <style>{`
         @keyframes ripple {
           0% { transform: scale(0.8); opacity: 1; }
@@ -416,7 +503,7 @@ const AIGuide = ({ run, onComplete }) => {
           animation: blink 1s step-end infinite;
           font-weight: 200;
           color: #EC4899;
-        } 
+        }
         @keyframes blink {
           0%, 100% { opacity: 1; }
           50% { opacity: 0; }
@@ -424,6 +511,6 @@ const AIGuide = ({ run, onComplete }) => {
       `}</style>
     </div>
   );
-}; 
+};
 
-export default AIGuide; 
+export default AIGuide;
