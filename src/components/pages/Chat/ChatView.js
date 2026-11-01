@@ -615,9 +615,7 @@ const ChatView = () => {
     window.dispatchEvent(new CustomEvent('chat-read', { detail: { userId } }));
     notifyChatListUpdate(userId, { unreadCount: 0 });
     hasMarkedRead.current = true;
-  };
-
-  const markMessagesAsRead = async () => {
+  };  const markMessagesAsRead = async () => {
     if (!user?.uid || !userId) return;
     if (!sendReadReceipts) return;
     const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
@@ -728,10 +726,10 @@ const ChatView = () => {
   };
   const flashArrived = (id) => {
     if (!id) return;
-       justArrivedIdsRef.current.add(id);
+    justArrivedIdsRef.current.add(id);
     setTimeout(() => { justArrivedIdsRef.current.delete(id); setMessages((prev) => [...prev]); }, 700);
   };
-  const triggerSendRipple = () => {
+    const triggerSendRipple = () => {
     const btn = sendButtonRef.current;
     if (!btn) return;
     btn.classList.remove('rippling');
@@ -1020,9 +1018,7 @@ const ChatView = () => {
       }
     }
     clearMessageCache(cId);
-  };
-
-  const sendMediaMessage = async (retryMessageId = null) => {
+  };  const sendMediaMessage = async (retryMessageId = null) => {
     let file = selectedFile;
     let caption = captionText.trim();
     let reply = replyTo;
@@ -1442,9 +1438,7 @@ const ChatView = () => {
   const handleTouchMove = () => {
     if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
     setPressedMsgId(null);
-  };
-
-  // ★ ECHO Plus — right-click handler (Telegram-style, desktop only)
+  };  // ★ ECHO Plus — right-click handler (Telegram-style, desktop only)
   const handleMessageContextMenu = useCallback((e, msgId) => {
     if (selectMode || !isDesktop) return;
     e.preventDefault();
@@ -1795,9 +1789,7 @@ const ChatView = () => {
         isSystem,
       };
     });
-  }, [messages]);
-
-  const renderContextMenu = () => {
+  }, [messages]);  const renderContextMenu = () => {
     if (!contextMenu) return null;
     const msg = messages.find((m) => m.id === contextMenu.msgId);
     if (!msg) return null;
@@ -2177,9 +2169,7 @@ const ChatView = () => {
         {content}
       </Fragment>
     );
-  };
-
-  useEffect(() => { clearedAtRef.current = clearedAt || 0; }, [clearedAt]);
+  };  useEffect(() => { clearedAtRef.current = clearedAt || 0; }, [clearedAt]);
 
   useEffect(() => {
     return () => { (messages || []).forEach((m) => { if (typeof m?.mediaUrl === 'string' && m.mediaUrl.startsWith('blob:')) { try { URL.revokeObjectURL(m.mediaUrl); } catch (_) {} } }); };
@@ -2391,7 +2381,8 @@ const ChatView = () => {
 
   const bulkCopy = async () => {
     const arr = [...selectedIds].map((id) => messages.find((m) => m.id === id)).filter(Boolean);
-    const text = arr.map((m) => (m.type === 'media' ? m.mediaUrl || m.caption || '' : m.text || '')).join('\n');    try { await navigator.clipboard.writeText(text); setToast({ message: `Copied ${arr.length} message${arr.length !== 1 ? 's' : ''}`, type: 'success' }); }
+    const text = arr.map((m) => (m.type === 'media' ? m.mediaUrl || m.caption || '' : m.text || '')).join('\n');
+    try { await navigator.clipboard.writeText(text); setToast({ message: `Copied ${arr.length} message${arr.length !== 1 ? 's' : ''}`, type: 'success' }); }
     catch (_) { setToast({ message: 'Copy failed', type: 'error' }); }
     exitSelectMode();
   };
