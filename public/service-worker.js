@@ -19,30 +19,32 @@ firebase.initializeApp({
 let messaging = null;
 try {
   messaging = firebase.messaging();
+  console.log('[SW] Firebase Messaging initialized');
 } catch (err) {
   console.warn('[SW] Firebase Messaging not available:', err);
 }
 
-// ─── FCM: Background Message Handler ──────────────────────
+// ─── FCM: Background message handler (WhatsApp Style) ─────
 if (messaging) {
   messaging.onBackgroundMessage((payload) => {
+    console.log('[SW] Background message received:', payload);
+
     const notification = payload.notification || {};
     const data = payload.data || {};
 
     const title = notification.title || data.title || 'New Message';
     const body = notification.body || data.body || 'You have a new message';
 
-    // These options make it look native on Android and iOS
     const options = {
       body: body,
       icon: data.icon || '/logo192.png', // Ensure this exists in your public folder
       badge: '/logo192.png',
-      vibrate: [200, 100, 200, 100, 200], // WhatsApp-style double buzz
-      tag: data.partnerId ? `chat-${data.partnerId}` : 'echo-msg', // Prevents stacking multiple notifications from the same person
-      renotify: true, // Alerts the user again if the tag matches
+      vibrate: [200, 100, 200], // Double buzz like WhatsApp
+      tag: data.partnerId ? `chat-${data.partnerId}` : 'echo-msg', // Groups messages from same person
+      renotify: true, // Vibrates again if a new message comes from the same person
       data: {
-        url: data.url || '/', // Where to go when clicked
         partnerId: data.partnerId || '',
+        url: data.partnerId ? `/chat/${data.partnerId}` : '/', // Deep link to chat
       },
     };
 
@@ -50,42 +52,32 @@ if (messaging) {
   });
 }
 
-// ─── Notification Click Handler ───────────────────────────
+// ─── Notification click handler ───────────────────────────
 self.addEventListener('notificationclick', (event) => {
-  event.notification.close(); // Close the notification
+  event.notification.close();
 
   const urlToOpen = new URL(event.notification.data?.url || '/', self.location.origin).href;
 
-  const promiseChain = clients
-    .matchAll({
-      type: 'window',
-      includeUncontrolled: true,
-    })
-    .then((windowClients) => {
-      let matchingClient = null;
-
-      // Check if the app is already open
-      for (let i = 0; i < windowClients.length; i++) {
-        const windowClient = windowClients[i];
-        if (windowClient.url === urlToOpen) {
-          matchingClient = windowClient;
-          break;
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // 1. Check if the app is already open, focus it and navigate
+      for (const client of clientList) {
+        if (client.url.includes(self.location.origin) && 'focus' in client) {
+          client.navigate(urlToOpen);
+          return client.focus();
         }
       }
-
-      // If open, focus it. If not, open a new tab.
-      if (matchingClient) {
-        return matchingClient.focus();
-      } else {
+      // 2. If not open, open a new window
+      if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }
-    });
-
-  event.waitUntil(promiseChain);
+    })
+  );
 });
 
-// ─── Existing caching logic (kept as-is) ──────────────────
+// ─── Existing caching logic ───────────────────────────────
 const CACHE_NAME = 'echo-v2-cache-v4';
+
 const PASS_THROUGH = [
   'googleapis.com', 'gstatic.com', 'google.com', 'firebaseio.com',
   'firebasestorage.googleapis.com', 'cloudinary.com', 'onrender.com', 'myhappr.com',
@@ -117,7 +109,9 @@ self.addEventListener('fetch', (event) => {
   if (request.method !== 'GET' || shouldBypass(request.url)) return;
 
   if (request.mode === 'navigate') {
-    event.respondWith(fetch(request).then((response) => response).catch(() => caches.match(request)));
+    event.respondWith(
+      fetch(request).then((response) => response).catch(() => caches.match(request))
+    );
     return;
   }
 
