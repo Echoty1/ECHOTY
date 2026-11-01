@@ -1,1 +1,202 @@
 
+/* src/components/pages/Chat/ChatViewLiquid.css */
+.cv-menu-root {
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: flex;
+  flex-direction: column;
+}
+.cv-menu-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: cvFadeIn 0.2s ease-out;
+}
+.cv-menu-reactions {
+  position: absolute;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  padding: 8px;
+  border-radius: 999px;
+  animation: cvPopIn 0.25s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+.cv-menu-lift {
+  position: absolute;
+  pointer-events: none;
+  animation: cvLiftUp 0.25s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+.cv-menu-lift > * {
+  pointer-events: auto;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+  transform: scale(1.02);
+}
+.cv-menu-list {
+  position: absolute;
+  border-radius: 16px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: cvPopIn 0.25s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+}
+.cv-glass {
+  background: rgba(30, 25, 45, 0.85);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+}
+html[data-theme="light"] .cv-glass {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+.cv-menu-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.cv-menu-item:hover {
+  background: rgba(255, 255, 255, 0.1);
+}
+html[data-theme="light"] .cv-menu-item:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+.cv-menu-item.danger {
+  color: #ef4444;
+}
+.cv-menu-item.danger i {
+  color: #ef4444;
+}
+.cv-menu-item i {
+  font-size: 15px;
+  opacity: 0.8;
+}
+.cv-swipe-reply {
+  position: absolute;
+  right: -20px;
+  top: 50%;
+  transform: translateY(-50%) scale(0.4);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #6C3CE1;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: transform 0.15s, opacity 0.15s, background 0.15s;
+  pointer-events: none;
+  z-index: -1;
+}
+.cv-swipe-reply.armed {
+  background: #8B5CF6;
+  box-shadow: 0 0 16px rgba(139, 92, 246, 0.6);
+}
+.cv-source-hidden {
+  opacity: 0.3;
+  filter: blur(2px);
+}
+.cv-reactions {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+.cv-reactions.own {
+  justify-content: flex-end;
+}
+.cv-reaction {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cv-reaction.mine {
+  background: rgba(108, 60, 225, 0.25);
+  border-color: rgba(108, 60, 225, 0.4);
+}
+.cv-reaction:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+.cv-reaction-count {
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.cv-link {
+  color: #60A5FA;
+  text-decoration: underline;
+}
+.message-bubble.own .cv-link {
+  color: #c4b5fd;
+}
+@keyframes cvFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes cvPopIn {
+  from { opacity: 0; transform: scale(0.85); }
+  to { opacity: 1; transform: scale(1); }
+}
+@keyframes cvLiftUp {
+  from { transform: translateY(var(--dy)); }
+  to { transform: translateY(0); }
+}
+.cv-swap-in {
+  animation: cvSwapIn 0.2s cubic-bezier(0.2, 1.2, 0.4, 1);
+}
+@keyframes cvSwapIn {
+  from { transform: scale(0.7); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+.cv-retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 12px;
+  background: #ef4444;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+}
+/* Fix the white reaction box to match the dark theme */
+.cv-reactions .reaction-badge {
+  background: rgba(30, 25, 45, 0.85) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  color: #fff !important;
+  backdrop-filter: blur(10px);
+}
+
+/* Hide the swipe-to-reply arrow if you are on a desktop mouse */
+@media (hover: hover) and (pointer: fine) {
+  .cv-swipe-reply {
+    display: none !important;
+  }
+}
+
+/* Ensure the gold text is readable on the partner side */
+.message-bubble.gold {
+  color: #000 !important;
+}
