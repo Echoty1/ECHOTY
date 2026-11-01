@@ -1,18 +1,22 @@
-
 /* src/components/pages/Chat/ChatViewLiquid.css */
+
+/* =========================================================
+   1. LIQUID LONG-PRESS MENU (iOS / Telegram Style)
+   ========================================================= */
 .cv-menu-root {
   position: fixed;
   inset: 0;
   z-index: 999999;
   display: flex;
   flex-direction: column;
+  perspective: 1000px;
 }
 .cv-menu-backdrop {
   position: absolute;
   inset: 0;
   background: rgba(0, 0, 0, 0.4);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  backdrop-filter: blur(8px) saturate(150%);
+  -webkit-backdrop-filter: blur(8px) saturate(150%);
   animation: cvFadeIn 0.2s ease-out;
 }
 .cv-menu-reactions {
@@ -20,39 +24,42 @@
   display: flex;
   justify-content: space-around;
   align-items: center;
-  padding: 8px;
+  padding: 10px;
   border-radius: 999px;
-  animation: cvPopIn 0.25s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+  animation: cvSpringPop 0.35s cubic-bezier(0.25, 1.5, 0.5, 1) both;
 }
 .cv-menu-lift {
   position: absolute;
   pointer-events: none;
-  animation: cvLiftUp 0.25s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+  animation: cvSpringLift 0.35s cubic-bezier(0.25, 1.5, 0.5, 1) both;
+  z-index: 10;
 }
 .cv-menu-lift > * {
   pointer-events: auto;
-  box-shadow: 0 12px 40px rgba(0,0,0,0.5);
-  transform: scale(1.02);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  transform: scale(1.05);
 }
 .cv-menu-list {
   position: absolute;
-  border-radius: 16px;
-  padding: 8px;
+  border-radius: 18px;
+  padding: 6px;
   display: flex;
   flex-direction: column;
   gap: 2px;
-  animation: cvPopIn 0.25s cubic-bezier(0.2, 1.2, 0.4, 1) both;
+  animation: cvSpringPop 0.35s cubic-bezier(0.25, 1.5, 0.5, 1) both;
+  z-index: 11;
 }
 .cv-glass {
-  background: rgba(30, 25, 45, 0.85);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  background: rgba(28, 28, 30, 0.75);
+  backdrop-filter: blur(30px) saturate(200%);
+  -webkit-backdrop-filter: blur(30px) saturate(200%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
 }
 html[data-theme="light"] .cv-glass {
-  background: rgba(255, 255, 255, 0.9);
-  border-color: rgba(0, 0, 0, 0.08);
+  background: rgba(255, 255, 255, 0.8);
+  border-color: rgba(0, 0, 0, 0.06);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
 }
 .cv-menu-item {
   display: flex;
@@ -61,142 +68,146 @@ html[data-theme="light"] .cv-glass {
   padding: 12px 16px;
   background: transparent;
   border: none;
-  color: var(--text-primary);
-  font-size: 14px;
-  font-weight: 500;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: background 0.15s;
-}
-.cv-menu-item:hover {
-  background: rgba(255, 255, 255, 0.1);
-}
-html[data-theme="light"] .cv-menu-item:hover {
-  background: rgba(0, 0, 0, 0.05);
-}
-.cv-menu-item.danger {
-  color: #ef4444;
-}
-.cv-menu-item.danger i {
-  color: #ef4444;
-}
-.cv-menu-item i {
+  color: #fff;
   font-size: 15px;
-  opacity: 0.8;
+  font-weight: 500;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: background 0.1s;
 }
+html[data-theme="light"] .cv-menu-item { color: #000; }
+.cv-menu-item:active {
+  background: rgba(255, 255, 255, 0.15);
+}
+html[data-theme="light"] .cv-menu-item:active { background: rgba(0, 0, 0, 0.08); }
+.cv-menu-item.danger { color: #ff453a; }
+.cv-menu-item.danger i { color: #ff453a; }
+.cv-menu-item i { font-size: 16px; opacity: 0.9; }
+
+/* =========================================================
+   2. SWIPE TO REPLY (iOS Fluid)
+   ========================================================= */
 .cv-swipe-reply {
   position: absolute;
-  right: -20px;
+  right: 10px;
   top: 50%;
-  transform: translateY(-50%) scale(0.4);
-  width: 36px;
-  height: 36px;
+  transform: translateY(-50%) scale(0.2);
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: #6C3CE1;
+  background: rgba(255, 255, 255, 0.2);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   opacity: 0;
-  transition: transform 0.15s, opacity 0.15s, background 0.15s;
+  transition: transform 0.2s cubic-bezier(0.2, 1, 0.4, 1), opacity 0.2s;
   pointer-events: none;
   z-index: -1;
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
 }
 .cv-swipe-reply.armed {
-  background: #8B5CF6;
-  box-shadow: 0 0 16px rgba(139, 92, 246, 0.6);
+  background: #6C3CE1;
+  transform: translateY(-50%) scale(1.1);
+  box-shadow: 0 0 20px rgba(108, 60, 225, 0.5);
 }
-.cv-source-hidden {
-  opacity: 0.3;
-  filter: blur(2px);
-}
+.message-row.own .cv-swipe-reply { left: 10px; right: auto; }
+
+/* =========================================================
+   3. REACTIONS & BUBBLES
+   ========================================================= */
+.cv-source-hidden { opacity: 0; pointer-events: none; }
+
 .cv-reactions {
   display: flex;
   gap: 4px;
-  margin-top: 4px;
+  margin-top: -6px;
+  padding: 0 8px;
+  position: relative;
+  z-index: 2;
   flex-wrap: wrap;
 }
-.cv-reactions.own {
-  justify-content: flex-end;
-}
+.cv-reactions.own { justify-content: flex-end; }
 .cv-reaction {
   display: inline-flex;
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  font-size: 12px;
+  background: rgba(30, 25, 45, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  font-size: 13px;
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.1s;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+}
+html[data-theme="light"] .cv-reaction {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.08);
 }
 .cv-reaction.mine {
-  background: rgba(108, 60, 225, 0.25);
-  border-color: rgba(108, 60, 225, 0.4);
+  background: rgba(108, 60, 225, 0.3);
+  border-color: rgba(108, 60, 225, 0.5);
 }
-.cv-reaction:hover {
-  background: rgba(255, 255, 255, 0.2);
+html[data-theme="light"] .cv-reaction.mine {
+  background: rgba(108, 60, 225, 0.15);
 }
-.cv-reaction-count {
-  font-weight: 600;
-  color: var(--text-secondary);
+.cv-reaction:active { transform: scale(0.9); }
+.cv-reaction-count { font-weight: 700; opacity: 0.8; }
+.cv-link { color: #60A5FA; text-decoration: underline; }
+.message-bubble.own .cv-link { color: #c4b5fd; }
+
+/* =========================================================
+   4. ANIMATIONS (Liquid Springs)
+   ========================================================= */
+@keyframes cvFadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes cvSpringPop {
+  0% { opacity: 0; transform: scale(0.6) translateY(20px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
 }
-.cv-link {
-  color: #60A5FA;
-  text-decoration: underline;
-}
-.message-bubble.own .cv-link {
-  color: #c4b5fd;
-}
-@keyframes cvFadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-@keyframes cvPopIn {
-  from { opacity: 0; transform: scale(0.85); }
-  to { opacity: 1; transform: scale(1); }
-}
-@keyframes cvLiftUp {
-  from { transform: translateY(var(--dy)); }
-  to { transform: translateY(0); }
+@keyframes cvSpringLift {
+  0% { transform: translateY(var(--dy)) scale(1); }
+  100% { transform: translateY(0) scale(1.05); }
 }
 .cv-swap-in {
-  animation: cvSwapIn 0.2s cubic-bezier(0.2, 1.2, 0.4, 1);
-}
-@keyframes cvSwapIn {
-  from { transform: scale(0.7); opacity: 0; }
-  to { transform: scale(1); opacity: 1; }
-}
-.cv-retry {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  margin-top: 8px;
-  padding: 6px 12px;
-  background: #ef4444;
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font-size: 12px;
-  cursor: pointer;
-}
-/* Fix the white reaction box to match the dark theme */
-.cv-reactions .reaction-badge {
-  background: rgba(30, 25, 45, 0.85) !important;
-  border: 1px solid rgba(255, 255, 255, 0.15) !important;
-  color: #fff !important;
-  backdrop-filter: blur(10px);
+  animation: cvSpringPop 0.3s cubic-bezier(0.2, 1.2, 0.4, 1);
 }
 
-/* Hide the swipe-to-reply arrow if you are on a desktop mouse */
-@media (hover: hover) and (pointer: fine) {
-  .cv-swipe-reply {
-    display: none !important;
+/* =========================================================
+   5. MOBILE OPTIMIZATIONS (iPhone Safe Areas)
+   ========================================================= */
+@media (max-width: 820px) and (hover: none) {
+  /* Make the composer stick to the keyboard perfectly */
+  .chat-input-container {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 12px));
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border-color);
+    padding-top: 8px;
+    transition: padding-bottom 0.2s ease;
   }
-}
+  
+  /* Modern iOS input field */
+  .chat-input {
+    border-radius: 20px !important;
+    padding: 10px 16px !important;
+    font-size: 16px !important; /* Prevents iOS auto-zoom */
+    box-shadow: inset 0 1px 4px rgba(0,0,0,0.05);
+    border: 1px solid rgba(255,255,255,0.1) !important;
+  }
+  
+  html[data-theme="light"] .chat-input {
+    background: #fff !important;
+    border: 1px solid rgba(0,0,0,0.08) !important;
+  }
 
-/* Ensure the gold text is readable on the partner side */
-.message-bubble.gold {
-  color: #000 !important;
+  /* Smoother bubble curves */
+  .message-bubble.own { border-bottom-right-radius: 6px; }
+  .message-bubble.partner { border-bottom-left-radius: 6px; }
+
+  /* Make long press menu fill more space on phone */
+  .cv-menu-list {
+    width: 260px !important;
+  }
 }
