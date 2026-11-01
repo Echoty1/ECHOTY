@@ -1,7 +1,6 @@
 // src/components/pages/Profile/PlusCustomizer.jsx
 import React, { useState } from 'react';
 import { useSubscription } from '../../../contexts/SubscriptionContext';
-import './PlusCustomizer.css'; // 👈 THIS LINE FIXES THE WHITE BOXES
 
 const PlusCustomizer = () => {
   const { 
