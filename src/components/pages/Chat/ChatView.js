@@ -117,13 +117,7 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024;
 const MAX_VIDEO_DURATION = 30 * 60;
 const ECHO_AI_ID = 'echo_ai_assistant';
 
-const REACTION_BAR_HEIGHT = 48;
-const REACTION_BAR_GAP = 12;
-const REACTION_ARROW_SIZE = 12;
-const REACTION_BAR_HALF_WIDTH = 150;
-
 const GROUP_WINDOW_MS = 2 * 60 * 1000;
-
 const FONT_SIZE_MAP = { sm: '13px', md: '15px', lg: '17px' };
 
 const sanitizeName = (rawName, userId) => {
@@ -203,39 +197,6 @@ const MessageReceipt = ({ msg, isMe }) => {
   return <span className="message-receipt sent" title="Sent">✓</span>;
 };
 
-const useIsDesktopPointer = () => {
-  const [isDesktop, setIsDesktop] = useState(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return false;
-    const fine = window.matchMedia('(hover: hover) and (pointer: fine)').matches;
-    const wide = window.matchMedia('(min-width: 821px)').matches;
-    return Boolean(fine || wide);
-  });
-
-  useEffect(() => {
-    if (typeof window === 'undefined' || !window.matchMedia) return undefined;
-
-    const mqFine = window.matchMedia('(hover: hover) and (pointer: fine)');
-    const mqWide = window.matchMedia('(min-width: 821px)');
-    const onChange = () => setIsDesktop(Boolean(mqFine.matches || mqWide.matches));
-
-    if (mqFine.addEventListener) mqFine.addEventListener('change', onChange);
-    else mqFine.addListener(onChange);
-
-    if (mqWide.addEventListener) mqWide.addEventListener('change', onChange);
-    else mqWide.addListener(onChange);
-
-    return () => {
-      if (mqFine.removeEventListener) mqFine.removeEventListener('change', onChange);
-      else mqFine.removeListener(onChange);
-
-      if (mqWide.removeEventListener) mqWide.removeEventListener('change', onChange);
-      else mqWide.removeListener(onChange);
-    };
-  }, []);
-
-  return isDesktop;
-};
-
 const ChatView = () => {
   const { userId } = useParams();
   const { user } = useAuth();
@@ -245,7 +206,6 @@ const ChatView = () => {
   const { chatStyle: myChatStyle, isEchoPlus } = useSubscription();
 
   useVisualViewport();
-  const isDesktop = useIsDesktopPointer();
 
   const { settings: userSettings } = useUserSettings(user?.uid);
   const partnerPrivacy = useUserPrivacy(userId);
@@ -260,7 +220,6 @@ const ChatView = () => {
   const videoFullscreenDefault = userSettings?.chats?.videoFullscreen !== false;
 
   const [blockedByMe, setBlockedByMe] = useState(false);
-
   const [partnerProfile, setPartnerProfile] = useState(null);
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [messages, setMessages] = useState([]);
@@ -277,14 +236,13 @@ const ChatView = () => {
   const [editingMediaMessage, setEditingMediaMessage] = useState(null);
   const [deletingMessageId, setDeletingMessageId] = useState(null);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
-  const [showReactionPicker, setShowReactionPicker] = useState(false);
-  const [reactingMessageId, setReactingMessageId] = useState(null);
-  const [reactionPickerAnchor, setReactionPickerAnchor] = useState(null);
   const [reactionViewer, setReactionViewer] = useState(null);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
-  const [activeMessageMenuId, setActiveMessageMenuId] = useState(null);
+  
+  // WhatsApp Style Menu State
+  const [activeMessageMenuId, setActiveMessageMenuId] = useState(null); 
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
 
   const [mentionQuery, setMentionQuery] = useState(null);
@@ -292,13 +250,11 @@ const ChatView = () => {
   const [mentionIndex, setMentionIndex] = useState(0);
   const [mentionStartIndex, setMentionStartIndex] = useState(-1);
   const [isMuted, setIsMuted] = useState(false);
-
   const [replyToNote, setReplyToNote] = useState(null);
 
   const [wallpaperId, setWallpaperId] = useState('default');
   const [customWallpaper, setCustomWallpaper] = useState(null);
   const [showWallpaperPicker, setShowWallpaperPicker] = useState(false);
-
   const [haloActive, setHaloActive] = useState(false);
   const longPressTimer = useRef(null);
 
@@ -322,22 +278,16 @@ const ChatView = () => {
   const [tideTick, setTideTick] = useState(Date.now());
 
   const [savingIds, setSavingIds] = useState({});
-
   const [pressedMsgId, setPressedMsgId] = useState(null);
   const [tappedEmoji, setTappedEmoji] = useState(null);
-
   const [unreadWhileScrolled, setUnreadWhileScrolled] = useState(0);
-
   const [pinnedMessageId, setPinnedMessageId] = useState(null);
-
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
 
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false, title: '', message: '', confirmText: 'Confirm', cancelText: 'Cancel', onConfirm: null,
   });
-
-  const [contextMenu, setContextMenu] = useState(null); 
 
   const messagesEndRef = useRef(null);
   const messagesContainerRef = useRef(null);
@@ -521,22 +471,17 @@ const ChatView = () => {
   }, [user?.uid, userId, isGroupChat]);
 
   useEffect(() => {
-    if (!contextMenu) return;
-    const close = () => setContextMenu(null);
-    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    if (!activeMessageMenuId) return;
+    const close = () => setActiveMessageMenuId(null);
     window.addEventListener('click', close);
-    window.addEventListener('contextmenu', close);
-    window.addEventListener('keydown', onKey);
     window.addEventListener('scroll', close, true);
     window.addEventListener('resize', close);
     return () => {
       window.removeEventListener('click', close);
-      window.removeEventListener('contextmenu', close);
-      window.removeEventListener('keydown', onKey);
       window.removeEventListener('scroll', close, true);
       window.removeEventListener('resize', close);
     };
-  }, [contextMenu]);
+  }, [activeMessageMenuId]);
 
   const handleWallpaperSelect = async (id) => {
     setWallpaperId(id);
@@ -615,7 +560,9 @@ const ChatView = () => {
     window.dispatchEvent(new CustomEvent('chat-read', { detail: { userId } }));
     notifyChatListUpdate(userId, { unreadCount: 0 });
     hasMarkedRead.current = true;
-  };  const markMessagesAsRead = async () => {
+  };
+
+  const markMessagesAsRead = async () => {
     if (!user?.uid || !userId) return;
     if (!sendReadReceipts) return;
     const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
@@ -668,8 +615,10 @@ const ChatView = () => {
   };
 
   const scrollToBottom = (smooth = true) => {
-    if (messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'instant' });
+    if (messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
     setUnreadWhileScrolled(0);
+    isNearBottomRef.current = true;
+    setIsNearBottom(true);
   };
 
   const uploadToCloudinary = (file, onProgress) => {
@@ -726,10 +675,13 @@ const ChatView = () => {
   };
   const flashArrived = (id) => {
     if (!id) return;
+    justArrivedIdsRef  const flashArrived = (id) => {
+    if (!id) return;
     justArrivedIdsRef.current.add(id);
     setTimeout(() => { justArrivedIdsRef.current.delete(id); setMessages((prev) => [...prev]); }, 700);
   };
-    const triggerSendRipple = () => {
+  
+  const triggerSendRipple = () => {
     const btn = sendButtonRef.current;
     if (!btn) return;
     btn.classList.remove('rippling');
@@ -762,7 +714,6 @@ const ChatView = () => {
       const res = await fetch(msg.mediaUrl, { mode: 'cors' });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const blob = await res.blob();
-
       let ext = 'jpg';
       if (msg.mediaType === 'video') ext = 'mp4';
       else if (msg.mediaType === 'audio') ext = 'webm';
@@ -1018,7 +969,9 @@ const ChatView = () => {
       }
     }
     clearMessageCache(cId);
-  };  const sendMediaMessage = async (retryMessageId = null) => {
+  };  
+
+  const sendMediaMessage = async (retryMessageId = null) => {
     let file = selectedFile;
     let caption = captionText.trim();
     let reply = replyTo;
@@ -1343,39 +1296,15 @@ const ChatView = () => {
     setReplyTo({ messageId: msg.id, senderName, messageType: msg.type || 'text', textSnippet, originalMessage: msg });
     setNewMessage('');
     setActiveMessageMenuId(null);
-    setContextMenu(null);
     setTimeout(() => inputRef.current?.focus(), 100);
   }, [user, partnerProfile, currentUserProfile, location.state?.userName, isGroupChat]);
-
-  const handleReact = useCallback((messageId) => {
-    setActiveMessageMenuId(null);
-    setContextMenu(null);
-    const msgElement = messageRefs.current[messageId];
-    if (!msgElement) {
-      setReactionPickerAnchor({ top: window.innerHeight / 2, left: window.innerWidth / 2, flipped: false });
-      setShowReactionPicker(true);
-      setReactingMessageId(messageId);
-      return;
-    }
-    const rect = msgElement.getBoundingClientRect();
-    const windowWidth = window.innerWidth;
-    let top = rect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP - REACTION_ARROW_SIZE;
-    let flipped = false;
-    if (top < 60) { top = rect.bottom + REACTION_BAR_GAP + REACTION_ARROW_SIZE; flipped = true; }
-    let left = rect.left + rect.width / 2 - REACTION_BAR_HALF_WIDTH;
-    left = Math.max(10, Math.min(left, windowWidth - 20));
-    setReactionPickerAnchor({ top, left, flipped });
-    setReactingMessageId(messageId);
-    setShowReactionPicker(true);
-  }, []);
 
   const handleReactionSelect = async (emojiKey, msgIdOverride = null) => {
     hapticLight();
     setTappedEmoji(emojiKey);
     setTimeout(() => setTappedEmoji(null), 220);
-    setShowReactionPicker(false);
-    setReactionPickerAnchor(null);
-    const targetId = msgIdOverride || reactingMessageId;
+    setActiveMessageMenuId(null);
+    const targetId = msgIdOverride;
     if (!targetId || !user?.uid || !userId) return;
     const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
     const reactionRef = ref(db, `${msgRoot}/${targetId}/reactions/${user.uid}`);
@@ -1384,79 +1313,36 @@ const ChatView = () => {
       const currentReaction = currentMsg?.reactions?.[user.uid];
       if (currentReaction === emojiKey) await remove(reactionRef);
       else await set(reactionRef, emojiKey);
-      setReactingMessageId(null);
     } catch (err) { console.warn('Reaction error:', err); if (!err.message?.includes('PERMISSION_DENIED')) alert('Failed to react. Please try again.'); }
   };
 
-  const closeReactionPicker = () => { setShowReactionPicker(false); setReactingMessageId(null); setReactionPickerAnchor(null); };
-
-  useEffect(() => {
-    if (!showReactionPicker) return;
-    const container = messagesContainerRef.current;
-    const onDismiss = () => closeReactionPicker();
-    if (container) container.addEventListener('scroll', onDismiss);
-    window.addEventListener('resize', onDismiss);
-    return () => { if (container) container.removeEventListener('scroll', onDismiss); window.removeEventListener('resize', onDismiss); };
-  }, [showReactionPicker]);
-
   const handleTouchStart = (msg, e) => {
     if (selectMode) return;
-    if (isDesktop) return;
     if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
     setPressedMsgId(msg.id);
     touchTimerRef.current = setTimeout(() => {
       if (window.navigator?.vibrate) window.navigator.vibrate(50);
       setPressedMsgId(null);
-      const msgElement = messageRefs.current[msg.id];
-      if (msgElement) {
-        const msgRect = msgElement.getBoundingClientRect();
-        const windowWidth = window.innerWidth;
-        let top = msgRect.top - REACTION_BAR_HEIGHT - REACTION_BAR_GAP - REACTION_ARROW_SIZE;
-        let flipped = false;
-        if (top < 60) { top = msgRect.bottom + REACTION_BAR_GAP + REACTION_ARROW_SIZE; flipped = true; }
-        let left = msgRect.left + msgRect.width / 2 - REACTION_BAR_HALF_WIDTH;
-        left = Math.max(10, Math.min(left, windowWidth - 20));
-        setReactionPickerAnchor({ top, left, flipped });
-      }
-      setShowReactionPicker(true);
-      setReactingMessageId(msg.id);
-      setActiveMessageMenuId(null);
+      setActiveMessageMenuId(msg.id);
     }, 400);
   };
 
   const handleTouchEnd = (msg) => {
     if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
     setPressedMsgId(null);
-    if (selectMode) return;
-    if (isDesktop) return;
-    const now = Date.now();
-    const lastTap = lastTapRef.current;
-    if (lastTap.msgId === msg.id && now - lastTap.time < 300) { handleReactionSelect('heart', msg.id); lastTapRef.current = { time: 0, msgId: null }; }
-    else lastTapRef.current = { time: now, msgId: msg.id };
   };
 
   const handleTouchMove = () => {
     if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
     setPressedMsgId(null);
-  };  // ★ ECHO Plus — right-click handler (Telegram-style, desktop only)
+  };
+
   const handleMessageContextMenu = useCallback((e, msgId) => {
-    if (selectMode || !isDesktop) return;
+    if (selectMode) return;
     e.preventDefault();
     e.stopPropagation();
-    setActiveMessageMenuId(null);
-
-    const menuWidth = 230;
-    const menuHeight = 390;
-    const padding = 8;
-    const maxX = Math.max(padding, window.innerWidth - menuWidth - padding);
-    const maxY = Math.max(padding, window.innerHeight - menuHeight - padding);
-    const x = Math.min(Math.max(padding, e.clientX), maxX);
-    const y = Math.min(Math.max(padding, e.clientY), maxY);
-
-    setContextMenu({ x, y, msgId });
-  }, [selectMode, isDesktop]);
-
-  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+    setActiveMessageMenuId(msgId);
+  }, [selectMode]);
 
   const handleEditMessage = (msg) => {
     if (msg.senderId !== user?.uid) return;
@@ -1464,7 +1350,6 @@ const ChatView = () => {
     if (msg.type === 'media') { setEditingMediaMessage(msg); return; }
     setEditingMessage(msg);
     setActiveMessageMenuId(null);
-    setContextMenu(null);
   };
 
   const saveEditedMessage = async (newText) => {
@@ -1482,6 +1367,9 @@ const ChatView = () => {
   const saveEditedMediaCaption = async (newCaption) => {
     if (!editingMediaMessage || !user?.uid || !userId) return;
     const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
+    const messageId  const saveEditedMediaCaption = async (newCaption) => {
+    if (!editingMediaMessage || !user?.uid || !userId) return;
+    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
     const messageId = editingMediaMessage.id;
     try {
       await update(ref(db, `${msgRoot}/${messageId}`), { caption: newCaption, isEdited: true, lastEditedAt: serverTimestamp() });
@@ -1494,7 +1382,6 @@ const ChatView = () => {
   const handleDeleteMessage = (msgId) => {
     setDeletingMessageId(msgId);
     setActiveMessageMenuId(null);
-    setContextMenu(null);
     openConfirmModal({ title: 'Delete Message', message: 'Are you sure you want to delete this message? This action cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', onConfirm: () => confirmDeleteMessage(msgId) });
   };
 
@@ -1515,14 +1402,12 @@ const ChatView = () => {
     try { await navigator.clipboard.writeText(text); setToast({ message: 'Copied to clipboard', type: 'success' }); }
     catch (_) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); setToast({ message: 'Copied to clipboard', type: 'success' }); }
     setActiveMessageMenuId(null);
-    setContextMenu(null);
   };
 
   const handlePinMessage = async (msg) => {
     if (!user?.uid || !userId) return;
     const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
     setActiveMessageMenuId(null);
-    setContextMenu(null);
     try {
       const currentlyPinned = pinnedMessageId === msg.id;
       await set(ref(db, `chats/${cId}/pinnedMessageId`), currentlyPinned ? null : msg.id);
@@ -1680,7 +1565,7 @@ const ChatView = () => {
       const result = await saveToEchoArchive(user.uid, { ...msg, senderName, senderAvatar }, { chatId: cId, source: 'chat', partnerId: userId, senderName, senderAvatar });
       if (result?.ok) { await update(ref(db, `${isGroupChat ? `groups/${groupIdFromChat}` : `chats/${cId}`}/messages/${msg.id}`), { pinned: true }).catch(() => {}); const rows = await listEchoArchive(user.uid); const map = {}; rows.forEach((row) => { if (row.message?.id) map[row.message.id] = row.archiveId; }); setBookmarkedIds(map); }
     } catch (_) {}
-    setContextMenu(null);
+    setActiveMessageMenuId(null);
   };
 
   const renderTide = (msg) => {
@@ -1709,263 +1594,107 @@ const ChatView = () => {
     );
   };
 
-  const renderInlineActions = (msg) => {
-    const isOwn = String(msg.senderId || '') === String(user?.uid || '');
-    const isAi = msg.senderId === ECHO_AI_ID;
+  // ★ WHATSAPP STYLE POP-OUT MENU
+  const renderWhatsAppMenu = (msg, isOwn) => {
+    if (activeMessageMenuId !== msg.id) return null;
     const allowEdit = isOwn && userId !== ECHO_AI_ID && msg.type !== 'audio';
-    const allowDelete = isOwn || (userId === ECHO_AI_ID && isAi);
+    const allowDelete = isOwn || (userId === ECHO_AI_ID && msg.senderId === ECHO_AI_ID);
     const isPinned = pinnedMessageId === msg.id;
-    const EmojiIcon = () => <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"/></svg>;
-    const ReplyIcon = () => <svg viewBox="0 0 24 24"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z"/></svg>;
-    const EditIcon = () => <svg viewBox="0 0 24 24"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>;
-    const CopyIcon = () => <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>;
-    const SaveIcon = () => <svg viewBox="0 0 24 24"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>;
-    const DeleteIcon = () => <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>;
-    const PinIcon = ({ filled }) => <svg viewBox="0 0 24 24">{filled ? <path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z"/> : <path d="M14 4v5c0 1.12.37 2.16 1 3H9c.65-.86 1-1.9 1-3V4h4m3-2H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3V4h1c.55 0 1-.45 1-1s-.45-1-1-1z"/>}</svg>;
-    const SelectIcon = () => <svg viewBox="0 0 24 24"><path d="M3 5h2V3c-1.1 0-2 .9-2 2zm0 8h2v-2H3v2zm4 8h2v-2H7v2zM3 9h2V7H3v2zm10-6h-2v2h2V3zm6 0v2h2c0-1.1-.9-2-2-2zM5 21v-2H3c0 1.1.9 2 2 2zm-2-4h2v-2H3v2zM9 3H7v2h2V3zm2 18h2v-2h-2v2zm8-8h2v-2h-2v2zm0 8c1.1 0 2-.9 2-2h-2v2zm0-12h2V7h-2v2zm0 8h2v-2h-2v2zm-4 4h2v-2h-2v2zm0-16h2V3h-2v2zM7 17h10V7H7v10zm2-8h6v6H9V9z"/></svg>;
 
     return (
-      <div className={`message-inline-actions ${isOwn ? 'own' : 'partner'}`}>
-        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleReact(msg.id); }} title="React"><EmojiIcon /></button>
-        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleReply(msg); }} title="Reply"><ReplyIcon /></button>
-        {allowEdit && <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleEditMessage(msg); }} title="Edit"><EditIcon /></button>}
-        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handleCopy(msg); }} title="Copy"><CopyIcon /></button>
-        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); handlePinMessage(msg); }} title={isPinned ? 'Unpin' : 'Pin'}><PinIcon filled={isPinned} /></button>
-        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); saveMessageToArchive(msg); }} title="Save to archive"><SaveIcon /></button>
-        {allowDelete && <button className="message-action-btn danger" onClick={(e) => { e.stopPropagation(); handleDeleteMessage(msg.id); }} title="Delete"><DeleteIcon /></button>}
-        <button className="message-action-btn" onClick={(e) => { e.stopPropagation(); setSelectMode(true); setSelectedIds(new Set([msg.id])); setActiveMessageMenuId(null); }} title="Select"><SelectIcon /></button>
+      <div 
+        className="whatsapp-popout-menu" 
+        style={{ 
+          position: 'absolute', 
+          bottom: '100%', 
+          [isOwn ? 'right' : 'left']: 0, 
+          marginBottom: '8px', 
+          zIndex: 100,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: isOwn ? 'flex-end' : 'flex-start',
+          gap: '8px'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Top Reaction Bar */}
+        <div style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '30px', padding: '6px 10px', display: 'flex', gap: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
+          {REACTION_EMOJIS.map(({ key, Component }) => (
+            <button key={key} type="button" onClick={() => handleReactionSelect(key, msg.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, transform: tappedEmoji === key ? 'scale(1.3)' : 'scale(1)', transition: 'transform 0.1s' }}>
+              <div style={{ width: '24px', height: '24px' }}><Component /></div>
+            </button>
+          ))}
+        </div>
+
+        {/* Options Menu Below */}
+        <div style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px', padding: '6px', display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '160px', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
+          <button onClick={() => handleReply(msg)} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <i className="fas fa-reply" style={{ width: '16px' }}></i> Reply
+          </button>
+          <button onClick={() => handleCopy(msg)} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <i className="fas fa-copy" style={{ width: '16px' }}></i> Copy
+          </button>
+          <button onClick={() => handlePinMessage(msg)} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <i className="fas fa-thumbtack" style={{ width: '16px' }}></i> {isPinned ? 'Unpin' : 'Pin'}
+          </button>
+          <button onClick={() => saveMessageToArchive(msg)} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <i className="fas fa-bookmark" style={{ width: '16px' }}></i> {bookmarkedIds[msg.id] ? 'Unsave' : 'Save'}
+          </button>
+          {allowEdit && (
+            <button onClick={() => handleEditMessage(msg)} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <i className="fas fa-pen" style={{ width: '16px' }}></i> Edit
+            </button>
+          )}
+          <button onClick={() => { setSelectMode(true); setSelectedIds(new Set([msg.id])); setActiveMessageMenuId(null); }} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <i className="fas fa-check-square" style={{ width: '16px' }}></i> Select
+          </button>
+          {allowDelete && (
+            <button onClick={() => handleDeleteMessage(msg.id)} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#ff4d4d', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+              <i className="fas fa-trash" style={{ width: '16px' }}></i> Delete
+            </button>
+          )}
+        </div>
       </div>
     );
   };
 
+  // ★ NEW: Render a reply-to-note card (was referenced but never defined)
   const renderNoteReplyCard = (note) => {
     if (!note) return null;
     return (
-      <div className="note-reply-card">
-        {note.song?.title && (
-          <button type="button" className="note-reply-song" onClick={(e) => { e.stopPropagation(); if (note.song?.sourceUrl) window.open(note.song.sourceUrl, '_blank', 'noopener,noreferrer'); }} aria-label={`Open ${note.song.title}`}>
-            <span className="note-reply-song-art">{note.song.artwork ? <img src={note.song.artwork} alt="" loading="lazy" /> : <span>🎵</span>}</span>
-            <span className="note-reply-song-meta">
-              <span className="note-reply-song-title">{note.song.title}</span>
-              {note.song.artist && <span className="note-reply-song-artist">{note.song.artist}</span>}
-            </span>
-            <span className="note-reply-song-play" aria-hidden="true"><svg viewBox="0 0 24 24" width="12" height="12"><path d="M8 5v14l11-7z" fill="currentColor" /></svg></span>
-          </button>
-        )}
-        {note.text && <p className="note-reply-text">{note.text}</p>}
-      </div>
-    );
-  };
-
-  const groupedMessages = useMemo(() => {
-    const sorted = sortMessages(messages);
-    return sorted.map((msg, i, arr) => {
-      const prev = arr[i - 1];
-      const next = arr[i + 1];
-      const isSystem = msg.type === 'system' || msg.system;
-
-      const sameSenderAsPrev = !isSystem && prev && !(prev.type === 'system' || prev.system) && prev.senderId === msg.senderId;
-      const sameSenderAsNext = !isSystem && next && !(next.type === 'system' || next.system) && next.senderId === msg.senderId;
-
-      const withinPrev = sameSenderAsPrev && Math.abs(msgTime(msg) - msgTime(prev)) < GROUP_WINDOW_MS;
-      const withinNext = sameSenderAsNext && Math.abs(msgTime(next) - msgTime(msg)) < GROUP_WINDOW_MS;
-
-      const breaksTop = !withinPrev || !!msg.replyTo || !!msg.replyToNote;
-      const breaksBottom = !withinNext || !!next?.replyTo || !!next?.replyToNote;
-
-      const groupTop = breaksTop;
-      const groupBottom = breaksBottom;
-
-      const dayThis = startOfDay(msgTime(msg) || Date.now());
-      const dayPrev = prev ? startOfDay(msgTime(prev) || Date.now()) : null;
-      const showDateSeparator = dayPrev === null || dayThis !== dayPrev;
-
-      return {
-        msg,
-        groupTop,
-        groupBottom,
-        showDateSeparator,
-        dateLabel: showDateSeparator ? formatDayLabel(msgTime(msg) || Date.now()) : null,
-        isSystem,
-      };
-    });
-  }, [messages]);  const renderContextMenu = () => {
-    if (!contextMenu) return null;
-    const msg = messages.find((m) => m.id === contextMenu.msgId);
-    if (!msg) return null;
-    const isOwn = String(msg.senderId || '') === String(user?.uid || '');
-    const isAi = msg.senderId === ECHO_AI_ID;
-    const allowEdit = isOwn && userId !== ECHO_AI_ID && msg.type !== 'audio';
-    const allowDelete = isOwn || (userId === ECHO_AI_ID && isAi);
-    const isPinned = pinnedMessageId === msg.id;
-    const textToCopy = msg.type === 'media' ? msg.mediaUrl || msg.caption || '' : msg.text || '';
-
-    return (
       <div
-        className="chat-context-menu echo-liquid-context-menu"
+        className="note-reply-card"
+        onClick={() => { if (note.authorUid) navigate(`/user/${note.authorUid}`); }}
+        role="button"
+        tabIndex={0}
         style={{
-          position: 'fixed',
-          top: contextMenu.y,
-          left: contextMenu.x,
-          zIndex: 99999,
-          width: 244,
-          maxWidth: 'calc(100vw - 20px)',
-          maxHeight: 'min(430px, calc(100vh - 20px))',
-          overflowY: 'auto',
-          overflowX: 'hidden',
-          padding: 7,
           display: 'flex',
-          flexDirection: 'column',
-          gap: 3,
-          boxSizing: 'border-box',
-          color: '#eef2ff',
-          background: 'linear-gradient(145deg, rgba(35,34,49,.97), rgba(19,20,31,.97))',
-          border: '1px solid rgba(255,255,255,.14)',
-          borderRadius: 17,
-          boxShadow: '0 18px 55px rgba(0,0,0,.52), inset 0 1px 0 rgba(255,255,255,.08)',
-          backdropFilter: 'blur(24px) saturate(165%)',
-          WebkitBackdropFilter: 'blur(24px) saturate(165%)',
+          alignItems: 'flex-start',
+          gap: '8px',
+          padding: '8px 10px',
+          marginBottom: '6px',
+          background: 'rgba(108, 60, 225, 0.1)',
+          borderLeft: '3px solid #6C3CE1',
+          borderRadius: '8px',
+          cursor: 'pointer',
+          fontSize: '12.5px',
         }}
-        onClick={(e) => e.stopPropagation()}
-        onContextMenu={(e) => { e.preventDefault(); e.stopPropagation(); }}
-        role="menu"
-        aria-label="Message actions"
       >
-        <style>{`
-          .echo-liquid-context-menu {
-            box-sizing: border-box !important;
-            width: 244px !important;
-            max-width: calc(100vw - 20px) !important;
-            max-height: min(430px, calc(100vh - 20px)) !important;
-            overflow-y: auto !important;
-            overflow-x: hidden !important;
-            padding: 7px !important;
-            display: flex !important;
-            flex-direction: column !important;
-            gap: 3px !important;
-            color: #eef2ff !important;
-            background: linear-gradient(145deg, rgba(35, 34, 49, .96), rgba(19, 20, 31, .96)) !important;
-            border: 1px solid rgba(255,255,255,.13) !important;
-            border-radius: 17px !important;
-            box-shadow: 0 18px 55px rgba(0,0,0,.48), 0 3px 12px rgba(0,0,0,.22), inset 0 1px 0 rgba(255,255,255,.08) !important;
-            -webkit-backdrop-filter: blur(24px) saturate(165%) !important;
-            backdrop-filter: blur(24px) saturate(165%) !important;
-            animation: echoLiquidMenuIn .16s cubic-bezier(.2,.8,.2,1) both !important;
-            transform-origin: top left !important;
-            scrollbar-width: thin !important;
-            scrollbar-color: rgba(160,150,210,.35) transparent !important;
-          }
-          .echo-liquid-context-menu .ctx-item {
-            appearance: none !important;
-            -webkit-appearance: none !important;
-            box-sizing: border-box !important;
-            width: 100% !important;
-            min-height: 39px !important;
-            flex: 0 0 auto !important;
-            display: flex !important;
-            align-items: center !important;
-            gap: 12px !important;
-            padding: 0 12px !important;
-            margin: 0 !important;
-            border: 1px solid transparent !important;
-            border-radius: 11px !important;
-            background: transparent !important;
-            color: #e9eaf4 !important;
-            font: 500 13.5px/1.2 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif !important;
-            text-align: left !important;
-            white-space: nowrap !important;
-            cursor: pointer !important;
-            transition: background .16s ease, color .16s ease, border-color .16s ease, transform .16s ease !important;
-          }
-          .echo-liquid-context-menu .ctx-item svg {
-            width: 17px !important;
-            height: 17px !important;
-            flex: 0 0 17px !important;
-            color: #aeb4cc !important;
-            opacity: .94 !important;
-          }
-          .echo-liquid-context-menu .ctx-item:hover,
-          .echo-liquid-context-menu .ctx-item:focus-visible {
-            outline: none !important;
-            color: #fff !important;
-            background: linear-gradient(100deg, rgba(103,82,220,.28), rgba(67,128,230,.16)) !important;
-            border-color: rgba(153,139,255,.19) !important;
-          }
-          .echo-liquid-context-menu .ctx-item:hover svg,
-          .echo-liquid-context-menu .ctx-item:focus-visible svg {
-            color: #b9aaff !important;
-          }
-          .echo-liquid-context-menu .ctx-item:active {
-            transform: scale(.985) !important;
-            background: rgba(120,103,235,.28) !important;
-          }
-          .echo-liquid-context-menu .ctx-item.danger {
-            color: #ff858f !important;
-          }
-          .echo-liquid-context-menu .ctx-item.danger svg {
-            color: #ff858f !important;
-          }
-          .echo-liquid-context-menu .ctx-item.danger:hover {
-            color: #fff !important;
-            background: rgba(235,75,94,.17) !important;
-            border-color: rgba(255,105,120,.18) !important;
-          }
-          .echo-liquid-context-menu .ctx-divider {
-            height: 1px !important;
-            min-height: 1px !important;
-            margin: 4px 7px !important;
-            background: linear-gradient(90deg, transparent, rgba(255,255,255,.16), transparent) !important;
-          }
-          @keyframes echoLiquidMenuIn {
-            from { opacity: 0; transform: translateY(5px) scale(.97); }
-            to { opacity: 1; transform: translateY(0) scale(1); }
-          }
-          @media (prefers-reduced-motion: reduce) {
-            .echo-liquid-context-menu { animation: none !important; }
-            .echo-liquid-context-menu .ctx-item { transition: none !important; }
-          }
-        `}</style>
-        <button type="button" className="ctx-item" onClick={() => handleReact(msg.id)} role="menuitem">
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z" fill="currentColor" /></svg>
-          React
-        </button>
-        <button type="button" className="ctx-item" onClick={() => handleReply(msg)} role="menuitem">
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M10 9V5l-7 7 7 7v-4.1c5 0 8.5 1.6 11 5.1-1-5-4-10-11-11z" fill="currentColor" /></svg>
-          Reply
-        </button>
-        {textToCopy && (
-          <button type="button" className="ctx-item" onClick={() => handleCopy(msg)} role="menuitem">
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z" fill="currentColor" /></svg>
-            Copy
-          </button>
-        )}
-        {allowEdit && (
-          <button type="button" className="ctx-item" onClick={() => handleEditMessage(msg)} role="menuitem">
-            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34a.9959.9959 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z" fill="currentColor" /></svg>
-            Edit
-          </button>
-        )}
-        <button type="button" className="ctx-item" onClick={() => handlePinMessage(msg)} role="menuitem">
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" fill="currentColor" /></svg>
-          {isPinned ? 'Unpin' : 'Pin'}
-        </button>
-        <button type="button" className="ctx-item" onClick={() => saveMessageToArchive(msg)} role="menuitem">
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z" fill="currentColor" /></svg>
-          {bookmarkedIds[msg.id] ? 'Remove from archive' : 'Save to archive'}
-        </button>
-        <button type="button" className="ctx-item" onClick={() => { setSelectMode(true); setSelectedIds(new Set([msg.id])); setContextMenu(null); }} role="menuitem">
-          <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 5h2V3c-1.1 0-2 .9-2 2zm0 8h2v-2H3v2zm4 8h2v-2H7v2zM3 9h2V7H3v2zm10-6h-2v2h2V3zm6 0v2h2c0-1.1-.9-2-2-2zM5 21v-2H3c0 1.1.9 2 2 2zm-2-4h2v-2H3v2zM9 3H7v2h2V3zm2 18h2v-2h-2v2zm8-8h2v-2h-2v2zm0 8c1.1 0 2-.9 2-2h-2v2zm0-12h2V7h-2v2zm0 8h2v-2h-2v2zm-4 4h2v-2h-2v2zm0-16h2V3h-2v2zM7 17h10V7H7v10zm2-8h6v6H9V9z" fill="currentColor" /></svg>
-          Select
-        </button>
-        {allowDelete && (
-          <>
-            <div className="ctx-divider" />
-            <button type="button" className="ctx-item danger" onClick={() => handleDeleteMessage(msg.id)} role="menuitem">
-              <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" fill="currentColor" /></svg>
-              Delete
-            </button>
-          </>
-        )}
+        <i className="fas fa-sticky-note" style={{ color: '#6C3CE1', marginTop: '2px' }} />
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em', color: '#6C3CE1', marginBottom: '2px' }}>
+            {note.authorName || 'User'}&apos;s note
+          </div>
+          {note.song?.title ? (
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              🎵 {note.song.title}{note.song.artist ? ` · ${note.song.artist}` : ''}
+            </div>
+          ) : (
+            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.85 }}>
+              {note.text || 'Note'}
+            </div>
+          )}
+        </div>
       </div>
     );
   };
@@ -2000,16 +1729,15 @@ const ChatView = () => {
 
     const showSenderName = isGroupChat && !isOwn && groupTop && !isSystem;
 
-    // ★ ECHO Plus — apply premium bubble style based on WHO sent it
     const senderIsPlus = msg.senderIsPlus || (isOwn && isEchoPlus);
     const appliedStyle = isOwn ? myChatStyle : (senderIsPlus ? msg.senderChatStyle : '');
 
     const shell = (inner) => {
       const row = (
         <div
-          className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${justSent ? 'just-sent' : ''} ${justArrived ? 'just-arrived' : ''} ${isPressed ? 'pressed' : ''} ${groupTop ? 'group-top' : 'group-mid'} ${groupBottom ? 'group-bottom' : 'group-mid'} ${isSelected ? 'selected' : ''} ${selectMode ? 'select-mode' : ''} ${isDesktop ? 'on-desktop-context' : ''}`}
+          className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${justSent ? 'just-sent' : ''} ${justArrived ? 'just-arrived' : ''} ${isPressed ? 'pressed' : ''} ${groupTop ? 'group-top' : 'group-mid'} ${groupBottom ? 'group-bottom' : 'group-mid'} ${isSelected ? 'selected' : ''} ${selectMode ? 'select-mode' : ''}`}
           ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
-          onClick={() => {
+          onClick={(e) => {
             if (selectMode) {
               setSelectedIds((prev) => {
                 const n = new Set(prev);
@@ -2018,16 +1746,11 @@ const ChatView = () => {
               });
               return;
             }
-            if (isDesktop) return; // Desktop uses the native right-click context menu.
-            setActiveMessageMenuId(activeMessageMenuId === msg.id ? null : msg.id);
+            if (activeMessageMenuId !== msg.id) {
+               setActiveMessageMenuId(null);
+            }
           }}
           onContextMenu={(e) => handleMessageContextMenu(e, msg.id)}
-          onMouseEnter={() => {
-            if (!selectMode && !isDesktop) setActiveMessageMenuId(msg.id);
-          }}
-          onMouseLeave={() => {
-            if (!isDesktop) setActiveMessageMenuId(null);
-          }}
           onTouchStart={(e) => handleTouchStart(msg, e)}
           onTouchEnd={() => handleTouchEnd(msg)}
           onTouchMove={handleTouchMove}
@@ -2040,13 +1763,15 @@ const ChatView = () => {
             </div>
           )}
           <div className={`message-stack ${isOwn ? 'own' : 'partner'}`} style={{ position: 'relative', marginBottom: msg.reactions && Object.keys(msg.reactions).length > 0 ? '14px' : 0 }}>
+            {renderWhatsAppMenu(msg, isOwn)}
+            
             {showSenderName && (
               <div className={`group-sender-name ${senderIsPlus ? 'premium-sender' : ''}`} style={{ color: senderIsPlus ? undefined : senderColor(msg.senderId), display: 'flex', alignItems: 'center', gap: '4px' }}>
                 {msg.senderName || 'Member'}
                 {senderIsPlus && <PlusBadge size={14} />}
               </div>
             )}
-            <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${appliedStyle} ${msg.pending ? 'pending' : ''} ${isPinned ? 'pinned' : ''} ${isOwn && isEchoPlus ? 'premium-glow' : ''}`}>
+            <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${appliedStyle} ${msg.pending ? 'pending' : ''} ${isPinned ? 'pinned' : ''} ${isOwn && isEchoPlus ? 'premium-glow' : ''} ${isPressed ? 'scale-105 transition-transform' : ''}`}>
               {isPinned && (
                 <span className="message-pin-badge" title="Pinned">
                   <svg viewBox="0 0 24 24" width="11" height="11"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" fill="currentColor"/></svg>
@@ -2060,7 +1785,6 @@ const ChatView = () => {
               {renderTide(msg)}
             </div>
             {renderReactions(msg.reactions, msg.id, isOwn)}
-            {!selectMode && !isDesktop && activeMessageMenuId === msg.id && <div className="message-inline-menu-wrapper" onClick={(e) => e.stopPropagation()}>{renderInlineActions(msg)}</div>}
           </div>
         </div>
       );
@@ -2072,17 +1796,9 @@ const ChatView = () => {
     if (msg.type === 'spotlight') {
       content = shell(
         <>
-          {replyToDisplay && (
-            <RepliedMessage
-              replyTo={replyToDisplay}
-              onTap={() => jumpToMessage(replyToDisplay.messageId)}
-            />
-          )}
+          {replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}
           {noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}
-          <ChatSpotlightCard
-            spotlight={msg.spotlight}
-            onOpen={(postId) => navigate(`/spotlight?focus=${postId}`)}
-          />
+          <ChatSpotlightCard spotlight={msg.spotlight} onOpen={(postId) => navigate(`/spotlight?focus=${postId}`)} />
         </>
       );
     } else if (msg.type === 'echomoji') {
@@ -2099,27 +1815,11 @@ const ChatView = () => {
           inner = <div className="media-error-placeholder"><i className="fas fa-exclamation-triangle" /><span>Upload failed</span><button onClick={handleRetry}>Retry</button></div>;
         } else {
           inner = (
-            <div
-              className={msg.mediaType === 'video' ? 'chat-media-video-wrapper' : 'chat-media-image-wrapper'}
-              onClick={!msg.isUploading && !selectMode ? handleMediaClick : undefined}
-              style={{ cursor: !msg.isUploading && !selectMode ? 'pointer' : 'default', position: 'relative' }}
-            >
+            <div className={msg.mediaType === 'video' ? 'chat-media-video-wrapper' : 'chat-media-image-wrapper'} onClick={!msg.isUploading && !selectMode ? handleMediaClick : undefined} style={{ cursor: !msg.isUploading && !selectMode ? 'pointer' : 'default', position: 'relative' }}>
               <ChatMediaMessage message={msg} isUploading={msg.isUploading} uploadProgress={msg.uploadProgress} disablePreview={true} />
               {!msg.isUploading && !selectMode && msg.mediaUrl && msg.mediaUrl.startsWith('http') && (
-                <button
-                  type="button"
-                  className={`media-download-btn${saveState ? ' ' + saveState : ''}`}
-                  onClick={(e) => { e.stopPropagation(); handleDownloadMedia(msg); }}
-                  title="Save to device"
-                  aria-label="Save to device"
-                >
-                  {saveState === 'saving' ? (
-                    <i className="fas fa-spinner fa-spin" />
-                  ) : saveState === 'saved' ? (
-                    <i className="fas fa-check" />
-                  ) : (
-                    <i className="fas fa-download" />
-                  )}
+                <button type="button" className={`media-download-btn${saveState ? ' ' + saveState : ''}`} onClick={(e) => { e.stopPropagation(); handleDownloadMedia(msg); }} title="Save to device" aria-label="Save to device">
+                  {saveState === 'saving' ? <i className="fas fa-spinner fa-spin" /> : saveState === 'saved' ? <i className="fas fa-check" /> : <i className="fas fa-download" />}
                 </button>
               )}
             </div>
@@ -2132,21 +1832,7 @@ const ChatView = () => {
         {replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}
         {noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}
         <div className="message-text" style={{ whiteSpace: userId === ECHO_AI_ID && !isOwn ? 'normal' : 'pre-wrap' }}>
-          {userId === ECHO_AI_ID && !isOwn ? (
-            <AiRichText text={msg.text} onFollowup={(q) => handleSendText(q)} />
-          ) : isGroupChat ? (
-            parseMentions(msg.text).map((part, i) => {
-              if (part.isEveryone) {
-                return <span key={i} className="mention mention-everyone">{part.text}</span>;
-              }
-              if (part.isMention) {
-                return <span key={i} className="mention">{part.text}</span>;
-              }
-              return <span key={i}>{part.text}</span>;
-            })
-          ) : (
-            msg.text
-          )}
+          {userId === ECHO_AI_ID && !isOwn ? <AiRichText text={msg.text} onFollowup={(q) => handleSendText(q)} /> : isGroupChat ? parseMentions(msg.text).map((part, i) => { if (part.isEveryone) return <span key={i} className="mention mention-everyone">{part.text}</span>; if (part.isMention) return <span key={i} className="mention">{part.text}</span>; return <span key={i}>{part.text}</span>; }) : msg.text}
           {msg.isEdited && <span className="message-edited-badge">(edited)</span>}
         </div>
         {msg.linkPreview && <LinkPreviewCard preview={msg.linkPreview} />}
@@ -2169,7 +1855,9 @@ const ChatView = () => {
         {content}
       </Fragment>
     );
-  };  useEffect(() => { clearedAtRef.current = clearedAt || 0; }, [clearedAt]);
+  };
+
+  useEffect(() => { clearedAtRef.current = clearedAt || 0; }, [clearedAt]);
 
   useEffect(() => {
     return () => { (messages || []).forEach((m) => { if (typeof m?.mediaUrl === 'string' && m.mediaUrl.startsWith('blob:')) { try { URL.revokeObjectURL(m.mediaUrl); } catch (_) {} } }); };
@@ -2180,7 +1868,6 @@ const ChatView = () => {
     clearUnreadInstantly();
     const syncTimer = setTimeout(() => { if (isMounted.current) markMessagesAsRead(); }, 100);
     return () => clearTimeout(syncTimer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.uid, userId, sendReadReceipts]);
 
   useEffect(() => {
@@ -2207,6 +1894,11 @@ const ChatView = () => {
       if (!isMounted.current) return;
       const data = snapshot.val();
       let newMessages = [];
+      if (data) newMessages = sortMessages(Object    const messagesRef = ref(db, msgRoot);
+    const unsubscribe = onValue(messagesRef, async (snapshot) => {
+      if (!isMounted.current) return;
+      const data = snapshot.val();
+      let newMessages = [];
       if (data) newMessages = sortMessages(Object.entries(data).map(([id, val]) => ({ id, ...val })));
       const cut = clearedAtRef.current || 0;
       let visible = cut ? newMessages.filter((m) => { if (m.pending) return true; const ts = msgTime(m); if (!ts) return true; return ts >= cut; }) : newMessages;
@@ -2222,19 +1914,8 @@ const ChatView = () => {
       setLoadingMessages(false);
 
       if (autoSaveMedia && userId !== ECHO_AI_ID) {
-        const incomingMedia = visible.filter(
-          (m) =>
-            m.type === 'media' &&
-            m.mediaType !== 'audio' &&
-            m.senderId !== user.uid &&
-            m.mediaUrl &&
-            m.mediaUrl.startsWith('http') &&
-            !savingIds[m.id]
-        );
-        if (incomingMedia.length > 0) {
-          const newest = incomingMedia[incomingMedia.length - 1];
-          handleDownloadMedia(newest, true);
-        }
+        const incomingMedia = visible.filter((m) => m.type === 'media' && m.mediaType !== 'audio' && m.senderId !== user.uid && m.mediaUrl && m.mediaUrl.startsWith('http') && !savingIds[m.id]);
+        if (incomingMedia.length > 0) handleDownloadMedia(incomingMedia[incomingMedia.length - 1], true);
       }
 
       const prevCount = prevMsgCountRef.current;
@@ -2244,11 +1925,7 @@ const ChatView = () => {
       prevMsgCountRef.current = visible.length;
 
       if (grew && isIncoming && newest?.id) flashArrived(newest.id);
-
-      if (grew && isIncoming && !isNearBottomRef.current) {
-        setUnreadWhileScrolled((n) => n + Math.max(1, visible.length - prevCount));
-      }
-
+      if (grew && isIncoming && !isNearBottomRef.current) setUnreadWhileScrolled((n) => n + Math.max(1, visible.length - prevCount));
       if (!initialScrollRef.current) { initialScrollRef.current = true; requestAnimationFrame(() => scrollToBottom(false)); }
       else if (grew && isNearBottomRef.current) requestAnimationFrame(() => scrollToBottom(true));
 
@@ -2267,7 +1944,7 @@ const ChatView = () => {
         update(ref(db, `userChats/${user.uid}/${userId}`), { unreadCount: 0 }).catch(() => {});
       }
     }, (error) => {
-      console.error('🔥 [ChatView] Firebase listener error:', error);
+      console.error('🔥 [ChatView]', error);
       setLoadingMessages(false);
       if (messages.length === 0) setMessages([{ id: 'error', senderId: 'system', text: '⚠️ Could not load messages. Please check your connection.', timestamp: Date.now(), type: 'text', isRead: true }]);
     });
@@ -2376,6 +2053,45 @@ const ChatView = () => {
     if (pinnedMessage.type === 'spotlight') return '🎬 Spotlight';
     return pinnedMessage.text || '';
   }, [pinnedMessage]);
+
+  // ★ NEW: Compute groupedMessages (was referenced in render but never defined)
+  const groupedMessages = useMemo(() => {
+    const result = [];
+    let lastDateKey = null;
+    let lastSenderId = null;
+    let lastTimestamp = 0;
+
+    for (let i = 0; i < messages.length; i++) {
+      const msg = messages[i];
+      const ts = msgTime(msg) || Date.now();
+      const dayKey = startOfDay(ts);
+      const showDateSeparator = dayKey !== lastDateKey;
+
+      const prev = messages[i - 1];
+      const next = messages[i + 1];
+      const prevTs = prev ? msgTime(prev) : 0;
+      const nextTs = next ? msgTime(next) : 0;
+      const sameSenderAsPrev = prev && prev.senderId === msg.senderId;
+      const sameSenderAsNext = next && next.senderId === msg.senderId;
+
+      const groupTop = !sameSenderAsPrev || (ts - prevTs) > GROUP_WINDOW_MS || showDateSeparator;
+      const groupBottom = !sameSenderAsNext || (nextTs - ts) > GROUP_WINDOW_MS || (next && startOfDay(nextTs) !== dayKey);
+
+      result.push({
+        msg,
+        groupTop,
+        groupBottom,
+        isSystem: msg.senderId === 'system',
+        showDateSeparator,
+        dateLabel: showDateSeparator ? formatDayLabel(ts) : '',
+      });
+
+      lastDateKey = dayKey;
+      lastSenderId = msg.senderId;
+      lastTimestamp = ts;
+    }
+    return result;
+  }, [messages]);
 
   const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
 
@@ -2543,7 +2259,7 @@ const ChatView = () => {
             </div>
           )}
 
-          {!selectMode && pinnedMessage && (
+          {          {!selectMode && pinnedMessage && (
             <div className="pinned-banner" onClick={() => jumpToMessage(pinnedMessage.id)} role="button" tabIndex={0}>
               <span className="pinned-banner-icon" aria-hidden="true">
                 <svg viewBox="0 0 24 24" width="14" height="14"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" fill="currentColor"/></svg>
@@ -2558,7 +2274,7 @@ const ChatView = () => {
             </div>
           )}
 
-          <div className={`messages-container ${pinnedMessage && !selectMode ? 'has-pinned' : ''}`} ref={messagesContainerRef} onScroll={handleScroll} style={wallpaperStyle}>
+          <div className={`messages-container ${pinnedMessage && !selectMode ? 'has-pinned' : ''}`} ref={messagesContainerRef} onScroll={handleScroll} style={wallpaperStyle} onClick={() => setActiveMessageMenuId(null)}>
             {loadingMessages && messages.length === 0 ? (
               <div className="chat-skeleton-list"><SkeletonMessage /><SkeletonMessage /><SkeletonMessage /></div>
             ) : messages.length === 0 ? (
@@ -2601,19 +2317,6 @@ const ChatView = () => {
         )}
 
         {showEmojiPicker && (<ChatEmojiPicker onClose={() => setShowEmojiPicker(false)} onSelect={handleEmojiSelect} excludeRefs={[inputContainerRef, captionPreviewRef]} />)}
-
-        {showReactionPicker && reactionPickerAnchor && (
-          <>
-            <div className="echo-reaction-backdrop" onClick={closeReactionPicker} />
-            <div className="echo-reaction-bar" style={{ top: reactionPickerAnchor.top, left: reactionPickerAnchor.left }} onClick={(e) => e.stopPropagation()}>
-              {REACTION_EMOJIS.map(({ key, Component }) => (
-                <button key={key} type="button" className={`echo-reaction-emoji${tappedEmoji === key ? ' tapped' : ''}`} onClick={() => handleReactionSelect(key)} aria-label={key}>
-                  <Component />
-                </button>
-              ))}
-            </div>
-          </>
-        )}
 
         {reactionViewer && (
           <div className="reaction-viewer-modal" onClick={() => setReactionViewer(null)}>
@@ -2802,9 +2505,6 @@ const ChatView = () => {
         {showWallpaperPicker && (
           <WallpaperPicker current={wallpaperId} currentCustom={customWallpaper} onSelect={handleWallpaperSelect} onSelectCustom={handleCustomWallpaperSelect} onClose={() => setShowWallpaperPicker(false)} />
         )}
-
-        {/* ★ ECHO Plus — right-click context menu (Telegram-style) */}
-        {renderContextMenu()}
 
         <ConfirmModal isOpen={confirmModal.isOpen} onClose={closeConfirmModal} onConfirm={confirmModal.onConfirm} title={confirmModal.title} message={confirmModal.message} confirmText={confirmModal.confirmText} cancelText={confirmModal.cancelText} />
         <Modal isOpen={fileSizeError} onClose={() => setFileSizeError(false)} title="File Too Large" message="The file you tried to upload exceeds the 20 MB limit. Please choose a smaller file." type="error" />
