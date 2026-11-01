@@ -1,32 +1,21 @@
 // src/components/pages/Chat/ChatView.js
-import React, { useState, useEffect, useRef, useCallback, Fragment, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, Fragment } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
-import {
-  ref, onValue, push, set, update, get, remove, serverTimestamp, runTransaction,
-} from 'firebase/database';
+import { ref, onValue, push, set, update, get, remove, runTransaction } from 'firebase/database';
 import { useAuth } from '../../../hooks/useAuth';
 import { sortMessages as sortMessagesByTime } from '../../../utils/sortMessages';
 import { useProfile } from '../../../contexts/ProfileContext';
-import { auth, db } from '../../../services/firebase';
-import { apiUrl } from '../../../utils/api';
-import { postNoteReply } from '../../../services/notesService';
-import {
-  loadMessagesFromCache, upsertMessageInCache, deleteMessageFromCache, saveMessagesToCache,
-} from '../../../services/messageStorage';
+import { db } from '../../../services/firebase';
 import { clearMessageCache } from '../../../services/messageCache';
-import { cleanCachedMessagesForChat } from '../../../services/messageCleanup';
-import { cacheMedia } from '../../../utils/mediaCache';
 import { VideoAudioProvider } from '../../../contexts/VideoAudioContext';
 import SEO from '../../common/SEO';
-import StructuredData from '../../common/StructuredData';
-import Avatar from '../../common/Avatar';
 import ChatMediaMessage from './ChatMediaMessage';
 import AudioPlayer from './AudioPlayer';
-import { saveToEchoArchive, listEchoArchive, removeEchoArchive } from '../../../services/echoArchive';
-import { privateExpiresAt, isTideExpired, formatTideLeft, PRIVATE_TTL_MS } from '../../../utils/echoTides';
+import { saveToEchoArchive, listEchoArchive } from '../../../services/echoArchive';
+import { isTideExpired } from '../../../utils/echoTides';
 import ReplyPreview from './ReplyPreview';
 import RepliedMessage from './RepliedMessage';
-import SwipeToReply from './SwipeToReply';
 import EditMessageModal from './EditMessageModal';
 import EditMediaCaptionModal from './EditMediaCaptionModal';
 import ChatEmojiPicker from './ChatEmojiPicker';
@@ -36,89 +25,38 @@ import CustomVideoPlayer from '../../common/CustomVideoPlayer';
 import ConfirmModal from '../../common/ConfirmModal';
 import Modal from '../../common/Modal';
 import Toast from '../../Toast/Toast';
-import AiRichText from './AiRichText';
 import { SkeletonMessage } from '../../common/SkeletonLoader';
-import ECHOMOJI from '../../UI/ECHOMOJI';
-import { getSkinById } from '../../../constants/echomoji';
 import WallpaperPicker from './WallpaperPicker';
 import { getWallpaperById } from '../../../constants/wallpapers';
 import { playSentSound, unlockAudio, getSoundEnabled } from '../../../services/notificationService';
 import { REACTION_EMOJIS, REACTION_LABELS } from './ReactionEmoji';
 import { useUserSettings } from '../../../hooks/useUserSettings';
-import { useUserPrivacy } from '../../../hooks/useUserPrivacy';
-import { useUserPresence } from '../../../hooks/usePresence';
-import { formatLastSeen } from '../../../utils/formatLastSeen';
 import { isBlocked as checkIsBlocked, unblockUser } from '../../../services/blockService';
-import { sendPushToUser } from '../../../services/fcmService';
 import { hapticSend, hapticLight } from '../../../utils/haptics';
 import { isGroupChatId, chatIdToGroupId } from '../../../utils/groupId';
-// ★ ECHO Plus
 import { useSubscription } from '../../../contexts/SubscriptionContext';
-import PlusBadge from '../../common/PlusBadge';
 import './ChatView.css';
+import './ChatViewLiquid.css';
 
-import MentionAutocomplete from '../../common/MentionAutocomplete';
-import {
-  parseMentions,
-  extractMentions,
-  mentionsEveryone,
-  getActiveMentionQuery,
-  insertMention,
-} from '../../../utils/mentionParser';
-import { ROLE_LABELS } from '../../../utils/groupRoles';
-
-import LinkPreviewCard from './LinkPreviewCard';
-import { extractFirstUrl, fetchLinkPreview } from '../../../utils/linkPreview';
-
-import ChatSpotlightCard from './ChatSpotlightCard';
-
-const useVisualViewport = () => {
-  useEffect(() => {
-    const root = document.documentElement;
-    const isTouch =
-      typeof window !== 'undefined' &&
-      (window.matchMedia?.('(hover: none)').matches ||
-        window.matchMedia?.('(pointer: coarse)').matches);
-    if (!isTouch) {
-      root.style.removeProperty('--vvh');
-      root.style.removeProperty('--vvt');
-      root.style.removeProperty('--kb');
-      root.classList.remove('keyboard-open');
-      return;
-    }
-    const vv = window.visualViewport;
-    if (!vv) return;
-    const apply = () => {
-      const h = vv.height;
-      const top = vv.offsetTop;
-      const kb = Math.max(0, window.innerHeight - h - top);
-      root.style.setProperty('--vvh', `${h}px`);
-      root.style.setProperty('--vvt', `${top}px`);
-      root.style.setProperty('--kb', `${kb}px`);
-      root.classList.toggle('keyboard-open', kb > 120);
-    };
-    apply();
-    vv.addEventListener('resize', apply);
-    vv.addEventListener('scroll', apply);
-    return () => {
-      vv.removeEventListener('resize', apply);
-      vv.removeEventListener('scroll', apply);
-      root.style.removeProperty('--vvh');
-      root.style.removeProperty('--vvt');
-      root.style.removeProperty('--kb');
-      root.classList.remove('keyboard-open');
-    };
-  }, []);
-};
+/* ------------------------------------------------------------------ */
+/* Constants                                                           */
+/* ------------------------------------------------------------------ */
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
-const MAX_VIDEO_DURATION = 30 * 60;
 const ECHO_AI_ID = 'echo_ai_assistant';
-
 const GROUP_WINDOW_MS = 2 * 60 * 1000;
 const FONT_SIZE_MAP = { sm: '13px', md: '15px', lg: '17px' };
+
+const LONG_PRESS_MS = 380;
+const SWIPE_THRESHOLD = 56;
+const SWIPE_MAX = 84;
+const MENU_W = 236;
+
+/* ------------------------------------------------------------------ */
+/* Helpers                                                             */
+/* ------------------------------------------------------------------ */
 
 const sanitizeName = (rawName, userId) => {
   if (!rawName) return 'User';
@@ -150,14 +88,9 @@ const formatMsgClock = (m) => {
   if (!ts) return '';
   try {
     return new Date(ts).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
-  } catch { return ''; }
-};
-
-const formatReactionCount = (n) => {
-  const count = Number(n) || 0;
-  if (count <= 1) return '';
-  if (count > 99) return '99+';
-  return String(count);
+  } catch {
+    return '';
+  }
 };
 
 const startOfDay = (ts) => {
@@ -175,9 +108,10 @@ const formatDayLabel = (ts) => {
   const d = new Date(ts);
   const now = new Date();
   const sameYear = d.getFullYear() === now.getFullYear();
-  return d.toLocaleDateString(undefined, sameYear
-    ? { month: 'long', day: 'numeric' }
-    : { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString(
+    undefined,
+    sameYear ? { month: 'long', day: 'numeric' } : { month: 'short', day: 'numeric', year: 'numeric' }
+  );
 };
 
 const senderColor = (uid) => {
@@ -188,14 +122,385 @@ const senderColor = (uid) => {
   return colors[Math.abs(h) % colors.length];
 };
 
-const MessageReceipt = ({ msg, isMe }) => {
+const clean = (obj) => {
+  if (obj === null || obj === undefined) return null;
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(clean).filter((v) => v !== undefined);
+  const result = {};
+  for (const key of Object.keys(obj)) {
+    const val = clean(obj[key]);
+    if (val !== undefined) result[key] = val;
+  }
+  return result;
+};
+
+const EMOJI_ONLY_RE = /^(?:\p{Extended_Pictographic}|\p{Emoji_Modifier}|\u200d|\ufe0f|\s)+$/u;
+const isEmojiOnly = (t) => {
+  if (!t || t.length > 24 || !EMOJI_ONLY_RE.test(t)) return false;
+  const n = Array.from(t.replace(/\s/g, '')).filter((ch) => /\p{Extended_Pictographic}/u.test(ch)).length;
+  return n > 0 && n <= 3;
+};
+
+const TOKEN_RE = /(https?:\/\/[^\s<]+|@[A-Za-z0-9_.]+)/g;
+const linkify = (text) => {
+  if (!text) return null;
+  return String(text).split(TOKEN_RE).map((p, i) => {
+    if (!p) return null;
+    if (/^https?:\/\//.test(p)) {
+      const cleanUrl = p.replace(/[.,!?)]+$/, '');
+      const tail = p.slice(cleanUrl.length);
+      return (
+        <Fragment key={i}>
+          <a href={cleanUrl} target="_blank" rel="noopener noreferrer" className="cv-link" onClick={(e) => e.stopPropagation()}>
+            {cleanUrl}
+          </a>
+          {tail}
+        </Fragment>
+      );
+    }
+    if (/^@[A-Za-z0-9_.]+$/.test(p)) return <span key={i} className="mention">{p}</span>;
+    return <Fragment key={i}>{p}</Fragment>;
+  });
+};
+
+const isMessageExpired = (m) => {
+  const hasExpiry = m.expiresAt != null || m.tideExpiresAt != null || m.expireAt != null;
+  if (!hasExpiry) return false;
+  try { return !!isTideExpired(m); } catch (_) { return false; }
+};
+
+const useVisualViewport = () => {
+  useEffect(() => {
+    const root = document.documentElement;
+    const isTouch =
+      window.matchMedia?.('(hover: none)').matches || window.matchMedia?.('(pointer: coarse)').matches;
+    if (!isTouch) return undefined;
+    const vv = window.visualViewport;
+    if (!vv) return undefined;
+    const apply = () => {
+      const h = vv.height;
+      const top = vv.offsetTop;
+      const kb = Math.max(0, window.innerHeight - h - top);
+      root.style.setProperty('--vvh', `${h}px`);
+      root.style.setProperty('--vvt', `${top}px`);
+      root.style.setProperty('--kb', `${kb}px`);
+      root.classList.toggle('keyboard-open', kb > 120);
+    };
+    apply();
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+    return () => {
+      vv.removeEventListener('resize', apply);
+      vv.removeEventListener('scroll', apply);
+      root.style.removeProperty('--vvh');
+      root.style.removeProperty('--vvt');
+      root.style.removeProperty('--kb');
+      root.classList.remove('keyboard-open');
+    };
+  }, []);
+};
+
+const MessageReceipt = ({ msg, isMe, group }) => {
   if (!isMe) return null;
+  if (msg.pending || msg.isUploading) return <span className="message-receipt pending" title="Sending"><i className="far fa-clock" /></span>;
+  if (msg.uploadFailed) return <span className="message-receipt failed" title="Failed"><i className="fas fa-exclamation-circle" /></span>;
+  if (group) return <span className="message-receipt sent" title="Sent">✓</span>;
   const read = !!msg.readAt || msg.isRead === true;
   const delivered = !!msg.deliveredAt || msg.received === true;
   if (read) return <span className="message-receipt read" title="Read">✓✓</span>;
   if (delivered) return <span className="message-receipt delivered" title="Delivered">✓✓</span>;
   return <span className="message-receipt sent" title="Sent">✓</span>;
 };
+
+/* ------------------------------------------------------------------ */
+/* MessageRow                                                          */
+/* ------------------------------------------------------------------ */
+
+const MessageRow = ({
+  msg, isOwn, rowClass, selectMode, selected, canReply,
+  onLongPress, onReply, onDoubleTap, onToggleSelect, registerRef, children,
+}) => {
+  const rowRef = useRef(null);
+  const stackRef = useRef(null);
+  const iconRef = useRef(null);
+  const g = useRef({
+    id: null, x: 0, y: 0, mode: null, timer: null, pressTimer: null,
+    longFired: false, passed: false, lastTap: 0, noSwipe: false,
+  });
+
+  const clearTimers = () => {
+    const s = g.current;
+    if (s.timer) clearTimeout(s.timer);
+    if (s.pressTimer) clearTimeout(s.pressTimer);
+    s.timer = null;
+    s.pressTimer = null;
+    rowRef.current?.classList.remove('pressed');
+  };
+
+  useEffect(() => () => {
+    const s = g.current;
+    if (s.timer) clearTimeout(s.timer);
+    if (s.pressTimer) clearTimeout(s.pressTimer);
+  }, []);
+
+  const resetSwipe = (animate) => {
+    const st = stackRef.current;
+    if (st) {
+      st.style.transition = animate ? 'transform .34s cubic-bezier(.2,.9,.3,1.25)' : 'none';
+      st.style.transform = '';
+    }
+    const ic = iconRef.current;
+    if (ic) {
+      ic.style.opacity = '0';
+      ic.style.transform = 'translateY(-50%) scale(.4)';
+      ic.classList.remove('armed');
+    }
+  };
+
+  const fireLong = () => {
+    const s = g.current;
+    s.longFired = true;
+    s.mode = 'long';
+    clearTimers();
+    const bubble = rowRef.current?.querySelector('.message-bubble');
+    const rect = (bubble || rowRef.current)?.getBoundingClientRect();
+    if (rect) onLongPress(msg, rect);
+  };
+
+  const onPointerDown = (e) => {
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    const s = g.current;
+    s.id = e.pointerId;
+    s.x = e.clientX;
+    s.y = e.clientY;
+    s.mode = null;
+    s.longFired = false;
+    s.passed = false;
+    s.noSwipe = !!e.target.closest?.('input, [role="slider"], video');
+    clearTimers();
+    if (selectMode) return;
+    s.pressTimer = setTimeout(() => rowRef.current?.classList.add('pressed'), 110);
+    if (e.pointerType !== 'mouse') s.timer = setTimeout(fireLong, LONG_PRESS_MS);
+  };
+
+  const onPointerMove = (e) => {
+    const s = g.current;
+    if (s.id !== e.pointerId || s.mode === 'long') return;
+    const dx = e.clientX - s.x;
+    const dy = e.clientY - s.y;
+    if (s.mode === null) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      clearTimers();
+      if (!selectMode && canReply && !s.noSwipe && e.pointerType !== 'mouse' && dx < 0 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+        s.mode = 'swipe';
+        try { rowRef.current.setPointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+        if (stackRef.current) stackRef.current.style.transition = 'none';
+      } else {
+        s.mode = 'scroll';
+        return;
+      }
+    }
+    if (s.mode !== 'swipe') return;
+    const raw = Math.max(0, -dx);
+    const eased = raw <= SWIPE_THRESHOLD ? raw : Math.min(SWIPE_MAX, SWIPE_THRESHOLD + (raw - SWIPE_THRESHOLD) * 0.35);
+    if (stackRef.current) stackRef.current.style.transform = `translate3d(${-eased}px,0,0)`;
+    const p = Math.min(1, raw / SWIPE_THRESHOLD);
+    const ic = iconRef.current;
+    if (ic) {
+      ic.style.opacity = String(p);
+      ic.style.transform = `translateY(-50%) scale(${0.5 + 0.5 * p})`;
+    }
+    const armed = raw >= SWIPE_THRESHOLD;
+    if (armed !== s.passed) {
+      s.passed = armed;
+      ic?.classList.toggle('armed', armed);
+      if (armed) hapticLight();
+    }
+  };
+
+  const finish = (e, cancelled) => {
+    const s = g.current;
+    if (s.id !== e.pointerId) return;
+    s.id = null;
+    clearTimers();
+    if (s.mode === 'swipe') {
+      const doReply = s.passed && !cancelled;
+      resetSwipe(true);
+      try { rowRef.current.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+      s.mode = null;
+      if (doReply) onReply(msg);
+      return;
+    }
+    if (s.mode === null && !cancelled && !s.longFired) {
+      if (selectMode) { onToggleSelect(msg); return; }
+      if (e.target.closest?.('a, button, .chat-media-wrapper, .cv-reply-hit, audio, input, .cv-retry')) return;
+      const now = Date.now();
+      if (now - s.lastTap < 300) { s.lastTap = 0; onDoubleTap(msg); } else { s.lastTap = now; }
+    }
+  };
+
+  const onContextMenu = (e) => {
+    e.preventDefault();
+    if (selectMode) return;
+    if (!g.current.longFired) fireLong();
+  };
+
+  const onClickCapture = (e) => {
+    if (g.current.longFired) {
+      e.preventDefault();
+      e.stopPropagation();
+      g.current.longFired = false;
+    }
+  };
+
+  return (
+    <div
+      ref={(el) => { rowRef.current = el; registerRef?.(msg.id, el); }}
+      className={rowClass}
+      data-msg-id={msg.id}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={(e) => finish(e, false)}
+      onPointerCancel={(e) => finish(e, true)}
+      onContextMenu={onContextMenu}
+      onClickCapture={onClickCapture}
+    >
+      {selectMode && (
+        <span className={`select-checkbox ${selected ? 'checked' : ''}`}><i className="fas fa-check" /></span>
+      )}
+      <div className="cv-swipe-reply" ref={iconRef} aria-hidden="true"><i className="fas fa-reply" /></div>
+      <div className={`message-stack ${isOwn ? 'own' : 'partner'}`} ref={stackRef}>{children}</div>
+    </div>
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/* Liquid long-press menu                                              */
+/* ------------------------------------------------------------------ */
+
+const computeMenuLayout = (rect, itemCount, isOwn, reactionCount) => {
+  const vh = window.innerHeight;
+  const vw = window.innerWidth;
+  const REACT_H = 56;
+  const ITEM_H = 46;
+  const GAP = 10;
+  const TOP = 70;
+  const BOTTOM = 26;
+  const EDGE = 12;
+  const menuH = itemCount * ITEM_H + 12;
+  const reactW = Math.min(vw - EDGE * 2, reactionCount * 46 + 20);
+  let bubbleH = Math.min(rect.height, vh * 0.36);
+  const avail = vh - TOP - BOTTOM - REACT_H - menuH - GAP * 2;
+  if (bubbleH > avail) bubbleH = Math.max(48, avail);
+  const minTop = TOP + REACT_H + GAP;
+  const maxTop = vh - BOTTOM - menuH - GAP - bubbleH;
+  const bubbleTop = Math.max(minTop, Math.min(rect.top, maxTop));
+  const clampX = (x, w) => Math.max(EDGE, Math.min(x, vw - w - EDGE));
+  return {
+    bubbleH,
+    bubbleTop,
+    reactW,
+    reactTop: bubbleTop - REACT_H - GAP,
+    reactLeft: clampX(isOwn ? rect.right - reactW : rect.left, reactW),
+    menuTop: bubbleTop + Math.min(rect.height, bubbleH) + GAP,
+    menuLeft: clampX(isOwn ? rect.right - MENU_W : rect.left, MENU_W),
+  };
+};
+
+const MessageMenu = ({ menu, items, myReaction, onReact, onClose, children }) => {
+  const [closing, setClosing] = useState(false);
+  const closingRef = useRef(false);
+
+  const close = useCallback((after) => {
+    if (closingRef.current) return;
+    closingRef.current = true;
+    setClosing(true);
+    setTimeout(() => {
+      onClose();
+      if (typeof after === 'function') after();
+    }, 180);
+  }, [onClose]);
+
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === 'Escape') close(); };
+    const onResize = () => close();
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('resize', onResize);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('resize', onResize);
+    };
+  }, [close]);
+
+  const L = useMemo(
+    () => computeMenuLayout(menu.rect, items.length, menu.isOwn, REACTION_EMOJIS.length),
+    [menu, items.length]
+  );
+
+  return createPortal(
+    <div
+      className={`cv-menu-root${closing ? ' closing' : ''}`}
+      onClick={() => close()}
+      onContextMenu={(e) => { e.preventDefault(); close(); }}
+    >
+      <div className="cv-menu-backdrop" />
+
+      <div
+        className="cv-menu-reactions cv-glass"
+        style={{ top: L.reactTop, left: L.reactLeft, width: L.reactW, transformOrigin: `${menu.isOwn ? 'right' : 'left'} bottom` }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {REACTION_EMOJIS.map(({ key, Component }, i) => (
+          <button
+            type="button"
+            key={key}
+            className={`echo-reaction-emoji cv-react-btn${myReaction === key ? ' active' : ''}`}
+            style={{ '--i': i }}
+            onClick={() => close(() => onReact(key))}
+          >
+            <Component />
+          </button>
+        ))}
+      </div>
+
+      <div
+        className="cv-menu-lift"
+        style={{
+          top: L.bubbleTop,
+          left: menu.rect.left,
+          width: menu.rect.width,
+          maxHeight: L.bubbleH,
+          '--dy': `${menu.rect.top - L.bubbleTop}px`,
+        }}
+      >
+        {children}
+      </div>
+
+      <div
+        className="cv-menu-list cv-glass"
+        style={{ top: L.menuTop, left: L.menuLeft, width: MENU_W, transformOrigin: `${menu.isOwn ? 'right' : 'left'} top` }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {items.map((it) => (
+          <button
+            type="button"
+            key={it.key}
+            className={`cv-menu-item${it.danger ? ' danger' : ''}`}
+            onClick={() => close(it.onPress)}
+          >
+            <span>{it.label}</span>
+            <i className={`fas ${it.icon}`} />
+          </button>
+        ))}
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+/* ------------------------------------------------------------------ */
+/* Main component                                                      */
+/* ------------------------------------------------------------------ */
 
 const ChatView = () => {
   const { userId } = useParams();
@@ -206,144 +511,127 @@ const ChatView = () => {
   const { chatStyle: myChatStyle, isEchoPlus } = useSubscription();
 
   useVisualViewport();
-
   const { settings: userSettings } = useUserSettings(user?.uid);
-  const partnerPrivacy = useUserPrivacy(userId);
-  const partnerPresence = useUserPresence(userId);
 
-  const tideTTL = userSettings?.echo?.defaultTideTTL ?? PRIVATE_TTL_MS;
   const enterToSend = userSettings?.chats?.enterToSend !== false;
   const showTyping = userSettings?.chats?.showTyping !== false;
   const sendReadReceipts = userSettings?.chats?.sendReadReceipts !== false;
   const fontSize = userSettings?.chats?.fontSize || 'md';
-  const autoSaveMedia = userSettings?.chats?.mediaAutoDownload === 'always';
-  const videoFullscreenDefault = userSettings?.chats?.videoFullscreen !== false;
 
+  const isGroupChat = isGroupChatId(userId);
+  const groupIdFromChat = isGroupChat ? chatIdToGroupId(userId) : null;
+
+  const chatKey = useMemo(() => {
+    if (!user?.uid || !userId) return null;
+    return isGroupChat ? userId : [user.uid, userId].sort().join('_');
+  }, [user?.uid, userId, isGroupChat]);
+
+  const msgRoot = useMemo(() => {
+    if (!chatKey) return null;
+    return isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${chatKey}/messages`;
+  }, [chatKey, isGroupChat, groupIdFromChat]);
+
+  /* ---------------- state ---------------- */
+  const [groupData, setGroupData] = useState(null);
   const [blockedByMe, setBlockedByMe] = useState(false);
   const [partnerProfile, setPartnerProfile] = useState(null);
   const [currentUserProfile, setCurrentUserProfile] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [localMsgs, setLocalMsgs] = useState([]);
   const [newMessage, setNewMessage] = useState('');
   const [loadingMessages, setLoadingMessages] = useState(true);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [isAILoading, setIsAILoading] = useState(false);
   const [isNearBottom, setIsNearBottom] = useState(true);
-  const [ended, setEnded] = useState(false);
-  const [endedByName, setEndedByName] = useState('');
-  const [clearedAt, setClearedAt] = useState(0);
+  const [unreadWhileScrolled, setUnreadWhileScrolled] = useState(0);
   const [replyTo, setReplyTo] = useState(null);
+  const [replyToNote, setReplyToNote] = useState(null);
   const [editingMessage, setEditingMessage] = useState(null);
   const [editingMediaMessage, setEditingMediaMessage] = useState(null);
-  const [deletingMessageId, setDeletingMessageId] = useState(null);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
-  const [reactionViewer, setReactionViewer] = useState(null);
   const [showMoreOptions, setShowMoreOptions] = useState(false);
   const [mediaPreview, setMediaPreview] = useState(null);
   const [videoPreview, setVideoPreview] = useState(null);
-  
-  // WhatsApp Style Menu State
-  const [activeMessageMenuId, setActiveMessageMenuId] = useState(null); 
+  const [menu, setMenu] = useState(null);
   const [partnerIsTyping, setPartnerIsTyping] = useState(false);
-
-  const [mentionQuery, setMentionQuery] = useState(null);
-  const [mentionSuggestions, setMentionSuggestions] = useState([]);
-  const [mentionIndex, setMentionIndex] = useState(0);
-  const [mentionStartIndex, setMentionStartIndex] = useState(-1);
   const [isMuted, setIsMuted] = useState(false);
-  const [replyToNote, setReplyToNote] = useState(null);
-
   const [wallpaperId, setWallpaperId] = useState('default');
   const [customWallpaper, setCustomWallpaper] = useState(null);
   const [showWallpaperPicker, setShowWallpaperPicker] = useState(false);
-  const [haloActive, setHaloActive] = useState(false);
-  const longPressTimer = useRef(null);
-
-  const typingTimeoutRef = useRef(null);
-  const touchTimerRef = useRef(null);
-  const lastTapRef = useRef({ time: 0, msgId: null });
-
   const [selectedFile, setSelectedFile] = useState(null);
   const [previewUrl, setPreviewUrl] = useState(null);
   const [captionText, setCaptionText] = useState('');
-  const [isUploading, setIsUploading] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [showCaptionEmoji, setShowCaptionEmoji] = useState(false);
-  const fileInputRef = useRef(null);
-  const captionInputRef = useRef(null);
-
   const [fileSizeError, setFileSizeError] = useState(false);
   const [toast, setToast] = useState(null);
   const [bookmarkedIds, setBookmarkedIds] = useState({});
-  const stampedLegacyTides = useRef(false);
-  const [tideTick, setTideTick] = useState(Date.now());
-
-  const [savingIds, setSavingIds] = useState({});
-  const [pressedMsgId, setPressedMsgId] = useState(null);
-  const [tappedEmoji, setTappedEmoji] = useState(null);
-  const [unreadWhileScrolled, setUnreadWhileScrolled] = useState(0);
   const [pinnedMessageId, setPinnedMessageId] = useState(null);
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
-
+  const [highlightId, setHighlightId] = useState(null);
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false, title: '', message: '', confirmText: 'Confirm', cancelText: 'Cancel', onConfirm: null,
   });
 
-  const messagesEndRef = useRef(null);
+  /* ---------------- refs ---------------- */
   const messagesContainerRef = useRef(null);
   const inputRef = useRef(null);
   const inputContainerRef = useRef(null);
-  const captionPreviewRef = useRef(null);
+  const fileInputRef = useRef(null);
+  const moreOptionsRef = useRef(null);
+  const sendButtonRef = useRef(null);
+  const messageRefs = useRef({});
+  const seenIdsRef = useRef(new Set());
   const isNearBottomRef = useRef(true);
   const initialScrollRef = useRef(false);
-  const prevMsgCountRef = useRef(0);
-  const chatId = useRef(null);
-  const isMounted = useRef(true);
-  const markReadTimeout = useRef(null);
-  const hasMarkedRead = useRef(false);
-  const focusedField = useRef('main');
-  const moreOptionsRef = useRef(null);
-  const messageRefs = useRef({});
-  const clearedAtRef = useRef(0);
-  const justSentIdsRef = useRef(new Set());
-  const justArrivedIdsRef = useRef(new Set());
-  const sendButtonRef = useRef(null);
-  const noteReplyContext = useRef(null);
+  const prevLastTimeRef = useRef(0);
+  const typingTimeoutRef = useRef(null);
+  const latestTypingRef = useRef(null);
+  const toastTimerRef = useRef(null);
+  const lastMarkKeyRef = useRef(null);
 
-  const isGroupChat = isGroupChatId(userId);
-  const groupIdFromChat = isGroupChat ? chatIdToGroupId(userId) : null;
-  const [groupData, setGroupData] = useState(null);
-
-  useEffect(() => {
-    if (isGroupChat && groupIdFromChat) {
-      const groupRef = ref(db, `groups/${groupIdFromChat}`);
-      const unsub = onValue(groupRef, (snap) => {
-        setGroupData(snap.exists() ? { id: groupIdFromChat, ...snap.val() } : null);
-      });
-      return () => unsub();
-    }
-    if (!userId) return;
-    const cached = getProfile(userId);
-    if (cached) setPartnerProfile(cached);
-    else fetchProfile(userId);
-    const pRef = ref(db, `profiles/${userId}`);
-    const unsub = onValue(pRef, (snap) => { if (snap.exists()) setPartnerProfile(snap.val()); });
-    return () => unsub();
-  }, [userId, getProfile, fetchProfile, isGroupChat, groupIdFromChat]);
-
-  useEffect(() => {
-    const t = setTimeout(() => setLoadingMessages(false), 1200);
-    return () => clearTimeout(t);
+  /* ---------------- tiny helpers ---------------- */
+  const showToast = useCallback((message, type = 'success') => {
+    setToast({ message, type });
+    if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+    toastTimerRef.current = setTimeout(() => setToast(null), 2600);
   }, []);
 
+  useEffect(() => () => { if (toastTimerRef.current) clearTimeout(toastTimerRef.current); }, []);
+
+  const closeConfirmModal = () => setConfirmModal((prev) => ({ ...prev, isOpen: false }));
+  const openConfirmModal = (config) => setConfirmModal({ isOpen: true, cancelText: 'Cancel', ...config });
+
+  const registerRef = useCallback((id, el) => {
+    if (el) messageRefs.current[id] = el;
+    else delete messageRefs.current[id];
+  }, []);
+
+  const upsertLocal = useCallback((m) => {
+    setLocalMsgs((prev) => {
+      const i = prev.findIndex((x) => x.id === m.id);
+      if (i < 0) return [...prev, m];
+      const next = [...prev];
+      next[i] = m;
+      return next;
+    });
+  }, []);
+  const patchLocal = useCallback((id, patch) => {
+    setLocalMsgs((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
+  }, []);
+  const removeLocal = useCallback((id) => {
+    setLocalMsgs((prev) => {
+      const found = prev.find((x) => x.id === id);
+      if (found?.mediaUrl && String(found.mediaUrl).startsWith('blob:')) {
+        try { URL.revokeObjectURL(found.mediaUrl); } catch (_) { /* ignore */ }
+      }
+      return prev.filter((x) => x.id !== id);
+    });
+  }, []);
+
+  /* ---------------- global effects ---------------- */
   useEffect(() => {
     const unlock = () => unlockAudio();
     window.addEventListener('pointerdown', unlock, { once: true });
-    window.addEventListener('keydown', unlock, { once: true });
-    return () => {
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
-    };
+    return () => window.removeEventListener('pointerdown', unlock);
   }, []);
 
   useEffect(() => {
@@ -352,2170 +640,1210 @@ const ChatView = () => {
   }, []);
 
   useEffect(() => {
-    const id = setInterval(() => setTideTick(Date.now()), 30000);
-    return () => clearInterval(id);
+    const t = setTimeout(() => setLoadingMessages(false), 1200);
+    return () => clearTimeout(t);
   }, []);
 
+  // Partner profile / group data
   useEffect(() => {
-    const isTouch =
-      typeof window !== 'undefined' &&
-      (window.matchMedia?.('(hover: none)').matches ||
-        window.matchMedia?.('(pointer: coarse)').matches);
-    if (!isTouch) return;
-    const vv = window.visualViewport;
-    if (!vv) return;
-    let raf = null;
-    const onResize = () => {
-      if (raf) cancelAnimationFrame(raf);
-      raf = requestAnimationFrame(() => {
-        const el = messagesContainerRef.current;
-        if (el && isNearBottomRef.current) el.scrollTop = el.scrollHeight;
+    if (isGroupChat && groupIdFromChat) {
+      const groupRef = ref(db, `groups/${groupIdFromChat}`);
+      const unsub = onValue(groupRef, (snap) => {
+        setGroupData(snap.exists() ? { id: groupIdFromChat, ...snap.val() } : null);
       });
-    };
-    vv.addEventListener('resize', onResize);
-    return () => {
-      vv.removeEventListener('resize', onResize);
-      if (raf) cancelAnimationFrame(raf);
-    };
-  }, []);
+      return () => unsub();
+    }
+    if (!userId) return undefined;
+    const cached = getProfile(userId);
+    if (cached) setPartnerProfile(cached);
+    else fetchProfile(userId);
+    const unsub = onValue(ref(db, `profiles/${userId}`), (snap) => {
+      if (snap.exists()) setPartnerProfile(snap.val());
+    });
+    return () => unsub();
+  }, [userId, getProfile, fetchProfile, isGroupChat, groupIdFromChat]);
 
+  // My profile
+  useEffect(() => {
+    if (!user?.uid) return;
+    get(ref(db, `profiles/${user.uid}`))
+      .then((snap) => { if (snap.exists()) setCurrentUserProfile(snap.val()); })
+      .catch(console.error);
+  }, [user?.uid]);
+
+  // Reply-to-note / prefilled text coming from navigation state
   useEffect(() => {
     const state = location.state;
     if (!state) return;
-    if (state.replyToNote && (state.prefilledNote || state.noteSong)) {
-      const noteContext = {
-        text: state.prefilledNote || '',
-        authorUid: state.noteAuthorUid,
-        authorName: state.noteAuthorName || 'User',
-        createdAt: state.noteCreatedAt || Date.now(),
-        song: state.noteSong || null,
-      };
-      setReplyToNote(noteContext);
-      noteReplyContext.current = noteContext;
-      if (typeof state.prefilledNote === 'string' && state.prefilledNote) setNewMessage(state.prefilledNote);
-      navigate(location.pathname, { replace: true, state: {} });
+    const focusEnd = (text) => {
       setTimeout(() => {
         if (inputRef.current) {
           inputRef.current.focus();
-          try {
-            const len = (state.prefilledNote || '').length;
-            inputRef.current.setSelectionRange(len, len);
-          } catch (_) {}
+          try { inputRef.current.setSelectionRange(text.length, text.length); } catch (_) { /* ignore */ }
         }
       }, 120);
+    };
+    if (state.replyToNote && (state.prefilledNote || state.noteSong)) {
+      setReplyToNote({
+        text: state.prefilledNote || '',
+        authorUid: state.noteAuthorUid || null,
+        authorName: state.noteAuthorName || 'User',
+        createdAt: state.noteCreatedAt || Date.now(),
+        song: state.noteSong || null,
+      });
+      if (typeof state.prefilledNote === 'string' && state.prefilledNote) setNewMessage(state.prefilledNote);
+      navigate(location.pathname, { replace: true, state: {} });
+      focusEnd(state.prefilledNote || '');
       return;
     }
     if (state.prefilledNote && typeof state.prefilledNote === 'string') {
       setNewMessage(state.prefilledNote);
-      setTimeout(() => {
-        if (inputRef.current) {
-          inputRef.current.focus();
-          try { inputRef.current.setSelectionRange(state.prefilledNote.length, state.prefilledNote.length); } catch (_) {}
-        }
-      }, 120);
+      focusEnd(state.prefilledNote);
     }
   }, [location.state, location.pathname, navigate]);
 
-  useEffect(() => () => { noteReplyContext.current = null; }, [userId]);
-
+  // Partner typing
   useEffect(() => {
-    if (!user?.uid || !userId || isGroupChat) return;
-    const cId = [user.uid, userId].sort().join('_');
-    const typingRef = ref(db, `chats/${cId}/typing/${userId}`);
-    const checkTyping = (data) => {
+    if (!chatKey || !userId || isGroupChat) return undefined;
+    latestTypingRef.current = null;
+    const typingRef = ref(db, `chats/${chatKey}/typing/${userId}`);
+    const evaluate = () => {
+      const data = latestTypingRef.current;
       if (!data || !data.isTyping) return setPartnerIsTyping(false);
-      const age = Date.now() - (data.timestamp || 0);
-      setPartnerIsTyping(age < 4000);
+      return setPartnerIsTyping(Date.now() - (data.timestamp || 0) < 4000);
     };
-    const unsub = onValue(typingRef, (snap) => checkTyping(snap.val()));
-    const interval = setInterval(() => {
-      get(typingRef).then((snap) => checkTyping(snap.val())).catch(() => {});
-    }, 2000);
-    return () => { unsub(); clearInterval(interval); };
-  }, [user?.uid, userId, isGroupChat]);
+    const unsub = onValue(typingRef, (snap) => { latestTypingRef.current = snap.val(); evaluate(); });
+    const interval = setInterval(evaluate, 1500);
+    return () => { unsub(); clearInterval(interval); setPartnerIsTyping(false); };
+  }, [chatKey, userId, isGroupChat]);
 
+  // Wallpaper
   useEffect(() => {
-    if (!user?.uid || !userId || isGroupChat) return;
-    const cId = [user.uid, userId].sort().join('_');
-    const wpRef = ref(db, `chats/${cId}/wallpaper`);
-    const cwRef = ref(db, `chats/${cId}/customWallpaper`);
-    const unsubWp = onValue(wpRef, (snap) => setWallpaperId(snap.val() || 'default'));
-    const unsubCw = onValue(cwRef, (snap) => setCustomWallpaper(snap.val() || null));
+    if (!chatKey) return undefined;
+    const unsubWp = onValue(ref(db, `chats/${chatKey}/wallpaper`), (snap) => setWallpaperId(snap.val() || 'default'));
+    const unsubCw = onValue(ref(db, `chats/${chatKey}/customWallpaper`), (snap) => setCustomWallpaper(snap.val() || null));
     return () => { unsubWp(); unsubCw(); };
-  }, [user?.uid, userId, isGroupChat]);
+  }, [chatKey]);
 
+  // Pinned message
   useEffect(() => {
-    if (!user?.uid || !userId) return;
-    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
-    const pinRef = ref(db, `chats/${cId}/pinnedMessageId`);
-    const unsub = onValue(pinRef, (snap) => setPinnedMessageId(snap.val() || null));
+    if (!chatKey) return undefined;
+    const unsub = onValue(ref(db, `chats/${chatKey}/pinnedMessageId`), (snap) => setPinnedMessageId(snap.val() || null));
+    return () => unsub();
+  }, [chatKey]);
+
+  // Mute (groups)
+  useEffect(() => {
+    if (!user?.uid || !userId || !isGroupChat) return undefined;
+    const unsub = onValue(ref(db, `userChats/${user.uid}/${userId}/muted`), (snap) => setIsMuted(!!snap.val()));
     return () => unsub();
   }, [user?.uid, userId, isGroupChat]);
 
-  useEffect(() => {
-    if (!user?.uid || !userId || !isGroupChat) return;
-    const muteRef = ref(db, `userChats/${user.uid}/${userId}/muted`);
-    const unsub = onValue(muteRef, (snap) => {
-      setIsMuted(!!snap.val());
-    });
-    return () => unsub();
-  }, [user?.uid, userId, isGroupChat]);
-
+  // Block state
   useEffect(() => {
     if (!user?.uid || !userId || isGroupChat) return undefined;
     let mounted = true;
-    checkIsBlocked(user.uid, userId)
+    Promise.resolve(checkIsBlocked(user.uid, userId))
       .then((v) => { if (mounted) setBlockedByMe(!!v); })
       .catch(() => {});
     return () => { mounted = false; };
   }, [user?.uid, userId, isGroupChat]);
 
+  // Saved (bookmarked) message ids
   useEffect(() => {
-    if (!activeMessageMenuId) return;
-    const close = () => setActiveMessageMenuId(null);
-    window.addEventListener('click', close);
-    window.addEventListener('scroll', close, true);
-    window.addEventListener('resize', close);
-    return () => {
-      window.removeEventListener('click', close);
-      window.removeEventListener('scroll', close, true);
-      window.removeEventListener('resize', close);
-    };
-  }, [activeMessageMenuId]);
-
-  const handleWallpaperSelect = async (id) => {
-    setWallpaperId(id);
-    try {
-      const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
-      await update(ref(db, `chats/${cId}`), { wallpaper: id });
-    } catch (err) { console.error('Failed to save wallpaper', err); }
-  };
-
-  const handleCustomWallpaperSelect = async (url) => {
-    setCustomWallpaper(url);
-    setWallpaperId('__custom__');
-    try {
-      const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
-      await update(ref(db, `chats/${cId}`), { wallpaper: '__custom__', customWallpaper: url });
-    } catch (err) { console.error('Failed to save custom wallpaper', err); }
-  };
-
-  const handleToggleMute = async () => {
-    if (!user?.uid || !userId || !isGroupChat) return;
-    hapticLight();
-    const newMuted = !isMuted;
-    try {
-      await update(ref(db, `userChats/${user.uid}/${userId}`), { muted: newMuted });
-      setIsMuted(newMuted);
-      setToast({ message: newMuted ? 'Group muted' : 'Group unmuted', type: 'success' });
-      setTimeout(() => setToast(null), 2000);
-    } catch (err) {
-      console.error('Mute toggle failed:', err);
-      setToast({ message: 'Failed to update mute', type: 'error' });
-      setTimeout(() => setToast(null), 2000);
-    }
-  };
-
-  const pruneExpired = async (list, cId) => {
-    if (userId === ECHO_AI_ID) return list;
-    const keep = [];
-    const gone = [];
-    (list || []).forEach((m) => {
-      if (isTideExpired(m) && !bookmarkedIds[m.id] && !m.pinned) gone.push(m);
-      else keep.push(m);
-    });
-    if (gone.length && cId) {
-      const updates = {};
-      const prefix = isGroupChat ? `groups/${groupIdFromChat}` : `chats/${cId}`;
-      gone.forEach((m) => {
-        if (m.id && !String(m.id).startsWith('temp_')) {
-          updates[`${prefix}/messages/${m.id}`] = null;
-          deleteMessageFromCache(cId, m.id).catch(() => {});
-        }
-      });
-      if (keep.length === 0 && user?.uid && userId && !isGroupChat) {
-        updates[`userChats/${user.uid}/${userId}/lastMessage`] = 'Start chatting...';
-        updates[`userChats/${userId}/${user.uid}/lastMessage`] = 'Start chatting...';
-      }
-      if (Object.keys(updates).length) update(ref(db), updates).catch(() => {});
-    }
-    return keep;
-  };
-
-  const closeConfirmModal = () => setConfirmModal((prev) => ({ ...prev, isOpen: false }));
-  const openConfirmModal = (config) => setConfirmModal({ isOpen: true, ...config });
-
-  const notifyChatListUpdate = (partnerId, patch) => {
-    window.dispatchEvent(new CustomEvent('chat-list-update', { detail: { partnerId, patch } }));
-  };
-
-  const patchMyUserChat = async (partnerId, fields) => {
-    if (!user?.uid || !partnerId || isGroupChat) return;
-    await update(ref(db, `userChats/${user.uid}/${partnerId}`), { id: partnerId, ...fields });
-  };
-
-  const clearUnreadInstantly = () => {
-    if (!userId) return;
-    sessionStorage.setItem(`chat_read_${userId}`, 'true');
-    window.dispatchEvent(new CustomEvent('chat-read', { detail: { userId } }));
-    notifyChatListUpdate(userId, { unreadCount: 0 });
-    hasMarkedRead.current = true;
-  };
-
-  const markMessagesAsRead = async () => {
-    if (!user?.uid || !userId) return;
-    if (!sendReadReceipts) return;
-    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
-    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${cId}/messages`;
-    try {
-      const messagesRef = ref(db, msgRoot);
-      const snapshot = await get(messagesRef);
-      if (!snapshot.exists()) return;
-      const data = snapshot.val();
-      const updates = {};
-      let hasUnread = false;
-      let latestMsg = '';
-      let latestSender = '';
-      let latestTimestamp = Date.now();
-
-      const msgs = sortMessages(Object.entries(data).map(([key, val]) => ({ id: key, key, ...val })));
-      const latest = msgs[msgs.length - 1];
-      if (latest) {
-        if (latest.type === 'media') latestMsg = latest.mediaType === 'video' ? '🎬 Video' : latest.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
-        else if (latest.type === 'echomoji') latestMsg = `😤 ECHOMOJI (${latest.mood || 'neutral'})`;
-        else if (latest.type === 'spotlight') latestMsg = '🎬 Spotlight';
-        else latestMsg = latest.text || '';
-        latestSender = latest.senderId || '';
-        latestTimestamp = latest.timestamp || Date.now();
-      }
-
-      if (isGroupChat) {
-        await update(ref(db, `userChats/${user.uid}/${userId}`), {
-          lastMessage: latestMsg,
-          lastSenderId: latestSender,
-          lastUpdated: latestTimestamp,
-          unreadCount: 0,
-        }).catch(() => {});
-      } else {
-        msgs.forEach((msg) => {
-          if (msg.receiverId === user.uid && msg.isRead === false) {
-            updates[`chats/${cId}/messages/${msg.key}/isRead`] = true;
-            updates[`chats/${cId}/messages/${msg.key}/readAt`] = Date.now();
-            updates[`chats/${cId}/messages/${msg.key}/expiresAt`] = privateExpiresAt(Date.now(), tideTTL);
-            hasUnread = true;
-          }
+    if (!user?.uid) return undefined;
+    let alive = true;
+    Promise.resolve(listEchoArchive(user.uid))
+      .then((items) => {
+        if (!alive) return;
+        const arr = Array.isArray(items) ? items : Object.values(items || {});
+        const map = {};
+        arr.forEach((it) => {
+          const id = it?.messageId || it?.originalId || it?.id;
+          if (id) map[id] = true;
         });
-        if (!hasUnread) return;
-        await update(ref(db), updates);
-        await patchMyUserChat(userId, { partnerName: partnerProfile?.name || location.state?.userName || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: latestMsg, lastSenderId: latestSender, lastUpdated: latestTimestamp, unreadCount: 0 });
-      }
-      window.dispatchEvent(new CustomEvent('chat-unread-cleared', { detail: { partnerId: userId } }));
-      clearMessageCache(cId);
-    } catch (err) { console.warn('⚠️ [Unread] markMessagesAsRead error:', err.message); }
-  };
+        setBookmarkedIds(map);
+      })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [user?.uid]);
 
-  const scrollToBottom = (smooth = true) => {
-    if (messagesEndRef.current) messagesEndRef.current.scrollIntoView({ behavior: smooth ? 'smooth' : 'auto' });
-    setUnreadWhileScrolled(0);
-    isNearBottomRef.current = true;
-    setIsNearBottom(true);
-  };
+  // Messages listener
+  useEffect(() => {
+    seenIdsRef.current = new Set();
+    initialScrollRef.current = false;
+    prevLastTimeRef.current = 0;
+    lastMarkKeyRef.current = null;
+    setMessages([]);
+    setLocalMsgs([]);
+    setReplyTo(null);
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setMenu(null);
+    if (!msgRoot) { setLoadingMessages(false); return undefined; }
+    setLoadingMessages(true);
+    let active = true;
+    let first = true;
+    const unsub = onValue(
+      ref(db, msgRoot),
+      (snap) => {
+        if (!active) return;
+        const data = snap.val();
+        const list = data ? Object.entries(data).map(([id, val]) => ({ ...val, id })) : [];
+        if (first) {
+          first = false;
+          list.forEach((m) => seenIdsRef.current.add(m.id));
+        }
+        setMessages(sortMessages(list));
+        setLoadingMessages(false);
+      },
+      (error) => { console.error('Firebase listener error:', error); setLoadingMessages(false); }
+    );
+    return () => { active = false; unsub(); };
+  }, [msgRoot]);
 
-  const uploadToCloudinary = (file, onProgress) => {
-    return new Promise((resolve, reject) => {
-      const formData = new FormData();
-      formData.append('file', file);
-      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, true);
-      xhr.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(Math.round((e.loaded / e.total) * 100)); };
-      xhr.onload = () => { if (xhr.status === 200) { try { resolve(JSON.parse(xhr.responseText).secure_url); } catch (err) { reject(err); } } else reject(new Error('Upload failed')); };
-      xhr.onerror = () => reject(new Error('Network error'));
-      xhr.send(formData);
+  // Merge server messages + local optimistic ones, hide truly expired tides
+  const displayMessages = useMemo(() => {
+    const byId = new Map();
+    messages.forEach((m) => byId.set(m.id, m));
+    localMsgs.forEach((m) => { if (!byId.has(m.id)) byId.set(m.id, { ...m, _local: true }); });
+    let list = Array.from(byId.values());
+    if (userId !== ECHO_AI_ID) {
+      list = list.filter((m) => !(isMessageExpired(m) && !bookmarkedIds[m.id] && !m.pinned && m.id !== pinnedMessageId));
+    }
+    return sortMessages(list);
+  }, [messages, localMsgs, bookmarkedIds, pinnedMessageId, userId]);
+
+  const entries = useMemo(() => {
+    const near = (a, b) =>
+      a && b && a.type !== 'system' && b.type !== 'system' && a.senderId === b.senderId &&
+      Math.abs(msgTime(b) - msgTime(a)) < GROUP_WINDOW_MS;
+    return displayMessages.map((msg, i) => {
+      const prev = displayMessages[i - 1];
+      const next = displayMessages[i + 1];
+      const dayThis = startOfDay(msgTime(msg) || Date.now());
+      const dayPrev = prev ? startOfDay(msgTime(prev) || Date.now()) : null;
+      return {
+        msg,
+        isSystem: msg.type === 'system',
+        groupTop: !near(prev, msg),
+        groupBottom: !near(msg, next),
+        showDateSeparator: dayPrev === null || dayThis !== dayPrev,
+        dateLabel: formatDayLabel(msgTime(msg) || Date.now()),
+      };
     });
-  };
+  }, [displayMessages]);
 
-  const handleScroll = useCallback(() => {
-    const container = messagesContainerRef.current;
-    if (!container) return;
-    const threshold = 80;
-    const isNear = container.scrollHeight - container.scrollTop - container.clientHeight < threshold;
-    isNearBottomRef.current = isNear;
-    setIsNearBottom(isNear);
-    if (isNear) setUnreadWhileScrolled(0);
+  /* ---------------- scrolling ---------------- */
+  const scrollToBottom = useCallback((smooth = true) => {
+    const c = messagesContainerRef.current;
+    if (c) c.scrollTo({ top: c.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+    setUnreadWhileScrolled(0);
   }, []);
 
+  const handleScroll = useCallback(() => {
+    const c = messagesContainerRef.current;
+    if (!c) return;
+    const near = c.scrollHeight - c.scrollTop - c.clientHeight < 80;
+    isNearBottomRef.current = near;
+    setIsNearBottom(near);
+    if (near) setUnreadWhileScrolled(0);
+  }, []);
+
+  useEffect(() => {
+    if (!displayMessages.length) return;
+    const last = displayMessages[displayMessages.length - 1];
+    if (!initialScrollRef.current) {
+      initialScrollRef.current = true;
+      prevLastTimeRef.current = msgTime(last);
+      requestAnimationFrame(() => scrollToBottom(false));
+    } else if (msgTime(last) > prevLastTimeRef.current) {
+      prevLastTimeRef.current = msgTime(last);
+      const mine = last.senderId === user?.uid;
+      if (mine || isNearBottomRef.current) requestAnimationFrame(() => scrollToBottom(true));
+      else setUnreadWhileScrolled((c) => c + 1);
+    }
+    displayMessages.forEach((m) => seenIdsRef.current.add(m.id));
+  }, [displayMessages, user?.uid, scrollToBottom]);
+
+  useEffect(() => {
+    if (partnerIsTyping && isNearBottomRef.current) requestAnimationFrame(() => scrollToBottom(true));
+  }, [partnerIsTyping, scrollToBottom]);
+
+  const scrollToMessage = useCallback((id) => {
+    const el = messageRefs.current[id];
+    if (!el) { showToast('Message not found', 'error'); return; }
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    setHighlightId(id);
+    setTimeout(() => setHighlightId(null), 1400);
+  }, [showToast]);
+
+  /* ---------------- read receipts ---------------- */
+  useEffect(() => {
+    if (!user?.uid || !userId || !chatKey || !msgRoot) return undefined;
+    const run = () => {
+      if (document.visibilityState === 'hidden') return;
+      if (isGroupChat) {
+        const key = `g:${messages.length}`;
+        if (lastMarkKeyRef.current === key) return;
+        lastMarkKeyRef.current = key;
+        update(ref(db, `userChats/${user.uid}/${userId}`), { unreadCount: 0 }).catch(() => {});
+        return;
+      }
+      const unread = messages.filter((m) => m.receiverId === user.uid && m.isRead === false);
+      if (!unread.length) { lastMarkKeyRef.current = ''; return; }
+      const key = unread.map((m) => m.id).join(',');
+      if (lastMarkKeyRef.current === key) return;
+      lastMarkKeyRef.current = key;
+
+      sessionStorage.setItem(`chat_read_${userId}`, 'true');
+      window.dispatchEvent(new CustomEvent('chat-read', { detail: { userId } }));
+      window.dispatchEvent(new CustomEvent('chat-list-update', { detail: { partnerId: userId, patch: { unreadCount: 0 } } }));
+      update(ref(db, `userChats/${user.uid}/${userId}`), { unreadCount: 0 }).catch(() => {});
+
+      if (sendReadReceipts) {
+        const upd = {};
+        const now = Date.now();
+        unread.forEach((m) => {
+          upd[`${msgRoot}/${m.id}/isRead`] = true;
+          upd[`${msgRoot}/${m.id}/readAt`] = now;
+        });
+        update(ref(db), upd).catch(() => {});
+      }
+      window.dispatchEvent(new CustomEvent('chat-unread-cleared', { detail: { partnerId: userId } }));
+      clearMessageCache(chatKey);
+    };
+    run();
+    document.addEventListener('visibilitychange', run);
+    return () => document.removeEventListener('visibilitychange', run);
+  }, [messages, user?.uid, userId, chatKey, msgRoot, isGroupChat, sendReadReceipts]);
+
+  /* ---------------- input helpers ---------------- */
+  useEffect(() => {
+    const ta = inputRef.current;
+    if (ta) {
+      ta.style.height = 'auto';
+      ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
+    }
+  }, [newMessage]);
+
+  useEffect(() => {
+    if (!showMoreOptions) return undefined;
+    const onDown = (e) => {
+      if (moreOptionsRef.current && !moreOptionsRef.current.contains(e.target)) setShowMoreOptions(false);
+    };
+    const t = setTimeout(() => {
+      document.addEventListener('mousedown', onDown);
+      document.addEventListener('touchstart', onDown);
+    }, 10);
+    return () => {
+      clearTimeout(t);
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('touchstart', onDown);
+    };
+  }, [showMoreOptions]);
+
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+
+  const clearMyTyping = useCallback(() => {
+    if (!chatKey || isGroupChat || !user?.uid) return;
+    if (typingTimeoutRef.current) { clearTimeout(typingTimeoutRef.current); typingTimeoutRef.current = null; }
+    set(ref(db, `chats/${chatKey}/typing/${user.uid}`), { isTyping: false, timestamp: Date.now() }).catch(() => {});
+  }, [chatKey, isGroupChat, user?.uid]);
+
   const handleTyping = useCallback(() => {
-    if (!user?.uid || !userId) return;
-    if (!showTyping) return;
-    if (isGroupChat) return;
-    const cId = [user.uid, userId].sort().join('_');
-    const typingRef = ref(db, `chats/${cId}/typing/${user.uid}`);
+    if (!chatKey || !user?.uid || !showTyping || isGroupChat) return;
+    const typingRef = ref(db, `chats/${chatKey}/typing/${user.uid}`);
     set(typingRef, { isTyping: true, timestamp: Date.now() }).catch(() => {});
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
       set(typingRef, { isTyping: false, timestamp: Date.now() }).catch(() => {});
     }, 2500);
-  }, [user?.uid, userId, showTyping, isGroupChat]);
-
-  const clearMyTyping = useCallback(() => {
-    if (!user?.uid || !userId) return;
-    if (isGroupChat) return;
-    const cId = [user.uid, userId].sort().join('_');
-    const typingRef = ref(db, `chats/${cId}/typing/${user.uid}`);
-    set(typingRef, { isTyping: false, timestamp: Date.now() }).catch(() => {});
-  }, [user?.uid, userId, isGroupChat]);
+  }, [chatKey, user?.uid, showTyping, isGroupChat]);
 
   useEffect(() => () => { clearMyTyping(); }, [clearMyTyping]);
 
-  const flashSent = (id) => {
-    if (!id) return;
-    justSentIdsRef.current.add(id);
-    setTimeout(() => { justSentIdsRef.current.delete(id); setMessages((prev) => [...prev]); }, 800);
-  };
-  const flashArrived = (id) => {
-    if (!id) return;
-    justArrivedIdsRef  const flashArrived = (id) => {
-    if (!id) return;
-    justArrivedIdsRef.current.add(id);
-    setTimeout(() => { justArrivedIdsRef.current.delete(id); setMessages((prev) => [...prev]); }, 700);
-  };
-  
   const triggerSendRipple = () => {
     const btn = sendButtonRef.current;
     if (!btn) return;
     btn.classList.remove('rippling');
     void btn.offsetWidth;
     btn.classList.add('rippling');
-    setTimeout(() => btn.classList.remove('rippling'), 650);
   };
 
-  const publishNoteReply = (text, song = null) => {
-    const ctx = noteReplyContext.current;
-    if (!ctx?.authorUid || !user?.uid) return;
-    if (ctx.authorUid === user.uid) return;
-    postNoteReply(ctx.authorUid, {
-      authorUid: user.uid,
-      authorName: currentUserProfile?.name || user.displayName || 'User',
-      authorAvatar: currentUserProfile?.avatar || '',
-      text: text || '',
-      song: song || null,
-    }).catch((err) => console.warn('postNoteReply failed', err));
-    noteReplyContext.current = null;
+  const playSendSound = () => {
+    try { if (typeof getSoundEnabled !== 'function' || getSoundEnabled()) playSentSound(); } catch (_) { /* ignore */ }
   };
 
-  const handleDownloadMedia = async (msg, isAuto = false) => {
-    if (!msg || !msg.mediaUrl || !msg.mediaUrl.startsWith('http')) return;
-    const id = msg.id;
-    if (savingIds[id] === 'saving') return;
-    setSavingIds((prev) => ({ ...prev, [id]: 'saving' }));
+  /* ---------------- sending ---------------- */
+  const patchMyUserChat = async (partnerId, fields) => {
+    if (!user?.uid || !partnerId || isGroupChat) return;
+    await update(ref(db, `userChats/${user.uid}/${partnerId}`), { id: partnerId, ...fields });
+  };
 
+  const updateChatMeta = async (preview) => {
+    const now = Date.now();
     try {
-      const res = await fetch(msg.mediaUrl, { mode: 'cors' });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const blob = await res.blob();
-      let ext = 'jpg';
-      if (msg.mediaType === 'video') ext = 'mp4';
-      else if (msg.mediaType === 'audio') ext = 'webm';
-      else if (blob.type) {
-        if (blob.type.includes('png')) ext = 'png';
-        else if (blob.type.includes('gif')) ext = 'gif';
-        else if (blob.type.includes('webp')) ext = 'webp';
-        else if (blob.type.includes('jpeg') || blob.type.includes('jpg')) ext = 'jpg';
+      if (isGroupChat) {
+        await update(ref(db, `groups/${groupIdFromChat}`), { lastMessage: preview, lastSenderId: user.uid, lastUpdated: now });
+        return;
       }
-      const safeSender = (msg.senderName || 'echo').replace(/[^a-z0-9]/gi, '_').slice(0, 20);
-      const filename = `echo_${safeSender}_${Date.now()}.${ext}`;
-
-      if (window.showSaveFilePicker && !isAuto) {
-        const handle = await window.showSaveFilePicker({
-          suggestedName: filename,
-          types: [
-            {
-              description: msg.mediaType === 'video' ? 'Video' : 'Image',
-              accept: { [blob.type || 'application/octet-stream']: ['.' + ext] },
-            },
-          ],
-        });
-        const writable = await handle.createWritable();
-        await writable.write(blob);
-        await writable.close();
-      } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
-      }
-
-      setSavingIds((prev) => ({ ...prev, [id]: 'saved' }));
-      if (!isAuto) {
-        setToast({ message: 'Saved to your device', type: 'success' });
-        setTimeout(() => setToast(null), 2200);
-      }
-      setTimeout(() => {
-        setSavingIds((prev) => {
-          const n = { ...prev };
-          delete n[id];
-          return n;
-        });
-      }, 2500);
-    } catch (err) {
-      console.warn('Download failed:', err);
-      setSavingIds((prev) => {
-        const n = { ...prev };
-        delete n[id];
-        return n;
+      await patchMyUserChat(userId, {
+        partnerName: partnerProfile?.name || 'User',
+        partnerAvatar: partnerProfile?.avatar || '',
+        lastMessage: preview,
+        lastSenderId: user.uid,
+        lastUpdated: now,
+        unreadCount: 0,
       });
-      if (!isAuto) {
-        setToast({ message: 'Could not save media', type: 'error' });
-        setTimeout(() => setToast(null), 2200);
-      }
+      await runTransaction(ref(db, `userChats/${userId}/${user.uid}`), (cur) => {
+        if (cur === null) {
+          return {
+            id: user.uid,
+            partnerName: currentUserProfile?.name || 'User',
+            partnerAvatar: currentUserProfile?.avatar || '',
+            lastMessage: preview,
+            lastSenderId: user.uid,
+            lastUpdated: now,
+            unreadCount: 1,
+          };
+        }
+        cur.unreadCount = (cur.unreadCount || 0) + 1;
+        cur.lastMessage = preview;
+        cur.lastSenderId = user.uid;
+        cur.lastUpdated = now;
+        return cur;
+      });
+    } catch (err) {
+      console.warn('Chat meta update failed:', err);
     }
   };
+
+  const buildMessageBase = (type, extra) => ({
+    senderId: user.uid,
+    receiverId: isGroupChat ? null : userId,
+    type,
+    timestamp: Date.now(),
+    isRead: false,
+    senderName: currentUserProfile?.name || user.displayName || 'User',
+    senderAvatar: currentUserProfile?.avatar || '',
+    senderIsPlus: !!isEchoPlus,
+    senderChatStyle: myChatStyle || '',
+    ...extra,
+  });
 
   const handleSendText = async (e) => {
     e?.preventDefault?.();
     const textToSend = (typeof e === 'string' ? e : newMessage).trim();
-    if (!textToSend || !user?.uid || !userId) return;
+    if (!textToSend) return;
+    if (!user?.uid || !userId || !msgRoot) {
+      showToast('Not signed in yet. Please try again.', 'error');
+      return;
+    }
+    if (blockedByMe) return;
 
+    triggerSendRipple();
     hapticSend();
-    setHaloActive(false);
-    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     clearMyTyping();
 
-    const currentNoteReply = replyToNote;
-    const replyToSave = replyTo;
+    const noteCtx = replyToNote;
+    const replyCtx = replyTo;
     setNewMessage('');
     setReplyTo(null);
     setReplyToNote(null);
-
-    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
-    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${cId}/messages`;
-
-    if (!isGroupChat && ended) {
-      try { await remove(ref(db, `chats/${cId}/ended`)); setEnded(false); } catch (_) {}
-    }
-
-    const tempId = `temp_${Date.now()}`;
-    const optimisticMsg = {
-      id: tempId,
-      senderId: user.uid,
-      receiverId: isGroupChat ? null : userId,
-      type: 'text',
-      text: textToSend,
-      timestamp: Date.now(),
-      isRead: false,
-      expiresAt: privateExpiresAt(Date.now(), tideTTL),
-      pending: true,
-      senderName: currentUserProfile?.name || user.displayName || 'User',
-      senderAvatar: currentUserProfile?.avatar || '',
-      senderIsPlus: isEchoPlus,
-      senderChatStyle: myChatStyle,
-    };
-    if (replyToSave) optimisticMsg.replyTo = { messageId: replyToSave.messageId, senderName: replyToSave.senderName, messageType: replyToSave.messageType, textSnippet: replyToSave.textSnippet };
-    if (currentNoteReply) optimisticMsg.replyToNote = { ...currentNoteReply };
-    setMessages((prev) => sortMessages([...prev, optimisticMsg]));
-    prevMsgCountRef.current += 1;
-    if (isNearBottomRef.current) requestAnimationFrame(() => scrollToBottom(true));
+    setShowEmojiPicker(false);
 
     const newMsgRef = push(ref(db, msgRoot));
-    const msgData = {
-      senderId: user.uid,
-      receiverId: isGroupChat ? null : userId,
-      type: 'text',
-      text: textToSend,
-      timestamp: Date.now(),
-      clientTs: Date.now(),
-      isRead: false,
-      expiresAt: privateExpiresAt(Date.now(), tideTTL),
-      senderName: currentUserProfile?.name || user.displayName || 'User',
-      senderAvatar: currentUserProfile?.avatar || '',
-      senderIsPlus: isEchoPlus,
-      senderChatStyle: myChatStyle,
-    };
-    if (replyToSave) msgData.replyTo = { messageId: replyToSave.messageId, senderName: replyToSave.senderName, messageType: replyToSave.messageType, textSnippet: replyToSave.textSnippet };
-    if (currentNoteReply) msgData.replyToNote = { ...currentNoteReply };
+    const id = newMsgRef.key;
+    const payload = buildMessageBase('text', { text: textToSend });
+    if (replyCtx) payload.replyTo = { ...replyCtx };
+    if (noteCtx) payload.replyToNote = { ...noteCtx };
+    const safePayload = clean(payload);
 
-    try { await set(newMsgRef, msgData); } catch (err) { console.error('Send failed:', err); setMessages((prev) => prev.filter((m) => m.id !== tempId)); return; }
-
-    const detectedUrl = extractFirstUrl(textToSend);
-    if (detectedUrl) {
-      fetchLinkPreview(detectedUrl)
-        .then((preview) => {
-          if (!preview) return;
-          update(ref(db, `${msgRoot}/${newMsgRef.key}`), { linkPreview: preview }).catch(() => {});
-        })
-        .catch(() => {});
+    upsertLocal({ ...safePayload, id, pending: true });
+    try {
+      await set(newMsgRef, safePayload);
+    } catch (err) {
+      console.error('Send failed:', err);
+      removeLocal(id);
+      setNewMessage(textToSend);
+      showToast(`Message not sent${err?.code ? ` (${err.code})` : ''}`, 'error');
+      return;
     }
+    removeLocal(id);
+    playSendSound();
+    await updateChatMeta(textToSend);
+    clearMessageCache(chatKey);
+  };
 
-    if (currentNoteReply) publishNoteReply(textToSend);
-    triggerSendRipple();
-    flashSent(newMsgRef.key);
-    if (getSoundEnabled()) playSentSound();
-
-    if (isGroupChat && groupData?.members) {
-      const mentioned = extractMentions(textToSend);
-      const everyone = mentionsEveryone(textToSend);
-      const memberUids = Object.keys(groupData.members);
-
-      const toNotify = new Set();
-      if (everyone) {
-        memberUids.forEach((uid) => {
-          if (uid !== user.uid) toNotify.add(uid);
-        });
+  const uploadToCloudinary = (file, onProgress) => new Promise((resolve, reject) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`, true);
+    xhr.upload.onprogress = (ev) => {
+      if (ev.lengthComputable && onProgress) onProgress(Math.round((ev.loaded / ev.total) * 100));
+    };
+    xhr.onload = () => {
+      if (xhr.status === 200) {
+        try { resolve(JSON.parse(xhr.responseText).secure_url); } catch (err) { reject(err); }
       } else {
-        mentioned.forEach((handle) => {
-          const match = memberUids.find((uid) => {
-            const p = getProfile(uid);
-            return p?.username?.toLowerCase() === handle;
-          });
-          if (match && match !== user.uid) toNotify.add(match);
-        });
+        reject(new Error('Upload failed'));
       }
-
-      toNotify.forEach((uid) => {
-        sendPushToUser({
-          recipientUid: uid,
-          title: `${currentUserProfile?.name || 'Someone'} mentioned you`,
-          body: textToSend.slice(0, 120),
-          data: {
-            partnerId: user.uid,
-            groupId: groupIdFromChat,
-            type: 'mention',
-          },
-        }).catch(() => {});
-      });
-    }
-
-    if (isGroupChat) {
-      update(ref(db, `groups/${groupIdFromChat}`), {
-        lastMessage: textToSend,
-        lastSenderId: user.uid,
-        lastUpdated: Date.now(),
-      }).catch(() => {});
-
-      if (groupData?.members) {
-        const memberUids = Object.keys(groupData.members);
-        memberUids.forEach((uid) => {
-          if (uid !== user.uid) {
-            const userChatPath = `userChats/${uid}/${userId}`;
-            runTransaction(ref(db, userChatPath), (currentData) => {
-              if (currentData === null) {
-                return {
-                  id: userId,
-                  groupId: groupIdFromChat,
-                  isGroup: true,
-                  partnerName: groupData.name || 'Group',
-                  partnerAvatar: groupData.emoji || '👥',
-                  lastMessage: `${currentUserProfile?.name || 'User'}: ${textToSend}`,
-                  lastSenderId: user.uid,
-                  lastUpdated: Date.now(),
-                  unreadCount: 1,
-                };
-              }
-              currentData.unreadCount = (currentData.unreadCount || 0) + 1;
-              currentData.lastMessage = `${currentUserProfile?.name || 'User'}: ${textToSend}`;
-              currentData.lastSenderId = user.uid;
-              currentData.lastUpdated = Date.now();
-              return currentData;
-            }).catch(() => {});
-          }
-        });
-      }
-    } else {
-      if (userId === ECHO_AI_ID) {
-        setIsAILoading(true);
-        try {
-          const token = await auth.currentUser?.getIdToken?.();
-          const headers = { 'Content-Type': 'application/json' };
-          if (token) headers.Authorization = `Bearer ${token}`;
-          const response = await fetch(apiUrl('/api/chat'), { method: 'POST', headers, body: JSON.stringify({ message: textToSend, userId: user.uid }) });
-          if (!response.ok) throw new Error('AI request failed');
-          const data = await response.json();
-          if (data.reply) setMessages((prev) => sortMessages(prev.concat({ id: `ai_${Date.now()}`, senderId: ECHO_AI_ID, text: data.reply, timestamp: Date.now(), type: 'text' })));
-        } catch (err) {
-          setMessages((prev) => sortMessages(prev.concat({ id: `ai_err_${Date.now()}`, senderId: ECHO_AI_ID, text: 'ECHO AI could not reply. Check that the backend is running.', timestamp: Date.now(), type: 'text' })));
-        } finally { setIsAILoading(false); }
-      }
-
-      await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: textToSend, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
-      notifyChatListUpdate(userId, { lastMessage: `You: ${textToSend}`.slice(0, 40), lastSenderId: user.uid, timestamp: Date.now(), unreadCount: 0 });
-
-      const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
-      await runTransaction(recipientChatRef, (currentData) => {
-        if (currentData === null) return { id: user.uid, partnerName: currentUserProfile?.name || 'User', partnerAvatar: currentUserProfile?.avatar || '', lastMessage: textToSend, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 1 };
-        currentData.unreadCount = (currentData.unreadCount || 0) + 1;
-        currentData.lastMessage = textToSend;
-        currentData.lastSenderId = user.uid;
-        currentData.lastUpdated = Date.now();
-        return currentData;
-      });
-
-      if (userId !== ECHO_AI_ID) {
-        sendPushToUser({
-          recipientUid: userId,
-          title: currentUserProfile?.name || user.displayName || 'ECHO',
-          body: textToSend.slice(0, 120),
-          data: {
-            partnerId: user.uid,
-            title: currentUserProfile?.name || user.displayName || 'ECHO',
-            body: textToSend.slice(0, 120),
-            icon: currentUserProfile?.avatar || '/logo192.png',
-          },
-        }).catch(() => {});
-      }
-    }
-    clearMessageCache(cId);
-  };  
-
-  const sendMediaMessage = async (retryMessageId = null) => {
-    let file = selectedFile;
-    let caption = captionText.trim();
-    let reply = replyTo;
-    let noteReply = replyToNote;
-
-    if (retryMessageId) {
-      const failedMsg = messages.find(m => m.id === retryMessageId);
-      if (!failedMsg || !failedMsg._file) { alert('Cannot retry: file not available.'); return; }
-      file = failedMsg._file;
-      setMessages(prev => prev.filter(m => m.id !== retryMessageId));
-    }
-
-    if (!file) return;
-    if (file.size > MAX_FILE_SIZE) { setFileSizeError(true); return; }
-
-    setIsUploading(true);
-    setUploadProgress(0);
-    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
-    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${cId}/messages`;
-    const tempId = `temp_${Date.now()}`;
-    const mediaType = file.type.startsWith('video/') ? 'video' : 'image';
-    const mediaIcon = mediaType === 'video' ? '🎬 Video' : '📷 Image';
-    const blobUrl = URL.createObjectURL(file);
-    const currentReply = reply || replyTo;
-
-    const optimisticMsg = {
-      id: tempId,
-      senderId: user.uid,
-      receiverId: isGroupChat ? null : userId,
-      type: 'media',
-      mediaType,
-      mediaUrl: blobUrl,
-      realUrl: null,
-      caption,
-      timestamp: Date.now(),
-      isRead: false,
-      expiresAt: privateExpiresAt(Date.now(), tideTTL),
-      isUploading: true,
-      uploadProgress: 0,
-      isMediaReady: true,
-      uploadFailed: false,
-      _file: file,
-      senderName: currentUserProfile?.name || user.displayName || 'User',
-      senderAvatar: currentUserProfile?.avatar || '',
-      senderIsPlus: isEchoPlus,
-      senderChatStyle: myChatStyle,
     };
-    if (currentReply) { optimisticMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet }; setReplyTo(null); }
-    if (noteReply) { optimisticMsg.replyToNote = { ...noteReply }; setReplyToNote(null); }
+    xhr.onerror = () => reject(new Error('Network error'));
+    xhr.send(formData);
+  });
 
-    setMessages((prev) => sortMessages([...prev, optimisticMsg]));
-    setPreviewUrl(null);
-    setSelectedFile(null);
-    setCaptionText('');
+  const sendMedia = async ({ file, mediaType, caption = '', duration, replyCtx, noteCtx, existingId }) => {
+    if (!file || !user?.uid || !msgRoot) return;
+    const msgRef = existingId ? ref(db, `${msgRoot}/${existingId}`) : push(ref(db, msgRoot));
+    const id = msgRef.key;
+    const blobUrl = URL.createObjectURL(file);
+
+    const extra = { mediaType, caption: (caption || '').trim() };
+    if (duration != null) extra.duration = duration;
+    const payload = buildMessageBase('media', extra);
+    if (replyCtx) payload.replyTo = { ...replyCtx };
+    if (noteCtx) payload.replyToNote = { ...noteCtx };
+    const safePayload = clean(payload);
+
+    upsertLocal({
+      ...safePayload, id, mediaUrl: blobUrl, isUploading: true, uploadProgress: 0, uploadFailed: false, _file: file,
+    });
 
     try {
-      const downloadURL = await uploadToCloudinary(file, (progress) => { setUploadProgress(progress); setMessages((prev) => prev.map((m) => m.id === tempId ? { ...m, uploadProgress: progress } : m)); });
-      const newMsgRef = push(ref(db, msgRoot));
-      const realMsg = {
-        senderId: user.uid,
-        receiverId: isGroupChat ? null : userId,
-        type: 'media',
-        mediaType,
-        mediaUrl: downloadURL,
-        caption,
-        timestamp: Date.now(),
-        isRead: false,
-        expiresAt: privateExpiresAt(Date.now(), tideTTL),
-        senderName: currentUserProfile?.name || user.displayName || 'User',
-        senderAvatar: currentUserProfile?.avatar || '',
-        senderIsPlus: isEchoPlus,
-        senderChatStyle: myChatStyle,
-      };
-      if (currentReply) realMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet };
-      if (noteReply) realMsg.replyToNote = { ...noteReply };
-      await set(newMsgRef, realMsg);
-      setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
-      URL.revokeObjectURL(blobUrl);
-
-      if (noteReply) publishNoteReply(caption || mediaIcon);
-      triggerSendRipple();
-      flashSent(newMsgRef.key);
-      if (getSoundEnabled()) playSentSound();
-
-      if (isGroupChat) {
-        update(ref(db, `groups/${groupIdFromChat}`), {
-          lastMessage: mediaIcon,
-          lastSenderId: user.uid,
-          lastUpdated: Date.now(),
-        }).catch(() => {});
-
-        if (groupData?.members) {
-          Object.keys(groupData.members).forEach((uid) => {
-            if (uid === user.uid) return;
-            runTransaction(ref(db, `userChats/${uid}/${userId}`), (currentData) => {
-              if (currentData === null) {
-                return {
-                  id: userId,
-                  groupId: groupIdFromChat,
-                  isGroup: true,
-                  partnerName: groupData.name || 'Group',
-                  partnerAvatar: groupData.emoji || '👥',
-                  lastMessage: `${currentUserProfile?.name || 'User'}: ${mediaIcon}`,
-                  lastSenderId: user.uid,
-                  lastUpdated: Date.now(),
-                  unreadCount: 1,
-                };
-              }
-              currentData.unreadCount = (currentData.unreadCount || 0) + 1;
-              currentData.lastMessage = `${currentUserProfile?.name || 'User'}: ${mediaIcon}`;
-              currentData.lastSenderId = user.uid;
-              currentData.lastUpdated = Date.now();
-              return currentData;
-            }).catch(() => {});
-          });
-        }
-      } else {
-        await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: mediaIcon, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
-        const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
-        await runTransaction(recipientChatRef, (currentData) => {
-          if (currentData === null) return { id: user.uid, partnerName: currentUserProfile?.name || 'User', partnerAvatar: currentUserProfile?.avatar || '', lastMessage: mediaIcon, lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 1 };
-          currentData.unreadCount = (currentData.unreadCount || 0) + 1;
-          currentData.lastMessage = mediaIcon;
-          currentData.lastSenderId = user.uid;
-          currentData.lastUpdated = Date.now();
-          return currentData;
-        });
-
-        if (userId !== ECHO_AI_ID) {
-          sendPushToUser({
-            recipientUid: userId,
-            title: currentUserProfile?.name || user.displayName || 'ECHO',
-            body: caption ? caption.slice(0, 120) : mediaIcon,
-            data: {
-              partnerId: user.uid,
-              title: currentUserProfile?.name || user.displayName || 'ECHO',
-              body: caption ? caption.slice(0, 120) : mediaIcon,
-              icon: currentUserProfile?.avatar || '/logo192.png',
-            },
-          }).catch(() => {});
-        }
-      }
-      clearMessageCache(cId);
-      setIsUploading(false);
-      setUploadProgress(0);
+      const url = await uploadToCloudinary(file, (p) => patchLocal(id, { uploadProgress: p }));
+      await set(msgRef, { ...safePayload, mediaUrl: url });
+      removeLocal(id);
+      playSendSound();
+      const label = mediaType === 'video' ? '🎬 Video' : mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
+      await updateChatMeta(label);
+      clearMessageCache(chatKey);
     } catch (err) {
-      console.error('Upload failed:', err);
-      setIsUploading(false);
-      setMessages((prev) => prev.map((m) => m.id === tempId ? { ...m, isUploading: false, uploadFailed: true, uploadProgress: 0 } : m));
-      URL.revokeObjectURL(blobUrl);
+      console.error('Media send failed:', err);
+      patchLocal(id, { isUploading: false, uploadFailed: true, uploadProgress: 0 });
     }
+  };
+
+  const retryMedia = (msg) => {
+    if (!msg?._file) return;
+    sendMedia({
+      file: msg._file,
+      mediaType: msg.mediaType,
+      caption: msg.caption,
+      duration: msg.duration,
+      replyCtx: msg.replyTo,
+      noteCtx: msg.replyToNote,
+      existingId: msg.id,
+    });
+  };
+
+  const handleFileSelect = (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    if (file.size > MAX_FILE_SIZE) { setFileSizeError(true); return; }
+    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
+      showToast('Only images and videos are supported', 'error');
+      return;
+    }
+    setSelectedFile(file);
+    setPreviewUrl(URL.createObjectURL(file));
+    setCaptionText('');
+  };
+
+  const cancelFileSelection = () => { setSelectedFile(null); setPreviewUrl(null); setCaptionText(''); };
+
+  const sendSelectedFile = () => {
+    if (!selectedFile) return;
+    hapticSend();
+    const file = selectedFile;
+    const caption = captionText;
+    const replyCtx = replyTo;
+    const noteCtx = replyToNote;
+    cancelFileSelection();
+    setReplyTo(null);
+    setReplyToNote(null);
+    sendMedia({
+      file,
+      mediaType: file.type.startsWith('video/') ? 'video' : 'image',
+      caption,
+      replyCtx,
+      noteCtx,
+    });
   };
 
   const handleVoiceSend = async (audioBlob, duration) => {
-    if (!isGroupChat && ended) { try { const cId = [user.uid, userId].sort().join('_'); await remove(ref(db, `chats/${cId}/ended`)); setEnded(false); } catch (_) {} }
     setShowVoiceRecorder(false);
-    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
-    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${cId}/messages`;
-    const tempId = `temp_${Date.now()}`;
-    const blobUrl = URL.createObjectURL(audioBlob);
-    const currentReply = replyTo;
-    const noteReply = replyToNote;
-    const optimisticMsg = {
-      id: tempId,
-      senderId: user.uid,
-      receiverId: isGroupChat ? null : userId,
-      type: 'media',
-      mediaType: 'audio',
-      mediaUrl: blobUrl,
-      duration,
-      timestamp: Date.now(),
-      isRead: false,
-      expiresAt: privateExpiresAt(Date.now(), tideTTL),
-      isUploading: true,
-      uploadProgress: 0,
-      isMediaReady: false,
-      uploadFailed: false,
-      _file: audioBlob,
-      senderName: currentUserProfile?.name || user.displayName || 'User',
-      senderAvatar: currentUserProfile?.avatar || '',
-      senderIsPlus: isEchoPlus,
-      senderChatStyle: myChatStyle,
-    };
-    if (currentReply) { optimisticMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet }; setReplyTo(null); }
-    if (noteReply) { optimisticMsg.replyToNote = { ...noteReply }; setReplyToNote(null); }
-    setMessages((prev) => sortMessages([...prev, optimisticMsg]));
-
-    try {
-      const formData = new FormData();
-      formData.append('file', audioBlob);
-      formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, true);
-      xhr.upload.onprogress = (e) => { if (e.lengthComputable) { const progress = Math.round((e.loaded / e.total) * 100); setMessages((prev) => prev.map((m) => (m.id === tempId ? { ...m, uploadProgress: progress } : m))); } };
-      const uploadPromise = new Promise((resolve, reject) => { xhr.onload = () => { if (xhr.status === 200) { try { resolve(JSON.parse(xhr.responseText).secure_url); } catch (e) { reject(e); } } else reject(new Error('Upload failed')); }; xhr.onerror = () => reject(new Error('Network error')); });
-      xhr.send(formData);
-      const downloadURL = await uploadPromise;
-      const newMsgRef = push(ref(db, msgRoot));
-      const realMsg = {
-        senderId: user.uid,
-        receiverId: isGroupChat ? null : userId,
-        type: 'media',
-        mediaType: 'audio',
-        mediaUrl: downloadURL,
-        duration,
-        timestamp: Date.now(),
-        isRead: false,
-        expiresAt: privateExpiresAt(Date.now(), tideTTL),
-        senderName: currentUserProfile?.name || user.displayName || 'User',
-        senderAvatar: currentUserProfile?.avatar || '',
-        senderIsPlus: isEchoPlus,
-        senderChatStyle: myChatStyle,
-      };
-      if (currentReply) realMsg.replyTo = { messageId: currentReply.messageId, senderName: currentReply.senderName, messageType: currentReply.messageType, textSnippet: currentReply.textSnippet };
-      if (noteReply) realMsg.replyToNote = { ...noteReply };
-      await set(newMsgRef, realMsg);
-      setMessages((prev) => sortMessages(prev.map((m) => m.id === tempId ? { ...realMsg, id: newMsgRef.key, isUploading: false, uploadProgress: 100, isMediaReady: true, uploadFailed: false, _file: undefined } : m)));
-      URL.revokeObjectURL(blobUrl);
-      if (noteReply) publishNoteReply('🎤 Voice note');
-      triggerSendRipple();
-      flashSent(newMsgRef.key);
-      if (getSoundEnabled()) playSentSound();
-
-      if (isGroupChat) {
-        update(ref(db, `groups/${groupIdFromChat}`), {
-          lastMessage: '🎤 Voice note',
-          lastSenderId: user.uid,
-          lastUpdated: Date.now(),
-        }).catch(() => {});
-
-        if (groupData?.members) {
-          Object.keys(groupData.members).forEach((uid) => {
-            if (uid === user.uid) return;
-            runTransaction(ref(db, `userChats/${uid}/${userId}`), (currentData) => {
-              if (currentData === null) {
-                return {
-                  id: userId,
-                  groupId: groupIdFromChat,
-                  isGroup: true,
-                  partnerName: groupData.name || 'Group',
-                  partnerAvatar: groupData.emoji || '👥',
-                  lastMessage: `${currentUserProfile?.name || 'User'}: 🎤 Voice note`,
-                  lastSenderId: user.uid,
-                  lastUpdated: Date.now(),
-                  unreadCount: 1,
-                };
-              }
-              currentData.unreadCount = (currentData.unreadCount || 0) + 1;
-              currentData.lastMessage = `${currentUserProfile?.name || 'User'}: 🎤 Voice note`;
-              currentData.lastSenderId = user.uid;
-              currentData.lastUpdated = Date.now();
-              return currentData;
-            }).catch(() => {});
-          });
-        }
-      } else {
-        await patchMyUserChat(userId, { partnerName: location.state?.userName || partnerProfile?.name || 'User', partnerAvatar: partnerProfile?.avatar || location.state?.userAvatar || '', lastMessage: '🎤 Voice note', lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 0 });
-        const recipientChatRef = ref(db, `userChats/${userId}/${user.uid}`);
-        await runTransaction(recipientChatRef, (currentData) => {
-          if (currentData === null) return { id: user.uid, partnerName: currentUserProfile?.name || 'User', partnerAvatar: currentUserProfile?.avatar || '', lastMessage: '🎤 Voice note', lastSenderId: user.uid, lastUpdated: Date.now(), unreadCount: 1 };
-          currentData.unreadCount = (currentData.unreadCount || 0) + 1;
-          currentData.lastMessage = '🎤 Voice note';
-          currentData.lastSenderId = user.uid;
-          currentData.lastUpdated = Date.now();
-          return currentData;
-        });
-
-        if (userId !== ECHO_AI_ID) {
-          sendPushToUser({
-            recipientUid: userId,
-            title: currentUserProfile?.name || user.displayName || 'ECHO',
-            body: '🎤 Voice note',
-            data: {
-              partnerId: user.uid,
-              title: currentUserProfile?.name || user.displayName || 'ECHO',
-              body: '🎤 Voice note',
-              icon: currentUserProfile?.avatar || '/logo192.png',
-            },
-          }).catch(() => {});
-        }
-      }
-      clearMessageCache(cId);
-    } catch (err) { console.error('Voice upload failed:', err); setMessages((prev) => prev.map((m) => m.id === tempId ? { ...m, isUploading: false, uploadFailed: true, uploadProgress: 0 } : m)); URL.revokeObjectURL(blobUrl); }
+    if (!audioBlob) return;
+    sendMedia({ file: audioBlob, mediaType: 'audio', duration });
   };
 
-  const handleFileSelect = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (userId === ECHO_AI_ID) { e.target.value = ''; setToast({ message: 'Attachments are not available in ECHO AI chat right now.', type: 'info' }); setTimeout(() => setToast(null), 2800); return; }
-    if (file.size > MAX_FILE_SIZE) { setFileSizeError(true); e.target.value = ''; return; }
-    setSelectedFile(file);
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    setCaptionText('');
-    e.target.value = '';
-    setTimeout(() => captionInputRef.current?.focus(), 100);
-    setShowMoreOptions(false);
+  /* ---------------- message actions ---------------- */
+  const handleReply = (msg) => {
+    const own = String(msg.senderId || '') === String(user?.uid || '');
+    const senderName = own
+      ? currentUserProfile?.name || 'You'
+      : isGroupChat ? msg.senderName || 'Member' : partnerProfile?.name || 'User';
+    const textSnippet = msg.type === 'media'
+      ? msg.caption || (msg.mediaType === 'video' ? '🎬 Video' : msg.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image')
+      : msg.text || 'Message';
+    setReplyTo({ messageId: msg.id, senderName, messageType: msg.type || 'text', textSnippet });
+    setTimeout(() => inputRef.current?.focus(), 80);
   };
 
-  const cancelMediaPreview = () => { if (previewUrl) URL.revokeObjectURL(previewUrl); setSelectedFile(null); setPreviewUrl(null); setCaptionText(''); setShowCaptionEmoji(false); setIsUploading(false); setUploadProgress(0); };
-
-  const handlePaste = (e) => {
-    if (userId === ECHO_AI_ID) { const items = e.clipboardData?.items || []; for (let i = 0; i < items.length; i++) { if (items[i].type.startsWith('image/') || items[i].type.startsWith('video/')) { e.preventDefault(); setToast({ message: 'Images and videos are not available in ECHO AI chat right now.', type: 'info' }); setTimeout(() => setToast(null), 2800); return; } } }
-    const items = e.clipboardData.items;
-    let mediaFile = null;
-    for (let i = 0; i < items.length; i++) { const item = items[i]; if (item.type.startsWith('image/') || item.type.startsWith('video/')) { mediaFile = item.getAsFile(); break; } }
-    if (mediaFile) { if (mediaFile.size > MAX_FILE_SIZE) { setFileSizeError(true); return; } e.preventDefault(); setSelectedFile(mediaFile); const url = URL.createObjectURL(mediaFile); setPreviewUrl(url); setCaptionText(''); setTimeout(() => captionInputRef.current?.focus(), 100); }
-  };
-
-  const handleReply = useCallback((msg) => {
-    const isOwnMsg = String(msg.senderId || '') === String(user?.uid || '');
-    let senderName;
-    if (isOwnMsg) senderName = currentUserProfile?.name || 'You';
-    else if (isGroupChat) senderName = msg.senderName || 'Member';
-    else senderName = partnerProfile?.name || location.state?.userName || 'User';
-
-    let textSnippet;
-    if (msg.type === 'media') textSnippet = msg.mediaType === 'video' ? '🎬 Video' : msg.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
-    else if (msg.type === 'echomoji') textSnippet = `😤 ECHOMOJI (${msg.mood || 'neutral'})`;
-    else if (msg.type === 'spotlight') textSnippet = '🎬 Spotlight';
-    else textSnippet = msg.text || 'Message';
-    setReplyTo({ messageId: msg.id, senderName, messageType: msg.type || 'text', textSnippet, originalMessage: msg });
-    setNewMessage('');
-    setActiveMessageMenuId(null);
-    setTimeout(() => inputRef.current?.focus(), 100);
-  }, [user, partnerProfile, currentUserProfile, location.state?.userName, isGroupChat]);
-
-  const handleReactionSelect = async (emojiKey, msgIdOverride = null) => {
+  const handleReactionSelect = async (emojiKey, msg) => {
+    if (!msg || msg._local || !msgRoot) return;
     hapticLight();
-    setTappedEmoji(emojiKey);
-    setTimeout(() => setTappedEmoji(null), 220);
-    setActiveMessageMenuId(null);
-    const targetId = msgIdOverride;
-    if (!targetId || !user?.uid || !userId) return;
-    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
-    const reactionRef = ref(db, `${msgRoot}/${targetId}/reactions/${user.uid}`);
+    const reactionRef = ref(db, `${msgRoot}/${msg.id}/reactions/${user.uid}`);
     try {
-      const currentMsg = messages.find((m) => m.id === targetId);
-      const currentReaction = currentMsg?.reactions?.[user.uid];
-      if (currentReaction === emojiKey) await remove(reactionRef);
+      if (msg.reactions?.[user.uid] === emojiKey) await remove(reactionRef);
       else await set(reactionRef, emojiKey);
-    } catch (err) { console.warn('Reaction error:', err); if (!err.message?.includes('PERMISSION_DENIED')) alert('Failed to react. Please try again.'); }
+    } catch (err) {
+      console.warn('Reaction error:', err);
+    }
   };
 
-  const handleTouchStart = (msg, e) => {
-    if (selectMode) return;
-    if (touchTimerRef.current) clearTimeout(touchTimerRef.current);
-    setPressedMsgId(msg.id);
-    touchTimerRef.current = setTimeout(() => {
-      if (window.navigator?.vibrate) window.navigator.vibrate(50);
-      setPressedMsgId(null);
-      setActiveMessageMenuId(msg.id);
-    }, 400);
-  };
-
-  const handleTouchEnd = (msg) => {
-    if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
-    setPressedMsgId(null);
-  };
-
-  const handleTouchMove = () => {
-    if (touchTimerRef.current) { clearTimeout(touchTimerRef.current); touchTimerRef.current = null; }
-    setPressedMsgId(null);
-  };
-
-  const handleMessageContextMenu = useCallback((e, msgId) => {
-    if (selectMode) return;
-    e.preventDefault();
-    e.stopPropagation();
-    setActiveMessageMenuId(msgId);
-  }, [selectMode]);
-
-  const handleEditMessage = (msg) => {
-    if (msg.senderId !== user?.uid) return;
-    if (msg.type === 'media' && msg.mediaType === 'audio') return;
-    if (msg.type === 'media') { setEditingMediaMessage(msg); return; }
-    setEditingMessage(msg);
-    setActiveMessageMenuId(null);
-  };
-
-  const saveEditedMessage = async (newText) => {
-    if (!editingMessage || !user?.uid || !userId) return;
-    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
-    const messageId = editingMessage.id;
-    try {
-      await update(ref(db, `${msgRoot}/${messageId}`), { text: newText, isEdited: true, lastEditedAt: serverTimestamp() });
-      setEditingMessage(null);
-      clearMessageCache(isGroupChat ? userId : [user.uid, userId].sort().join('_'));
-      setToast({ message: 'Message updated successfully', type: 'success' });
-    } catch (err) { console.error('Edit failed:', err); setToast({ message: 'Failed to edit message', type: 'error' }); }
-  };
-
-  const saveEditedMediaCaption = async (newCaption) => {
-    if (!editingMediaMessage || !user?.uid || !userId) return;
-    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
-    const messageId  const saveEditedMediaCaption = async (newCaption) => {
-    if (!editingMediaMessage || !user?.uid || !userId) return;
-    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
-    const messageId = editingMediaMessage.id;
-    try {
-      await update(ref(db, `${msgRoot}/${messageId}`), { caption: newCaption, isEdited: true, lastEditedAt: serverTimestamp() });
-      setEditingMediaMessage(null);
-      clearMessageCache(isGroupChat ? userId : [user.uid, userId].sort().join('_'));
-      setToast({ message: 'Caption updated successfully', type: 'success' });
-    } catch (err) { console.error('Edit caption failed:', err); setToast({ message: 'Failed to edit caption', type: 'error' }); }
-  };
-
-  const handleDeleteMessage = (msgId) => {
-    setDeletingMessageId(msgId);
-    setActiveMessageMenuId(null);
-    openConfirmModal({ title: 'Delete Message', message: 'Are you sure you want to delete this message? This action cannot be undone.', confirmText: 'Delete', cancelText: 'Cancel', onConfirm: () => confirmDeleteMessage(msgId) });
-  };
-
-  const confirmDeleteMessage = async (msgId) => {
-    if (!user?.uid || !userId) return;
-    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
-    try {
-      await remove(ref(db, `${msgRoot}/${msgId}`));
-      deleteMessageFromCache(isGroupChat ? userId : [user.uid, userId].sort().join('_'), msgId).catch(() => {});
-      setDeletingMessageId(null);
-      clearMessageCache(isGroupChat ? userId : [user.uid, userId].sort().join('_'));
-      setToast({ message: 'Message deleted successfully', type: 'success' });
-    } catch (err) { console.error('Delete failed:', err); setToast({ message: 'Failed to delete message', type: 'error' }); }
+  const handleDoubleTap = (msg) => {
+    if (msg._local || !REACTION_EMOJIS[0]) return;
+    handleReactionSelect(REACTION_EMOJIS[0].key, msg);
   };
 
   const handleCopy = async (msg) => {
-    const text = msg.type === 'media' ? msg.mediaUrl || msg.caption || '' : msg.text || '';
-    try { await navigator.clipboard.writeText(text); setToast({ message: 'Copied to clipboard', type: 'success' }); }
-    catch (_) { const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta); setToast({ message: 'Copied to clipboard', type: 'success' }); }
-    setActiveMessageMenuId(null);
+    try {
+      await navigator.clipboard.writeText(msg.text || msg.caption || msg.mediaUrl || '');
+      showToast('Copied');
+    } catch (_) {
+      showToast('Could not copy', 'error');
+    }
   };
 
   const handlePinMessage = async (msg) => {
-    if (!user?.uid || !userId) return;
-    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
-    setActiveMessageMenuId(null);
+    if (!chatKey) return;
     try {
-      const currentlyPinned = pinnedMessageId === msg.id;
-      await set(ref(db, `chats/${cId}/pinnedMessageId`), currentlyPinned ? null : msg.id);
-      await update(ref(db, `${isGroupChat ? `groups/${groupIdFromChat}` : `chats/${cId}`}/messages/${msg.id}`), { pinned: !currentlyPinned });
-      setToast({ message: currentlyPinned ? 'Message unpinned' : 'Message pinned', type: 'success' });
-    } catch (err) {
-      console.error('Pin failed:', err);
-      setToast({ message: 'Failed to pin message', type: 'error' });
+      await set(ref(db, `chats/${chatKey}/pinnedMessageId`), pinnedMessageId === msg.id ? null : msg.id);
+    } catch (_) {
+      showToast('Could not pin message', 'error');
     }
   };
-
-  const jumpToMessage = (messageId) => {
-    const el = messageRefs.current[messageId];
-    if (el) { el.scrollIntoView({ behavior: 'smooth', block: 'center' }); el.classList.add('highlight-flash'); setTimeout(() => el.classList.remove('highlight-flash'), 1600); }
-    else scrollToBottom(true);
-  };
-
-  useEffect(() => {
-    const focusId = new URLSearchParams(location.search || '').get('focus');
-    if (!focusId || !messages.length) return;
-    const t = setTimeout(() => jumpToMessage(focusId), 250);
-    return () => clearTimeout(t);
-  }, [location.search, messages.length]);
-
-  const handleEmojiSelect = (emoji) => {
-    const target = focusedField.current;
-    if (target === 'caption' && captionInputRef.current) {
-      const input = captionInputRef.current;
-      const start = input.selectionStart; const end = input.selectionEnd;
-      const current = captionText;
-      const newText = current.substring(0, start) + emoji + current.substring(end);
-      setCaptionText(newText);
-      const newCursor = start + emoji.length;
-      setTimeout(() => { input.focus(); input.setSelectionRange(newCursor, newCursor); }, 0);
-      return;
-    }
-    if (inputRef.current) {
-      const input = inputRef.current;
-      const start = input.selectionStart; const end = input.selectionEnd;
-      const current = newMessage;
-      const newText = current.substring(0, start) + emoji + current.substring(end);
-      setNewMessage(newText);
-      const newCursor = start + emoji.length;
-      setTimeout(() => { input.focus(); input.setSelectionRange(newCursor, newCursor); }, 0);
-    } else { setNewMessage((prev) => prev + emoji); setTimeout(() => inputRef.current?.focus(), 0); }
-  };
-
-  const handleKeyDown = (e) => {
-    if (mentionQuery && mentionSuggestions.length > 0) {
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setMentionIndex((i) => (i + 1) % mentionSuggestions.length);
-        return;
-      }
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setMentionIndex((i) => (i - 1 + mentionSuggestions.length) % mentionSuggestions.length);
-        return;
-      }
-      if (e.key === 'Enter' || e.key === 'Tab') {
-        e.preventDefault();
-        const chosen = mentionSuggestions[mentionIndex];
-        if (chosen) {
-          const cursor = inputRef.current?.selectionStart || newMessage.length;
-          const result = insertMention(newMessage, mentionStartIndex, cursor, chosen.handle);
-          setNewMessage(result.text);
-          setMentionQuery(null);
-          setMentionSuggestions([]);
-          setTimeout(() => {
-            if (inputRef.current) {
-              inputRef.current.setSelectionRange(result.cursor, result.cursor);
-              inputRef.current.focus();
-            }
-          }, 0);
-        }
-        return;
-      }
-      if (e.key === 'Escape') {
-        setMentionQuery(null);
-        setMentionSuggestions([]);
-        return;
-      }
-    }
-
-    if (e.key !== 'Enter') return;
-    if (enterToSend && !e.shiftKey) {
-      e.preventDefault();
-      handleSendText(e);
-    } else if (!enterToSend && (e.ctrlKey || e.metaKey)) {
-      e.preventDefault();
-      handleSendText(e);
-    }
-  };
-
-  const renderPreviewOverlay = () => {
-    if (!previewUrl) return null;
-    return (
-      <div className="media-preview-overlay" onClick={(e) => { if (e.target === e.currentTarget) cancelMediaPreview(); }}>
-        <div className="media-preview-content" onClick={(e) => e.stopPropagation()}>
-          <button type="button" className="media-preview-close" onClick={cancelMediaPreview} aria-label="Close preview">
-            <i className="fas fa-times" />
-          </button>
-          <div className="media-preview-media">
-            {selectedFile?.type.startsWith('video/') ? (
-              <video src={previewUrl} controls autoPlay loop muted playsInline className="media-preview-video" />
-            ) : (
-              <img src={previewUrl} alt="Preview" className="media-preview-image" />
-            )}
-          </div>
-          <div className="media-preview-caption-row" ref={captionPreviewRef}>
-            <textarea
-              ref={captionInputRef}
-              className="media-preview-caption"
-              placeholder="Add a caption..."
-              value={captionText}
-              onChange={(e) => setCaptionText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault();
-                  sendMediaMessage();
-                }
-              }}
-              onFocus={() => { focusedField.current = 'caption'; }}
-            />
-            <button type="button" className="media-preview-emoji-btn" onClick={() => setShowCaptionEmoji(!showCaptionEmoji)} aria-label="Emojis">
-              <i className="fas fa-smile" />
-            </button>
-          </div>
-          {showCaptionEmoji && (
-            <ChatEmojiPicker
-              onClose={() => setShowCaptionEmoji(false)}
-              onSelect={(emoji) => setCaptionText((t) => t + emoji)}
-              excludeRefs={[captionPreviewRef]}
-            />
-          )}
-          <button type="button" className="media-preview-send" onClick={() => sendMediaMessage()} disabled={isUploading}>
-            {isUploading ? `Uploading ${Math.round(uploadProgress)}%` : 'Send Media'}
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  useEffect(() => {
-    if (!user?.uid) return;
-    listEchoArchive(user.uid).then((rows) => { const map = {}; rows.forEach((row) => { if (row.message?.id) map[row.message.id] = row.archiveId; }); setBookmarkedIds(map); }).catch(() => {});
-  }, [user?.uid]);
 
   const saveMessageToArchive = async (msg) => {
-    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
     try {
-      if (bookmarkedIds[msg.id]) { await removeEchoArchive(bookmarkedIds[msg.id]); await update(ref(db, `${isGroupChat ? `groups/${groupIdFromChat}` : `chats/${cId}`}/messages/${msg.id}`), { pinned: null }).catch(() => {}); setBookmarkedIds((prev) => { const n = { ...prev }; delete n[msg.id]; return n; }); return; }
-      const senderName = msg.senderId === user.uid ? (currentUserProfile?.name || 'You') : (msg.senderName || partnerProfile?.name || getProfile?.(msg.senderId)?.name || 'User');
-      const senderAvatar = msg.senderId === user.uid ? (currentUserProfile?.avatar || '') : (msg.senderAvatar || partnerProfile?.avatar || getProfile?.(msg.senderId)?.avatar || '');
-      const result = await saveToEchoArchive(user.uid, { ...msg, senderName, senderAvatar }, { chatId: cId, source: 'chat', partnerId: userId, senderName, senderAvatar });
-      if (result?.ok) { await update(ref(db, `${isGroupChat ? `groups/${groupIdFromChat}` : `chats/${cId}`}/messages/${msg.id}`), { pinned: true }).catch(() => {}); const rows = await listEchoArchive(user.uid); const map = {}; rows.forEach((row) => { if (row.message?.id) map[row.message.id] = row.archiveId; }); setBookmarkedIds(map); }
-    } catch (_) {}
-    setActiveMessageMenuId(null);
+      const { _local, _file, ...rest } = msg;
+      await saveToEchoArchive(user.uid, rest);
+      setBookmarkedIds((prev) => ({ ...prev, [msg.id]: true }));
+      showToast('Saved');
+    } catch (_) {
+      showToast('Could not save', 'error');
+    }
   };
 
-  const renderTide = (msg) => {
-    void tideTick;
-    if (userId === ECHO_AI_ID || msg.pinned || bookmarkedIds[msg.id]) return null;
-    const fake = { ...msg, expiresAt: msg.expiresAt || (Number(msg.timestamp) || Date.now()) + PRIVATE_TTL_MS };
-    return <span className="echo-tide-chip" title="ECHO Tide"><i className="fas fa-water" aria-hidden="true" />{formatTideLeft(fake)}</span>;
+  const handleEditMessage = (msg) => {
+    if (msg.senderId !== user?.uid) return;
+    if (msg.type === 'media') setEditingMediaMessage(msg);
+    else setEditingMessage(msg);
   };
 
-  const renderReactions = (reactions, messageId, isOwn) => {
-    if (!reactions || typeof reactions !== 'object') return null;
-    const entries = Object.entries(reactions);
-    if (entries.length === 0) return null;
+  const saveEditedMessage = async (newText) => {
+    if (!editingMessage || !msgRoot) return;
+    const text = (newText || '').trim();
+    if (!text) return;
+    try {
+      await update(ref(db, `${msgRoot}/${editingMessage.id}`), { text, isEdited: true });
+    } catch (_) {
+      showToast('Edit failed', 'error');
+    }
+    setEditingMessage(null);
+  };
+
+  const saveEditedCaption = async (caption) => {
+    if (!editingMediaMessage || !msgRoot) return;
+    try {
+      await update(ref(db, `${msgRoot}/${editingMediaMessage.id}`), { caption: (caption || '').trim(), isEdited: true });
+    } catch (_) {
+      showToast('Edit failed', 'error');
+    }
+    setEditingMediaMessage(null);
+  };
+
+  /* ---------------- selection mode ---------------- */
+  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
+  const enterSelectMode = (msg) => { setSelectMode(true); setSelectedIds(new Set(msg ? [msg.id] : [])); };
+  const toggleSelect = (msg) => {
+    setSelectedIds((prev) => {
+      const n = new Set(prev);
+      if (n.has(msg.id)) n.delete(msg.id); else n.add(msg.id);
+      return n;
+    });
+  };
+
+  const confirmDelete = (targets) => {
+    if (!targets.length || !msgRoot) return;
+    if (targets.some((m) => m.senderId !== user?.uid)) return;
+    const n = targets.length;
+    openConfirmModal({
+      title: n > 1 ? `Delete ${n} messages` : 'Delete message',
+      message: 'This cannot be undone.',
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        closeConfirmModal();
+        const upd = {};
+        targets.forEach((m) => {
+          if (m._local) removeLocal(m.id);
+          else upd[`${msgRoot}/${m.id}`] = null;
+        });
+        try {
+          if (Object.keys(upd).length) await update(ref(db), upd);
+          clearMessageCache(chatKey);
+        } catch (_) {
+          showToast('Delete failed', 'error');
+        }
+        exitSelectMode();
+      },
+    });
+  };
+
+  const selectedMessages = useMemo(
+    () => displayMessages.filter((m) => selectedIds.has(m.id)),
+    [displayMessages, selectedIds]
+  );
+  const canDeleteSelected = selectedMessages.length > 0 && selectedMessages.every((m) => m.senderId === user?.uid);
+
+  const copySelected = async () => {
+    const text = selectedMessages.map((m) => m.text || m.caption || '').filter(Boolean).join('\n');
+    if (!text) { showToast('Nothing to copy', 'error'); return; }
+    try { await navigator.clipboard.writeText(text); showToast('Copied'); } catch (_) { showToast('Could not copy', 'error'); }
+    exitSelectMode();
+  };
+
+  /* ---------------- long-press menu ---------------- */
+  const getAppliedStyle = (msg, isOwn) => {
+    const senderIsPlus = msg.senderIsPlus || (isOwn && isEchoPlus);
+    return isOwn ? myChatStyle || '' : senderIsPlus ? msg.senderChatStyle || '' : '';
+  };
+
+  const openMenu = (msg, rect) => {
+    if (selectMode) return;
+    if (msg.isUploading || msg.pending) return;
+    hapticLight();
+    setMenu({ msg, rect, isOwn: String(msg.senderId || '') === String(user?.uid || '') });
+  };
+
+  const buildMenuItems = (msg, isOwn) => {
+    if (msg.uploadFailed) {
+      return [
+        { key: 'retry', label: 'Retry upload', icon: 'fa-redo', onPress: () => retryMedia(msg) },
+        { key: 'discard', label: 'Discard', icon: 'fa-trash', danger: true, onPress: () => removeLocal(msg.id) },
+      ];
+    }
+    const items = [{ key: 'reply', label: 'Reply', icon: 'fa-reply', onPress: () => handleReply(msg) }];
+    if (msg.text || msg.caption || msg.mediaUrl) items.push({ key: 'copy', label: 'Copy', icon: 'fa-copy', onPress: () => handleCopy(msg) });
+    items.push({
+      key: 'pin',
+      label: pinnedMessageId === msg.id ? 'Unpin' : 'Pin',
+      icon: 'fa-thumbtack',
+      onPress: () => handlePinMessage(msg),
+    });
+    items.push({ key: 'save', label: 'Save', icon: 'fa-bookmark', onPress: () => saveMessageToArchive(msg) });
+    if (isOwn && !(msg.type === 'media' && msg.mediaType === 'audio')) {
+      items.push({ key: 'edit', label: 'Edit', icon: 'fa-pen', onPress: () => handleEditMessage(msg) });
+    }
+    items.push({ key: 'select', label: 'Select', icon: 'fa-check-circle', onPress: () => enterSelectMode(msg) });
+    if (isOwn) items.push({ key: 'delete', label: 'Delete', icon: 'fa-trash', danger: true, onPress: () => confirmDelete([msg]) });
+    return items;
+  };
+
+  /* ---------------- wallpaper / mute / block ---------------- */
+  const handleWallpaperSelect = async (id) => {
+    setWallpaperId(id);
+    if (!chatKey) return;
+    try { await update(ref(db, `chats/${chatKey}`), { wallpaper: id }); } catch (_) { /* ignore */ }
+  };
+
+  const handleCustomWallpaperSelect = async (url) => {
+    setCustomWallpaper(url);
+    setWallpaperId('__custom__');
+    if (!chatKey) return;
+    try { await update(ref(db, `chats/${chatKey}`), { wallpaper: '__custom__', customWallpaper: url }); } catch (_) { /* ignore */ }
+  };
+
+  const handleToggleMute = async () => {
+    if (!user?.uid || !userId || !isGroupChat) return;
+    hapticLight();
+    const next = !isMuted;
+    try {
+      await update(ref(db, `userChats/${user.uid}/${userId}`), { muted: next });
+      setIsMuted(next);
+      showToast(next ? 'Group muted' : 'Group unmuted');
+    } catch (_) {
+      showToast('Could not update', 'error');
+    }
+  };
+
+  const handleUnblock = async () => {
+    try {
+      await unblockUser(user.uid, userId);
+      setBlockedByMe(false);
+      showToast('User unblocked');
+    } catch (_) {
+      showToast('Could not unblock', 'error');
+    }
+  };
+
+  /* ---------------- derived UI values ---------------- */
+  const displayName = isGroupChat
+    ? groupData?.name || 'Group'
+    : sanitizeName(location.state?.userName || partnerProfile?.name, userId);
+
+  const wallpaperStyle = useMemo(() => {
+    const fallback = { background: 'transparent' };
+    if (wallpaperId === '__custom__' && customWallpaper) {
+      return { backgroundImage: `url(${customWallpaper})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+    }
+    if (!wallpaperId || wallpaperId === 'default') return fallback;
+    let wp = null;
+    try { wp = getWallpaperById(wallpaperId); } catch (_) { wp = null; }
+    if (!wp) return fallback;
+    if (typeof wp === 'string') return { background: wp };
+    if (wp.style && typeof wp.style === 'object') return wp.style;
+    const bg = wp.css || wp.background || wp.value || wp.gradient;
+    if (bg) return { background: bg };
+    const img = wp.url || wp.image;
+    if (img) return { backgroundImage: `url(${img})`, backgroundSize: 'cover', backgroundPosition: 'center' };
+    return fallback;
+  }, [wallpaperId, customWallpaper]);
+
+  const pinnedMessage = useMemo(
+    () => (pinnedMessageId ? displayMessages.find((m) => m.id === pinnedMessageId) : null),
+    [pinnedMessageId, displayMessages]
+  );
+
+  const hasText = !!newMessage.trim();
+
+  /* ---------------- rendering ---------------- */
+  const renderNoteQuote = (note) => (
+    <div className="cv-note-quote">
+      <div className="cv-note-quote-name">{note.authorName || 'Note'} · Note</div>
+      <div className="cv-note-quote-text">{note.text || (note.song ? '🎵 Song' : '')}</div>
+    </div>
+  );
+
+  const renderReactions = (msg, isOwn) => {
+    if (!msg.reactions) return null;
     const groups = {};
-    entries.forEach(([uid, emoji]) => { if (!groups[emoji]) groups[emoji] = []; groups[emoji].push(uid); });
-    const openReactionViewer = (emoji, reacs, msgId) => { const userIds = Object.keys(reacs).filter((uid) => reacs[uid] === emoji); if (userIds.length === 0) return; setReactionViewer({ emoji, userIds, messageId: msgId }); };
+    Object.entries(msg.reactions).forEach(([uid, emoji]) => {
+      if (!groups[emoji]) groups[emoji] = [];
+      groups[emoji].push(uid);
+    });
     return (
-      <div className="message-reactions" style={{ position: 'absolute', bottom: '-12px', [isOwn ? 'left' : 'right']: '8px', display: 'flex', gap: '4px', zIndex: 3 }}>
+      <div className={`cv-reactions ${isOwn ? 'own' : 'partner'}`}>
         {Object.entries(groups).map(([emojiKey, uids]) => (
-          <span key={emojiKey} className="reaction-badge clickable" onClick={(e) => { e.stopPropagation(); openReactionViewer(emojiKey, reactions, messageId); }} title={`${uids.length} reaction${uids.length !== 1 ? 's' : ''}`} style={{ display: 'inline-flex', alignItems: 'center', gap: '2px', background: 'var(--bg-primary, #ffffff)', border: '1px solid var(--border-color, #e2e8f0)', borderRadius: '999px', padding: '2px 6px', fontSize: '13px', lineHeight: 1, boxShadow: '0 2px 6px rgba(0,0,0,0.15)', cursor: 'pointer', userSelect: 'none' }}>
-            {REACTION_LABELS[emojiKey] || emojiKey}
-            {uids.length > 1 && <span className="reaction-count" style={{ fontSize: '10px', fontWeight: 700, color: 'var(--text-muted, #64748b)' }}>{formatReactionCount(uids.length)}</span>}
-          </span>
+          <button
+            type="button"
+            key={emojiKey}
+            className={`cv-reaction${uids.includes(user?.uid) ? ' mine' : ''}`}
+            onClick={() => handleReactionSelect(emojiKey, msg)}
+          >
+            <span>{REACTION_LABELS[emojiKey] || emojiKey}</span>
+            {uids.length > 1 && <span className="cv-reaction-count">{uids.length > 99 ? '99+' : uids.length}</span>}
+          </button>
         ))}
       </div>
     );
   };
 
-  // ★ WHATSAPP STYLE POP-OUT MENU
-  const renderWhatsAppMenu = (msg, isOwn) => {
-    if (activeMessageMenuId !== msg.id) return null;
-    const allowEdit = isOwn && userId !== ECHO_AI_ID && msg.type !== 'audio';
-    const allowDelete = isOwn || (userId === ECHO_AI_ID && msg.senderId === ECHO_AI_ID);
-    const isPinned = pinnedMessageId === msg.id;
-
-    return (
-      <div 
-        className="whatsapp-popout-menu" 
-        style={{ 
-          position: 'absolute', 
-          bottom: '100%', 
-          [isOwn ? 'right' : 'left']: 0, 
-          marginBottom: '8px', 
-          zIndex: 100,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: isOwn ? 'flex-end' : 'flex-start',
-          gap: '8px'
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Top Reaction Bar */}
-        <div style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '30px', padding: '6px 10px', display: 'flex', gap: '12px', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
-          {REACTION_EMOJIS.map(({ key, Component }) => (
-            <button key={key} type="button" onClick={() => handleReactionSelect(key, msg.id)} style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 0, transform: tappedEmoji === key ? 'scale(1.3)' : 'scale(1)', transition: 'transform 0.1s' }}>
-              <div style={{ width: '24px', height: '24px' }}><Component /></div>
-            </button>
-          ))}
-        </div>
-
-        {/* Options Menu Below */}
-        <div style={{ background: '#1a1a1a', border: '1px solid rgba(255,255,255,0.1)', borderRadius: '14px', padding: '6px', display: 'flex', flexDirection: 'column', gap: '2px', minWidth: '160px', boxShadow: '0 4px 15px rgba(0,0,0,0.5)' }}>
-          <button onClick={() => handleReply(msg)} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-            <i className="fas fa-reply" style={{ width: '16px' }}></i> Reply
-          </button>
-          <button onClick={() => handleCopy(msg)} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-            <i className="fas fa-copy" style={{ width: '16px' }}></i> Copy
-          </button>
-          <button onClick={() => handlePinMessage(msg)} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-            <i className="fas fa-thumbtack" style={{ width: '16px' }}></i> {isPinned ? 'Unpin' : 'Pin'}
-          </button>
-          <button onClick={() => saveMessageToArchive(msg)} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-            <i className="fas fa-bookmark" style={{ width: '16px' }}></i> {bookmarkedIds[msg.id] ? 'Unsave' : 'Save'}
-          </button>
-          {allowEdit && (
-            <button onClick={() => handleEditMessage(msg)} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-              <i className="fas fa-pen" style={{ width: '16px' }}></i> Edit
-            </button>
-          )}
-          <button onClick={() => { setSelectMode(true); setSelectedIds(new Set([msg.id])); setActiveMessageMenuId(null); }} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#fff', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-            <i className="fas fa-check-square" style={{ width: '16px' }}></i> Select
-          </button>
-          {allowDelete && (
-            <button onClick={() => handleDeleteMessage(msg.id)} style={{ padding: '10px 12px', textAlign: 'left', background: 'none', color: '#ff4d4d', border: 'none', borderRadius: '8px', fontSize: '14px', display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-              <i className="fas fa-trash" style={{ width: '16px' }}></i> Delete
-            </button>
-          )}
-        </div>
+  const renderBubbleBody = (msg) => {
+    const quote = msg.replyTo && (
+      <div className="cv-reply-hit" onClick={(e) => { e.stopPropagation(); scrollToMessage(msg.replyTo.messageId); }}>
+        <RepliedMessage replyTo={msg.replyTo} />
       </div>
+    );
+    if (msg.type === 'media') {
+      const openMedia = () => {
+        if (selectMode || msg.isUploading || msg.uploadFailed) return;
+        if (msg.mediaType === 'video') setVideoPreview({ src: msg.mediaUrl });
+        else setMediaPreview({ src: msg.mediaUrl, type: 'image' });
+      };
+      return (
+        <>
+          {quote}
+          {msg.replyToNote && renderNoteQuote(msg.replyToNote)}
+          {msg.mediaType === 'audio' ? (
+            <AudioPlayer src={msg.mediaUrl} />
+          ) : (
+            <div className="chat-media-wrapper" onClick={openMedia}>
+              <ChatMediaMessage message={msg} isUploading={msg.isUploading} uploadProgress={msg.uploadProgress} />
+            </div>
+          )}
+          {msg.uploadFailed && (
+            <button type="button" className="cv-retry" onClick={() => retryMedia(msg)}>
+              <i className="fas fa-redo" /> Upload failed · Tap to retry
+            </button>
+          )}
+          {msg.caption && (
+            <div className="message-text">{linkify(msg.caption)}{msg.isEdited && <span className="message-edited-badge">edited</span>}</div>
+          )}
+        </>
+      );
+    }
+    return (
+      <>
+        {quote}
+        {msg.replyToNote && renderNoteQuote(msg.replyToNote)}
+        <div className={`message-text${isEmojiOnly(msg.text) ? ' cv-emoji-only' : ''}`}>
+          {linkify(msg.text)}
+          {msg.isEdited && <span className="message-edited-badge">edited</span>}
+        </div>
+      </>
     );
   };
 
-  // ★ NEW: Render a reply-to-note card (was referenced but never defined)
-  const renderNoteReplyCard = (note) => {
-    if (!note) return null;
+  const renderCloneBubble = (msg, isOwn) => {
+    let body;
+    if (msg.type === 'media') {
+      let media;
+      if (msg.mediaType === 'audio') media = <div className="cv-clone-audio"><i className="fas fa-microphone" /> Voice note</div>;
+      else if (msg.mediaType === 'video') media = <video className="cv-clone-media" src={msg.mediaUrl} muted playsInline preload="metadata" />;
+      else media = <img className="cv-clone-media" src={msg.mediaUrl} alt="" />;
+      body = (
+        <>
+          {media}
+          {msg.caption && <div className="message-text">{linkify(msg.caption)}</div>}
+        </>
+      );
+    } else {
+      body = <div className={`message-text${isEmojiOnly(msg.text) ? ' cv-emoji-only' : ''}`}>{linkify(msg.text)}</div>;
+    }
     return (
-      <div
-        className="note-reply-card"
-        onClick={() => { if (note.authorUid) navigate(`/user/${note.authorUid}`); }}
-        role="button"
-        tabIndex={0}
-        style={{
-          display: 'flex',
-          alignItems: 'flex-start',
-          gap: '8px',
-          padding: '8px 10px',
-          marginBottom: '6px',
-          background: 'rgba(108, 60, 225, 0.1)',
-          borderLeft: '3px solid #6C3CE1',
-          borderRadius: '8px',
-          cursor: 'pointer',
-          fontSize: '12.5px',
-        }}
-      >
-        <i className="fas fa-sticky-note" style={{ color: '#6C3CE1', marginTop: '2px' }} />
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontWeight: 700, fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.04em', color: '#6C3CE1', marginBottom: '2px' }}>
-            {note.authorName || 'User'}&apos;s note
-          </div>
-          {note.song?.title ? (
-            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              🎵 {note.song.title}{note.song.artist ? ` · ${note.song.artist}` : ''}
-            </div>
-          ) : (
-            <div style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', opacity: 0.85 }}>
-              {note.text || 'Note'}
-            </div>
-          )}
-        </div>
+      <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${getAppliedStyle(msg, isOwn)}`}>
+        {body}
+        <div className="message-meta-time">{formatMsgClock(msg)}</div>
       </div>
     );
   };
 
   const renderMessage = (entry) => {
     const { msg, groupTop, groupBottom, isSystem } = entry;
-
     if (isSystem) {
-      return (
-        <Fragment key={msg.id}>
-          {entry.showDateSeparator && <DateSeparator label={entry.dateLabel} />}
-          <div className="message-bubble system">{msg.text}</div>
-        </Fragment>
-      );
+      return <div key={msg.id} className="message-bubble system">{msg.text}</div>;
     }
-
     const isOwn = String(msg.senderId || '') === String(user?.uid || '');
-    const isDeleting = msg.id === deletingMessageId;
-    const isAi = msg.senderId === ECHO_AI_ID;
-    const replyToDisplay = msg.replyTo ? { ...msg.replyTo, senderName: msg.replyTo.senderName || 'User' } : null;
-    const noteReplyDisplay = msg.replyToNote || null;
-    const showReply = !isAi;
-    const handleMediaClick = () => { if (msg.type === 'media') { if (msg.mediaType === 'video') setVideoPreview({ src: msg.mediaUrl }); else if (msg.mediaType === 'image') setMediaPreview({ src: msg.mediaUrl, type: 'image', alt: msg.caption || 'Image' }); } };
-    const handleRetry = () => { sendMediaMessage(msg.id); };
-    const sentClock = formatMsgClock(msg);
-    const justSent = justSentIdsRef.current.has(msg.id);
-    const justArrived = justArrivedIdsRef.current.has(msg.id);
-    const isPressed = pressedMsgId === msg.id;
-    const isSelected = selectedIds.has(msg.id);
     const isPinned = pinnedMessageId === msg.id;
-    const saveState = savingIds[msg.id];
-
-    const showSenderName = isGroupChat && !isOwn && groupTop && !isSystem;
-
-    const senderIsPlus = msg.senderIsPlus || (isOwn && isEchoPlus);
-    const appliedStyle = isOwn ? myChatStyle : (senderIsPlus ? msg.senderChatStyle : '');
-
-    const shell = (inner) => {
-      const row = (
-        <div
-          className={`message-row ${isOwn ? 'own' : 'partner'} ${isDeleting ? 'deleting' : ''} ${justSent ? 'just-sent' : ''} ${justArrived ? 'just-arrived' : ''} ${isPressed ? 'pressed' : ''} ${groupTop ? 'group-top' : 'group-mid'} ${groupBottom ? 'group-bottom' : 'group-mid'} ${isSelected ? 'selected' : ''} ${selectMode ? 'select-mode' : ''}`}
-          ref={(el) => { if (el) messageRefs.current[msg.id] = el; }}
-          onClick={(e) => {
-            if (selectMode) {
-              setSelectedIds((prev) => {
-                const n = new Set(prev);
-                if (n.has(msg.id)) n.delete(msg.id); else n.add(msg.id);
-                return n;
-              });
-              return;
-            }
-            if (activeMessageMenuId !== msg.id) {
-               setActiveMessageMenuId(null);
-            }
-          }}
-          onContextMenu={(e) => handleMessageContextMenu(e, msg.id)}
-          onTouchStart={(e) => handleTouchStart(msg, e)}
-          onTouchEnd={() => handleTouchEnd(msg)}
-          onTouchMove={handleTouchMove}
-        >
-          {selectMode && (
-            <div className={`select-checkbox ${isSelected ? 'checked' : ''}`} aria-hidden="true">
-              <svg viewBox="0 0 24 24" width="14" height="14">
-                <path d="M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z" fill="currentColor" />
-              </svg>
-            </div>
-          )}
-          <div className={`message-stack ${isOwn ? 'own' : 'partner'}`} style={{ position: 'relative', marginBottom: msg.reactions && Object.keys(msg.reactions).length > 0 ? '14px' : 0 }}>
-            {renderWhatsAppMenu(msg, isOwn)}
-            
-            {showSenderName && (
-              <div className={`group-sender-name ${senderIsPlus ? 'premium-sender' : ''}`} style={{ color: senderIsPlus ? undefined : senderColor(msg.senderId), display: 'flex', alignItems: 'center', gap: '4px' }}>
-                {msg.senderName || 'Member'}
-                {senderIsPlus && <PlusBadge size={14} />}
-              </div>
-            )}
-            <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${appliedStyle} ${msg.pending ? 'pending' : ''} ${isPinned ? 'pinned' : ''} ${isOwn && isEchoPlus ? 'premium-glow' : ''} ${isPressed ? 'scale-105 transition-transform' : ''}`}>
-              {isPinned && (
-                <span className="message-pin-badge" title="Pinned">
-                  <svg viewBox="0 0 24 24" width="11" height="11"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" fill="currentColor"/></svg>
-                </span>
-              )}
-              {inner}
-              <div className="message-meta-time">
-                {sentClock}
-                <MessageReceipt msg={msg} isOwn={isOwn} />
-              </div>
-              {renderTide(msg)}
-            </div>
-            {renderReactions(msg.reactions, msg.id, isOwn)}
-          </div>
-        </div>
-      );
-      if (showReply && !selectMode) return <SwipeToReply key={msg.id} direction={isOwn ? 'left' : 'right'} onReply={() => handleReply(msg)}>{row}</SwipeToReply>;
-      return <Fragment key={msg.id}>{row}</Fragment>;
-    };
-
-    let content;
-    if (msg.type === 'spotlight') {
-      content = shell(
-        <>
-          {replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}
-          {noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}
-          <ChatSpotlightCard spotlight={msg.spotlight} onOpen={(postId) => navigate(`/spotlight?focus=${postId}`)} />
-        </>
-      );
-    } else if (msg.type === 'echomoji') {
-      const skinObj = msg.skinId ? getSkinById(msg.skinId) : null;
-      content = shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}<div style={{ display: 'flex', justifyContent: 'center', padding: '4px 0' }}><ECHOMOJI mood={msg.mood || 'neutral'} skin={skinObj} size={56} interactive={false} animated={true} /></div></>);
-    } else if (msg.type === 'media') {
-      let inner;
-      if (msg.mediaType === 'audio') {
-        if (msg.isUploading) inner = <div className="media-upload-overlay"><div className="upload-spinner"><svg className="spinner-ring" viewBox="0 0 50 50"><circle className="spinner-path" cx="25" cy="25" r="20" fill="none" strokeWidth="4" /></svg></div></div>;
-        else if (msg.uploadFailed) inner = <div className="media-error-placeholder"><i className="fas fa-exclamation-triangle" /><span>Upload failed</span><button onClick={handleRetry}>Retry</button></div>;
-        else inner = <AudioPlayer src={msg.mediaUrl} />;
-      } else {
-        if (msg.uploadFailed) {
-          inner = <div className="media-error-placeholder"><i className="fas fa-exclamation-triangle" /><span>Upload failed</span><button onClick={handleRetry}>Retry</button></div>;
-        } else {
-          inner = (
-            <div className={msg.mediaType === 'video' ? 'chat-media-video-wrapper' : 'chat-media-image-wrapper'} onClick={!msg.isUploading && !selectMode ? handleMediaClick : undefined} style={{ cursor: !msg.isUploading && !selectMode ? 'pointer' : 'default', position: 'relative' }}>
-              <ChatMediaMessage message={msg} isUploading={msg.isUploading} uploadProgress={msg.uploadProgress} disablePreview={true} />
-              {!msg.isUploading && !selectMode && msg.mediaUrl && msg.mediaUrl.startsWith('http') && (
-                <button type="button" className={`media-download-btn${saveState ? ' ' + saveState : ''}`} onClick={(e) => { e.stopPropagation(); handleDownloadMedia(msg); }} title="Save to device" aria-label="Save to device">
-                  {saveState === 'saving' ? <i className="fas fa-spinner fa-spin" /> : saveState === 'saved' ? <i className="fas fa-check" /> : <i className="fas fa-download" />}
-                </button>
-              )}
-            </div>
-          );
-        }
-      }
-      content = shell(<>{replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}{noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}{inner}</>);
-    } else {
-      content = shell(<>
-        {replyToDisplay && <RepliedMessage replyTo={replyToDisplay} onTap={() => jumpToMessage(replyToDisplay.messageId)} />}
-        {noteReplyDisplay && renderNoteReplyCard(noteReplyDisplay)}
-        <div className="message-text" style={{ whiteSpace: userId === ECHO_AI_ID && !isOwn ? 'normal' : 'pre-wrap' }}>
-          {userId === ECHO_AI_ID && !isOwn ? <AiRichText text={msg.text} onFollowup={(q) => handleSendText(q)} /> : isGroupChat ? parseMentions(msg.text).map((part, i) => { if (part.isEveryone) return <span key={i} className="mention mention-everyone">{part.text}</span>; if (part.isMention) return <span key={i} className="mention">{part.text}</span>; return <span key={i}>{part.text}</span>; }) : msg.text}
-          {msg.isEdited && <span className="message-edited-badge">(edited)</span>}
-        </div>
-        {msg.linkPreview && <LinkPreviewCard preview={msg.linkPreview} />}
-        {!msg.linkPreview && !msg.pending && extractFirstUrl(msg.text || '') && (
-          <div className="link-preview-loading">
-            <div className="link-preview-skeleton-logo" />
-            <div className="link-preview-skeleton-lines">
-              <div className="link-preview-skeleton-line w70" />
-              <div className="link-preview-skeleton-line w90" />
-              <div className="link-preview-skeleton-line w50" />
-            </div>
-          </div>
-        )}
-      </>);
-    }
+    const showSenderName = isGroupChat && !isOwn && groupTop;
+    const appliedStyle = getAppliedStyle(msg, isOwn);
+    const rowClass = [
+      'message-row',
+      isOwn ? 'own' : 'partner',
+      groupTop ? 'group-top' : 'group-mid',
+      groupBottom ? 'group-bottom' : 'group-mid',
+      selectMode ? 'select-mode' : '',
+      selectedIds.has(msg.id) ? 'selected' : '',
+      menu?.msg?.id === msg.id ? 'cv-source-hidden' : '',
+    ].filter(Boolean).join(' ');
 
     return (
       <Fragment key={msg.id}>
-        {entry.showDateSeparator && <DateSeparator label={entry.dateLabel} />}
-        {content}
+        {entry.showDateSeparator && (
+          <div className="chat-date-separator"><span>{entry.dateLabel}</span></div>
+        )}
+        <MessageRow
+          msg={msg}
+          isOwn={isOwn}
+          rowClass={rowClass}
+          selectMode={selectMode}
+          selected={selectedIds.has(msg.id)}
+          canReply={!msg._local && !msg.isUploading && !blockedByMe}
+          onLongPress={openMenu}
+          onReply={handleReply}
+          onDoubleTap={handleDoubleTap}
+          onToggleSelect={toggleSelect}
+          registerRef={registerRef}
+        >
+          {showSenderName && (
+            <div className="group-sender-name" style={{ color: senderColor(msg.senderId) }}>{msg.senderName || 'Member'}</div>
+          )}
+          <div
+            className={[
+              'message-bubble', isOwn ? 'own' : 'partner', appliedStyle,
+              isPinned ? 'pinned' : '',
+              msg.pending ? 'pending' : '',
+              highlightId === msg.id ? 'highlight-flash' : '',
+            ].filter(Boolean).join(' ')}
+          >
+            {isPinned && <span className="message-pin-badge"><i className="fas fa-thumbtack" style={{ fontSize: 9 }} /></span>}
+            {renderBubbleBody(msg)}
+            <div className="message-meta-time">
+              {formatMsgClock(msg)} <MessageReceipt msg={msg} isMe={isOwn} group={isGroupChat} />
+            </div>
+                    </div>
+          {renderReactions(msg, isOwn)}
+        </MessageRow>
       </Fragment>
     );
   };
 
-  useEffect(() => { clearedAtRef.current = clearedAt || 0; }, [clearedAt]);
-
-  useEffect(() => {
-    return () => { (messages || []).forEach((m) => { if (typeof m?.mediaUrl === 'string' && m.mediaUrl.startsWith('blob:')) { try { URL.revokeObjectURL(m.mediaUrl); } catch (_) {} } }); };
-  }, [userId]);
-
-  useEffect(() => {
-    if (!user?.uid || !userId) return;
-    clearUnreadInstantly();
-    const syncTimer = setTimeout(() => { if (isMounted.current) markMessagesAsRead(); }, 100);
-    return () => clearTimeout(syncTimer);
-  }, [user?.uid, userId, sendReadReceipts]);
-
-  useEffect(() => {
-    if (!user?.uid || !userId) { setLoadingMessages(false); return; }
-    isMounted.current = true;
-    const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
-    chatId.current = cId;
-
-    const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${cId}/messages`;
-
-    loadMessagesFromCache(cId).then((cachedMessages) => {
-      if (isMounted.current && cachedMessages.length > 0) {
-        const cut = clearedAtRef.current || 0;
-        const visible = cut ? cachedMessages.filter((m) => { const ts = typeof m.timestamp === 'number' ? m.timestamp : 0; return !ts || ts >= cut; }) : cachedMessages;
-        setMessages(sortMessages(visible.filter((m) => userId === 'echo_ai_assistant' || !isTideExpired(m))));
-        setLoadingMessages(false);
-        prevMsgCountRef.current = visible.length;
-        if (!initialScrollRef.current) { initialScrollRef.current = true; requestAnimationFrame(() => scrollToBottom(false)); }
-      }
-    });
-
-    const messagesRef = ref(db, msgRoot);
-    const unsubscribe = onValue(messagesRef, async (snapshot) => {
-      if (!isMounted.current) return;
-      const data = snapshot.val();
-      let newMessages = [];
-      if (data) newMessages = sortMessages(Object    const messagesRef = ref(db, msgRoot);
-    const unsubscribe = onValue(messagesRef, async (snapshot) => {
-      if (!isMounted.current) return;
-      const data = snapshot.val();
-      let newMessages = [];
-      if (data) newMessages = sortMessages(Object.entries(data).map(([id, val]) => ({ id, ...val })));
-      const cut = clearedAtRef.current || 0;
-      let visible = cut ? newMessages.filter((m) => { if (m.pending) return true; const ts = msgTime(m); if (!ts) return true; return ts >= cut; }) : newMessages;
-      visible = sortMessages(visible);
-      visible = await pruneExpired(visible.filter((m) => userId === ECHO_AI_ID || !isTideExpired(m) || m.pinned || bookmarkedIds[m.id]), cId);
-      if (userId !== ECHO_AI_ID) visible = visible.filter((m) => !isTideExpired(m) || m.pinned || bookmarkedIds[m.id]);
-      setMessages((prev) => {
-        const pending = (prev || []).filter((m) => m.pending && !visible.some((v) => v.id === m.id || (v.text === m.text && v.senderId === m.senderId && Math.abs(msgTime(v) - msgTime(m)) < 5000)));
-        const serverOwnTexts = new Set(visible.filter((v) => v.senderId === user.uid).map((v) => v.text));
-        const stillPending = pending.filter((p) => !serverOwnTexts.has(p.text));
-        return sortMessages([...visible, ...stillPending]);
-      });
-      setLoadingMessages(false);
-
-      if (autoSaveMedia && userId !== ECHO_AI_ID) {
-        const incomingMedia = visible.filter((m) => m.type === 'media' && m.mediaType !== 'audio' && m.senderId !== user.uid && m.mediaUrl && m.mediaUrl.startsWith('http') && !savingIds[m.id]);
-        if (incomingMedia.length > 0) handleDownloadMedia(incomingMedia[incomingMedia.length - 1], true);
-      }
-
-      const prevCount = prevMsgCountRef.current;
-      const grew = visible.length > prevCount;
-      const newest = visible[visible.length - 1];
-      const isIncoming = newest && newest.senderId && newest.senderId !== user.uid;
-      prevMsgCountRef.current = visible.length;
-
-      if (grew && isIncoming && newest?.id) flashArrived(newest.id);
-      if (grew && isIncoming && !isNearBottomRef.current) setUnreadWhileScrolled((n) => n + Math.max(1, visible.length - prevCount));
-      if (!initialScrollRef.current) { initialScrollRef.current = true; requestAnimationFrame(() => scrollToBottom(false)); }
-      else if (grew && isNearBottomRef.current) requestAnimationFrame(() => scrollToBottom(true));
-
-      Promise.resolve().then(async () => {
-        try { for (const msg of visible) { await upsertMessageInCache(cId, msg); if (msg.type === 'media' && msg.mediaUrl && msg.mediaUrl.startsWith('http')) cacheMedia(msg.mediaUrl); } await saveMessagesToCache(cId, visible); } catch (_) {}
-      });
-      clearMessageCache(cId);
-      if (!isGroupChat) {
-        const hasUnread = newMessages.some((msg) => msg.receiverId === user.uid && msg.isRead === false);
-        if (hasUnread && isMounted.current) {
-          clearUnreadInstantly();
-          if (markReadTimeout.current) clearTimeout(markReadTimeout.current);
-          markReadTimeout.current = setTimeout(() => { if (isMounted.current) markMessagesAsRead(); }, 300);
-        }
-      } else {
-        update(ref(db, `userChats/${user.uid}/${userId}`), { unreadCount: 0 }).catch(() => {});
-      }
-    }, (error) => {
-      console.error('🔥 [ChatView]', error);
-      setLoadingMessages(false);
-      if (messages.length === 0) setMessages([{ id: 'error', senderId: 'system', text: '⚠️ Could not load messages. Please check your connection.', timestamp: Date.now(), type: 'text', isRead: true }]);
-    });
-
-    return () => { isMounted.current = false; if (markReadTimeout.current) clearTimeout(markReadTimeout.current); unsubscribe(); };
-  }, [user?.uid, userId, isGroupChat, groupIdFromChat]);
-
-  useEffect(() => {
-    if (!user?.uid) return;
-    const myProfileRef = ref(db, `profiles/${user.uid}`);
-    get(myProfileRef).then((snap) => { if (snap.exists()) setCurrentUserProfile(snap.val()); }).catch(console.error);
-  }, [user?.uid]);
-
-  useEffect(() => {
-    const textarea = inputRef.current;
-    if (textarea) { textarea.style.height = 'auto'; textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`; }
-  }, [newMessage]);
-
-  useEffect(() => {
-    if (!showMoreOptions) return;
-    const handleClickOutside = (e) => { if (moreOptionsRef.current && !moreOptionsRef.current.contains(e.target)) setShowMoreOptions(false); };
-    const t = setTimeout(() => { document.addEventListener('mousedown', handleClickOutside); document.addEventListener('touchstart', handleClickOutside); }, 10);
-    return () => { clearTimeout(t); document.removeEventListener('mousedown', handleClickOutside); document.removeEventListener('touchstart', handleClickOutside); };
-  }, [showMoreOptions]);
-
-  useEffect(() => {
-    if (!messagesEndRef.current) return;
-    if (!initialScrollRef.current) { initialScrollRef.current = true; messagesEndRef.current.scrollIntoView({ behavior: 'auto' }); return; }
-    if (isNearBottomRef.current) messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
-  }, [messages]);
-
-  useEffect(() => {
-    if (!selectMode) return;
-    const onKey = (e) => { if (e.key === 'Escape') { setSelectMode(false); setSelectedIds(new Set()); } };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [selectMode]);
-
-  const [chatBgEnabled, setChatBgEnabled] = useState(() => { try { const v = localStorage.getItem('echo_chat_bg'); return v === null ? true : v === '1'; } catch { return true; } });
-
-  useEffect(() => {
-    const onBg = (e) => { if (e?.detail && typeof e.detail.enabled === 'boolean') setChatBgEnabled(e.detail.enabled); else { try { const v = localStorage.getItem('echo_chat_bg'); setChatBgEnabled(v === null ? true : v === '1'); } catch (_) {} } };
-    window.addEventListener('echo-chat-bg-changed', onBg);
-    window.addEventListener('storage', onBg);
-    return () => { window.removeEventListener('echo-chat-bg-changed', onBg); window.removeEventListener('storage', onBg); };
-  }, []);
-
-  useEffect(() => {
-    if (!user?.uid || !userId) { setEnded(false); return; }
-    if (isGroupChat) { setEnded(false); return; }
-    const cId = [user.uid, userId].sort().join('_');
-    const endedRef = ref(db, `chats/${cId}/ended`);
-    const unsub = onValue(endedRef, (snap) => { const val = snap.val(); if (val === true || (val && (val.by || val === true))) { setEnded(true); setEndedByName((val && val.byName) || ''); } else { setEnded(false); setEndedByName(''); } });
-    return () => unsub();
-  }, [user?.uid, userId, isGroupChat]);
-
-  useEffect(() => {
-    if (!user?.uid || !userId) { setClearedAt(0); return; }
-    if (isGroupChat) { setClearedAt(0); return; }
-    const clearedRef = ref(db, `userChats/${user.uid}/${userId}/clearedAt`);
-    const unsub = onValue(clearedRef, (snap) => { const val = typeof snap.val() === 'number' ? snap.val() : 0; clearedAtRef.current = val; setClearedAt(val); if (val) setMessages((prev) => prev.filter((m) => { if (m.pending) return true; const ts = typeof m.timestamp === 'number' ? m.timestamp : 0; return !ts || ts >= val; })); });
-    const onLocalClear = (e) => { if (e.detail?.partnerId === userId) { const now = Date.now(); clearedAtRef.current = now; setClearedAt(now); setMessages([]); } };
-    window.addEventListener('chat-history-cleared', onLocalClear);
-    return () => { unsub(); window.removeEventListener('chat-history-cleared', onLocalClear); };
-  }, [user?.uid, userId, isGroupChat]);
-
-  const displayName = isGroupChat
-    ? (groupData?.name || 'Group')
-    : sanitizeName(location.state?.userName || partnerProfile?.name, userId);
-
-  const handleInputPointerDown = () => {
-    if (userId === ECHO_AI_ID) return;
-    longPressTimer.current = setTimeout(() => { setHaloActive(true); if (window.navigator?.vibrate) window.navigator.vibrate(50); }, 500);
-  };
-  const handleInputPointerUp = () => clearTimeout(longPressTimer.current);
-  const handleInputPointerLeave = () => clearTimeout(longPressTimer.current);
-
-  const isCustom = wallpaperId === '__custom__' && customWallpaper;
-  const wallpaper = isCustom ? null : getWallpaperById(wallpaperId);
-
-  const wallpaperStyle = isCustom
-    ? { backgroundImage: `url(${customWallpaper})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat', transition: 'background 0.3s ease', '--msg-font-size': FONT_SIZE_MAP[fontSize] || FONT_SIZE_MAP.md }
-    : {
-        background: (wallpaper.type === 'color' || wallpaper.type === 'gradient') ? (wallpaper.value === 'transparent' ? 'var(--bg-primary)' : wallpaper.value) : 'var(--bg-primary)',
-        backgroundImage: wallpaper.type === 'pattern' ? wallpaper.value : 'none',
-        backgroundSize: wallpaper.type === 'pattern' ? '20px 20px' : 'cover',
-        backgroundRepeat: wallpaper.type === 'pattern' ? 'repeat' : 'no-repeat',
-        backgroundPosition: 'center',
-        transition: 'background 0.3s ease',
-        '--msg-font-size': FONT_SIZE_MAP[fontSize] || FONT_SIZE_MAP.md,
-      };
-
-  const pinnedMessage = useMemo(() => {
-    if (!pinnedMessageId) return null;
-    return messages.find((m) => m.id === pinnedMessageId) || null;
-  }, [messages, pinnedMessageId]);
-
-  const pinnedPreview = useMemo(() => {
-    if (!pinnedMessage) return '';
-    if (pinnedMessage.type === 'media') {
-      if (pinnedMessage.mediaType === 'video') return '🎬 Video';
-      if (pinnedMessage.mediaType === 'audio') return '🎤 Voice note';
-      return pinnedMessage.caption || '📷 Image';
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey && enterToSend && !e.nativeEvent?.isComposing) {
+      e.preventDefault();
+      handleSendText(e);
     }
-    if (pinnedMessage.type === 'echomoji') return `😤 ECHOMOJI (${pinnedMessage.mood || 'neutral'})`;
-    if (pinnedMessage.type === 'spotlight') return '🎬 Spotlight';
-    return pinnedMessage.text || '';
-  }, [pinnedMessage]);
-
-  // ★ NEW: Compute groupedMessages (was referenced in render but never defined)
-  const groupedMessages = useMemo(() => {
-    const result = [];
-    let lastDateKey = null;
-    let lastSenderId = null;
-    let lastTimestamp = 0;
-
-    for (let i = 0; i < messages.length; i++) {
-      const msg = messages[i];
-      const ts = msgTime(msg) || Date.now();
-      const dayKey = startOfDay(ts);
-      const showDateSeparator = dayKey !== lastDateKey;
-
-      const prev = messages[i - 1];
-      const next = messages[i + 1];
-      const prevTs = prev ? msgTime(prev) : 0;
-      const nextTs = next ? msgTime(next) : 0;
-      const sameSenderAsPrev = prev && prev.senderId === msg.senderId;
-      const sameSenderAsNext = next && next.senderId === msg.senderId;
-
-      const groupTop = !sameSenderAsPrev || (ts - prevTs) > GROUP_WINDOW_MS || showDateSeparator;
-      const groupBottom = !sameSenderAsNext || (nextTs - ts) > GROUP_WINDOW_MS || (next && startOfDay(nextTs) !== dayKey);
-
-      result.push({
-        msg,
-        groupTop,
-        groupBottom,
-        isSystem: msg.senderId === 'system',
-        showDateSeparator,
-        dateLabel: showDateSeparator ? formatDayLabel(ts) : '',
-      });
-
-      lastDateKey = dayKey;
-      lastSenderId = msg.senderId;
-      lastTimestamp = ts;
-    }
-    return result;
-  }, [messages]);
-
-  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
-
-  const bulkCopy = async () => {
-    const arr = [...selectedIds].map((id) => messages.find((m) => m.id === id)).filter(Boolean);
-    const text = arr.map((m) => (m.type === 'media' ? m.mediaUrl || m.caption || '' : m.text || '')).join('\n');
-    try { await navigator.clipboard.writeText(text); setToast({ message: `Copied ${arr.length} message${arr.length !== 1 ? 's' : ''}`, type: 'success' }); }
-    catch (_) { setToast({ message: 'Copy failed', type: 'error' }); }
-    exitSelectMode();
-  };
-
-  const bulkSave = async () => {
-    const arr = [...selectedIds].map((id) => messages.find((m) => m.id === id)).filter(Boolean);
-    let ok = 0;
-    for (const m of arr) { try { await saveMessageToArchive(m); ok++; } catch (_) {} }
-    setToast({ message: `Saved ${ok} message${ok !== 1 ? 's' : ''}`, type: 'success' });
-    exitSelectMode();
-  };
-
-  const bulkDelete = () => {
-    openConfirmModal({
-      title: `Delete ${selectedIds.size} message${selectedIds.size !== 1 ? 's' : ''}?`,
-      message: 'This cannot be undone.',
-      confirmText: 'Delete',
-      cancelText: 'Cancel',
-      onConfirm: async () => {
-        closeConfirmModal();
-        if (!user?.uid || !userId) return;
-        const msgRoot = isGroupChat ? `groups/${groupIdFromChat}/messages` : `chats/${[user.uid, userId].sort().join('_')}/messages`;
-        const updates = {};
-        selectedIds.forEach((id) => { updates[`${msgRoot}/${id}`] = null; });
-        try {
-          await update(ref(db), updates);
-          const cId = isGroupChat ? userId : [user.uid, userId].sort().join('_');
-          selectedIds.forEach((id) => deleteMessageFromCache(cId, id).catch(() => {}));
-          clearMessageCache(cId);
-          setToast({ message: 'Messages deleted', type: 'success' });
-        } catch (err) { console.error('Bulk delete failed:', err); setToast({ message: 'Failed to delete', type: 'error' }); }
-        exitSelectMode();
-      },
-    });
   };
 
   return (
     <>
-      <style>{`
-        .echo-reaction-backdrop { position: fixed; inset: 0; z-index: 998; background: transparent; }
-        .echo-reaction-bar { position: fixed; z-index: 1000; display: flex; align-items: center; gap: 2px; background: #1a1a1a; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 999px; padding: 6px 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); transform: translateX(-50%); transform-origin: bottom center; animation: snapReactionPop 0.22s cubic-bezier(0.2, 1.3, 0.4, 1) both; }
-        html[data-theme="light"] .echo-reaction-bar, html.theme-light .echo-reaction-bar { background: #ffffff; border-color: rgba(0, 0, 0, 0.08); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12); }
-        @keyframes snapReactionPop { 0% { opacity: 0; transform: translateX(-50%) translateY(8px) scale(0.85); } 100% { opacity: 1; transform: translateX(-50%) translateY(0) scale(1); } }
-        .echo-reaction-emoji { width: 44px; height: 44px; display: inline-flex; align-items: center; justify-content: center; padding: 0; background: transparent; border: none; border-radius: 50%; cursor: pointer; transition: transform 0.15s cubic-bezier(0.2, 1.3, 0.4, 1), background 0.15s ease; -webkit-tap-highlight-color: transparent; }
-        .echo-reaction-emoji .rx-svg { width: 32px; height: 32px; display: block; overflow: visible; animation: rxIdleBounce 3.2s ease-in-out infinite; }
-        .echo-reaction-emoji:hover { background: rgba(255, 255, 255, 0.08); transform: scale(1.15); }
-        .echo-reaction-emoji.tapped .rx-svg { animation: rxTapPop 0.42s cubic-bezier(0.2, 1.6, 0.4, 1); }
-        @keyframes rxTapPop { 0% { transform: scale(1); } 40% { transform: scale(1.55); } 100% { transform: scale(1); } }
-        @keyframes rxIdleBounce { 0%, 75%, 100% { transform: translateY(0) scale(1); } 82% { transform: translateY(-3px) scale(1.08); } 90% { transform: translateY(0) scale(1); } }
-        .echo-reaction-bar-arrow { display: none; }
-
-        .highlight-flash { animation: highlightFlash 1.6s ease; }
-        @keyframes highlightFlash { 0%, 100% { background: transparent; } 20% { background: rgba(255, 215, 0, 0.3); } }
-        .message-inline-menu-wrapper { display: flex; width: 100%; margin-top: 8px; z-index: 10; }
-        .message-inline-actions.own { justify-content: flex-end; }
-        .message-inline-actions.partner { justify-content: flex-start; }
-        .message-inline-actions { display: flex; align-items: center; gap: 4px; background: var(--bg-primary, #ffffff); border: 1px solid rgba(0,0,0,0.08); padding: 3px; border-radius: 20px; box-shadow: 0 6px 16px rgba(0,0,0,0.08); animation: menuFadeIn 0.24s cubic-bezier(0.2, 1.2, 0.4, 1); flex-wrap: wrap; }
-        @keyframes menuFadeIn { 0% { opacity: 0; transform: translateY(-6px) scale(0.92); } 70% { opacity: 1; transform: translateY(1px) scale(1.02); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
-        .message-action-btn { background: transparent; border: none; cursor: pointer; width: 34px; height: 34px; border-radius: 50%; display: flex; align-items: center; justify-content: center; color: var(--text-secondary, #555); transition: all 0.15s ease; }
-        .message-action-btn svg { width: 18px; height: 18px; fill: currentColor; }
-        .message-action-btn:hover { background: var(--bg-hover, #eaeaea); color: var(--text-primary, #333); transform: scale(1.15) translateY(-1px); }
-        .message-action-btn.danger:hover { background: #fde8e8; color: #d32f2f; }
-
-        .group-sender-name { font-size: 11.5px; font-weight: 700; letter-spacing: 0.2px; padding: 0 4px; margin-bottom: 3px; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
-
-        .message-row.own .message-bubble, .message-row.partner .message-bubble { animation: echoBubbleIn 0.3s cubic-bezier(0.2, 0.9, 0.25, 1.05) both; transform-origin: bottom; will-change: transform, opacity; }
-        @keyframes echoBubbleIn { 0% { opacity: 0; transform: translateY(10px) scale(0.84); } 60% { opacity: 1; transform: translateY(-1px) scale(1.03); } 100% { opacity: 1; transform: translateY(0) scale(1); } }
-        .message-row .message-bubble.pending { animation: echoSendingPulse 1.4s ease-in-out infinite; }
-        @keyframes echoSendingPulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(108, 60, 225, 0.0); } 50% { box-shadow: 0 0 0 4px rgba(108, 60, 225, 0.15); } }
-
-        .message-receipt { display: inline-block; }
-        .message-receipt.sent { color: rgba(255, 255, 255, 0.55); }
-        .message-receipt.delivered { color: rgba(255, 255, 255, 0.8); }
-        .message-receipt.read { color: #60A5FA; }
-
-        .chat-send-btn { position: relative; overflow: visible; transition: transform 0.12s ease; }
-        .chat-send-btn:not(:disabled):active { transform: scale(0.88); }
-        .chat-send-btn.rippling::after { content: ''; position: absolute; inset: -4px; border-radius: 50%; border: 2px solid rgba(108, 60, 225, 0.55); animation: sendRipple 0.6s cubic-bezier(0.2, 0.8, 0.4, 1) forwards; pointer-events: none; }
-        @keyframes sendRipple { 0% { transform: scale(0.9); opacity: 0.85; } 100% { transform: scale(2.4); opacity: 0; } }
-
-        .typing-indicator-container { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border-radius: 22px 22px 22px 4px; align-self: flex-start; max-width: 260px; margin: 6px 0 10px 12px; background: rgba(20, 15, 35, 0.85); border: 1px solid rgba(255, 255, 255, 0.15); }
-        .typing-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: linear-gradient(135deg, #A78BFA, #F472B6); animation: typingBounce 1.4s infinite ease-in-out; }
-        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
-        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
-        @keyframes typingBounce { 0%, 60%, 100% { transform: translateY(0) scale(1); opacity: 0.55; } 30% { transform: translateY(-5px) scale(1.15); opacity: 1; } }
-
-        .chat-date-separator { position: sticky; top: 8px; z-index: 5; display: flex; justify-content: center; margin: 10px 0 6px; pointer-events: none; }
-        .chat-date-separator > span { background: rgba(20, 15, 35, 0.78); color: #fff; font-size: 11.5px; font-weight: 600; padding: 4px 12px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.06); }
-        html.theme-light .chat-date-separator > span { background: rgba(255,255,255,0.92); color: #111; border: 1px solid rgba(0,0,0,0.06); }
-
-        .message-row.group-mid { margin-top: 1px; }
-        .message-row.group-top { margin-top: 8px; }
-
-        .chat-scroll-fab { position: absolute; right: 16px; bottom: 96px; z-index: 20; display: inline-flex; align-items: center; gap: 8px; padding: 8px 14px 8px 12px; border-radius: 999px; background: linear-gradient(135deg, #6C3CE1, #EC4899); color: #fff; font-size: 13px; font-weight: 600; border: none; cursor: pointer; box-shadow: 0 8px 24px rgba(108,60,225,0.4); }
-        .chat-scroll-fab svg { width: 16px; height: 16px; fill: currentColor; }
-
-        .message-bubble.pinned { box-shadow: inset 0 0 0 1.5px rgba(255, 193, 7, 0.5); }
-        .message-pin-badge { position: absolute; top: -6px; right: 8px; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; background: #FFC107; color: #111; }
-        .message-row.partner .message-pin-badge { right: auto; left: 8px; }
-
-        .pinned-banner { position: sticky; top: 0; z-index: 9; display: flex; align-items: center; gap: 10px; padding: 8px 12px; background: rgba(20, 15, 35, 0.92); border-bottom: 1px solid rgba(255,255,255,0.08); color: #fff; cursor: pointer; }
-        html.theme-light .pinned-banner { background: rgba(255,255,255,0.96); border-bottom: 1px solid rgba(0,0,0,0.08); color: #111; }
-        .pinned-banner-icon { width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; background: linear-gradient(135deg, #FFC107, #FF9800); color: #111; flex-shrink: 0; }
-        .pinned-banner-body { flex: 1; min-width: 0; }
-        .pinned-banner-label { display: block; font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; opacity: 0.75; margin-bottom: 1px; }
-        .pinned-banner-text { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-        .pinned-banner-close { background: none; border: none; color: inherit; padding: 4px; cursor: pointer; opacity: 0.75; }
-
-        .message-row.select-mode { cursor: pointer; padding-left: 34px; padding-right: 34px; }
-        .message-row.select-mode.selected { background: rgba(108, 60, 225, 0.14); }
-        .select-checkbox { position: absolute; top: 50%; left: 8px; transform: translateY(-50%); width: 22px; height: 22px; border-radius: 50%; border: 2px solid rgba(255,255,255,0.5); display: flex; align-items: center; justify-content: center; background: transparent; color: transparent; z-index: 4; }
-        .message-row.own .select-checkbox { left: auto; right: 8px; }
-        .select-checkbox.checked { background: linear-gradient(135deg, #6C3CE1, #EC4899); border-color: transparent; color: #fff; }
-
-        .select-top-bar { position: absolute; top: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; gap: 10px; padding: 10px 14px; background: rgba(20, 15, 35, 0.95); border-bottom: 1px solid rgba(255,255,255,0.1); color: #fff; }
-        html.theme-light .select-top-bar { background: rgba(255,255,255,0.98); color: #111; }
-        .select-top-title { flex: 1; font-size: 15px; font-weight: 700; }
-        .select-top-btn { background: none; border: none; color: inherit; cursor: pointer; padding: 6px 10px; border-radius: 8px; font-size: 14px; font-weight: 600; }
-
-        .select-bottom-bar { position: absolute; bottom: 0; left: 0; right: 0; z-index: 30; display: flex; align-items: center; justify-content: space-around; padding: 8px 10px calc(8px + env(safe-area-inset-bottom, 0px)); background: rgba(20, 15, 35, 0.95); border-top: 1px solid rgba(255,255,255,0.1); }
-        html.theme-light .select-bottom-bar { background: rgba(255,255,255,0.98); border-top: 1px solid rgba(0,0,0,0.08); }
-        .select-action { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; background: none; border: none; color: #fff; cursor: pointer; padding: 6px 4px; font-size: 11px; font-weight: 600; }
-        html.theme-light .select-action { color: #111; }
-        .select-action:disabled { opacity: 0.35; cursor: not-allowed; }
-        .select-action svg { width: 20px; height: 20px; fill: currentColor; }
-        .select-action.danger { color: #ff6b6b; }
-
-        .messages-container.has-pinned { padding-top: 0; }
-        .messages-container .message-text { font-size: var(--msg-font-size, 15px); }
-
-        .blocked-composer-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; background: var(--bg-input); border-top: 1px solid var(--border-color); color: var(--text-secondary); font-size: 14px; }
-        .blocked-composer-unblock { padding: 8px 18px; border-radius: 20px; border: none; background: linear-gradient(135deg, #6C3CE1, #EC4899); color: #fff; font-weight: 600; cursor: pointer; }
-
-        .chat-header-info-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--bg-input); color: var(--text-secondary); font-size: 15px; cursor: pointer; display: grid; place-items: center; margin-left: 8px; }
-        .chat-header-info-btn:hover { background: var(--border-color); color: #6C3CE1; }
-
-        .chat-header-mute-btn { width: 36px; height: 36px; border-radius: 50%; border: none; background: var(--bg-input); color: var(--text-secondary); font-size: 14px; cursor: pointer; display: grid; place-items: center; }
-        .chat-header-mute-btn.muted { color: #EF4444; background: rgba(239, 68, 68, 0.12); }
-
-        .mention { background: rgba(108, 60, 225, 0.22); color: #A78BFA; padding: 1px 6px; border-radius: 6px; font-weight: 700; border: 1px solid rgba(108, 60, 225, 0.4); display: inline-block; line-height: 1.3; }
-        .mention-everyone { background: linear-gradient(135deg, rgba(108, 60, 225, 0.28), rgba(236, 72, 153, 0.28)); color: #F0ABFC; border-color: rgba(236, 72, 153, 0.5); }
-        .chat-input-wrapper { position: relative; flex: 1; display: flex; align-items: center; }
-      `}</style>
-
       <SEO title={`Chat with ${displayName}`} description={`Chat with ${displayName} on ECHO.`} />
-      <StructuredData />
-      <div className="chat-view">
+      <div className="chat-view" style={{ '--cv-msg-font': FONT_SIZE_MAP[fontSize] || FONT_SIZE_MAP.md }}>
+        {selectMode && (
+          <div className="select-top-bar">
+            <button type="button" className="select-top-btn" onClick={exitSelectMode}>Cancel</button>
+            <div className="select-top-title">{selectedIds.size ? `${selectedIds.size} selected` : 'Select messages'}</div>
+          </div>
+        )}
+
         <VideoAudioProvider>
-          {chatBgEnabled && (<div className="echo-rings-bg is-active" aria-hidden="true"><span className="echo-bg-ring r1" /><span className="echo-bg-ring r2" /><span className="echo-bg-ring r3" /></div>)}
-
-          {selectMode && (
-            <div className="select-top-bar">
-              <button type="button" className="select-top-btn" onClick={exitSelectMode} aria-label="Cancel select">
-                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-              </button>
-              <span className="select-top-title">{selectedIds.size} selected</span>
-              <button type="button" className="select-top-btn" onClick={() => { if (selectedIds.size === messages.length) setSelectedIds(new Set()); else setSelectedIds(new Set(messages.map(m => m.id))); }}>{selectedIds.size === messages.length ? 'Clear' : 'All'}</button>
-            </div>
-          )}
-
-          {          {!selectMode && pinnedMessage && (
-            <div className="pinned-banner" onClick={() => jumpToMessage(pinnedMessage.id)} role="button" tabIndex={0}>
-              <span className="pinned-banner-icon" aria-hidden="true">
-                <svg viewBox="0 0 24 24" width="14" height="14"><path d="M16 9V4h1c.55 0 1-.45 1-1s-.45-1-1-1H7c-.55 0-1 .45-1 1s.45 1 1 1h1v5c0 1.66-1.34 3-3 3v2h5.97v7l1 1 1-1v-7H19v-2c-1.66 0-3-1.34-3-3z" fill="currentColor"/></svg>
-              </span>
-              <div className="pinned-banner-body">
-                <span className="pinned-banner-label">Pinned Message</span>
-                <span className="pinned-banner-text">{pinnedPreview || 'Message'}</span>
+          <div
+            className="messages-container"
+            ref={messagesContainerRef}
+            onScroll={handleScroll}
+            style={wallpaperStyle}
+          >
+            {pinnedMessage && !selectMode && (
+              <div className="pinned-banner" onClick={() => scrollToMessage(pinnedMessage.id)}>
+                <span className="pinned-banner-icon"><i className="fas fa-thumbtack" /></span>
+                <div className="pinned-banner-body">
+                  <span className="pinned-banner-label">Pinned message</span>
+                  <span className="pinned-banner-text">
+                    {pinnedMessage.text || pinnedMessage.caption || (pinnedMessage.mediaType === 'audio' ? '🎤 Voice note' : pinnedMessage.mediaType === 'video' ? '🎬 Video' : '📷 Image')}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="pinned-banner-close"
+                  onClick={(e) => { e.stopPropagation(); handlePinMessage(pinnedMessage); }}
+                  aria-label="Unpin"
+                >
+                  <i className="fas fa-times" />
+                </button>
               </div>
-              <button type="button" className="pinned-banner-close" onClick={(e) => { e.stopPropagation(); handlePinMessage(pinnedMessage); }} aria-label="Unpin">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
-              </button>
-            </div>
-          )}
-
-          <div className={`messages-container ${pinnedMessage && !selectMode ? 'has-pinned' : ''}`} ref={messagesContainerRef} onScroll={handleScroll} style={wallpaperStyle} onClick={() => setActiveMessageMenuId(null)}>
-            {loadingMessages && messages.length === 0 ? (
-              <div className="chat-skeleton-list"><SkeletonMessage /><SkeletonMessage /><SkeletonMessage /></div>
-            ) : messages.length === 0 ? (
-              <div className="empty-chat-state"><i className="fas fa-paper-plane empty-icon" /><p>No messages yet. Say hello!</p></div>
-            ) : (
-              groupedMessages.map((entry) => renderMessage(entry))
             )}
-            {isAILoading && (<div className="message-bubble partner"><div className="typing-indicator"><span></span><span></span><span></span></div></div>)}
+
+            {loadingMessages && displayMessages.length === 0 ? (
+              <div className="chat-skeleton-list"><SkeletonMessage /><SkeletonMessage /><SkeletonMessage /></div>
+            ) : displayMessages.length === 0 ? (
+              <div className="empty-chat-state">
+                <i className="fas fa-paper-plane empty-icon" />
+                <p>No messages yet. Say hello!</p>
+              </div>
+            ) : (
+              entries.map(renderMessage)
+            )}
 
             {partnerIsTyping && !isGroupChat && (
-              <div className={`typing-indicator-container ${isEchoPlus ? 'premium-typing' : ''}`}>
-                {isEchoPlus ? (
-                  <div className="premium-typing-content">
-                    <div className="premium-typing-aura">
-                       <ECHOMOJI mood="happy" skin={partnerProfile?.activeSkin ? getSkinById(partnerProfile.activeSkin) : null} size={30} interactive={false} animated={true} />
-                    </div>
-                    <span className="premium-typing-text">Echoing...</span>
+              <div className="message-row partner group-top">
+                <div className="message-stack partner">
+                  <div className="message-bubble partner">
+                    <div className="typing-indicator"><span /><span /><span /></div>
                   </div>
-                ) : (
-                  <>
-                    <div className="typing-echomoji-wrapper">
-                      <ECHOMOJI mood={partnerProfile?.mood || 'happy'} skin={partnerProfile?.activeSkin ? getSkinById(partnerProfile.activeSkin) : null} size={44} interactive={false} animated={false} />
-                    </div>
-                    <div className="typing-dots-row">
-                      <span className="typing-dot" /><span className="typing-dot" /><span className="typing-dot" />
-                    </div>
-                  </>
-                )}
+                </div>
               </div>
             )}
-            <div ref={messagesEndRef} />
           </div>
         </VideoAudioProvider>
 
-        {!isNearBottom && !selectMode && (
+        {!isNearBottom && (
           <button type="button" className="chat-scroll-fab" onClick={() => scrollToBottom(true)} aria-label="Scroll to latest">
-            <svg viewBox="0 0 24 24"><path d="M20 12l-1.41-1.41L13 16.17V4h-2v12.17l-5.58-5.59L4 12l8 8 8-8z"/></svg>
-            {unreadWhileScrolled > 0 ? `${unreadWhileScrolled} new` : ''}
+            <i className="fas fa-chevron-down" />
+            {unreadWhileScrolled > 0 && <span>{unreadWhileScrolled > 99 ? '99+' : unreadWhileScrolled} new</span>}
           </button>
         )}
 
-        {showEmojiPicker && (<ChatEmojiPicker onClose={() => setShowEmojiPicker(false)} onSelect={handleEmojiSelect} excludeRefs={[inputContainerRef, captionPreviewRef]} />)}
-
-        {reactionViewer && (
-          <div className="reaction-viewer-modal" onClick={() => setReactionViewer(null)}>
-            <div className="reaction-viewer-content" onClick={(e) => e.stopPropagation()}>
-              <h3>{REACTION_LABELS[reactionViewer.emoji] || reactionViewer.emoji} Reactions</h3>
-              <div className="reaction-viewer-list">
-                {reactionViewer.userIds.map((uid) => (
-                  <div
-                    key={uid}
-                    className="reaction-viewer-item"
-                    onClick={() => { setReactionViewer(null); navigate(`/user/${uid}`); }}
-                    role="button"
-                    tabIndex={0}
-                    style={{ cursor: 'pointer' }}
-                  >
-                    <Avatar uid={uid} size="small" />
-                    <span>{getProfile(uid)?.name || 'User'}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+        {showEmojiPicker && (
+          <ChatEmojiPicker
+            onClose={() => setShowEmojiPicker(false)}
+            onSelect={(emoji) => setNewMessage((prev) => prev + emoji)}
+            excludeRefs={[inputContainerRef]}
+          />
         )}
 
-        {!selectMode && !isGroupChat && blockedByMe && (
-          <div className="blocked-composer-bar">
-            <span>You blocked this user.</span>
+        {selectMode ? (
+          <div className="select-bottom-bar">
+            <button type="button" className="select-action" onClick={copySelected} disabled={!selectedMessages.length}>
+              <i className="fas fa-copy" style={{ fontSize: 18 }} /><span>Copy</span>
+            </button>
             <button
               type="button"
-              className="blocked-composer-unblock"
-              onClick={async () => {
-                try {
-                  await unblockUser(user.uid, userId);
-                  setBlockedByMe(false);
-                  setToast({ message: 'User unblocked', type: 'success' });
-                  setTimeout(() => setToast(null), 2500);
-                } catch (_) {
-                  setToast({ message: 'Failed to unblock', type: 'error' });
-                  setTimeout(() => setToast(null), 2500);
-                }
-              }}
-            >Unblock</button>
+              className="select-action danger"
+              onClick={() => confirmDelete(selectedMessages)}
+              disabled={!canDeleteSelected}
+            >
+              <i className="fas fa-trash" style={{ fontSize: 18 }} /><span>Delete</span>
+            </button>
           </div>
-        )}
-
-        {!selectMode && (isGroupChat || !blockedByMe) && (
+        ) : blockedByMe && !isGroupChat ? (
+          <div className="blocked-composer-bar">
+            <span>You blocked this user.</span>
+            <button type="button" className="blocked-composer-unblock" onClick={handleUnblock}>Unblock</button>
+          </div>
+        ) : (
           <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
             {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
             {replyToNote && (
-              <div className="note-reply-preview-banner">
-                <div className="note-reply-preview-banner-content">
-                  <span className="note-reply-preview-banner-label">Replying to {replyToNote.authorName}'s note</span>
-                  {replyToNote.song?.title ? (
-                    <span className="note-reply-preview-banner-text">🎵 {replyToNote.song.title}{replyToNote.song.artist ? ` · ${replyToNote.song.artist}` : ''}</span>
-                  ) : (
-                    <span className="note-reply-preview-banner-text">{replyToNote.text}</span>
-                  )}
+              <div className="cv-note-reply-bar">
+                <div className="cv-note-reply-text">
+                  <strong>Replying to {replyToNote.authorName}’s note</strong>
+                  <span>{replyToNote.text || (replyToNote.song ? '🎵 Song' : '')}</span>
                 </div>
-                <button type="button" className="note-reply-preview-banner-close" onClick={() => setReplyToNote(null)} aria-label="Cancel note reply">✕</button>
+                <button type="button" className="chat-more-btn" onClick={() => setReplyToNote(null)} aria-label="Cancel reply">
+                  <i className="fas fa-times" />
+                </button>
               </div>
             )}
             <div className="chat-input-row">
-              <button type="button" className="chat-emoji-btn" onClick={() => setShowEmojiPicker(!showEmojiPicker)} title="Emojis"><i className="fas fa-smile" /></button>
-              <button type="button" className="chat-voice-btn" onClick={() => { if (userId === ECHO_AI_ID) { setToast({ message: 'Voice notes are not available in ECHO AI chat right now.', type: 'info' }); setTimeout(() => setToast(null), 2800); return; } setShowVoiceRecorder(true); }} title="Voice note"><i className="fas fa-microphone" /></button>
               <div className="chat-more-wrapper" ref={moreOptionsRef}>
-                <button type="button" className="chat-more-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShowMoreOptions((v) => !v); }} title="More options"><i className="fas fa-ellipsis-h" /></button>
+                <button type="button" className="chat-more-btn" onClick={() => setShowMoreOptions((v) => !v)} aria-label="More">
+                  <i className="fas fa-ellipsis-h" />
+                </button>
                 {showMoreOptions && (
-                  <div className="chat-more-options-popup" onClick={(e) => e.stopPropagation()}>
-                    <button type="button" className="chat-more-option" onClick={() => { fileInputRef.current?.click(); setShowMoreOptions(false); }}><i className="fas fa-paperclip" /><span>Attach</span></button>
-                    <button type="button" className="chat-more-option" onClick={() => { setShowWallpaperPicker(true); setShowMoreOptions(false); }}><i className="fas fa-image" /><span>Wallpaper</span></button>
-                    {!isGroupChat && (
-                      <button type="button" className="chat-more-option danger" onClick={() => { setShowMoreOptions(false); }} disabled={ended} style={ended ? { opacity: 0.4, pointerEvents: 'none' } : undefined}><i className="fas fa-stop-circle" /><span>End ECHO</span></button>
+                  <div className="chat-more-options-popup">
+                    <button type="button" className="chat-more-option" onClick={() => { setShowMoreOptions(false); fileInputRef.current?.click(); }}>
+                      <i className="fas fa-paperclip" /><span>Photo or video</span>
+                    </button>
+                    <button type="button" className="chat-more-option" onClick={() => { setShowMoreOptions(false); setShowWallpaperPicker(true); }}>
+                      <i className="fas fa-image" /><span>Wallpaper</span>
+                    </button>
+                    <button type="button" className="chat-more-option" onClick={() => { setShowMoreOptions(false); enterSelectMode(null); }}>
+                      <i className="fas fa-check-circle" /><span>Select messages</span>
+                    </button>
+                    {isGroupChat && (
+                      <button type="button" className="chat-more-option" onClick={() => { setShowMoreOptions(false); handleToggleMute(); }}>
+                        <i className={`fas ${isMuted ? 'fa-bell' : 'fa-bell-slash'}`} /><span>{isMuted ? 'Unmute' : 'Mute'}</span>
+                      </button>
                     )}
                   </div>
                 )}
               </div>
               <input type="file" ref={fileInputRef} accept="image/*,video/*" style={{ display: 'none' }} onChange={handleFileSelect} />
-              <div className="chat-input-wrapper" style={{ position: 'relative', flex: 1 }}>
-                <MentionAutocomplete
-                  visible={!!mentionQuery && mentionSuggestions.length > 0}
-                  suggestions={mentionSuggestions}
-                  activeIndex={mentionIndex}
-                  onSelect={(s) => {
-                    const cursor = inputRef.current?.selectionStart || newMessage.length;
-                    const result = insertMention(newMessage, mentionStartIndex, cursor, s.handle);
-                    setNewMessage(result.text);
-                    setMentionQuery(null);
-                    setMentionSuggestions([]);
-                    setTimeout(() => {
-                      if (inputRef.current) {
-                        inputRef.current.setSelectionRange(result.cursor, result.cursor);
-                        inputRef.current.focus();
-                      }
-                    }, 0);
-                  }}
-                  onHover={(i) => setMentionIndex(i)}
-                  position="above"
-                />
+
+              <button type="button" className="chat-emoji-btn" onClick={() => setShowEmojiPicker((v) => !v)} aria-label="Emoji">
+                <i className="fas fa-smile" />
+              </button>
+
+              <div className="chat-input-wrapper">
                 <textarea
                   ref={inputRef}
-                  className={`chat-input ${haloActive ? 'halo-active' : ''}`}
+                  className="chat-input"
                   placeholder={`Message ${displayName}...`}
                   value={newMessage}
-                  onChange={(e) => {
-                    const val = e.target.value;
-                    setNewMessage(val);
-                    handleTyping();
-                    const cursor = e.target.selectionStart;
-                    const active = getActiveMentionQuery(val, cursor);
-                    if (active && isGroupChat && groupData?.members) {
-                      const query = active.query.toLowerCase();
-                      const memberUids = Object.keys(groupData.members);
-                      const suggestions = [];
-                      const myRole = groupData.members[user.uid]?.role;
-                      if (myRole === 'owner' || myRole === 'admin') {
-                        if (!query || 'everyone'.includes(query)) {
-                          suggestions.push({ uid: 'everyone', handle: 'everyone', name: 'everyone', isEveryone: true });
-                        }
-                      }
-                      memberUids.forEach((uid) => {
-                        if (uid === user.uid) return;
-                        const p = getProfile(uid) || {};
-                        const handle = (p.username || '').toLowerCase();
-                        const name = (p.name || '').toLowerCase();
-                        if (!query || handle.startsWith(query) || name.startsWith(query)) {
-                          suggestions.push({ uid, handle: p.username || p.name || uid, name: p.name || 'User', username: p.username || '', avatar: p.avatar || '' });
-                        }
-                      });
-                      setMentionSuggestions(suggestions.slice(0, 8));
-                      setMentionQuery(active);
-                      setMentionStartIndex(active.startIndex);
-                      setMentionIndex(0);
-                    } else {
-                      setMentionQuery(null);
-                      setMentionSuggestions([]);
-                      setMentionStartIndex(-1);
-                    }
-                  }}
-                  onBlur={clearMyTyping}
+                  onChange={(e) => { setNewMessage(e.target.value); if (e.target.value) handleTyping(); }}
                   onKeyDown={handleKeyDown}
-                  onPaste={handlePaste}
-                  onPointerDown={handleInputPointerDown}
-                  onPointerUp={handleInputPointerUp}
-                  onPointerLeave={handleInputPointerLeave}
                   rows={1}
-                  style={{ resize: 'none', overflow: 'hidden', minHeight: '44px', maxHeight: '120px', lineHeight: '1.4', fontFamily: 'inherit', width: '100%', padding: '10px 16px', borderRadius: '24px', border: '1px solid var(--border-color)', background: 'var(--bg-input)', color: 'var(--text-primary)', fontSize: '14px', outline: 'none', boxSizing: 'border-box' }}
-                  onFocus={() => { focusedField.current = 'main'; }}
                 />
               </div>
-              <button ref={sendButtonRef} type="submit" className="chat-send-btn" disabled={!newMessage.trim()}><i className="fas fa-paper-plane" /></button>
+
+              {hasText ? (
+                <button ref={sendButtonRef} type="submit" className="chat-send-btn cv-swap-in" aria-label="Send">
+                  <i className="fas fa-paper-plane" />
+                </button>
+              ) : (
+                <button type="button" className="chat-voice-btn cv-swap-in" onClick={() => setShowVoiceRecorder(true)} aria-label="Record voice note">
+                  <i className="fas fa-microphone" />
+                </button>
+              )}
             </div>
           </form>
         )}
 
-        {selectMode && (
-          <div className="select-bottom-bar">
-            <button type="button" className="select-action" onClick={bulkCopy} disabled={selectedIds.size === 0}>
-              <svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
-              Copy
-            </button>
-            <button type="button" className="select-action" onClick={bulkSave} disabled={selectedIds.size === 0}>
-              <svg viewBox="0 0 24 24"><path d="M17 3H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V7l-4-4zm-5 16c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3zm3-10H5V5h10v4z"/></svg>
-              Save
-            </button>
-            <button type="button" className="select-action danger" onClick={bulkDelete} disabled={selectedIds.size === 0}>
-              <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
-              Delete
-            </button>
-          </div>
+        {menu && (
+          <MessageMenu
+            menu={menu}
+            items={buildMenuItems(menu.msg, menu.isOwn)}
+            myReaction={menu.msg.reactions?.[user?.uid]}
+            onReact={(key) => handleReactionSelect(key, menu.msg)}
+            onClose={() => setMenu(null)}
+          >
+            {renderCloneBubble(menu.msg, menu.isOwn)}
+          </MessageMenu>
         )}
 
-        {showVoiceRecorder && (<VoiceRecorder onSend={handleVoiceSend} onCancel={() => setShowVoiceRecorder(false)} />)}
-        {renderPreviewOverlay()}
-        <EditMessageModal isOpen={!!editingMessage} onClose={() => setEditingMessage(null)} messageText={editingMessage?.text || ''} onSave={saveEditedMessage} />
-        <EditMediaCaptionModal isOpen={!!editingMediaMessage} onClose={() => setEditingMediaMessage(null)} currentCaption={editingMediaMessage?.caption || ''} mediaType={editingMediaMessage?.mediaType} onSave={saveEditedMediaCaption} />
+        {selectedFile && previewUrl && createPortal(
+          <div className="media-preview-overlay">
+            <div className="media-preview-content">
+              <button type="button" className="media-preview-close" onClick={cancelFileSelection} aria-label="Cancel">
+                <i className="fas fa-times" />
+              </button>
+              <div className="media-preview-media">
+                {selectedFile.type.startsWith('video/')
+                  ? <video className="media-preview-video" src={previewUrl} controls playsInline />
+                  : <img className="media-preview-image" src={previewUrl} alt="" />}
+              </div>
+              <div className="media-preview-caption-row">
+                <textarea
+                  className="media-preview-caption"
+                  placeholder="Add a caption…"
+                  rows={1}
+                  value={captionText}
+                  onChange={(e) => setCaptionText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendSelectedFile(); } }}
+                />
+              </div>
+              <button type="button" className="media-preview-send" onClick={sendSelectedFile}>Send</button>
+            </div>
+          </div>,
+          document.body
+        )}
 
-        {mediaPreview && (<MediaPreview src={mediaPreview.src} type={mediaPreview.type} alt={mediaPreview.alt} onClose={() => setMediaPreview(null)} />)}
-        {videoPreview && (
-          <CustomVideoPlayer
-            src={videoPreview.src}
-            autoFullscreen={videoFullscreenDefault}
-            onClose={() => setVideoPreview(null)}
+        {showVoiceRecorder && <VoiceRecorder onSend={handleVoiceSend} onCancel={() => setShowVoiceRecorder(false)} />}
+
+        <EditMessageModal
+          isOpen={!!editingMessage}
+          onClose={() => setEditingMessage(null)}
+          messageText={editingMessage?.text || ''}
+          onSave={saveEditedMessage}
+        />
+        <EditMediaCaptionModal
+          isOpen={!!editingMediaMessage}
+          onClose={() => setEditingMediaMessage(null)}
+          caption={editingMediaMessage?.caption || ''}
+          messageText={editingMediaMessage?.caption || ''}
+          onSave={saveEditedCaption}
+        />
+
+        {showWallpaperPicker && (
+          <WallpaperPicker
+            isOpen={showWallpaperPicker}
+            onClose={() => setShowWallpaperPicker(false)}
+            currentWallpaper={wallpaperId}
+            selectedId={wallpaperId}
+            customWallpaper={customWallpaper}
+            onSelect={handleWallpaperSelect}
+            onCustomSelect={handleCustomWallpaperSelect}
           />
         )}
 
-        {showWallpaperPicker && (
-          <WallpaperPicker current={wallpaperId} currentCustom={customWallpaper} onSelect={handleWallpaperSelect} onSelectCustom={handleCustomWallpaperSelect} onClose={() => setShowWallpaperPicker(false)} />
-        )}
-
-        <ConfirmModal isOpen={confirmModal.isOpen} onClose={closeConfirmModal} onConfirm={confirmModal.onConfirm} title={confirmModal.title} message={confirmModal.message} confirmText={confirmModal.confirmText} cancelText={confirmModal.cancelText} />
-        <Modal isOpen={fileSizeError} onClose={() => setFileSizeError(false)} title="File Too Large" message="The file you tried to upload exceeds the 20 MB limit. Please choose a smaller file." type="error" />
+        {mediaPreview && <MediaPreview src={mediaPreview.src} type={mediaPreview.type} alt="" onClose={() => setMediaPreview(null)} />}
+        {videoPreview && <CustomVideoPlayer src={videoPreview.src} onClose={() => setVideoPreview(null)} />}
+        <ConfirmModal
+          isOpen={confirmModal.isOpen}
+          onClose={closeConfirmModal}
+          onConfirm={confirmModal.onConfirm}
+          title={confirmModal.title}
+          message={confirmModal.message}
+          confirmText={confirmModal.confirmText}
+          cancelText={confirmModal.cancelText}
+        />
+        <Modal
+          isOpen={fileSizeError}
+          onClose={() => setFileSizeError(false)}
+          title="File Too Large"
+          message="The file exceeds the 20 MB limit."
+          type="error"
+        />
         {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       </div>
     </>
   );
 };
-
-const DateSeparator = ({ label }) => (
-  <div className="chat-date-separator"><span>{label}</span></div>
-);
 
 export default ChatView;
