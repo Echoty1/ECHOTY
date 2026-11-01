@@ -16,17 +16,10 @@ const firebaseConfig = {
   measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID,
 };
 
-const missingKeys = Object.entries(firebaseConfig)
-  .filter(([key, value]) => !value && key !== 'measurementId')
-  .map(([key]) => key);
-
-if (missingKeys.length > 0) {
-  console.error(`Firebase config missing: ${missingKeys.join(', ')}`);
-}
-
-// Export 'app' directly so it can be imported by other services
+// Initialize Firebase App
 export const app = initializeApp(firebaseConfig);
 
+// Initialize Services
 export const auth = getAuth(app);
 export const db = getDatabase(app);
 export const storage = getStorage(app);
