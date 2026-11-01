@@ -1,12 +1,12 @@
 // src/services/fcmService.js
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { ref, set } from 'firebase/database';
-import { app, db } from './firebase'; // Importing 'app' from the updated firebase.js
+import { app, db } from './firebase'; 
 
-// 👇 YOUR NEW VAPID KEY
+// 👇 YOUR VAPID PUBLIC KEY (Safe to be in frontend)
 const VAPID_KEY = 'BDBlwKrHur1ThJQEmRP5fN--0d-wjHU_uAVDh2RY1JidWQI4ojtndM-fM4egmT-LwE2zG0RfTMVA6fxvWq71CYQBNaJXP5fHYsz1axBYdSRDEatGNCfN_kqgmzeWzWvjC9L-rQLY0Ppr4IeNVQvronwd0C95NQtMRPzWfmEmvdxeZM';
 
-// This is the function causing the build error. It is now correctly exported.
+// ✅ THIS IS THE MISSING EXPORT THAT WAS BREAKING YOUR BUILD
 export const registerFcmToken = async (userId) => {
   try {
     if (!('Notification' in window)) {
@@ -25,7 +25,7 @@ export const registerFcmToken = async (userId) => {
         console.log('FCM Token saved successfully');
         return true;
       } else {
-        console.log('No registration token available. Request permission to generate one.');
+        console.log('No registration token available.');
         return false;
       }
     } else {
@@ -38,7 +38,7 @@ export const registerFcmToken = async (userId) => {
   }
 };
 
-// Keep this for foreground messages (if you want to show an in-app toast when the app is open)
+// Keep this for foreground messages
 export const listenForMessages = () => {
   try {
     const messaging = getMessaging(app);
