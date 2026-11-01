@@ -1,51 +1,36 @@
 // src/services/fcmService.js
-import { getMessaging, getToken, onMessage } from 'firebase/messaging';
+import { getMessaging, getToken } from 'firebase/messaging';
 import { ref, set } from 'firebase/database';
 import { app, db } from './firebase'; 
 
-// 👇 YOUR VAPID PUBLIC KEY (Safe to be in frontend)
 const VAPID_KEY = 'BDBlwKrHur1ThJQEmRP5fN--0d-wjHU_uAVDh2RY1JidWQI4ojtndM-fM4egmT-LwE2zG0RfTMVA6fxvWq71CYQBNaJXP5fHYsz1axBYdSRDEatGNCfN_kqgmzeWzWvjC9L-rQLY0Ppr4IeNVQvronwd0C95NQtMRPzWfmEmvdxeZM';
 
-// ✅ THIS IS THE MISSING EXPORT THAT WAS BREAKING YOUR BUILD
 export const registerFcmToken = async (userId) => {
   try {
     if (!('Notification' in window)) {
-      console.warn('This browser does not support desktop notification');
       return false;
     }
 
-    const permission = await Notification.requestPermission();
-    if (permission === 'granted') {
-      const messaging = getMessaging(app);
-      const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
-
-      if (currentToken) {
-        // Save token to Firebase so your backend knows where to send the push
-        await set(ref(db, `users/${userId}/fcmTokens/${currentToken}`), true);
-        console.log('FCM Token saved successfully');
-        return true;
-      } else {
-        console.log('No registration token available.');
-        return false;
-      }
-    } else {
-      console.warn('Notification permission denied');
+    // Check if permission is already granted before asking
+    if (Notification.permission === 'default') {
+      const permission = await Notification.requestPermission();
+      if (permission !== 'granted') return false;
+    } else if (Notification.permission === 'denied') {
       return false;
     }
-  } catch (error) {
-    console.error('Error getting FCM token:', error);
-    return false;
-  }
-};
 
-// Keep this for foreground messages
-export const listenForMessages = () => {
-  try {
     const messaging = getMessaging(app);
-    onMessage(messaging, (payload) => {
-      console.log('Message received in foreground:', payload);
-    });
-  } catch (e) {
-    console.warn('Messaging not supported in foreground', e);
+    const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
+
+    if (currentToken) {
+      await set(ref(db, `users/${userId}/fcmTokens/${currentToken}`), true);
+      console.log('FCM Token saved successfully');
+      return true;
+    }
+    return false;
+  } catch (error) {
+    // Silently ignore errors so it doesn't break the send message logic
+    console.warn('FCM registration failed:', error);
+    return false;
   }
 };
