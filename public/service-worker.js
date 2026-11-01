@@ -19,7 +19,6 @@ firebase.initializeApp({
 let messaging = null;
 try {
   messaging = firebase.messaging();
-  console.log('[SW] Firebase Messaging initialized');
 } catch (err) {
   console.warn('[SW] Firebase Messaging not available:', err);
 }
@@ -27,8 +26,6 @@ try {
 // ─── FCM: Background message handler (WhatsApp Style) ─────
 if (messaging) {
   messaging.onBackgroundMessage((payload) => {
-    console.log('[SW] Background message received:', payload);
-
     const notification = payload.notification || {};
     const data = payload.data || {};
 
@@ -37,14 +34,14 @@ if (messaging) {
 
     const options = {
       body: body,
-      icon: data.icon || '/logo192.png', // Ensure this exists in your public folder
+      icon: data.icon || '/logo192.png',
       badge: '/logo192.png',
-      vibrate: [200, 100, 200], // Double buzz like WhatsApp
-      tag: data.partnerId ? `chat-${data.partnerId}` : 'echo-msg', // Groups messages from same person
-      renotify: true, // Vibrates again if a new message comes from the same person
+      vibrate: [200, 100, 200],
+      tag: data.partnerId ? `chat-${data.partnerId}` : 'echo-msg',
+      renotify: true,
       data: {
         partnerId: data.partnerId || '',
-        url: data.partnerId ? `/chat/${data.partnerId}` : '/', // Deep link to chat
+        url: data.partnerId ? `/chat/${data.partnerId}` : '/',
       },
     };
 
@@ -60,14 +57,12 @@ self.addEventListener('notificationclick', (event) => {
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      // 1. Check if the app is already open, focus it and navigate
       for (const client of clientList) {
         if (client.url.includes(self.location.origin) && 'focus' in client) {
           client.navigate(urlToOpen);
           return client.focus();
         }
       }
-      // 2. If not open, open a new window
       if (clients.openWindow) {
         return clients.openWindow(urlToOpen);
       }
