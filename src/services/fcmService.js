@@ -1,12 +1,12 @@
 // src/services/fcmService.js
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { ref, set } from 'firebase/database';
-import { db, app } from './firebase'; 
+import { app, db } from './firebase'; // Importing 'app' from the updated firebase.js
 
 // 👇 YOUR NEW VAPID KEY
 const VAPID_KEY = 'BDBlwKrHur1ThJQEmRP5fN--0d-wjHU_uAVDh2RY1JidWQI4ojtndM-fM4egmT-LwE2zG0RfTMVA6fxvWq71CYQBNaJXP5fHYsz1axBYdSRDEatGNCfN_kqgmzeWzWvjC9L-rQLY0Ppr4IeNVQvronwd0C95NQtMRPzWfmEmvdxeZM';
 
-// This fixes the build error for 'registerFcmToken'
+// This is the function causing the build error. It is now correctly exported.
 export const registerFcmToken = async (userId) => {
   try {
     if (!('Notification' in window)) {
@@ -38,7 +38,7 @@ export const registerFcmToken = async (userId) => {
   }
 };
 
-// Keep this for foreground messages
+// Keep this for foreground messages (if you want to show an in-app toast when the app is open)
 export const listenForMessages = () => {
   try {
     const messaging = getMessaging(app);
