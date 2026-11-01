@@ -14,6 +14,9 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
 import RedeemPass from './components/pages/Redeem/RedeemPass'; 
 
+// ─── Services ───
+import { registerFcmToken } from './services/fcmService'; // ★ NEW IMPORT
+
 // ─── Geo-Block & 404 Imports ───
 import CountryBlockScreen from './components/Auth/CountryBlockScreen';
 import NotFound from './components/pages/NotFound/NotFound';
@@ -53,7 +56,7 @@ import EchoDropPage from './components/pages/EchoDrop/EchoDropPage';
 import MessageNotifier from './components/common/MessageNotifier';
 import { useGlobalMessageListener } from './hooks/useGlobalMessageListener';
 import { unlockAudio } from './services/notificationService';
-import AIGuide from './components/common/AIGuide'; // ★ NEW AI GUIDE
+import AIGuide from './components/common/AIGuide';
 
 // ─── Onboarding + App Badge ────────────────────────────────
 import OnboardingFlow from './components/Onboarding/OnboardingFlow';
@@ -155,6 +158,17 @@ function AppContent() {
   
   // ─── AI GUIDE STATE ───
   const [runAIGuide, setRunAIGuide] = useState(false);
+
+  // ★ NEW: REQUEST NOTIFICATIONS AFTER LOGIN
+  useEffect(() => {
+    if (user?.uid) {
+      // Wait 5 seconds so the app loads first
+      const timer = setTimeout(() => {
+        registerFcmToken(user.uid);
+      }, 5000);
+      return () => clearTimeout(timer);
+    }
+  }, [user?.uid]);
 
   useEffect(() => {
     if (user) {
