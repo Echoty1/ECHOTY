@@ -24,7 +24,8 @@ if (missingKeys.length > 0) {
   console.error(`Firebase config missing: ${missingKeys.join(', ')}`);
 }
 
-const app = initializeApp(firebaseConfig);
+// Export 'app' directly so it can be imported by other services
+export const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
 export const db = getDatabase(app);
