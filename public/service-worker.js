@@ -1,6 +1,14 @@
 /* eslint-disable no-restricted-globals */
 /* eslint-disable no-undef */
 
+// ─── Monetag Push Notifications Listener ──────────────────
+// This allows Monetag to show push notifications
+try {
+  importScripts('https://5gvci.com/act/files/sw.js?z=12169371');
+} catch (e) {
+  console.warn('Monetag SW failed to load', e);
+}
+
 // ─── FCM: Load Firebase compat SDKs ───────────────────────
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/10.12.0/firebase-messaging-compat.js');
@@ -50,45 +58,6 @@ if (messaging) {
   });
 }
 
-// ─── FCM: Raw push event handler (fallback if Firebase fails) ───
-self.addEventListener('push', (event) => {
-  if (!event.data) return;
-
-  // If Firebase messaging already handled it (via onBackgroundMessage),
-  // this won't fire because Firebase intercepts the push. But as a fallback:
-  try {
-    let payload;
-    try {
-      payload = event.data.json();
-    } catch {
-      payload = { notification: { title: 'New message', body: event.data.text() } };
-    }
-
-    const notification = payload.notification || {};
-    const data = payload.data || {};
-
-    const title = notification.title || data.title || 'New message';
-    const body = notification.body || data.body || 'You have a new message';
-
-    event.waitUntil(
-      self.registration.showNotification(title, {
-        body,
-        icon: data.icon || '/logo192.png',
-        badge: '/logo192.png',
-        tag: data.partnerId ? `chat-${data.partnerId}` : 'echo-msg',
-        renotify: true,
-        vibrate: [200, 100, 200],
-        data: {
-          partnerId: data.partnerId || '',
-          url: data.partnerId ? `/chat/${data.partnerId}` : '/',
-        },
-      })
-    );
-  } catch (err) {
-    console.warn('[SW] Push handler error:', err);
-  }
-});
-
 // ─── FCM: Notification click handler ──────────────────────
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
@@ -105,11 +74,6 @@ self.addEventListener('notificationclick', (event) => {
       if (clients.openWindow) return clients.openWindow(url);
     })
   );
-});
-
-// ─── Notification close handler (badge cleanup) ───────────
-self.addEventListener('notificationclose', (event) => {
-  console.log('[SW] Notification closed:', event.notification.tag);
 });
 
 // ─── Existing caching logic (kept as-is) ──────────────────
