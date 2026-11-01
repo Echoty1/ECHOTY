@@ -267,7 +267,7 @@ const MessageRow = ({
     if (rect) onLongPress(msg, rect);
   };
 
-  const onPointerDown = (e) => {
+    const onPointerDown = (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const s = g.current;
     s.id = e.pointerId;
@@ -280,7 +280,13 @@ const MessageRow = ({
     clearTimers();
     if (selectMode) return;
     s.pressTimer = setTimeout(() => rowRef.current?.classList.add('pressed'), 110);
-    if (e.pointerType !== 'mouse') s.timer = setTimeout(fireLong, LONG_PRESS_MS);
+    
+    // ✅ ANDROID FIX: Only fire long press if the user hasn't moved
+    if (e.pointerType !== 'mouse') {
+      s.timer = setTimeout(() => {
+        fireLong();
+      }, LONG_PRESS_MS);
+    }
   };
 
   const onPointerMove = (e) => {
@@ -323,6 +329,13 @@ const MessageRow = ({
     if (s.id !== e.pointerId) return;
     s.id = null;
     clearTimers();
+    
+    // ✅ ANDROID FIX: If the long press already fired, DO NOT close the menu on pointer up.
+    if (s.longFired) {
+      try { rowRef.current.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
+      return; 
+    }
+
     if (s.mode === 'swipe') {
       const doReply = s.passed && !cancelled;
       resetSwipe(true);
@@ -802,7 +815,7 @@ const ChatView = () => {
     return () => { active = false; unsub(); };
   }, [msgRoot]);
 
-  // Merge server messages + local optimistic ones, hide truly expired tides
+    // Merge server messages + local optimistic ones, hide truly expired tides
   const displayMessages = useMemo(() => {
     const byId = new Map();
     messages.forEach((m) => byId.set(m.id, m));
@@ -811,7 +824,12 @@ const ChatView = () => {
     if (userId !== ECHO_AI_ID) {
       list = list.filter((m) => !(isMessageExpired(m) && !bookmarkedIds[m.id] && !m.pinned && m.id !== pinnedMessageId));
     }
-    return sortMessages(list);
+    const sorted = sortMessages(list);
+    // ✅ MEMORY FIX: Only render the last 100 messages to prevent browser crashes on Android
+    if (sorted.length > 100) {
+      return sorted.slice(sorted.length - 100);
+    }
+    return sorted;
   }, [messages, localMsgs, bookmarkedIds, pinnedMessageId, userId]);
 
   const entries = useMemo(() => {
