@@ -152,6 +152,13 @@ function AppContent() {
   const [appVersion] = useState(process.env.REACT_APP_VERSION || '1.0');
   const showLoading = loading || !minTimePassed;
   const isSpotlightRoute = pathname.startsWith('/spotlight');
+
+  // ─── MONETAG AD REFRESH ON PAGE CHANGE ───
+  useEffect(() => {
+    if (window.monetag) {
+      try { window.monetag.reload(); } catch (e) { /* ignore */ }
+    }
+  }, [pathname]);
   
   // ─── AI GUIDE STATE ───
   const [runAIGuide, setRunAIGuide] = useState(false);
@@ -542,4 +549,4 @@ function App() {
   );
 }
 
-export default App; 
+export default App;
