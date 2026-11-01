@@ -1,23 +1,32 @@
 // src/services/fcmService.js
 import { getMessaging, getToken, onMessage } from 'firebase/messaging';
 import { ref, set } from 'firebase/database';
-import { db } from './firebase';
-import { app } from './firebase'; // Your initialized firebase app
+import { db, app } from './firebase'; 
 
-const VAPID_KEY = 'YOUR_PUBLIC_VAPID_KEY_FROM_FIREBASE_CONSOLE'; // Get this from Firebase Settings -> Cloud Messaging
+// 👇 YOUR NEW VAPID KEY
+const VAPID_KEY = 'BDBlwKrHur1ThJQEmRP5fN--0d-wjHU_uAVDh2RY1JidWQI4ojtndM-fM4egmT-LwE2zG0RfTMVA6fxvWq71CYQBNaJXP5fHYsz1axBYdSRDEatGNCfN_kqgmzeWzWvjC9L-rQLY0Ppr4IeNVQvronwd0C95NQtMRPzWfmEmvdxeZM';
 
-export const requestNotificationPermission = async (userId) => {
+// This fixes the build error for 'registerFcmToken'
+export const registerFcmToken = async (userId) => {
   try {
+    if (!('Notification' in window)) {
+      console.warn('This browser does not support desktop notification');
+      return false;
+    }
+
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
       const messaging = getMessaging(app);
       const currentToken = await getToken(messaging, { vapidKey: VAPID_KEY });
 
       if (currentToken) {
-        // Save token to Firebase so your backend can send to this device
+        // Save token to Firebase so your backend knows where to send the push
         await set(ref(db, `users/${userId}/fcmTokens/${currentToken}`), true);
         console.log('FCM Token saved successfully');
         return true;
+      } else {
+        console.log('No registration token available. Request permission to generate one.');
+        return false;
       }
     } else {
       console.warn('Notification permission denied');
@@ -29,11 +38,14 @@ export const requestNotificationPermission = async (userId) => {
   }
 };
 
-// Listen for foreground messages (when the app is open)
+// Keep this for foreground messages
 export const listenForMessages = () => {
-  const messaging = getMessaging(app);
-  onMessage(messaging, (payload) => {
-    console.log('Message received in foreground:', payload);
-    // You can trigger a custom in-app toast here if you want!
-  });
+  try {
+    const messaging = getMessaging(app);
+    onMessage(messaging, (payload) => {
+      console.log('Message received in foreground:', payload);
+    });
+  } catch (e) {
+    console.warn('Messaging not supported in foreground', e);
+  }
 };
