@@ -1594,7 +1594,7 @@ const ChatView = () => {
   return (
     <>
       <SEO title={`Chat with ${displayName}`} description={`Chat with ${displayName} on ECHO.`} />
-      <div className="chat-view" style={{ '--cv-msg-font': FONT_SIZE_MAP[fontSize] || FONT_SIZE_MAP.md }}>
+      <div className="chat-view" style={{ '--cv-msg-font': FONT_SIZE_MAP[fontSize] || FONT_SIZE_MAP.md, height: 'var(--vvh, 100dvh)' }}>
         {selectMode && (
           <div className="select-top-bar">
             <button type="button" className="select-top-btn" onClick={exitSelectMode}>Cancel</button>
