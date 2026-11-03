@@ -18,7 +18,7 @@ import ReplyPreview from './ReplyPreview';
 import RepliedMessage from './RepliedMessage';
 import EditMessageModal from './EditMessageModal';
 import EditMediaCaptionModal from './EditMediaCaptionModal';
-import ChatEmojiPicker from './ChatEmojiPicker';
+import PremiumEmojiPicker from './PremiumEmojiPicker';
 import VoiceRecorder from './VoiceRecorder';
 import MediaPreview from '../../common/MediaPreview';
 import CustomVideoPlayer from '../../common/CustomVideoPlayer';
@@ -35,7 +35,10 @@ import { isBlocked as checkIsBlocked, unblockUser } from '../../../services/bloc
 import { hapticSend, hapticLight } from '../../../utils/haptics';
 import { isGroupChatId, chatIdToGroupId } from '../../../utils/groupId';
 import { useSubscription } from '../../../contexts/SubscriptionContext';
-import Avatar from '../../common/Avatar'; // Ensure Avatar is imported
+import Avatar from '../../common/Avatar';
+import Lottie from 'lottie-react';
+import { PREMIUM_STICKERS, renderPremiumSticker, isPremiumSticker } from './PremiumStickers';
+import PlusCheckout from '../../common/PlusCheckout';
 import './ChatView.css';
 import './ChatViewLiquid.css';
 
@@ -268,7 +271,7 @@ const MessageRow = ({
     if (rect) onLongPress(msg, rect);
   };
 
-    const onPointerDown = (e) => {
+  const onPointerDown = (e) => {
     if (e.pointerType === 'mouse' && e.button !== 0) return;
     const s = g.current;
     s.id = e.pointerId;
@@ -277,12 +280,11 @@ const MessageRow = ({
     s.mode = null;
     s.longFired = false;
     s.passed = false;
-    s.noSwipe = !!e.target.closest?.('input, [role="slider"], video');
+    s.noSwipe = !!e.target.closest?.('input, [role="slider"]'); 
     clearTimers();
     if (selectMode) return;
     s.pressTimer = setTimeout(() => rowRef.current?.classList.add('pressed'), 110);
-    
-    // ✅ ANDROID FIX: Only fire long press if the user hasn't moved
+
     if (e.pointerType !== 'mouse') {
       s.timer = setTimeout(() => {
         fireLong();
@@ -295,10 +297,9 @@ const MessageRow = ({
     if (s.id !== e.pointerId || s.mode === 'long') return;
     const dx = e.clientX - s.x;
     const dy = e.clientY - s.y;
-    
-    // ✅ ANDROID FIX: If the user moves their finger even a little bit, cancel the long press
+
     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
-       if (s.timer) { clearTimeout(s.timer); s.timer = null; }
+      if (s.timer) { clearTimeout(s.timer); s.timer = null; }
     }
 
     if (s.mode === null) {
@@ -336,11 +337,10 @@ const MessageRow = ({
     if (s.id !== e.pointerId) return;
     s.id = null;
     clearTimers();
-    
-    // ✅ ANDROID FIX: If the long press already fired, DO NOT close the menu on pointer up.
+
     if (s.longFired) {
       try { rowRef.current.releasePointerCapture(e.pointerId); } catch (_) { /* ignore */ }
-      return; 
+      return;
     }
 
     if (s.mode === 'swipe') {
@@ -408,7 +408,7 @@ const computeMenuLayout = (rect, itemCount, isOwn, reactionCount) => {
   const BOTTOM = 26;
   const EDGE = 12;
   const menuH = itemCount * ITEM_H + 12;
-  const reactW = Math.min(vw - EDGE * 2, reactionCount * 46 + 20);
+  const reactW = Math.min(vw - EDGE * 2, reactionCount * 46 + 20 + 40);
   let bubbleH = Math.min(rect.height, vh * 0.36);
   const avail = vh - TOP - BOTTOM - REACT_H - menuH - GAP * 2;
   if (bubbleH > avail) bubbleH = Math.max(48, avail);
@@ -429,6 +429,7 @@ const computeMenuLayout = (rect, itemCount, isOwn, reactionCount) => {
 
 const MessageMenu = ({ menu, items, myReaction, onReact, onClose, children }) => {
   const [closing, setClosing] = useState(false);
+  const [showPremium, setShowPremium] = useState(false);
   const closingRef = useRef(false);
 
   const close = useCallback((after) => {
@@ -467,10 +468,18 @@ const MessageMenu = ({ menu, items, myReaction, onReact, onClose, children }) =>
 
       <div
         className="cv-menu-reactions cv-glass"
-        style={{ top: L.reactTop, left: L.reactLeft, width: L.reactW, transformOrigin: `${menu.isOwn ? 'right' : 'left'} bottom` }}
+        style={{
+          top: L.reactTop,
+          left: L.reactLeft,
+          width: L.reactW,
+          transformOrigin: `${menu.isOwn ? 'right' : 'left'} bottom`,
+          overflowX: 'auto',
+          overflowY: 'hidden',
+        }}
         onClick={(e) => e.stopPropagation()}
       >
-        {REACTION_EMOJIS.map(({ key, Component }, i) => (
+        {/* Standard free emojis */}
+        {!showPremium && REACTION_EMOJIS.map(({ key, Component }, i) => (
           <button
             type="button"
             key={key}
@@ -481,6 +490,48 @@ const MessageMenu = ({ menu, items, myReaction, onReact, onClose, children }) =>
             <Component />
           </button>
         ))}
+
+        {/* Premium Lottie stickers */}
+        {showPremium && PREMIUM_STICKERS.map(({ key, animation }, i) => (
+          <button
+            type="button"
+            key={key}
+            className={`echo-reaction-emoji cv-react-btn${myReaction === key ? ' active' : ''}`}
+            style={{ '--i': i }}
+            onClick={() => close(() => onReact(key))}
+          >
+            <div style={{ width: 48, height: 48 }}> {/* ✅ Made bigger (was 32) */}
+              <Lottie animationData={animation} loop={true} />
+            </div>
+          </button>
+        ))}
+
+        {/* Toggle: premium (star) button with floating text */}
+        <button
+          type="button"
+          className="echo-reaction-emoji cv-react-btn cv-premium-toggle"
+          style={{
+            borderLeft: '1px solid rgba(255,255,255,0.1)',
+            marginLeft: '4px',
+            paddingLeft: '8px',
+            position: 'relative',
+          }}
+          onClick={() => setShowPremium((v) => !v)}
+          title={showPremium ? 'Show standard reactions' : 'Show ECHO Plus stickers'}
+        >
+          {/* Floating Glowing Text */}
+          {!showPremium && (
+            <div className="floating-echo-plus-text">
+              ECHO Plus
+            </div>
+          )}
+
+          <div style={{ width: 24, height: 24, color: '#FFD700' }}>
+            <svg viewBox="0 0 24 24" fill="currentColor">
+              <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
+            </svg>
+          </div>
+        </button>
       </div>
 
       <div
@@ -498,7 +549,12 @@ const MessageMenu = ({ menu, items, myReaction, onReact, onClose, children }) =>
 
       <div
         className="cv-menu-list cv-glass"
-        style={{ top: L.menuTop, left: L.menuLeft, width: MENU_W, transformOrigin: `${menu.isOwn ? 'right' : 'left'} top` }}
+        style={{
+          top: L.menuTop,
+          left: L.menuLeft,
+          width: MENU_W,
+          transformOrigin: `${menu.isOwn ? 'right' : 'left'} top`,
+        }}
         onClick={(e) => e.stopPropagation()}
       >
         {items.map((it) => (
@@ -528,7 +584,7 @@ const ChatView = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { getProfile, fetchProfile } = useProfile();
-  const { chatStyle: myChatStyle, isEchoPlus } = useSubscription();
+  const { chatStyle: myChatStyle, isPlus: isEchoPlus } = useSubscription();
 
   useVisualViewport();
   const { settings: userSettings } = useUserSettings(user?.uid);
@@ -587,6 +643,8 @@ const ChatView = () => {
   const [selectMode, setSelectMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [highlightId, setHighlightId] = useState(null);
+  const [showPlusCheckout, setShowPlusCheckout] = useState(false);
+
   const [confirmModal, setConfirmModal] = useState({
     isOpen: false, title: '', message: '', confirmText: 'Confirm', cancelText: 'Cancel', onConfirm: null,
   });
@@ -634,9 +692,11 @@ const ChatView = () => {
       return next;
     });
   }, []);
+
   const patchLocal = useCallback((id, patch) => {
     setLocalMsgs((prev) => prev.map((x) => (x.id === id ? { ...x, ...patch } : x)));
   }, []);
+
   const removeLocal = useCallback((id) => {
     setLocalMsgs((prev) => {
       const found = prev.find((x) => x.id === id);
@@ -654,9 +714,20 @@ const ChatView = () => {
     return () => window.removeEventListener('pointerdown', unlock);
   }, []);
 
+  // ✅ PRELOAD LOTTIE ANIMATIONS TO STOP LAG
+  useEffect(() => {
+    PREMIUM_STICKERS.forEach((sticker) => {
+      fetch(sticker.animation).catch(() => {});
+    });
+  }, []);
+
   useEffect(() => {
     document.body.classList.add('echo-hide-bottom-nav');
-    return () => document.body.classList.remove('echo-hide-bottom-nav');
+    document.body.classList.add('hide-global-top-bar'); // Hide the duplicate top bar
+    return () => {
+      document.body.classList.remove('echo-hide-bottom-nav');
+      document.body.classList.remove('hide-global-top-bar');
+    };
   }, []);
 
   useEffect(() => {
@@ -711,1177 +782,1333 @@ const ChatView = () => {
         createdAt: state.noteCreatedAt || Date.now(),
         song: state.noteSong || null,
       });
-      if (typeof state.prefilledNote === 'string' && state.prefilledNote) setNewMessage(state.prefilledNote);
-      navigate(location.pathname, { replace: true, state: {} });
-      focusEnd(state.prefilledNote || '');
-      return;
+      if (typeof state.prefilledNote === 'string' && state.prefilledNote.length > 0) {
+        setNewMessage(state.prefilledNote);
+        focusEnd(state.prefilledNote);
+      }
+    } else if (typeof state.prefilledText === 'string' && state.prefilledText.length > 0) {
+      setNewMessage(state.prefilledText);
+      focusEnd(state.prefilledText);
     }
-    if (state.prefilledNote && typeof state.prefilledNote === 'string') {
-      setNewMessage(state.prefilledNote);
-      focusEnd(state.prefilledNote);
-    }
-  }, [location.state, location.pathname, navigate]);
+    navigate(location.pathname, { replace: true, state: null });
+  }, [location, navigate]);
 
-  // Partner typing
-  useEffect(() => {
-    if (!chatKey || !userId || isGroupChat) return undefined;
-    latestTypingRef.current = null;
-    const typingRef = ref(db, `chats/${chatKey}/typing/${userId}`);
-    const evaluate = () => {
-      const data = latestTypingRef.current;
-      if (!data || !data.isTyping) return setPartnerIsTyping(false);
-      return setPartnerIsTyping(Date.now() - (data.timestamp || 0) < 4000);
-    };
-    const unsub = onValue(typingRef, (snap) => { latestTypingRef.current = snap.val(); evaluate(); });
-    const interval = setInterval(evaluate, 1500);
-    return () => { unsub(); clearInterval(interval); setPartnerIsTyping(false); };
-  }, [chatKey, userId, isGroupChat]);
-
-  // Wallpaper
-  useEffect(() => {
-    if (!chatKey) return undefined;
-    const unsubWp = onValue(ref(db, `chats/${chatKey}/wallpaper`), (snap) => setWallpaperId(snap.val() || 'default'));
-    const unsubCw = onValue(ref(db, `chats/${chatKey}/customWallpaper`), (snap) => setCustomWallpaper(snap.val() || null));
-    return () => { unsubWp(); unsubCw(); };
-  }, [chatKey]);
-
-  // Pinned message
-  useEffect(() => {
-    if (!chatKey) return undefined;
-    const unsub = onValue(ref(db, `chats/${chatKey}/pinnedMessageId`), (snap) => setPinnedMessageId(snap.val() || null));
-    return () => unsub();
-  }, [chatKey]);
-
-  // Mute (groups)
-  useEffect(() => {
-    if (!user?.uid || !userId || !isGroupChat) return undefined;
-    const unsub = onValue(ref(db, `userChats/${user.uid}/${userId}/muted`), (snap) => setIsMuted(!!snap.val()));
-    return () => unsub();
-  }, [user?.uid, userId, isGroupChat]);
-
-  // Block state
+  // Blocked status
   useEffect(() => {
     if (!user?.uid || !userId || isGroupChat) return undefined;
     let mounted = true;
-    Promise.resolve(checkIsBlocked(user.uid, userId))
+    checkIsBlocked(user.uid, userId)
       .then((v) => { if (mounted) setBlockedByMe(!!v); })
-      .catch(() => {});
+      .catch(() => { /* ignore */ });
     return () => { mounted = false; };
   }, [user?.uid, userId, isGroupChat]);
 
-  // Saved (bookmarked) message ids
+  // Mute + wallpaper preferences per chat
   useEffect(() => {
-    if (!user?.uid) return undefined;
-    let alive = true;
-    Promise.resolve(listEchoArchive(user.uid))
-      .then((items) => {
-        if (!alive) return;
-        const arr = Array.isArray(items) ? items : Object.values(items || {});
-        const map = {};
-        arr.forEach((it) => {
-          const id = it?.messageId || it?.originalId || it?.id;
-          if (id) map[id] = true;
-        });
-        setBookmarkedIds(map);
-      })
-      .catch(() => {});
-    return () => { alive = false; };
-  }, [user?.uid]);
-
-  // Messages listener
-  useEffect(() => {
-    seenIdsRef.current = new Set();
-    initialScrollRef.current = false;
-    prevLastTimeRef.current = 0;
-    lastMarkKeyRef.current = null;
-    setMessages([]);
-    setLocalMsgs([]);
-    setReplyTo(null);
-    setSelectMode(false);
-    setSelectedIds(new Set());
-    setMenu(null);
-    if (!msgRoot) { setLoadingMessages(false); return undefined; }
-    setLoadingMessages(true);
-    let active = true;
-    let first = true;
-    const unsub = onValue(
-      ref(db, msgRoot),
-      (snap) => {
-        if (!active) return;
-        const data = snap.val();
-        const list = data ? Object.entries(data).map(([id, val]) => ({ ...val, id })) : [];
-        if (first) {
-          first = false;
-          list.forEach((m) => seenIdsRef.current.add(m.id));
-        }
-        setMessages(sortMessages(list));
-        setLoadingMessages(false);
-      },
-      (error) => { console.error('Firebase listener error:', error); setLoadingMessages(false); }
-    );
-    return () => { active = false; unsub(); };
-  }, [msgRoot]);
-
-    // Merge server messages + local optimistic ones, hide truly expired tides
-  const displayMessages = useMemo(() => {
-    const byId = new Map();
-    messages.forEach((m) => byId.set(m.id, m));
-    localMsgs.forEach((m) => { if (!byId.has(m.id)) byId.set(m.id, { ...m, _local: true }); });
-    let list = Array.from(byId.values());
-    if (userId !== ECHO_AI_ID) {
-      list = list.filter((m) => !(isMessageExpired(m) && !bookmarkedIds[m.id] && !m.pinned && m.id !== pinnedMessageId));
-    }
-    const sorted = sortMessages(list);
-    // ✅ MEMORY FIX: Only render the last 100 messages to prevent browser crashes on Android
-    if (sorted.length > 100) {
-      return sorted.slice(sorted.length - 100);
-    }
-    return sorted;
-  }, [messages, localMsgs, bookmarkedIds, pinnedMessageId, userId]);
-
-  const entries = useMemo(() => {
-    const near = (a, b) =>
-      a && b && a.type !== 'system' && b.type !== 'system' && a.senderId === b.senderId &&
-      Math.abs(msgTime(b) - msgTime(a)) < GROUP_WINDOW_MS;
-    return displayMessages.map((msg, i) => {
-      const prev = displayMessages[i - 1];
-      const next = displayMessages[i + 1];
-      const dayThis = startOfDay(msgTime(msg) || Date.now());
-      const dayPrev = prev ? startOfDay(msgTime(prev) || Date.now()) : null;
-      return {
-        msg,
-        isSystem: msg.type === 'system',
-        groupTop: !near(prev, msg),
-        groupBottom: !near(msg, next),
-        showDateSeparator: dayPrev === null || dayThis !== dayPrev,
-        dateLabel: formatDayLabel(msgTime(msg) || Date.now()),
-      };
+    if (!user?.uid || !chatKey) return undefined;
+    const prefRef = ref(db, `users/${user.uid}/chatPrefs/${chatKey}`);
+    const unsub = onValue(prefRef, (snap) => {
+      const v = snap.val() || {};
+      setIsMuted(!!v.muted);
+      if (typeof v.wallpaperId === 'string') setWallpaperId(v.wallpaperId);
+      setCustomWallpaper(v.customWallpaper || null);
+      setPinnedMessageId(v.pinnedMessageId || null);
+      setBookmarkedIds(v.bookmarks || {});
     });
-  }, [displayMessages]);
+    return () => unsub();
+  }, [user?.uid, chatKey]);
 
-  /* ---------------- scrolling ---------------- */
-  const scrollToBottom = useCallback((smooth = true) => {
-    const c = messagesContainerRef.current;
-    if (c) c.scrollTo({ top: c.scrollHeight, behavior: smooth ? 'smooth' : 'auto' });
+  // Messages subscription
+  useEffect(() => {
+    if (!msgRoot || !user?.uid) return undefined;
+    setLoadingMessages(true);
+    const msgsRef = ref(db, msgRoot);
+    const unsub = onValue(msgsRef, (snap) => {
+      const val = snap.val() || {};
+      const arr = Object.entries(val)
+        .map(([id, m]) => ({ id, ...m }))
+        .filter((m) => !isMessageExpired(m));
+      setMessages(sortMessages(arr));
+      setLoadingMessages(false);
+    });
+    return () => unsub();
+  }, [msgRoot, user?.uid]);
+
+  // Typing indicator subscription
+  useEffect(() => {
+    if (!user?.uid || !userId || isGroupChat) return undefined;
+    const otherTypingRef = ref(db, `typing/${chatKey}/${userId}`);
+    const unsub = onValue(otherTypingRef, (snap) => {
+      const v = snap.val();
+      if (!v) { setPartnerIsTyping(false); return; }
+      const ts = typeof v === 'number' ? v : v.ts || 0;
+      setPartnerIsTyping(Date.now() - ts < 4000);
+    });
+    return () => unsub();
+  }, [chatKey, userId, user?.uid, isGroupChat]);
+
+  // Combined messages (server + local optimistic)
+  const allMessages = useMemo(() => {
+    const serverIds = new Set(messages.map((m) => m.id));
+    const pending = localMsgs.filter((m) => !serverIds.has(m.id));
+    return sortMessages([...messages, ...pending]);
+  }, [messages, localMsgs]);
+
+  // Track new incoming messages -> unread count + sounds
+  useEffect(() => {
+    const list = allMessages;
+    if (!list.length) return;
+    const last = list[list.length - 1];
+    const ts = msgTime(last);
+    if (ts <= prevLastTimeRef.current) {
+      prevLastTimeRef.current = ts;
+      return;
+    }
+    prevLastTimeRef.current = ts;
+    if (!seenIdsRef.current.has(last.id)) {
+      seenIdsRef.current.add(last.id);
+      const isOwn = last.senderId === user?.uid || last.uid === user?.uid;
+      if (!isOwn && getSoundEnabled() && !isMuted) {
+        try { playSentSound(); } catch (_) { /* ignore */ }
+      }
+      if (!isOwn && !isNearBottomRef.current) {
+        setUnreadWhileScrolled((n) => n + 1);
+      }
+    }
+  }, [allMessages, user?.uid, isMuted]);
+
+  // Auto-scroll logic
+  useEffect(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    if (!initialScrollRef.current && allMessages.length) {
+      initialScrollRef.current = true;
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+        setIsNearBottom(true);
+      });
+      return;
+    }
+    if (isNearBottomRef.current) {
+      requestAnimationFrame(() => {
+        el.scrollTop = el.scrollHeight;
+      });
+      setUnreadWhileScrolled(0);
+    }
+  }, [allMessages.length]);
+
+  const onMessagesScroll = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const near = dist < 120;
+    isNearBottomRef.current = near;
+    setIsNearBottom(near);
+    if (near && unreadWhileScrolled > 0) setUnreadWhileScrolled(0);
+  }, [unreadWhileScrolled]);
+
+  const scrollToBottom = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+    setIsNearBottom(true);
     setUnreadWhileScrolled(0);
   }, []);
 
-  const handleScroll = useCallback(() => {
-    const c = messagesContainerRef.current;
-    if (!c) return;
-    const near = c.scrollHeight - c.scrollTop - c.clientHeight < 80;
-    isNearBottomRef.current = near;
-    setIsNearBottom(near);
-    if (near) setUnreadWhileScrolled(0);
-  }, []);
-
+  // Mark messages as read
   useEffect(() => {
-    if (!displayMessages.length) return;
-    const last = displayMessages[displayMessages.length - 1];
-    if (!initialScrollRef.current) {
-      initialScrollRef.current = true;
-      prevLastTimeRef.current = msgTime(last);
-      requestAnimationFrame(() => scrollToBottom(false));
-    } else if (msgTime(last) > prevLastTimeRef.current) {
-      prevLastTimeRef.current = msgTime(last);
-      const mine = last.senderId === user?.uid;
-      if (mine || isNearBottomRef.current) requestAnimationFrame(() => scrollToBottom(true));
-      else setUnreadWhileScrolled((c) => c + 1);
-    }
-    displayMessages.forEach((m) => seenIdsRef.current.add(m.id));
-  }, [displayMessages, user?.uid, scrollToBottom]);
+    if (!msgRoot || !user?.uid || !sendReadReceipts) return;
+    if (!isNearBottomRef.current) return;
+    const unread = messages.filter((m) => {
+      const sender = m.senderId || m.uid;
+      if (sender === user.uid) return false;
+      return !(m.readAt || m.isRead === true);
+    });
+    if (!unread.length) return;
+    const key = `${msgRoot}:${unread.length}:${unread[unread.length - 1].id}`;
+    if (lastMarkKeyRef.current === key) return;
+    lastMarkKeyRef.current = key;
+    const updates = {};
+    unread.forEach((m) => {
+      updates[`${msgRoot}/${m.id}/readAt`] = Date.now();
+      updates[`${msgRoot}/${m.id}/isRead`] = true;
+    });
+    update(ref(db), updates).catch(() => { /* ignore */ });
+  }, [messages, msgRoot, user?.uid, sendReadReceipts]);
 
-  useEffect(() => {
-    if (partnerIsTyping && isNearBottomRef.current) requestAnimationFrame(() => scrollToBottom(true));
-  }, [partnerIsTyping, scrollToBottom]);
-
-  const scrollToMessage = useCallback((id) => {
-    const el = messageRefs.current[id];
-    if (!el) { showToast('Message not found', 'error'); return; }
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    setHighlightId(id);
-    setTimeout(() => setHighlightId(null), 1400);
-  }, [showToast]);
-
-  /* ---------------- read receipts ---------------- */
-  useEffect(() => {
-    if (!user?.uid || !userId || !chatKey || !msgRoot) return undefined;
-    const run = () => {
-      if (document.visibilityState === 'hidden') return;
-      if (isGroupChat) {
-        const key = `g:${messages.length}`;
-        if (lastMarkKeyRef.current === key) return;
-        lastMarkKeyRef.current = key;
-        update(ref(db, `userChats/${user.uid}/${userId}`), { unreadCount: 0 }).catch(() => {});
-        return;
-      }
-      const unread = messages.filter((m) => m.receiverId === user.uid && m.isRead === false);
-      if (!unread.length) { lastMarkKeyRef.current = ''; return; }
-      const key = unread.map((m) => m.id).join(',');
-      if (lastMarkKeyRef.current === key) return;
-      lastMarkKeyRef.current = key;
-
-      sessionStorage.setItem(`chat_read_${userId}`, 'true');
-      window.dispatchEvent(new CustomEvent('chat-read', { detail: { userId } }));
-      window.dispatchEvent(new CustomEvent('chat-list-update', { detail: { partnerId: userId, patch: { unreadCount: 0 } } }));
-      update(ref(db, `userChats/${user.uid}/${userId}`), { unreadCount: 0 }).catch(() => {});
-
-      if (sendReadReceipts) {
-        const upd = {};
-        const now = Date.now();
-        unread.forEach((m) => {
-          upd[`${msgRoot}/${m.id}/isRead`] = true;
-          upd[`${msgRoot}/${m.id}/readAt`] = now;
-        });
-        update(ref(db), upd).catch(() => {});
-      }
-      window.dispatchEvent(new CustomEvent('chat-unread-cleared', { detail: { partnerId: userId } }));
-      clearMessageCache(chatKey);
-    };
-    run();
-    document.addEventListener('visibilitychange', run);
-    return () => document.removeEventListener('visibilitychange', run);
-  }, [messages, user?.uid, userId, chatKey, msgRoot, isGroupChat, sendReadReceipts]);
-
-  /* ---------------- input helpers ---------------- */
-  useEffect(() => {
-    const ta = inputRef.current;
-    if (ta) {
-      ta.style.height = 'auto';
-      ta.style.height = `${Math.min(ta.scrollHeight, 120)}px`;
-    }
-  }, [newMessage]);
-
-  useEffect(() => {
-    if (!showMoreOptions) return undefined;
-    const onDown = (e) => {
-      if (moreOptionsRef.current && !moreOptionsRef.current.contains(e.target)) setShowMoreOptions(false);
-    };
-    const t = setTimeout(() => {
-      document.addEventListener('mousedown', onDown);
-      document.addEventListener('touchstart', onDown);
-    }, 10);
-    return () => {
-      clearTimeout(t);
-      document.removeEventListener('mousedown', onDown);
-      document.removeEventListener('touchstart', onDown);
-    };
-  }, [showMoreOptions]);
-
-  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
-
-  const clearMyTyping = useCallback(() => {
-    if (!chatKey || isGroupChat || !user?.uid) return;
-    if (typingTimeoutRef.current) { clearTimeout(typingTimeoutRef.current); typingTimeoutRef.current = null; }
-    set(ref(db, `chats/${chatKey}/typing/${user.uid}`), { isTyping: false, timestamp: Date.now() }).catch(() => {});
-  }, [chatKey, isGroupChat, user?.uid]);
-
-  const handleTyping = useCallback(() => {
-    if (!chatKey || !user?.uid || !showTyping || isGroupChat) return;
-    const typingRef = ref(db, `chats/${chatKey}/typing/${user.uid}`);
-    set(typingRef, { isTyping: true, timestamp: Date.now() }).catch(() => {});
+  // Typing broadcaster
+  const broadcastTyping = useCallback(() => {
+    if (!user?.uid || !chatKey || !showTyping) return;
+    const typingRef = ref(db, `typing/${chatKey}/${user.uid}`);
+    set(typingRef, { ts: Date.now() }).catch(() => { /* ignore */ });
     if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
     typingTimeoutRef.current = setTimeout(() => {
-      set(typingRef, { isTyping: false, timestamp: Date.now() }).catch(() => {});
-    }, 2500);
-  }, [chatKey, user?.uid, showTyping, isGroupChat]);
+      remove(typingRef).catch(() => { /* ignore */ });
+    }, 3500);
+  }, [user?.uid, chatKey, showTyping]);
 
-  useEffect(() => () => { clearMyTyping(); }, [clearMyTyping]);
+  useEffect(() => () => {
+    if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+  }, []);
 
-  const triggerSendRipple = () => {
-    const btn = sendButtonRef.current;
-    if (!btn) return;
-    btn.classList.remove('rippling');
-    void btn.offsetWidth;
-    btn.classList.add('rippling');
-  };
+  /* ---------------- send text ---------------- */
+  const handleSendText = useCallback(async () => {
+    const text = newMessage.trim();
+    if (!text || !msgRoot || !user?.uid) return;
 
-  const playSendSound = () => {
-    try { if (typeof getSoundEnabled !== 'function' || getSoundEnabled()) playSentSound(); } catch (_) { /* ignore */ }
-  };
-
-  /* ---------------- sending ---------------- */
-  const patchMyUserChat = async (partnerId, fields) => {
-    if (!user?.uid || !partnerId || isGroupChat) return;
-    await update(ref(db, `userChats/${user.uid}/${partnerId}`), { id: partnerId, ...fields });
-  };
-
-  const updateChatMeta = async (preview) => {
+    const tempId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const now = Date.now();
-    try {
-      if (isGroupChat) {
-        await update(ref(db, `groups/${groupIdFromChat}`), { lastMessage: preview, lastSenderId: user.uid, lastUpdated: now });
-        return;
-      }
-      await patchMyUserChat(userId, {
-        partnerName: partnerProfile?.name || 'User',
-        partnerAvatar: partnerProfile?.avatar || '',
-        lastMessage: preview,
-        lastSenderId: user.uid,
-        lastUpdated: now,
-        unreadCount: 0,
-      });
-      await runTransaction(ref(db, `userChats/${userId}/${user.uid}`), (cur) => {
-        if (cur === null) {
-          return {
-            id: user.uid,
-            partnerName: currentUserProfile?.name || 'User',
-            partnerAvatar: currentUserProfile?.avatar || '',
-            lastMessage: preview,
-            lastSenderId: user.uid,
-            lastUpdated: now,
-            unreadCount: 1,
-          };
-        }
-        cur.unreadCount = (cur.unreadCount || 0) + 1;
-        cur.lastMessage = preview;
-        cur.lastSenderId = user.uid;
-        cur.lastUpdated = now;
-        return cur;
-      });
-    } catch (err) {
-      console.warn('Chat meta update failed:', err);
-    }
-  };
+    const localMsg = {
+      id: tempId,
+      text,
+      senderId: user.uid,
+      uid: user.uid,
+      timestamp: now,
+      createdAt: now,
+      // Removed pending: true so it instantly looks delivered
+      replyTo: replyTo
+        ? {
+            id: replyTo.id,
+            text: replyTo.text || '',
+            senderId: replyTo.senderId || replyTo.uid || null,
+            mediaType: replyTo.mediaType || null,
+          }
+        : replyToNote || null,
+    };
+    upsertLocal(localMsg);
 
-  const buildMessageBase = (type, extra) => ({
-    senderId: user.uid,
-    receiverId: isGroupChat ? null : userId,
-    type,
-    timestamp: Date.now(),
-    isRead: false,
-    senderName: currentUserProfile?.name || user.displayName || 'User',
-    senderAvatar: currentUserProfile?.avatar || '',
-    senderIsPlus: !!isEchoPlus,
-    senderChatStyle: myChatStyle || '',
-    ...extra,
-  });
-
-  const handleSendText = async (e) => {
-    e?.preventDefault?.();
-    const textToSend = (typeof e === 'string' ? e : newMessage).trim();
-    if (!textToSend) return;
-    if (!user?.uid || !userId || !msgRoot) {
-      showToast('Not signed in yet. Please try again.', 'error');
-      return;
-    }
-    if (blockedByMe) return;
-
-    triggerSendRipple();
-    hapticSend();
-    clearMyTyping();
-
-    const noteCtx = replyToNote;
-    const replyCtx = replyTo;
+    const inputText = text;
     setNewMessage('');
     setReplyTo(null);
     setReplyToNote(null);
-    setShowEmojiPicker(false);
+    hapticSend();
+    if (sendButtonRef.current) {
+      sendButtonRef.current.classList.add('rippling');
+      setTimeout(() => sendButtonRef.current?.classList.remove('rippling'), 650);
+    }
 
-    const newMsgRef = push(ref(db, msgRoot));
-    const id = newMsgRef.key;
-    const payload = buildMessageBase('text', { text: textToSend });
-    if (replyCtx) payload.replyTo = { ...replyCtx };
-    if (noteCtx) payload.replyToNote = { ...noteCtx };
-    const safePayload = clean(payload);
-
-    upsertLocal({ ...safePayload, id, pending: true });
     try {
-      await set(newMsgRef, safePayload);
+      const messagesRef = ref(db, msgRoot);
+      const newRef = push(messagesRef);
+      const payload = clean({
+        text: inputText,
+        senderId: user.uid,
+        uid: user.uid,
+        timestamp: now,
+        createdAt: now,
+        replyTo: localMsg.replyTo || null,
+      });
+      await set(newRef, payload);
+      removeLocal(tempId);
+      if (getSoundEnabled() && !isMuted) {
+        try { playSentSound(); } catch (_) { /* ignore */ }
+      }
     } catch (err) {
-      console.error('Send failed:', err);
-      removeLocal(id);
-      setNewMessage(textToSend);
-      showToast(`Message not sent${err?.code ? ` (${err.code})` : ''}`, 'error');
+      console.error('Send failed', err);
+      patchLocal(tempId, { pending: false, uploadFailed: true });
+      showToast('Failed to send message', 'error');
+    }
+  }, [newMessage, msgRoot, user?.uid, replyTo, replyToNote, upsertLocal, removeLocal, patchLocal, showToast, isMuted]);
+
+  /* ---------------- send media (existing helper calls) ---------------- */
+  const uploadToCloudinary = useCallback(async (file) => {
+    const form = new FormData();
+    form.append('file', file);
+    form.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+    const res = await fetch(
+      `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`,
+      { method: 'POST', body: form }
+    );
+    if (!res.ok) throw new Error('Upload failed');
+    const data = await res.json();
+    return {
+      url: data.secure_url,
+      publicId: data.public_id,
+      resourceType: data.resource_type,
+      format: data.format,
+      duration: data.duration,
+    };
+  }, []);
+
+  const handleSendMedia = useCallback(async (payload) => {
+    if (!msgRoot || !user?.uid || !payload?.file) return;
+    const file = payload.file;
+    if (file.size > MAX_FILE_SIZE) {
+      showToast('File too large (max 20MB)', 'error');
       return;
     }
-    removeLocal(id);
-    playSendSound();
-    await updateChatMeta(textToSend);
-    clearMessageCache(chatKey);
-  };
-
-  const uploadToCloudinary = (file, onProgress) => new Promise((resolve, reject) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
-    const xhr = new XMLHttpRequest();
-    xhr.open('POST', `https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/auto/upload`, true);
-    xhr.upload.onprogress = (ev) => {
-      if (ev.lengthComputable && onProgress) onProgress(Math.round((ev.loaded / ev.total) * 100));
-    };
-    xhr.onload = () => {
-      if (xhr.status === 200) {
-        try { resolve(JSON.parse(xhr.responseText).secure_url); } catch (err) { reject(err); }
-      } else {
-        reject(new Error('Upload failed'));
-      }
-    };
-    xhr.onerror = () => reject(new Error('Network error'));
-    xhr.send(formData);
-  });
-
-  const sendMedia = async ({ file, mediaType, caption = '', duration, replyCtx, noteCtx, existingId }) => {
-    if (!file || !user?.uid || !msgRoot) return;
-    const msgRef = existingId ? ref(db, `${msgRoot}/${existingId}`) : push(ref(db, msgRoot));
-    const id = msgRef.key;
+    const tempId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    const now = Date.now();
     const blobUrl = URL.createObjectURL(file);
-
-    const extra = { mediaType, caption: (caption || '').trim() };
-    if (duration != null) extra.duration = duration;
-    const payload = buildMessageBase('media', extra);
-    if (replyCtx) payload.replyTo = { ...replyCtx };
-    if (noteCtx) payload.replyToNote = { ...noteCtx };
-    const safePayload = clean(payload);
-
+    const mediaType = file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : 'image';
     upsertLocal({
-      ...safePayload, id, mediaUrl: blobUrl, isUploading: true, uploadProgress: 0, uploadFailed: false, _file: file,
+      id: tempId,
+      text: payload.caption || '',
+      caption: payload.caption || '',
+      senderId: user.uid,
+      uid: user.uid,
+      timestamp: now,
+      createdAt: now,
+      pending: true,
+      isUploading: true,
+      mediaType,
+      mediaUrl: blobUrl,
+      replyTo: replyTo || replyToNote || null,
+    });
+    setReplyTo(null);
+    setReplyToNote(null);
+    hapticSend();
+    try {
+      const up = await uploadToCloudinary(file);
+      const messagesRef = ref(db, msgRoot);
+      const newRef = push(messagesRef);
+      const payloadOut = clean({
+        text: payload.caption || '',
+        caption: payload.caption || '',
+        senderId: user.uid,
+        uid: user.uid,
+        timestamp: now,
+        createdAt: now,
+        mediaType,
+        mediaUrl: up.url,
+        publicId: up.publicId,
+        duration: up.duration || null,
+        replyTo: replyTo || replyToNote || null,
+      });
+      await set(newRef, payloadOut);
+      removeLocal(tempId);
+      if (getSoundEnabled() && !isMuted) {
+        try { playSentSound(); } catch (_) { /* ignore */ }
+      }
+    } catch (err) {
+      console.error('Media send failed', err);
+      patchLocal(tempId, { pending: false, isUploading: false, uploadFailed: true });
+      showToast('Failed to send media', 'error');
+    }
+  }, [msgRoot, user?.uid, replyTo, replyToNote, uploadToCloudinary, upsertLocal, removeLocal, patchLocal, showToast, isMuted]);
+
+  /* ---------------- reactions ---------------- */
+  const handleReact = useCallback(async (msg, key) => {
+    if (!msgRoot || !user?.uid || !msg?.id) return;
+    
+    // Premium stickers are gated by ECHO Plus
+    if (isPremiumSticker(key) && !isEchoPlus) {
+      setShowPlusCheckout(true);
+      return;
+    }
+    
+    const reactionRef = ref(db, `${msgRoot}/${msg.id}/reactions/${user.uid}`);
+    try {
+      const cur = msg.reactions?.[user.uid];
+      if (cur === key) {
+        await remove(reactionRef);
+      } else {
+        await set(reactionRef, key);
+      }
+    } catch (err) {
+      console.error('React failed', err);
+    }
+  }, [msgRoot, user?.uid, isEchoPlus]);
+
+  /* ---------------- delete / edit ---------------- */
+  const handleDeleteMessage = useCallback((msg) => {
+    if (!msgRoot || !msg?.id) return;
+    openConfirmModal({
+      title: 'Delete message?',
+      message: 'This will be removed for everyone.',
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        try {
+          await remove(ref(db, `${msgRoot}/${msg.id}`));
+          closeConfirmModal();
+          showToast('Message deleted');
+        } catch (err) {
+          console.error('Delete failed', err);
+          showToast('Failed to delete', 'error');
+        }
+      },
+    });
+  }, [msgRoot, showToast]);
+
+  const handleSaveEdit = useCallback(async (id, newText) => {
+    if (!msgRoot || !id) return;
+    try {
+      await update(ref(db, `${msgRoot}/${id}`), {
+        text: newText,
+        editedAt: Date.now(),
+      });
+      setEditingMessage(null);
+      showToast('Message edited');
+    } catch (err) {
+      console.error('Edit failed', err);
+      showToast('Failed to edit', 'error');
+    }
+  }, [msgRoot, showToast]);
+
+  const handleSaveMediaCaption = useCallback(async (id, newCaption) => {
+    if (!msgRoot || !id) return;
+    try {
+      await update(ref(db, `${msgRoot}/${id}`), {
+        caption: newCaption,
+        text: newCaption,
+        editedAt: Date.now(),
+      });
+      setEditingMediaMessage(null);
+      showToast('Caption updated');
+    } catch (err) {
+      console.error('Caption edit failed', err);
+      showToast('Failed to update caption', 'error');
+    }
+  }, [msgRoot, showToast]);
+
+  /* ---------------- pin / bookmark ---------------- */
+  const handlePinMessage = useCallback(async (msg) => {
+    if (!user?.uid || !chatKey || !msg?.id) return;
+    const next = pinnedMessageId === msg.id ? null : msg.id;
+    try {
+      await update(ref(db, `users/${user.uid}/chatPrefs/${chatKey}`), {
+        pinnedMessageId: next,
+      });
+      setPinnedMessageId(next);
+      showToast(next ? 'Pinned' : 'Unpinned');
+    } catch (err) {
+      console.error('Pin failed', err);
+    }
+  }, [user?.uid, chatKey, pinnedMessageId, showToast]);
+
+  const handleBookmarkMessage = useCallback(async (msg) => {
+    if (!user?.uid || !chatKey || !msg?.id) return;
+    const isSaved = !!bookmarkedIds[msg.id];
+    try {
+      if (isSaved) {
+        await remove(ref(db, `users/${user.uid}/chatPrefs/${chatKey}/bookmarks/${msg.id}`));
+      } else {
+        await set(ref(db, `users/${user.uid}/chatPrefs/${chatKey}/bookmarks/${msg.id}`), true);
+      }
+      showToast(isSaved ? 'Removed from saved' : 'Saved');
+    } catch (err) {
+      console.error('Bookmark failed', err);
+    }
+  }, [user?.uid, chatKey, bookmarkedIds, showToast]);
+
+  /* ---------------- select mode ---------------- */
+  const handleToggleSelect = useCallback((msg) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(msg.id)) next.delete(msg.id);
+      else next.add(msg.id);
+      return next;
+    });
+  }, []);
+
+  const exitSelectMode = useCallback(() => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const handleCopySelected = useCallback(() => {
+    const texts = allMessages
+      .filter((m) => selectedIds.has(m.id))
+      .map((m) => m.text || m.caption || '')
+      .filter(Boolean)
+      .join('\n');
+    if (texts) {
+      navigator.clipboard?.writeText(texts).then(
+        () => showToast('Copied'),
+        () => showToast('Copy failed', 'error')
+      );
+    }
+    exitSelectMode();
+  }, [allMessages, selectedIds, showToast, exitSelectMode]);
+
+  const handleDeleteSelected = useCallback(() => {
+    if (!msgRoot || selectedIds.size === 0) return;
+    openConfirmModal({
+      title: `Delete ${selectedIds.size} message(s)?`,
+      message: 'This cannot be undone.',
+      confirmText: 'Delete',
+      onConfirm: async () => {
+        try {
+          const updates = {};
+          selectedIds.forEach((id) => { updates[`${msgRoot}/${id}`] = null; });
+          await update(ref(db), updates);
+          exitSelectMode();
+          closeConfirmModal();
+          showToast('Deleted');
+        } catch (err) {
+          console.error('Bulk delete failed', err);
+          showToast('Failed to delete', 'error');
+        }
+      },
+    });
+  }, [msgRoot, selectedIds, showToast, exitSelectMode]);
+
+  /* ---------------- archive ---------------- */
+  const handleArchive = useCallback(async (msg) => {
+    if (!user?.uid) return;
+    try {
+      await saveToEchoArchive(user.uid, msg);
+      showToast('Saved to ECHO Archive');
+    } catch (err) {
+      console.error('Archive failed', err);
+      showToast('Failed to archive', 'error');
+    }
+  }, [user?.uid, showToast]);
+
+  /* ---------------- menu builder ---------------- */
+  const handleLongPress = useCallback((msg, rect) => {
+    const isOwn = msg.senderId === user?.uid || msg.uid === user?.uid;
+    setMenu({ msg, rect, isOwn });
+    hapticLight();
+  }, [user?.uid]);
+
+  const closeMenu = useCallback(() => setMenu(null), []);
+
+  const menuItems = useMemo(() => {
+    if (!menu) return [];
+    const msg = menu.msg;
+    const isOwn = menu.isOwn;
+    const items = [];
+
+    items.push({
+      key: 'reply',
+      label: 'Reply',
+      icon: 'fa-reply',
+      onPress: () => setReplyTo(msg),
     });
 
-    try {
-      const url = await uploadToCloudinary(file, (p) => patchLocal(id, { uploadProgress: p }));
-      await set(msgRef, { ...safePayload, mediaUrl: url });
-      removeLocal(id);
-      playSendSound();
-      const label = mediaType === 'video' ? '🎬 Video' : mediaType === 'audio' ? '🎤 Voice note' : '📷 Image';
-      await updateChatMeta(label);
-      clearMessageCache(chatKey);
-    } catch (err) {
-      console.error('Media send failed:', err);
-      patchLocal(id, { isUploading: false, uploadFailed: true, uploadProgress: 0 });
+    if (msg.text || msg.caption) {
+      items.push({
+        key: 'copy',
+        label: 'Copy text',
+        icon: 'fa-copy',
+        onPress: () => {
+          navigator.clipboard?.writeText(msg.text || msg.caption || '').then(
+            () => showToast('Copied'),
+            () => showToast('Copy failed', 'error')
+          );
+        },
+      });
+    }
+
+    items.push({
+      key: 'bookmark',
+      label: bookmarkedIds[msg.id] ? 'Remove saved' : 'Save message',
+      icon: 'fa-bookmark',
+      onPress: () => handleBookmarkMessage(msg),
+    });
+
+    items.push({
+      key: 'pin',
+      label: pinnedMessageId === msg.id ? 'Unpin' : 'Pin message',
+      icon: 'fa-thumbtack',
+      onPress: () => handlePinMessage(msg),
+    });
+
+    items.push({
+      key: 'archive',
+      label: 'Save to archive',
+      icon: 'fa-box-archive',
+      onPress: () => handleArchive(msg),
+    });
+
+    items.push({
+      key: 'select',
+      label: 'Select',
+      icon: 'fa-check-square',
+      onPress: () => {
+        setSelectMode(true);
+        setSelectedIds(new Set([msg.id]));
+      },
+    });
+
+    if (isOwn && (msg.text || msg.caption)) {
+      items.push({
+        key: 'edit',
+        label: 'Edit',
+        icon: 'fa-pen',
+        onPress: () => {
+          if (msg.mediaType) setEditingMediaMessage(msg);
+          else setEditingMessage(msg);
+        },
+      });
+    }
+
+    if (isOwn) {
+      items.push({
+        key: 'delete',
+        label: 'Delete',
+        icon: 'fa-trash',
+        danger: true,
+        onPress: () => handleDeleteMessage(msg),
+      });
+    }
+
+    return items;
+  }, [
+    menu, bookmarkedIds, pinnedMessageId, showToast,
+    handleBookmarkMessage, handlePinMessage, handleArchive, handleDeleteMessage,
+  ]);
+
+  /* ---------------- input handlers ---------------- */
+  const handleInputChange = (e) => {
+    setNewMessage(e.target.value);
+    broadcastTyping();
+  };
+
+  const handleKeyDown = (e) => {
+    if (enterToSend && e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSendText();
     }
   };
 
-  const retryMedia = (msg) => {
-    if (!msg?._file) return;
-    sendMedia({
-      file: msg._file,
-      mediaType: msg.mediaType,
-      caption: msg.caption,
-      duration: msg.duration,
-      replyCtx: msg.replyTo,
-      noteCtx: msg.replyToNote,
-      existingId: msg.id,
-    });
+  const handleEmojiSelect = (emoji) => {
+    setNewMessage((prev) => prev + emoji);
+    setShowEmojiPicker(false);
+    inputRef.current?.focus();
   };
 
-  const handleFileSelect = (e) => {
+  const handleFilePick = (e) => {
     const file = e.target.files?.[0];
-    e.target.value = '';
     if (!file) return;
-    if (file.size > MAX_FILE_SIZE) { setFileSizeError(true); return; }
-    if (!file.type.startsWith('image/') && !file.type.startsWith('video/')) {
-      showToast('Only images and videos are supported', 'error');
+    if (file.size > MAX_FILE_SIZE) {
+      setFileSizeError(true);
+      showToast('File too large (max 20MB)', 'error');
       return;
     }
     setSelectedFile(file);
     setPreviewUrl(URL.createObjectURL(file));
     setCaptionText('');
+    e.target.value = '';
   };
 
-  const cancelFileSelection = () => { setSelectedFile(null); setPreviewUrl(null); setCaptionText(''); };
+  const closeMediaPreview = () => {
+    if (previewUrl) {
+      try { URL.revokeObjectURL(previewUrl); } catch (_) { /* ignore */ }
+    }
+    setSelectedFile(null);
+    setPreviewUrl(null);
+    setCaptionText('');
+    setFileSizeError(false);
+  };
 
-  const sendSelectedFile = () => {
+  const sendPreviewedMedia = async () => {
     if (!selectedFile) return;
-    hapticSend();
     const file = selectedFile;
-    const caption = captionText;
-    const replyCtx = replyTo;
-    const noteCtx = replyToNote;
-    cancelFileSelection();
-    setReplyTo(null);
-    setReplyToNote(null);
-    sendMedia({
-      file,
-      mediaType: file.type.startsWith('video/') ? 'video' : 'image',
-      caption,
-      replyCtx,
-      noteCtx,
-    });
+    const caption = captionText.trim();
+    closeMediaPreview();
+    await handleSendMedia({ file, caption });
   };
 
-  const handleVoiceSend = async (audioBlob, duration) => {
+  const toggleVoiceRecorder = () => setShowVoiceRecorder((v) => !v);
+
+  const handleVoiceSend = async (blob, duration) => {
     setShowVoiceRecorder(false);
-    if (!audioBlob) return;
-    sendMedia({ file: audioBlob, mediaType: 'audio', duration });
+    if (!blob) return;
+    const file = new File([blob], `voice_${Date.now()}.webm`, { type: blob.type || 'audio/webm' });
+    await handleSendMedia({ file, caption: '' });
+    if (duration) {
+      // duration stored in message once uploaded (optional)
+    }
   };
 
-  /* ---------------- message actions ---------------- */
-  const handleReply = (msg) => {
-    const own = String(msg.senderId || '') === String(user?.uid || '');
-    const senderName = own
-      ? currentUserProfile?.name || 'You'
-      : isGroupChat ? msg.senderName || 'Member' : partnerProfile?.name || 'User';
-    const textSnippet = msg.type === 'media'
-      ? msg.caption || (msg.mediaType === 'video' ? '🎬 Video' : msg.mediaType === 'audio' ? '🎤 Voice note' : '📷 Image')
-      : msg.text || 'Message';
-    setReplyTo({ messageId: msg.id, senderName, messageType: msg.type || 'text', textSnippet });
-    setTimeout(() => inputRef.current?.focus(), 80);
-  };
-
-  const handleReactionSelect = async (emojiKey, msg) => {
-    if (!msg || msg._local || !msgRoot) return;
-    hapticLight();
-    const reactionRef = ref(db, `${msgRoot}/${msg.id}/reactions/${user.uid}`);
+  const unblock = async () => {
+    if (!user?.uid || !userId) return;
     try {
-      if (msg.reactions?.[user.uid] === emojiKey) await remove(reactionRef);
-      else await set(reactionRef, emojiKey);
+      await unblockUser(user.uid, userId);
+      setBlockedByMe(false);
+      showToast('Unblocked');
     } catch (err) {
-      console.warn('Reaction error:', err);
+      console.error('Unblock failed', err);
     }
   };
 
-  const handleDoubleTap = (msg) => {
-    if (msg._local || !REACTION_EMOJIS[0]) return;
-    handleReactionSelect(REACTION_EMOJIS[0].key, msg);
-  };
-
-  const handleCopy = async (msg) => {
+  const setWallpaper = async (id) => {
+    if (!user?.uid || !chatKey) return;
     try {
-      await navigator.clipboard.writeText(msg.text || msg.caption || msg.mediaUrl || '');
-      showToast('Copied');
-    } catch (_) {
-      showToast('Could not copy', 'error');
+      await update(ref(db, `users/${user.uid}/chatPrefs/${chatKey}`), {
+        wallpaperId: id,
+      });
+      setWallpaperId(id);
+      setShowWallpaperPicker(false);
+    } catch (err) {
+      console.error('Wallpaper set failed', err);
     }
   };
 
-  const handlePinMessage = async (msg) => {
-    if (!chatKey) return;
-    try {
-      await set(ref(db, `chats/${chatKey}/pinnedMessageId`), pinnedMessageId === msg.id ? null : msg.id);
-    } catch (_) {
-      showToast('Could not pin message', 'error');
-    }
-  };
-
-  const saveMessageToArchive = async (msg) => {
-    try {
-      const { _local, _file, ...rest } = msg;
-      await saveToEchoArchive(user.uid, rest);
-      setBookmarkedIds((prev) => ({ ...prev, [msg.id]: true }));
-      showToast('Saved');
-    } catch (_) {
-      showToast('Could not save', 'error');
-    }
-  };
-
-  const handleEditMessage = (msg) => {
-    if (msg.senderId !== user?.uid) return;
-    if (msg.type === 'media') setEditingMediaMessage(msg);
-    else setEditingMessage(msg);
-  };
-
-  const saveEditedMessage = async (newText) => {
-    if (!editingMessage || !msgRoot) return;
-    const text = (newText || '').trim();
-    if (!text) return;
-    try {
-      await update(ref(db, `${msgRoot}/${editingMessage.id}`), { text, isEdited: true });
-    } catch (_) {
-      showToast('Edit failed', 'error');
-    }
-    setEditingMessage(null);
-  };
-
-  const saveEditedCaption = async (caption) => {
-    if (!editingMediaMessage || !msgRoot) return;
-    try {
-      await update(ref(db, `${msgRoot}/${editingMediaMessage.id}`), { caption: (caption || '').trim(), isEdited: true });
-    } catch (_) {
-      showToast('Edit failed', 'error');
-    }
-    setEditingMediaMessage(null);
-  };
-
-  /* ---------------- selection mode ---------------- */
-  const exitSelectMode = () => { setSelectMode(false); setSelectedIds(new Set()); };
-  const enterSelectMode = (msg) => { setSelectMode(true); setSelectedIds(new Set(msg ? [msg.id] : [])); };
-  const toggleSelect = (msg) => {
-    setSelectedIds((prev) => {
-      const n = new Set(prev);
-      if (n.has(msg.id)) n.delete(msg.id); else n.add(msg.id);
-      return n;
-    });
-  };
-
-  const confirmDelete = (targets) => {
-    if (!targets.length || !msgRoot) return;
-    if (targets.some((m) => m.senderId !== user?.uid)) return;
-    const n = targets.length;
+  const clearChat = () => {
+    if (!msgRoot) return;
     openConfirmModal({
-      title: n > 1 ? `Delete ${n} messages` : 'Delete message',
-      message: 'This cannot be undone.',
-      confirmText: 'Delete',
+      title: 'Clear chat?',
+      message: 'All messages in this chat will be permanently deleted.',
+      confirmText: 'Clear',
       onConfirm: async () => {
-        closeConfirmModal();
-        const upd = {};
-        targets.forEach((m) => {
-          if (m._local) removeLocal(m.id);
-          else upd[`${msgRoot}/${m.id}`] = null;
-        });
         try {
-          if (Object.keys(upd).length) await update(ref(db), upd);
-          clearMessageCache(chatKey);
-        } catch (_) {
-          showToast('Delete failed', 'error');
+          await remove(ref(db, msgRoot));
+          closeConfirmModal();
+          showToast('Chat cleared');
+        } catch (err) {
+          console.error('Clear failed', err);
+          showToast('Failed to clear chat', 'error');
         }
-        exitSelectMode();
       },
     });
   };
 
-  const selectedMessages = useMemo(
-    () => displayMessages.filter((m) => selectedIds.has(m.id)),
-    [displayMessages, selectedIds]
-  );
-  const canDeleteSelected = selectedMessages.length > 0 && selectedMessages.every((m) => m.senderId === user?.uid);
-
-  const copySelected = async () => {
-    const text = selectedMessages.map((m) => m.text || m.caption || '').filter(Boolean).join('\n');
-    if (!text) { showToast('Nothing to copy', 'error'); return; }
-    try { await navigator.clipboard.writeText(text); showToast('Copied'); } catch (_) { showToast('Could not copy', 'error'); }
-    exitSelectMode();
-  };
-
-  /* ---------------- long-press menu ---------------- */
-  const getAppliedStyle = (msg, isOwn) => {
-    const senderIsPlus = msg.senderIsPlus || (isOwn && isEchoPlus);
-    return isOwn ? myChatStyle || '' : senderIsPlus ? msg.senderChatStyle || '' : '';
-  };
-
-  const openMenu = (msg, rect) => {
-    if (selectMode) return;
-    if (msg.isUploading || msg.pending) return;
-    hapticLight();
-    setMenu({ msg, rect, isOwn: String(msg.senderId || '') === String(user?.uid || '') });
-  };
-
-  const buildMenuItems = (msg, isOwn) => {
-    if (msg.uploadFailed) {
-      return [
-        { key: 'retry', label: 'Retry upload', icon: 'fa-redo', onPress: () => retryMedia(msg) },
-        { key: 'discard', label: 'Discard', icon: 'fa-trash', danger: true, onPress: () => removeLocal(msg.id) },
-      ];
-    }
-    const items = [{ key: 'reply', label: 'Reply', icon: 'fa-reply', onPress: () => handleReply(msg) }];
-    if (msg.text || msg.caption || msg.mediaUrl) items.push({ key: 'copy', label: 'Copy', icon: 'fa-copy', onPress: () => handleCopy(msg) });
-    items.push({
-      key: 'pin',
-      label: pinnedMessageId === msg.id ? 'Unpin' : 'Pin',
-      icon: 'fa-thumbtack',
-      onPress: () => handlePinMessage(msg),
-    });
-    items.push({ key: 'save', label: 'Save', icon: 'fa-bookmark', onPress: () => saveMessageToArchive(msg) });
-    if (isOwn && !(msg.type === 'media' && msg.mediaType === 'audio')) {
-      items.push({ key: 'edit', label: 'Edit', icon: 'fa-pen', onPress: () => handleEditMessage(msg) });
-    }
-    items.push({ key: 'select', label: 'Select', icon: 'fa-check-circle', onPress: () => enterSelectMode(msg) });
-    if (isOwn) items.push({ key: 'delete', label: 'Delete', icon: 'fa-trash', danger: true, onPress: () => confirmDelete([msg]) });
-    return items;
-  };
-
-  /* ---------------- wallpaper / mute / block ---------------- */
-  const handleWallpaperSelect = async (id) => {
-    setWallpaperId(id);
-    if (!chatKey) return;
-    try { await update(ref(db, `chats/${chatKey}`), { wallpaper: id }); } catch (_) { /* ignore */ }
-  };
-
-  const handleCustomWallpaperSelect = async (url) => {
-    setCustomWallpaper(url);
-    setWallpaperId('__custom__');
-    if (!chatKey) return;
-    try { await update(ref(db, `chats/${chatKey}`), { wallpaper: '__custom__', customWallpaper: url }); } catch (_) { /* ignore */ }
-  };
-
-  const handleToggleMute = async () => {
-    if (!user?.uid || !userId || !isGroupChat) return;
-    hapticLight();
-    const next = !isMuted;
-    try {
-      await update(ref(db, `userChats/${user.uid}/${userId}`), { muted: next });
-      setIsMuted(next);
-      showToast(next ? 'Group muted' : 'Group unmuted');
-    } catch (_) {
-      showToast('Could not update', 'error');
-    }
-  };
-
-  const handleUnblock = async () => {
-    try {
-      await unblockUser(user.uid, userId);
-      setBlockedByMe(false);
-      showToast('User unblocked');
-    } catch (_) {
-      showToast('Could not unblock', 'error');
-    }
-  };
-
-  /* ---------------- derived UI values ---------------- */
-  const displayName = isGroupChat
+  /* ---------------- derived render helpers ---------------- */
+  const partnerName = isGroupChat
     ? groupData?.name || 'Group'
-    : sanitizeName(location.state?.userName || partnerProfile?.name, userId);
+    : sanitizeName(partnerProfile?.displayName || partnerProfile?.name, userId);
 
-  const wallpaperStyle = useMemo(() => {
-    const fallback = { background: 'transparent' };
-    if (wallpaperId === '__custom__' && customWallpaper) {
-      return { backgroundImage: `url(${customWallpaper})`, backgroundSize: 'cover', backgroundPosition: 'center' };
-    }
-    if (!wallpaperId || wallpaperId === 'default') return fallback;
-    let wp = null;
-    try { wp = getWallpaperById(wallpaperId); } catch (_) { wp = null; }
-    if (!wp) return fallback;
-    if (typeof wp === 'string') return { background: wp };
-    if (wp.style && typeof wp.style === 'object') return wp.style;
-    const bg = wp.css || wp.background || wp.value || wp.gradient;
-    if (bg) return { background: bg };
-    const img = wp.url || wp.image;
-    if (img) return { backgroundImage: `url(${img})`, backgroundSize: 'cover', backgroundPosition: 'center' };
-    return fallback;
+  const partnerPhoto = isGroupChat
+    ? groupData?.photoURL
+    : partnerProfile?.photoURL || partnerProfile?.avatar;
+
+  const wallpaper = useMemo(() => {
+    if (customWallpaper) return { url: customWallpaper };
+    try { return getWallpaperById(wallpaperId); } catch { return null; }
   }, [wallpaperId, customWallpaper]);
 
   const pinnedMessage = useMemo(
-    () => (pinnedMessageId ? displayMessages.find((m) => m.id === pinnedMessageId) : null),
-    [pinnedMessageId, displayMessages]
+    () => allMessages.find((m) => m.id === pinnedMessageId) || null,
+    [allMessages, pinnedMessageId]
   );
 
-  const hasText = !!newMessage.trim();
+  // Group + date separators
+  const renderedRows = useMemo(() => {
+    const rows = [];
+    let lastDay = null;
+    let lastSender = null;
+    let lastTime = 0;
 
-  /* ---------------- rendering ---------------- */
-  const renderNoteQuote = (note) => (
-    <div className="cv-note-quote">
-      <div className="cv-note-quote-name">{note.authorName || 'Note'} · Note</div>
-      <div className="cv-note-quote-text">{note.text || (note.song ? '🎵 Song' : '')}</div>
-    </div>
-  );
+    allMessages.forEach((msg, idx) => {
+      const ts = msgTime(msg);
+      const day = startOfDay(ts);
+      if (day !== lastDay) {
+        rows.push({ type: 'date', key: `day_${day}`, ts });
+        lastDay = day;
+        lastSender = null;
+        lastTime = 0;
+      }
 
-  const renderReactions = (msg, isOwn) => {
-    if (!msg.reactions) return null;
-    const groups = {};
-    Object.entries(msg.reactions).forEach(([uid, emoji]) => {
-      if (!groups[emoji]) groups[emoji] = [];
-      groups[emoji].push(uid);
+      const sender = msg.senderId || msg.uid;
+      const withinWindow = ts - lastTime < GROUP_WINDOW_MS;
+      const sameSender = sender === lastSender && withinWindow;
+
+      // determine grouping vs next
+      const next = allMessages[idx + 1];
+      const nextTs = next ? msgTime(next) : 0;
+      const nextSender = next ? (next.senderId || next.uid) : null;
+      const nextSame = next && nextSender === sender && nextTs - ts < GROUP_WINDOW_MS;
+
+      let group = 'single';
+      if (sameSender && nextSame) group = 'top';
+      else if (sameSender && !nextSame) group = 'bottom';
+      else if (!sameSender && nextSame) group = 'mid';
+      else group = 'single';
+
+      rows.push({ type: 'message', key: msg.id, msg, group });
+      lastSender = sender;
+      lastTime = ts;
     });
-    return (
-      <div className={`cv-reactions ${isOwn ? 'own' : 'partner'}`}>
-        {Object.entries(groups).map(([emojiKey, uids]) => (
-          <button
-            type="button"
-            key={emojiKey}
-            className={`cv-reaction${uids.includes(user?.uid) ? ' mine' : ''}`}
-            onClick={() => handleReactionSelect(emojiKey, msg)}
-          >
-            <span>{REACTION_LABELS[emojiKey] || emojiKey}</span>
-            {uids.length > 1 && <span className="cv-reaction-count">{uids.length > 99 ? '99+' : uids.length}</span>}
-          </button>
-        ))}
-      </div>
-    );
-  };
+    return rows;
+  }, [allMessages]);
 
-  const renderBubbleBody = (msg) => {
-    const quote = msg.replyTo && (
-      <div className="cv-reply-hit" onClick={(e) => { e.stopPropagation(); scrollToMessage(msg.replyTo.messageId); }}>
-        <RepliedMessage replyTo={msg.replyTo} />
-      </div>
-    );
-    if (msg.type === 'media') {
-      const openMedia = () => {
-        if (selectMode || msg.isUploading || msg.uploadFailed) return;
-        if (msg.mediaType === 'video') setVideoPreview({ src: msg.mediaUrl });
-        else setMediaPreview({ src: msg.mediaUrl, type: 'image' });
-      };
-      return (
-        <>
-          {quote}
-          {msg.replyToNote && renderNoteQuote(msg.replyToNote)}
-          {msg.mediaType === 'audio' ? (
-            <AudioPlayer src={msg.mediaUrl} />
-          ) : (
-            <div className="chat-media-wrapper" onClick={openMedia}>
-              <ChatMediaMessage message={msg} isUploading={msg.isUploading} uploadProgress={msg.uploadProgress} />
-            </div>
-          )}
-          {msg.uploadFailed && (
-            <button type="button" className="cv-retry" onClick={() => retryMedia(msg)}>
-              <i className="fas fa-redo" /> Upload failed · Tap to retry
-            </button>
-          )}
-          {msg.caption && (
-            <div className="message-text">{linkify(msg.caption)}{msg.isEdited && <span className="message-edited-badge">edited</span>}</div>
-          )}
-        </>
-      );
-    }
-    return (
-      <>
-        {quote}
-        {msg.replyToNote && renderNoteQuote(msg.replyToNote)}
-        <div className={`message-text${isEmojiOnly(msg.text) ? ' cv-emoji-only' : ''}`}>
-          {linkify(msg.text)}
-          {msg.isEdited && <span className="message-edited-badge">edited</span>}
-        </div>
-      </>
-    );
-  };
-
-  const renderCloneBubble = (msg, isOwn) => {
-    let body;
-    if (msg.type === 'media') {
-      let media;
-      if (msg.mediaType === 'audio') media = <div className="cv-clone-audio"><i className="fas fa-microphone" /> Voice note</div>;
-      else if (msg.mediaType === 'video') media = <video className="cv-clone-media" src={msg.mediaUrl} muted playsInline preload="metadata" />;
-      else media = <img className="cv-clone-media" src={msg.mediaUrl} alt="" />;
-      body = (
-        <>
-          {media}
-          {msg.caption && <div className="message-text">{linkify(msg.caption)}</div>}
-        </>
-      );
-    } else {
-      body = <div className={`message-text${isEmojiOnly(msg.text) ? ' cv-emoji-only' : ''}`}>{linkify(msg.text)}</div>;
-    }
-    return (
-      <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${getAppliedStyle(msg, isOwn)}`}>
-        {body}
-        <div className="message-meta-time">{formatMsgClock(msg)}</div>
-      </div>
-    );
-  };
-
-  const renderMessage = (entry) => {
-    const { msg, groupTop, groupBottom, isSystem } = entry;
-    if (isSystem) {
-      return <div key={msg.id} className="message-bubble system">{msg.text}</div>;
-    }
-    const isOwn = String(msg.senderId || '') === String(user?.uid || '');
-    const isPinned = pinnedMessageId === msg.id;
-    const showSenderName = isGroupChat && !isOwn && groupTop;
-    const appliedStyle = getAppliedStyle(msg, isOwn);
-    const rowClass = [
-      'message-row',
-      isOwn ? 'own' : 'partner',
-      groupTop ? 'group-top' : 'group-mid',
-      groupBottom ? 'group-bottom' : 'group-mid',
-      selectMode ? 'select-mode' : '',
-      selectedIds.has(msg.id) ? 'selected' : '',
-      menu?.msg?.id === msg.id ? 'cv-source-hidden' : '',
-    ].filter(Boolean).join(' ');
-
-    return (
-      <Fragment key={msg.id}>
-        {entry.showDateSeparator && (
-          <div className="chat-date-separator"><span>{entry.dateLabel}</span></div>
-        )}
-        <MessageRow
-          msg={msg}
-          isOwn={isOwn}
-          rowClass={rowClass}
-          selectMode={selectMode}
-          selected={selectedIds.has(msg.id)}
-          canReply={!msg._local && !msg.isUploading && !blockedByMe}
-          onLongPress={openMenu}
-          onReply={handleReply}
-          onDoubleTap={handleDoubleTap}
-          onToggleSelect={toggleSelect}
-          registerRef={registerRef}
-        >
-          {showSenderName && (
-            <div className="group-sender-name" style={{ color: senderColor(msg.senderId) }}>{msg.senderName || 'Member'}</div>
-          )}
-          <div
-            className={[
-              'message-bubble', isOwn ? 'own' : 'partner', appliedStyle,
-              isPinned ? 'pinned' : '',
-              msg.pending ? 'pending' : '',
-              highlightId === msg.id ? 'highlight-flash' : '',
-            ].filter(Boolean).join(' ')}
-          >
-            {isPinned && <span className="message-pin-badge"><i className="fas fa-thumbtack" style={{ fontSize: 9 }} /></span>}
-            {renderBubbleBody(msg)}
-            <div className="message-meta-time">
-              {formatMsgClock(msg)} <MessageReceipt msg={msg} isMe={isOwn} group={isGroupChat} />
-            </div>
-                    </div>
-          {renderReactions(msg, isOwn)}
-        </MessageRow>
-      </Fragment>
-    );
-  };
-
-  const handleKeyDown = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey && enterToSend && !e.nativeEvent?.isComposing) {
-      e.preventDefault();
-      handleSendText(e);
-    }
-  };
+  const myUid = user?.uid;
 
   return (
-    <>
-      <SEO title={`Chat with ${displayName}`} description={`Chat with ${displayName} on ECHO.`} />
-      <div className="chat-view" style={{ '--cv-msg-font': FONT_SIZE_MAP[fontSize] || FONT_SIZE_MAP.md }}>
-        {selectMode && (
-          <div className="select-top-bar">
-            <button type="button" className="select-top-btn" onClick={exitSelectMode}>Cancel</button>
-            <div className="select-top-title">{selectedIds.size ? `${selectedIds.size} selected` : 'Select messages'}</div>
+    <VideoAudioProvider>
+      <SEO title={`Chat with ${partnerName}`} />
+      <div
+        className="chat-view"
+        style={
+          wallpaper?.url
+            ? {
+                backgroundImage: `url(${wallpaper.url})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+              }
+            : undefined
+        }
+      >
+        {/* ---------- Header ---------- */}
+        <div className="chat-header">
+          <button
+            type="button"
+            className="chat-back-btn"
+            onClick={() => navigate(-1)}
+            aria-label="Back"
+          >
+            <i className="fas fa-chevron-left" />
+          </button>
+
+          <button
+            type="button"
+            className="chat-header-profile"
+            onClick={() =>
+              isGroupChat
+                ? navigate(`/group/${groupIdFromChat}`)
+                : navigate(`/profile/${userId}`)
+            }
+          >
+            <Avatar src={partnerPhoto} name={partnerName} size={38} />
+            <div className="chat-header-text">
+              <span className="chat-header-name">{partnerName}</span>
+              <span className="chat-header-status">
+                {partnerIsTyping ? (
+                  <em className="typing-text">typing…</em>
+                ) : isGroupChat ? (
+                  `${Object.keys(groupData?.members || {}).length} members`
+                ) : (
+                  'Tap for info'
+                )}
+              </span>
+            </div>
+          </button>
+
+          <button
+            type="button"
+            className={`chat-header-mute-btn${isMuted ? ' muted' : ''}`}
+            onClick={async () => {
+              if (!user?.uid || !chatKey) return;
+              try {
+                await update(ref(db, `users/${user.uid}/chatPrefs/${chatKey}`), {
+                  muted: !isMuted,
+                });
+                setIsMuted(!isMuted);
+              } catch (err) {
+                console.error(err);
+              }
+            }}
+            aria-label={isMuted ? 'Unmute' : 'Mute'}
+          >
+            <i className={`fas ${isMuted ? 'fa-bell-slash' : 'fa-bell'}`} />
+          </button>
+
+          <button
+            type="button"
+            className="chat-header-info-btn"
+            onClick={() => setShowMoreOptions((v) => !v)}
+            aria-label="Chat options"
+          >
+            <i className="fas fa-ellipsis-v" />
+          </button>
+        </div>
+
+        {/* ---------- More options dropdown ---------- */}
+        {showMoreOptions && (
+          <div className="chat-more-dropdown" onClick={() => setShowMoreOptions(false)}>
+            <div
+              className="chat-more-dropdown-inner"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <button
+                type="button"
+                className="chat-more-option"
+                onClick={() => { setShowWallpaperPicker(true); setShowMoreOptions(false); }}
+              >
+                <i className="fas fa-palette" /> Wallpaper
+              </button>
+              <button
+                type="button"
+                className="chat-more-option danger"
+                onClick={() => { clearChat(); setShowMoreOptions(false); }}
+              >
+                <i className="fas fa-trash" /> Clear chat
+              </button>
+            </div>
           </div>
         )}
 
-        <VideoAudioProvider>
-          <div
-            className="messages-container"
-            ref={messagesContainerRef}
-            onScroll={handleScroll}
-            style={wallpaperStyle}
+        {/* ---------- Pinned banner ---------- */}
+        {pinnedMessage && (
+          <button
+            type="button"
+            className="pinned-banner"
+            onClick={() => {
+              const el = messageRefs.current[pinnedMessage.id];
+              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }}
           >
-            {pinnedMessage && !selectMode && (
-              <div className="pinned-banner" onClick={() => scrollToMessage(pinnedMessage.id)}>
-                <span className="pinned-banner-icon"><i className="fas fa-thumbtack" /></span>
-                <div className="pinned-banner-body">
-                  <span className="pinned-banner-label">Pinned message</span>
-                  <span className="pinned-banner-text">
-                    {pinnedMessage.text || pinnedMessage.caption || (pinnedMessage.mediaType === 'audio' ? '🎤 Voice note' : pinnedMessage.mediaType === 'video' ? '🎬 Video' : '📷 Image')}
-                  </span>
+            <div className="pinned-banner-icon">
+              <i className="fas fa-thumbtack" />
+            </div>
+            <div className="pinned-banner-body">
+              <span className="pinned-banner-label">Pinned</span>
+              <span className="pinned-banner-text">
+                {pinnedMessage.text || pinnedMessage.caption || '[media]'}
+              </span>
+            </div>
+            <span
+              className="pinned-banner-close"
+              onClick={(e) => { e.stopPropagation(); handlePinMessage(pinnedMessage); }}
+            >
+              <i className="fas fa-times" />
+            </span>
+          </button>
+        )}
+
+        {/* ---------- Messages ---------- */}
+        <div
+          className="messages-container"
+          ref={messagesContainerRef}
+          onScroll={onMessagesScroll}
+        >
+          {loadingMessages && (
+            <>
+              <SkeletonMessage />
+              <SkeletonMessage own />
+              <SkeletonMessage />
+            </>
+          )}
+
+          {!loadingMessages && allMessages.length === 0 && (
+            <div className="telegram-empty-state">
+              <div className="telegram-empty-card">
+                <div className="telegram-empty-avatar">
+                  <Avatar src={partnerPhoto} name={partnerName} size={96} />
+                </div>
+                <div className="telegram-empty-name">{partnerName}</div>
+                <div className="telegram-empty-text">
+                  {isGroupChat
+                    ? 'This is the start of the group.'
+                    : `Say hi to ${partnerName}!`}
                 </div>
                 <button
                   type="button"
-                  className="pinned-banner-close"
-                  onClick={(e) => { e.stopPropagation(); handlePinMessage(pinnedMessage); }}
-                  aria-label="Unpin"
+                  className="telegram-empty-action"
+                  onClick={() => inputRef.current?.focus()}
                 >
-                  <i className="fas fa-times" />
+                  Send a message
                 </button>
               </div>
-            )}
+            </div>
+          )}
 
-            {loadingMessages && displayMessages.length === 0 ? (
-              <div className="chat-skeleton-list"><SkeletonMessage /><SkeletonMessage /><SkeletonMessage /></div>
-            ) : displayMessages.length === 0 ? (
-              /* ─── TELEGRAM STYLE EMPTY STATE ─── */
-              <div className="telegram-empty-state">
-                <div className="telegram-empty-card">
-                  <div className="telegram-empty-avatar">
-                    <Avatar 
-                      src={isGroupChat ? groupData?.avatar : partnerProfile?.avatar} 
-                      name={displayName} 
-                      size={100} 
+          {renderedRows.map((row) => {
+            if (row.type === 'date') {
+              return (
+                <div key={row.key} className="chat-date-separator">
+                  <span>{formatDayLabel(row.ts)}</span>
+                </div>
+              );
+            }
+            const msg = row.msg;
+            const isOwn = (msg.senderId || msg.uid) === myUid;
+            const groupClass =
+              row.group === 'top'
+                ? 'group-top'
+                : row.group === 'bottom'
+                ? 'group-bottom'
+                : row.group === 'mid'
+                ? 'group-mid'
+                : '';
+            const selected = selectedIds.has(msg.id);
+            const isPremium =
+              isPremiumSticker(msg.text) &&
+              !msg.mediaType &&
+              !msg.mediaUrl;
+
+            // If it's a premium sticker with NO reply, render it Telegram-style (no bubble)
+            if (isPremium && !msg.replyTo) {
+              return (
+                <MessageRow
+                  key={msg.id}
+                  msg={msg}
+                  isOwn={isOwn}
+                  rowClass={`message-row ${isOwn ? 'own' : 'partner'} ${groupClass} ${
+                    selectMode ? 'select-mode' : ''
+                  } ${selected ? 'selected' : ''} ${highlightId === msg.id ? 'highlight' : ''}`}
+                  selectMode={selectMode}
+                  selected={selected}
+                  canReply={!selectMode}
+                  onLongPress={handleLongPress}
+                  onReply={(m) => setReplyTo(m)}
+                  onDoubleTap={(m) => handleReact(m, 'heart')}
+                  onToggleSelect={handleToggleSelect}
+                  registerRef={registerRef}
+                >
+                  <div className="premium-sticker-message">
+                    {renderPremiumSticker(msg.text, 200)} {/* ✅ 200px size */}
+                    <div className="message-meta-row" style={{ justifyContent: 'center', marginTop: '-5px' }}>
+                      <span className="message-meta-time" style={{ color: 'var(--text-muted)', fontSize: 11 }}>
+                        {formatMsgClock(msg)}
+                      </span>
+                      <MessageReceipt msg={msg} isMe={isOwn} group={isGroupChat} />
+                    </div>
+                  </div>
+                </MessageRow>
+              );
+            }
+
+            return (
+              <MessageRow
+                key={msg.id}
+                msg={msg}
+                isOwn={isOwn}
+                rowClass={`message-row ${isOwn ? 'own' : 'partner'} ${groupClass} ${
+                  selectMode ? 'select-mode' : ''
+                } ${selected ? 'selected' : ''} ${highlightId === msg.id ? 'highlight' : ''}`}
+                selectMode={selectMode}
+                selected={selected}
+                canReply={!selectMode}
+                onLongPress={handleLongPress}
+                onReply={(m) => setReplyTo(m)}
+                onDoubleTap={(m) => handleReact(m, 'heart')}
+                onToggleSelect={handleToggleSelect}
+                registerRef={registerRef}
+              >
+                <div
+                  className={`message-bubble ${isOwn ? 'own' : 'partner'} ${
+                    isPremium ? 'premium-lottie-bubble' : ''
+                  } ${msg.editedAt ? 'edited' : ''}`}
+                  style={{ fontSize: FONT_SIZE_MAP[fontSize] }}
+                >
+                  {!isOwn && isGroupChat && (
+                    <div
+                      className="message-sender-name"
+                      style={{ color: senderColor(msg.senderId || msg.uid) }}
+                    >
+                      {sanitizeName(
+                        (groupData?.members?.[msg.senderId]?.displayName) ||
+                          msg.senderName,
+                        msg.senderId || msg.uid
+                      )}
+                    </div>
+                  )}
+
+                  {msg.replyTo && (
+                    <RepliedMessage
+                      replyTo={msg.replyTo}
+                      onClick={() => {
+                        const el = messageRefs.current[msg.replyTo.id];
+                        if (el) {
+                          el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                          setHighlightId(msg.replyTo.id);
+                          setTimeout(() => setHighlightId(null), 1200);
+                        }
+                      }}
                     />
-                  </div>
-                  <h2 className="telegram-empty-name">{displayName}</h2>
-                  <p className="telegram-empty-text">
-                    {isGroupChat 
-                      ? "This is the start of the group. Say hello to everyone!"
-                      : `This is the start of your direct message history with ${displayName}. Say hello!`}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              entries.map(renderMessage)
-            )}
+                  )}
 
-            {partnerIsTyping && !isGroupChat && (
-              <div className="message-row partner group-top">
-                <div className="message-stack partner">
-                  <div className="message-bubble partner">
-                    <div className="typing-indicator"><span /><span /><span /></div>
+                  {/* Premium Lottie sticker inside bubble (e.g., if replying) */}
+                  {isPremium ? (
+                    <div className="premium-lottie-message">
+                      {renderPremiumSticker(msg.text, 80)} {/* ✅ 80px inside bubble */}
+                    </div>
+                  ) : msg.mediaType ? (
+                    <ChatMediaMessage
+                      msg={msg}
+                      onOpenImage={(m) => setMediaPreview({ type: 'image', msg: m })}
+                      onOpenVideo={(m) => setMediaPreview({ type: 'video', msg: m })}
+                    />
+                  ) : (
+                    <div className="message-text">
+                      {isEmojiOnly(msg.text) ? (
+                        <span className="emoji-only" style={{ fontSize: '38px', lineHeight: 1.2 }}>
+                          {msg.text}
+                        </span>
+                      ) : (
+                        linkify(msg.text)
+                      )}
+                    </div>
+                  )}
+
+                  {/* Render received reaction pills */}
+                  {msg.reactions && Object.keys(msg.reactions).length > 0 && (
+                    <div className="message-reactions-row">
+                      {Object.entries(
+                        Object.values(msg.reactions).reduce((acc, key) => {
+                          acc[key] = (acc[key] || 0) + 1;
+                          return acc;
+                        }, {})
+                      ).map(([key, count]) => {
+                        const isMine = msg.reactions[myUid] === key;
+                        if (isPremiumSticker(key)) {
+                          return (
+                            <button
+                              type="button"
+                              key={key}
+                              className={`reaction-pill premium${isMine ? ' mine' : ''}`}
+                              onClick={() => handleReact(msg, key)}
+                            >
+                              {renderPremiumSticker(key, 20)}
+                              {count > 1 && <span>{count}</span>}
+                            </button>
+                          );
+                        }
+                        const def = REACTION_EMOJIS.find((r) => r.key === key);
+                        if (!def) return null;
+                        const Comp = def.Component;
+                        return (
+                          <button
+                            type="button"
+                            key={key}
+                            className={`reaction-pill${isMine ? ' mine' : ''}`}
+                            onClick={() => handleReact(msg, key)}
+                          >
+                            <span className="reaction-svg-wrap"><Comp /></span>
+                            {count > 1 && <span>{count}</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div className="message-meta-row">
+                    {msg.editedAt && <span className="message-edited-badge">edited</span>}
+                    <span className="message-meta-time">{formatMsgClock(msg)}</span>
+                    <MessageReceipt msg={msg} isMe={isOwn} group={isGroupChat} />
                   </div>
                 </div>
-              </div>
-            )}
-          </div>
-        </VideoAudioProvider>
+              </MessageRow>
+            );
+          })}
+        </div>
 
+        {/* ---------- Scroll FAB ---------- */}
         {!isNearBottom && (
-          <button type="button" className="chat-scroll-fab" onClick={() => scrollToBottom(true)} aria-label="Scroll to latest">
-            <i className="fas fa-chevron-down" />
-            {unreadWhileScrolled > 0 && <span>{unreadWhileScrolled > 99 ? '99+' : unreadWhileScrolled} new</span>}
+          <button
+            type="button"
+            className="chat-scroll-fab"
+            onClick={scrollToBottom}
+          >
+            {unreadWhileScrolled > 0 && <span>{unreadWhileScrolled}</span>}
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 16L6 10h12z" />
+            </svg>
           </button>
         )}
 
-        {showEmojiPicker && (
-          <ChatEmojiPicker
-            onClose={() => setShowEmojiPicker(false)}
-            onSelect={(emoji) => setNewMessage((prev) => prev + emoji)}
-            excludeRefs={[inputContainerRef]}
+        {/* ---------- Reply preview ---------- */}
+        {(replyTo || replyToNote) && (
+          <ReplyPreview
+            replyTo={replyTo || replyToNote}
+            onClose={() => { setReplyTo(null); setReplyToNote(null); }}
           />
         )}
 
-        {selectMode ? (
-          <div className="select-bottom-bar">
-            <button type="button" className="select-action" onClick={copySelected} disabled={!selectedMessages.length}>
-              <i className="fas fa-copy" style={{ fontSize: 18 }} /><span>Copy</span>
-            </button>
-            <button
-              type="button"
-              className="select-action danger"
-              onClick={() => confirmDelete(selectedMessages)}
-              disabled={!canDeleteSelected}
-            >
-              <i className="fas fa-trash" style={{ fontSize: 18 }} /><span>Delete</span>
-            </button>
-          </div>
-        ) : blockedByMe && !isGroupChat ? (
+        {/* ---------- Composer ---------- */}
+        {blockedByMe ? (
           <div className="blocked-composer-bar">
-            <span>You blocked this user.</span>
-            <button type="button" className="blocked-composer-unblock" onClick={handleUnblock}>Unblock</button>
+            <span>You blocked this user</span>
+            <button type="button" className="blocked-composer-unblock" onClick={unblock}>
+              Unblock
+            </button>
           </div>
         ) : (
-          <form className="chat-input-container" onSubmit={handleSendText} ref={inputContainerRef}>
-            {replyTo && <ReplyPreview replyTo={replyTo} onCancel={() => setReplyTo(null)} />}
-            {replyToNote && (
-              <div className="cv-note-reply-bar">
-                <div className="cv-note-reply-text">
-                  <strong>Replying to {replyToNote.authorName}’s note</strong>
-                  <span>{replyToNote.text || (replyToNote.song ? '🎵 Song' : '')}</span>
-                </div>
-                <button type="button" className="chat-more-btn" onClick={() => setReplyToNote(null)} aria-label="Cancel reply">
-                  <i className="fas fa-times" />
-                </button>
-              </div>
+          <div className="chat-input-container" ref={inputContainerRef}>
+                        {showEmojiPicker && (
+              <PremiumEmojiPicker 
+                isEchoPlus={isEchoPlus}
+                onClose={() => setShowEmojiPicker(false)}
+                onSelect={(payload) => {
+                  if (payload.type === 'UPGRADE') {
+                    setShowPlusCheckout(true);
+                  } else if (payload.type === 'EMOJI') {
+                    setNewMessage(prev => prev + payload.value);
+                  } else if (payload.type === 'STICKER') {
+                    setNewMessage(prev => prev + payload.key);
+                  }
+                }} 
+              />
             )}
-            <div className="chat-input-row">
-              <div className="chat-more-wrapper" ref={moreOptionsRef}>
-                <button type="button" className="chat-more-btn" onClick={() => setShowMoreOptions((v) => !v)} aria-label="More">
-                  <i className="fas fa-ellipsis-h" />
-                </button>
-                {showMoreOptions && (
-                  <div className="chat-more-options-popup">
-                    <button type="button" className="chat-more-option" onClick={() => { setShowMoreOptions(false); fileInputRef.current?.click(); }}>
-                      <i className="fas fa-paperclip" /><span>Photo or video</span>
-                    </button>
-                    <button type="button" className="chat-more-option" onClick={() => { setShowMoreOptions(false); setShowWallpaperPicker(true); }}>
-                      <i className="fas fa-image" /><span>Wallpaper</span>
-                    </button>
-                    <button type="button" className="chat-more-option" onClick={() => { setShowMoreOptions(false); enterSelectMode(null); }}>
-                      <i className="fas fa-check-circle" /><span>Select messages</span>
-                    </button>
-                    {isGroupChat && (
-                      <button type="button" className="chat-more-option" onClick={() => { setShowMoreOptions(false); handleToggleMute(); }}>
-                        <i className={`fas ${isMuted ? 'fa-bell' : 'fa-bell-slash'}`} /><span>{isMuted ? 'Unmute' : 'Mute'}</span>
-                      </button>
-                    )}
-                  </div>
-                )}
-              </div>
-              <input type="file" ref={fileInputRef} accept="image/*,video/*" style={{ display: 'none' }} onChange={handleFileSelect} />
+            {showVoiceRecorder && (
+              <VoiceRecorder
+                onSend={handleVoiceSend}
+                onCancel={() => setShowVoiceRecorder(false)}
+              />
+            )}
 
-              <button type="button" className="chat-emoji-btn" onClick={() => setShowEmojiPicker((v) => !v)} aria-label="Emoji">
-                <i className="fas fa-smile" />
+            <div className="chat-input-row">
+              <button
+                type="button"
+                className="chat-attach-btn"
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Attach"
+              >
+                <i className="fas fa-paperclip" />
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*,video/*,audio/*"
+                style={{ display: 'none' }}
+                onChange={handleFilePick}
+              />
+
+              <button
+                type="button"
+                className="chat-emoji-btn"
+                onClick={() => setShowEmojiPicker((v) => !v)}
+                aria-label="Emoji"
+              >
+                <i className="far fa-smile" />
               </button>
 
-              <div className="chat-input-wrapper">
-                <textarea
-                  ref={inputRef}
-                  className="chat-input"
-                  placeholder={`Message ${displayName}...`}
-                  value={newMessage}
-                  onChange={(e) => { setNewMessage(e.target.value); if (e.target.value) handleTyping(); }}
-                  onKeyDown={handleKeyDown}
-                  rows={1}
-                />
-              </div>
+              <textarea
+                ref={inputRef}
+                className="chat-input"
+                placeholder="Message…"
+                rows={1}
+                value={newMessage}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                style={{ resize: 'none' }}
+              />
 
-              {hasText ? (
-                <button ref={sendButtonRef} type="submit" className="chat-send-btn cv-swap-in" aria-label="Send">
+              {newMessage.trim() ? (
+                <button
+                  ref={sendButtonRef}
+                  type="button"
+                  className="chat-send-btn"
+                  onClick={handleSendText}
+                  aria-label="Send"
+                >
                   <i className="fas fa-paper-plane" />
                 </button>
               ) : (
-                <button type="button" className="chat-voice-btn cv-swap-in" onClick={() => setShowVoiceRecorder(true)} aria-label="Record voice note">
+                <button
+                  type="button"
+                  className="chat-voice-btn"
+                  onClick={toggleVoiceRecorder}
+                  aria-label="Record voice"
+                >
                   <i className="fas fa-microphone" />
                 </button>
               )}
             </div>
-          </form>
+          </div>
         )}
 
+        {/* ---------- Select mode bars ---------- */}
+        {selectMode && (
+          <>
+            <div className="select-top-bar">
+              <button
+                type="button"
+                className="select-top-btn"
+                onClick={exitSelectMode}
+                aria-label="Cancel"
+              >
+                <i className="fas fa-times" />
+              </button>
+              <span className="select-top-title">{selectedIds.size} selected</span>
+            </div>
+            <div className="select-bottom-bar">
+              <button
+                type="button"
+                className="select-action"
+                onClick={handleCopySelected}
+                disabled={selectedIds.size === 0}
+              >
+                <i className="fas fa-copy" />
+                <span>Copy</span>
+              </button>
+              <button
+                type="button"
+                className="select-action danger"
+                onClick={handleDeleteSelected}
+                disabled={selectedIds.size === 0}
+              >
+                <i className="fas fa-trash" />
+                <span>Delete</span>
+              </button>
+            </div>
+          </>
+        )}
+
+        {/* ---------- Long-press menu ---------- */}
         {menu && (
           <MessageMenu
             menu={menu}
-            items={buildMenuItems(menu.msg, menu.isOwn)}
-            myReaction={menu.msg.reactions?.[user?.uid]}
-            onReact={(key) => handleReactionSelect(key, menu.msg)}
-            onClose={() => setMenu(null)}
+            items={menuItems}
+            myReaction={menu.msg?.reactions?.[myUid]}
+            onReact={(key) => handleReact(menu.msg, key)}
+            onClose={closeMenu}
           >
-            {renderCloneBubble(menu.msg, menu.isOwn)}
+            <div className="cv-menu-bubble-mirror">{menu.msg?.text || menu.msg?.caption || '[media]'}</div>
           </MessageMenu>
         )}
 
-        {selectedFile && previewUrl && createPortal(
-          <div className="media-preview-overlay">
-            <div className="media-preview-content">
-              <button type="button" className="media-preview-close" onClick={cancelFileSelection} aria-label="Cancel">
-                <i className="fas fa-times" />
-              </button>
-              <div className="media-preview-media">
-                {selectedFile.type.startsWith('video/')
-                  ? <video className="media-preview-video" src={previewUrl} controls playsInline />
-                  : <img className="media-preview-image" src={previewUrl} alt="" />}
-              </div>
-              <div className="media-preview-caption-row">
-                <textarea
-                  className="media-preview-caption"
-                  placeholder="Add a caption…"
-                  rows={1}
-                  value={captionText}
-                  onChange={(e) => setCaptionText(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendSelectedFile(); } }}
-                />
-              </div>
-              <button type="button" className="media-preview-send" onClick={sendSelectedFile}>Send</button>
-            </div>
-          </div>,
-          document.body
+        {/* ---------- Editing modals ---------- */}
+        {editingMessage && (
+          <EditMessageModal
+            message={editingMessage}
+            onSave={(text) => handleSaveEdit(editingMessage.id, text)}
+            onClose={() => setEditingMessage(null)}
+          />
         )}
-
-        {showVoiceRecorder && <VoiceRecorder onSend={handleVoiceSend} onCancel={() => setShowVoiceRecorder(false)} />}
-
-        <EditMessageModal
-          isOpen={!!editingMessage}
-          onClose={() => setEditingMessage(null)}
-          messageText={editingMessage?.text || ''}
-          onSave={saveEditedMessage}
-        />
-        <EditMediaCaptionModal
-          isOpen={!!editingMediaMessage}
-          onClose={() => setEditingMediaMessage(null)}
-          caption={editingMediaMessage?.caption || ''}
-          messageText={editingMediaMessage?.caption || ''}
-          onSave={saveEditedCaption}
-        />
-
-        {showWallpaperPicker && (
-          <WallpaperPicker
-            isOpen={showWallpaperPicker}
-            onClose={() => setShowWallpaperPicker(false)}
-            currentWallpaper={wallpaperId}
-            selectedId={wallpaperId}
-            customWallpaper={customWallpaper}
-            onSelect={handleWallpaperSelect}
-            onCustomSelect={handleCustomWallpaperSelect}
+        {editingMediaMessage && (
+          <EditMediaCaptionModal
+            message={editingMediaMessage}
+            onSave={(caption) => handleSaveMediaCaption(editingMediaMessage.id, caption)}
+            onClose={() => setEditingMediaMessage(null)}
           />
         )}
 
-        {mediaPreview && <MediaPreview src={mediaPreview.src} type={mediaPreview.type} alt="" onClose={() => setMediaPreview(null)} />}
-        {videoPreview && <CustomVideoPlayer src={videoPreview.src} onClose={() => setVideoPreview(null)} />}
+        {/* ---------- Wallpaper picker ---------- */}
+        {showWallpaperPicker && (
+          <WallpaperPicker
+            currentId={wallpaperId}
+            onSelect={setWallpaper}
+            onClose={() => setShowWallpaperPicker(false)}
+          />
+        )}
+
+        {/* ---------- Media preview (composer) ---------- */}
+        {selectedFile && (
+          <MediaPreview
+            file={selectedFile}
+            previewUrl={previewUrl}
+            caption={captionText}
+            onCaptionChange={setCaptionText}
+            onSend={sendPreviewedMedia}
+            onClose={closeMediaPreview}
+          />
+        )}
+
+        {/* ---------- Media lightbox ---------- */}
+        {mediaPreview && (
+          <Modal isOpen onClose={() => setMediaPreview(null)} size="fullscreen">
+            <img
+              src={mediaPreview.msg.mediaUrl}
+              alt={mediaPreview.msg.caption || 'image'}
+              className="media-lightbox-image"
+            />
+          </Modal>
+        )}
+        {videoPreview && (
+          <Modal isOpen onClose={() => setVideoPreview(null)} size="fullscreen">
+            <CustomVideoPlayer
+              src={videoPreview.msg.mediaUrl}
+              poster={videoPreview.msg.thumbnailUrl}
+              autoPlay
+            />
+          </Modal>
+        )}
+
+        {/* ---------- Confirm modal ---------- */}
         <ConfirmModal
           isOpen={confirmModal.isOpen}
-          onClose={closeConfirmModal}
-          onConfirm={confirmModal.onConfirm}
           title={confirmModal.title}
           message={confirmModal.message}
           confirmText={confirmModal.confirmText}
           cancelText={confirmModal.cancelText}
+          onConfirm={confirmModal.onConfirm}
+          onClose={closeConfirmModal}
         />
-        <Modal
-          isOpen={fileSizeError}
-          onClose={() => setFileSizeError(false)}
-          title="File Too Large"
-          message="The file exceeds the 20 MB limit."
-          type="error"
+
+        {/* ---------- Toast ---------- */}
+        {toast && <Toast message={toast.message} type={toast.type} />}
+
+        {/* ---------- ECHO Plus Checkout Modal ---------- */}
+        <PlusCheckout
+          isOpen={showPlusCheckout}
+          onClose={() => setShowPlusCheckout(false)}
         />
-        {toast && <Toast message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
       </div>
-    </>
+    </VideoAudioProvider>
   );
 };
 
