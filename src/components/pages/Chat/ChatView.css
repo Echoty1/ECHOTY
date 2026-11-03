@@ -4117,3 +4117,104 @@ body.light .cv-menu-item:hover {
     padding-bottom: calc(10px + env(safe-area-inset-bottom, 10px)) !important;
   }
 }
+/* ═══════════════════════════════════════════════════════════════
+   ★ MESSAGE RECEIPTS & CHAT LIST TICKS (Snapchat / WhatsApp Style)
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 1. Ticks inside the Chat View bubbles */
+.message-receipt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.message-receipt.sent { color: rgba(255, 255, 255, 0.55); }
+.message-receipt.delivered { color: rgba(255, 255, 255, 0.85); }
+.message-receipt.read { color: #60A5FA; } /* Blue */
+.message-receipt.pending { color: rgba(255, 255, 255, 0.5); }
+.message-receipt.failed { color: #ef4444; }
+
+/* Light Mode support for Chat View ticks */
+html[data-theme="light"] .message-receipt.sent,
+body.light .message-receipt.sent { color: rgba(0, 0, 0, 0.4); }
+html[data-theme="light"] .message-receipt.delivered,
+body.light .message-receipt.delivered { color: rgba(0, 0, 0, 0.6); }
+html[data-theme="light"] .message-receipt.read,
+body.light .message-receipt.read { color: #3B82F6; }
+
+/* 2. Ticks inside the Chat List */
+.chat-list-tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.chat-list-tick.read { color: #60A5FA; } /* Blue for read */
+.chat-list-tick.delivered { color: rgba(255, 255, 255, 0.6); } /* Grey for delivered */
+
+/* Light mode for Chat List ticks */
+html[data-theme="light"] .chat-list-tick.delivered,
+body.light .chat-list-tick.delivered { color: rgba(0, 0, 0, 0.5); }
+
+/* Truncate long text in the chat list */
+.chat-last-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Red dot / Alert styling for unread messages */
+.chat-item.unread-active .chat-name {
+  color: #FF3B30; /* Snapchat red */
+}
+.chat-item.unread-active .chat-last {
+  color: #FF3B30; /* Snapchat red */
+  font-weight: 700;
+}
+/* ═══════════════════════════════════════════════════════════════
+   ★ FINAL FIX: MESSAGE RECEIPTS & CHAT LIST TICKS
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 1. Ticks inside the Chat View bubbles */
+.message-receipt {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  vertical-align: middle;
+  margin-left: 4px;
+}
+.message-receipt.sent { color: rgba(255, 255, 255, 0.55); }
+.message-receipt.delivered { color: rgba(255, 255, 255, 0.85); }
+.message-receipt.read { color: #60A5FA; } /* Blue */
+.message-receipt.pending { color: rgba(255, 255, 255, 0.5); }
+.message-receipt.failed { color: #ef4444; }
+
+/* Light Mode support for Chat View ticks */
+html[data-theme="light"] .message-receipt.sent,
+body.light .message-receipt.sent { color: rgba(0, 0, 0, 0.4); }
+html[data-theme="light"] .message-receipt.delivered,
+body.light .message-receipt.delivered { color: rgba(0, 0, 0, 0.6); }
+html[data-theme="light"] .message-receipt.read,
+body.light .message-receipt.read { color: #3B82F6; }
+
+/* 2. Ticks inside the Chat List */
+.chat-list-tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.chat-list-tick.read { color: #60A5FA; } /* Blue for read */
+.chat-list-tick.delivered { color: rgba(255, 255, 255, 0.6); } /* Grey for delivered */
+
+/* Light mode for Chat List ticks */
+html[data-theme="light"] .chat-list-tick.delivered,
+body.light .chat-list-tick.delivered { color: rgba(0, 0, 0, 0.5); }
+
+/* Truncate long text in the chat list */
+.chat-last-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
