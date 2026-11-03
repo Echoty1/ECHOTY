@@ -16,7 +16,6 @@ const LoadingSpinner = () => (
 );
 
 // ─── Upload overlay (for sender) ──────────────────────────────
-
 const ZoomLightbox = ({ src, alt, caption, onClose }) => {
   const [scale, setScale] = useState(1);
   const [pos, setPos] = useState({ x: 0, y: 0 });
@@ -103,7 +102,7 @@ const InvalidMediaPlaceholder = () => (
   </div>
 );
 
-// ─── Fullscreen Video Player (internal – only used if disablePreview is false) ──
+// ─── Fullscreen Video Player (internal) ────────────────────────
 const FullscreenVideoPlayer = ({ src, onClose }) => {
   const videoRef = useRef(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -185,34 +184,9 @@ const FullscreenVideoPlayer = ({ src, onClose }) => {
   );
 };
 
-// ─── Inline Video Player ──────────────────────────────────────────
+// ─── Inline Video Player ──────────────────────────────────────
 const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading, disablePreview }) => {
   const { blobUrl, isLoading: cacheLoading, error: cacheError } = useCachedBlobUrl(src);
-
-  // ─── If uploading, show upload overlay ──────────────────────
-  if (isUploading) {
-    return (
-      <div className="chat-media-video-wrapper" style={{ position: 'relative', minHeight: '200px', background: '#000' }}>
-        <video
-          src={src}
-          className="chat-media-video"
-          autoPlay
-          loop
-          muted
-          playsInline
-          preload="metadata"
-          style={{ opacity: 0.3 }}
-        />
-        <UploadOverlay />
-      </div>
-    );
-  }
-
-  // ─── Invalid source ──────────────────────────────────────────
-  if (!src || src.startsWith('blob:')) {
-    return <InvalidMediaPlaceholder />;
-  }
-
   const videoRef = useRef(null);
   const [isMuted, setIsMuted] = useState(true);
   const [showFullscreen, setShowFullscreen] = useState(false);
@@ -221,7 +195,6 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading, disable
 
   const { activeUnmutedId, requestUnmute, muteAll } = useVideoAudio();
 
-  // ─── When blobUrl is ready, we consider the video loaded ──
   useEffect(() => {
     if (blobUrl && !cacheLoading && !cacheError) {
       setIsReady(true);
@@ -241,7 +214,7 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading, disable
       video.removeEventListener('canplay', onCanPlay);
       video.removeEventListener('error', onError);
     };
-  }, [blobUrl]); // re-run when blobUrl changes
+  }, [blobUrl]);
 
   useEffect(() => {
     if (!videoRef.current) return;
@@ -271,12 +244,36 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading, disable
   };
 
   const openFullscreen = () => {
-    if (disablePreview) return; // 🚫 block internal fullscreen
+    if (disablePreview) return;
     muteAll();
     setShowFullscreen(true);
   };
 
   const displaySrc = blobUrl || src;
+
+  // If uploading, show upload overlay
+  if (isUploading) {
+    return (
+      <div className="chat-media-video-wrapper" style={{ position: 'relative', minHeight: '200px', background: '#000' }}>
+        <video
+          src={src}
+          className="chat-media-video"
+          autoPlay
+          loop
+          muted
+          playsInline
+          preload="metadata"
+          style={{ opacity: 0.3 }}
+        />
+        <UploadOverlay />
+      </div>
+    );
+  }
+
+  // Invalid source
+  if (!src || src.startsWith('blob:')) {
+    return <InvalidMediaPlaceholder />;
+  }
 
   return (
     <>
@@ -320,10 +317,53 @@ const VideoPlayer = ({ videoId, src, caption, isMediaReady, isUploading, disable
   );
 };
 
-// ─── Image with Lightbox ──────────────────────────────────────────
+// ─── Image with Lightbox ──────────────────────────────────────
 const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading, disablePreview }) => {
   const cachedImage = useCachedImage(src, null);
   const imageSrc = cachedImage || src;
+  const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [loadError, setLoadError] = useState(false);
+  const [imageLoaded, setImageLoaded] = useState(false);
+
+  const isBlob = src?.startsWith('blob:');
+  const isReady = isMediaReady || imageLoaded || isBlob || (cachedImage !== null && cachedImage !== src);
+
+  useEffect(() => {
+    if (!src || isBlob || cachedImage) return;
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = src;
+    img.onload = () => { setImageLoaded(true); setLoadError(false); };
+    img.onerror = () => { setLoadError(true); setImageLoaded(true); };
+    if (img.complete) setImageLoaded(true);
+    return () => {
+      img.onload = null;
+      img.onerror = null;
+    };
+  }, [src, isBlob, cachedImage]);
+
+  const openLightbox = () => {
+    if (disablePreview) return;
+    setLightboxOpen(true);
+  };
+  const closeLightbox = () => setLightboxOpen(false);
+
+  const handleRetry = (e) => {
+    e.stopPropagation();
+    setLoadError(false);
+    setImageLoaded(false);
+    const img = new Image();
+    img.src = src;
+    img.onload = () => { setImageLoaded(true); setLoadError(false); };
+    img.onerror = () => { setLoadError(true); setImageLoaded(true); };
+    if (img.complete) setImageLoaded(true);
+  };
+
+  useEffect(() => {
+    if (lightboxOpen) document.body.classList.add('hide-bottom-nav');
+    else document.body.classList.remove('hide-bottom-nav');
+    return () => document.body.classList.remove('hide-bottom-nav');
+  }, [lightboxOpen]);
 
   // If uploading, show overlay
   if (isUploading) {
@@ -345,53 +385,6 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading, disablePre
     return <InvalidMediaPlaceholder />;
   }
 
-  const [lightboxOpen, setLightboxOpen] = useState(false);
-  const [loadError, setLoadError] = useState(false);
-  const [imageLoaded, setImageLoaded] = useState(false);
-
-  // For blob URLs, we consider it loaded immediately
-  const isBlob = src.startsWith('blob:');
-  const isReady = isMediaReady || imageLoaded || isBlob || (cachedImage !== null && cachedImage !== src);
-
-  useEffect(() => {
-    if (!src || isBlob || cachedImage) return;
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.src = src;
-    img.onload = () => { setImageLoaded(true); setLoadError(false); };
-    img.onerror = () => { setLoadError(true); setImageLoaded(true); };
-    if (img.complete) setImageLoaded(true);
-    return () => {
-      img.onload = null;
-      img.onerror = null;
-    };
-  }, [src, isBlob, cachedImage]);
-
-  const openLightbox = () => {
-    if (disablePreview) return; // 🚫 block internal lightbox
-    setLightboxOpen(true);
-  };
-
-  const closeLightbox = () => setLightboxOpen(false);
-
-  const handleRetry = (e) => {
-    e.stopPropagation();
-    setLoadError(false);
-    setImageLoaded(false);
-    const img = new Image();
-    img.src = src;
-    img.onload = () => { setImageLoaded(true); setLoadError(false); };
-    img.onerror = () => { setLoadError(true); setImageLoaded(true); };
-    if (img.complete) setImageLoaded(true);
-  };
-
-  useEffect(() => {
-    if (lightboxOpen) document.body.classList.add('hide-bottom-nav');
-    else document.body.classList.remove('hide-bottom-nav');
-    return () => document.body.classList.remove('hide-bottom-nav');
-  }, [lightboxOpen]);
-
-  // If it's a blob, we don't show error or loading spinner
   if (isBlob) {
     return (
       <>
@@ -406,7 +399,6 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading, disablePre
     );
   }
 
-  // For non-blob URLs
   return (
     <>
       <div className="chat-media-image-wrapper" onClick={loadError ? undefined : openLightbox}>
@@ -437,9 +429,16 @@ const ImageWithLightbox = ({ src, caption, isMediaReady, isUploading, disablePre
   );
 };
 
-// ─── Main Media Message ──────────────────────────────────────────
-const ChatMediaMessage = ({ message, isUploading = false, uploadProgress, disablePreview = false }) => {
-  const { mediaType, mediaUrl, caption, id, isMediaReady } = message;
+// ─── Main Media Message ──────────────────────────────────────
+const ChatMediaMessage = ({ message, msg, isUploading = false, uploadProgress, disablePreview = false }) => {
+  // ✅ SAFETY CHECK: Support both `msg` and `message` prop names, and prevent crash
+  const activeMsg = message || msg;
+  
+  if (!activeMsg) return null;
+  
+  const { mediaType, mediaUrl, caption, id, isMediaReady } = activeMsg;
+
+  if (!mediaType) return null;
 
   if (mediaType === 'video') {
     return (
