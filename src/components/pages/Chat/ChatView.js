@@ -35,6 +35,7 @@ import { isBlocked as checkIsBlocked, unblockUser } from '../../../services/bloc
 import { hapticSend, hapticLight } from '../../../utils/haptics';
 import { isGroupChatId, chatIdToGroupId } from '../../../utils/groupId';
 import { useSubscription } from '../../../contexts/SubscriptionContext';
+import Avatar from '../../common/Avatar'; // Ensure Avatar is imported
 import './ChatView.css';
 import './ChatViewLiquid.css';
 
@@ -294,6 +295,12 @@ const MessageRow = ({
     if (s.id !== e.pointerId || s.mode === 'long') return;
     const dx = e.clientX - s.x;
     const dy = e.clientY - s.y;
+    
+    // ✅ ANDROID FIX: If the user moves their finger even a little bit, cancel the long press
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+       if (s.timer) { clearTimeout(s.timer); s.timer = null; }
+    }
+
     if (s.mode === null) {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       clearTimers();
@@ -1650,9 +1657,23 @@ const ChatView = () => {
             {loadingMessages && displayMessages.length === 0 ? (
               <div className="chat-skeleton-list"><SkeletonMessage /><SkeletonMessage /><SkeletonMessage /></div>
             ) : displayMessages.length === 0 ? (
-              <div className="empty-chat-state">
-                <i className="fas fa-paper-plane empty-icon" />
-                <p>No messages yet. Say hello!</p>
+              /* ─── TELEGRAM STYLE EMPTY STATE ─── */
+              <div className="telegram-empty-state">
+                <div className="telegram-empty-card">
+                  <div className="telegram-empty-avatar">
+                    <Avatar 
+                      src={isGroupChat ? groupData?.avatar : partnerProfile?.avatar} 
+                      name={displayName} 
+                      size={100} 
+                    />
+                  </div>
+                  <h2 className="telegram-empty-name">{displayName}</h2>
+                  <p className="telegram-empty-text">
+                    {isGroupChat 
+                      ? "This is the start of the group. Say hello to everyone!"
+                      : `This is the start of your direct message history with ${displayName}. Say hello!`}
+                  </p>
+                </div>
               </div>
             ) : (
               entries.map(renderMessage)
