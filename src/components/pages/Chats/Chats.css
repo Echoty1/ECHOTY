@@ -5,7 +5,7 @@
 
 /* ─────────────────────────────────────────────
    1. TOKENS
-   ───────────────────────────────────────────── */
+   ────────────── ─────────────────────────────── */
 .chats-page {
   --brand: var(--brand-600, #6c3ce1);
   --brand-light: var(--brand-300, #a78bfa);
@@ -3870,3 +3870,36 @@ html.theme-light .nrs-detail-btn-ghost:hover {
   font-weight: 800;
   letter-spacing: 0.3px;
 }
+/* ═══════════════════════════════════════════════════════════════
+   ★ SNAPCHAT/WHATSAPP STYLE TICKS
+   ═══════════════════════════════════════════════════════════════ */
+
+.chat-list-tick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.chat-list-tick.read { color: #60A5FA; } /* Blue */
+.chat-list-tick.delivered { color: rgba(255, 255, 255, 0.4); } /* Grey */
+
+/* Light theme fixes */
+html[data-theme="light"] .chat-list-tick.delivered,
+body.light .chat-list-tick.delivered { color: rgba(0, 0, 0, 0.4); }
+
+/* Red dot / Alert styling for unread messages */
+.chat-item.unread-active .chat-name {
+  color: #FF3B30; /* Snapchat red */
+}
+.chat-item.unread-active .chat-last {
+  color: #FF3B30; /* Snapchat red */
+  font-weight: 700;
+}
+
+/* Truncate long text in the chat list */
+.chat-last-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}x
