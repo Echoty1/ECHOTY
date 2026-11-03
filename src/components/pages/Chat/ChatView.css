@@ -4079,3 +4079,41 @@ body.light .cv-menu-item:hover {
   color: #FFD700;
   font-size: 20px;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ★ MOBILE RESPONSIVENESS FIXES (Emoji Picker & Inputs)
+   ═══════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  /* 1. Ensure the Emoji Picker close button is ALWAYS visible on phones */
+  .premium-picker-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-right: 48px; /* Make room for the absolute positioned X */
+  }
+  
+  .premium-close-btn {
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 36px;
+    height: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.1);
+    z-index: 10;
+  }
+
+  .premium-tab {
+    font-size: 13px;
+    padding: 6px 2px;
+  }
+
+  /* 2. Fix input container cutoffs on iPhones */
+  .chat-input-container {
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 10px)) !important;
+  }
+}
