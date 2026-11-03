@@ -229,7 +229,7 @@ const MessageReceipt = ({ msg, isMe, group }) => {
 };
 
 /* ------------------------------------------------------------------ */
-/* MessageRow                                                          */
+/* MessageRow - Fixed Swipe & Touch Logic                              */
 /* ------------------------------------------------------------------ */
 const MessageRow = ({
   msg, isOwn, rowClass, selectMode, selected, canReply,
@@ -238,7 +238,10 @@ const MessageRow = ({
   const rowRef = useRef(null);
   const stackRef = useRef(null);
   const iconRef = useRef(null);
-  const g = useRef({ id: null, x: 0, y: 0, mode: null, timer: null, pressTimer: null, longFired: false, passed: false, lastTap: 0, noSwipe: false });
+  const g = useRef({ 
+    id: null, x: 0, y: 0, mode: null, timer: null, pressTimer: null, 
+    longFired: false, passed: false, lastTap: 0, noSwipe: false 
+  });
 
   const clearTimers = () => {
     const s = g.current;
@@ -284,7 +287,8 @@ const MessageRow = ({
     const s = g.current;
     s.id = e.pointerId; s.x = e.clientX; s.y = e.clientY;
     s.mode = null; s.longFired = false; s.passed = false;
-    s.noSwipe = !!e.target.closest?.('input, [role="slider"]');
+    // Don't trigger swipe if touching links, buttons, images, etc.
+    s.noSwipe = !!e.target.closest?.('input, [role="slider"], a, button, .chat-media-wrapper, .cv-reply-hit');
     clearTimers();
     if (selectMode) return;
     s.pressTimer = setTimeout(() => rowRef.current?.classList.add('pressed'), 110);
@@ -296,44 +300,78 @@ const MessageRow = ({
   const onPointerMove = (e) => {
     const s = g.current;
     if (s.id !== e.pointerId || s.mode === 'long') return;
-    const dx = e.clientX - s.x; const dy = e.clientY - s.y;
-    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) { if (s.timer) { clearTimeout(s.timer); s.timer = null; } }
+    
+    const dx = e.clientX - s.x; 
+    const dy = e.clientY - s.y;
+    
+    // Cancel long press if moving
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) { 
+      if (s.timer) { clearTimeout(s.timer); s.timer = null; } 
+    }
+    
     if (s.mode === null) {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       clearTimers();
-      if (!selectMode && canReply && !s.noSwipe && e.pointerType !== 'mouse' && dx < 0 && Math.abs(dx) > Math.abs(dy) * 1.2) {
+      
+      // Ensure it's a definitive horizontal swipe, not a scroll
+      if (!selectMode && canReply && !s.noSwipe && e.pointerType !== 'mouse' && dx < 0 && Math.abs(dx) > Math.abs(dy) * 1.5) {
         s.mode = 'swipe';
         try { rowRef.current.setPointerCapture(e.pointerId); } catch { }
         if (stackRef.current) stackRef.current.style.transition = 'none';
-      } else { s.mode = 'scroll'; return; }
+      } else { 
+        s.mode = 'scroll'; 
+        return; 
+      }
     }
+    
     if (s.mode !== 'swipe') return;
+    
     const raw = Math.max(0, -dx);
     const eased = raw <= SWIPE_THRESHOLD ? raw : Math.min(SWIPE_MAX, SWIPE_THRESHOLD + (raw - SWIPE_THRESHOLD) * 0.35);
+    
     if (stackRef.current) stackRef.current.style.transform = `translate3d(${-eased}px,0,0)`;
+    
     const p = Math.min(1, raw / SWIPE_THRESHOLD);
     const ic = iconRef.current;
-    if (ic) { ic.style.opacity = String(p); ic.style.transform = `translateY(-50%) scale(${0.5 + 0.5 * p})`; }
+    if (ic) { 
+      ic.style.opacity = String(p); 
+      ic.style.transform = `translateY(-50%) scale(${0.5 + 0.5 * p})`; 
+    }
+    
     const armed = raw >= SWIPE_THRESHOLD;
-    if (armed !== s.passed) { s.passed = armed; ic?.classList.toggle('armed', armed); if (armed) hapticLight(); }
+    if (armed !== s.passed) { 
+      s.passed = armed; 
+      ic?.classList.toggle('armed', armed); 
+      if (armed) hapticLight(); 
+    }
   };
 
   const finish = (e, cancelled) => {
     const s = g.current;
     if (s.id !== e.pointerId) return;
-    s.id = null; clearTimers();
-    if (s.longFired) { try { rowRef.current.releasePointerCapture(e.pointerId); } catch { } return; }
+    
+    s.id = null; 
+    clearTimers();
+    
+    try { rowRef.current.releasePointerCapture(e.pointerId); } catch { }
+
+    if (s.longFired) return;
+
     if (s.mode === 'swipe') {
       const doReply = s.passed && !cancelled;
       resetSwipe(true);
-      try { rowRef.current.releasePointerCapture(e.pointerId); } catch { }
       s.mode = null;
-      if (doReply) onReply(msg);
+      if (doReply) {
+        hapticLight();
+        onReply(msg);
+      }
       return;
     }
+
     if (s.mode === null && !cancelled && !s.longFired) {
       if (selectMode) { onToggleSelect(msg); return; }
       if (e.target.closest?.('a, button, .chat-media-wrapper, .cv-reply-hit, audio, input, .cv-retry')) return;
+      
       const now = Date.now();
       if (now - s.lastTap < 300) { s.lastTap = 0; onDoubleTap(msg); } else { s.lastTap = now; }
     }
@@ -749,7 +787,6 @@ const ChatView = () => {
 
   useEffect(() => {
     if (!msgRoot || !user?.uid || !sendReadReceipts) return;
-    if (!isNearBottomRef.current) return;
     const unread = messages.filter(m => {
       const sender = m.senderId || m.uid;
       if (sender === user.uid) return false;
@@ -806,6 +843,12 @@ const ChatView = () => {
       const newRef = push(messagesRef);
       const payload = clean({ text: inputText, senderId: user.uid, uid: user.uid, timestamp: now, createdAt: now, replyTo: localMsg.replyTo || null });
       await set(newRef, payload);
+      
+      if (!isGroupChat && userId) {
+        const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+        update(partnerChatRef, { lastMessage: inputText, lastUpdated: now, lastSenderId: user.uid }).catch(() => {});
+      }
+
       removeLocal(tempId);
       if (getSoundEnabled() && !isMuted) { try { playSentSound(); } catch { } }
     } catch (err) {
@@ -813,7 +856,7 @@ const ChatView = () => {
       patchLocal(tempId, { pending: false, uploadFailed: true });
       showToast('Failed to send message', 'error');
     }
-  }, [newMessage, msgRoot, user?.uid, replyTo, replyToNote, upsertLocal, removeLocal, patchLocal, showToast, isMuted]);
+  }, [newMessage, msgRoot, user?.uid, replyTo, replyToNote, upsertLocal, removeLocal, patchLocal, showToast, isMuted, userId, isGroupChat]);
 
   const uploadToCloudinary = useCallback(async (file) => {
     const form = new FormData();
@@ -845,6 +888,12 @@ const ChatView = () => {
       const newRef = push(messagesRef);
       const payloadOut = clean({ text: payload.caption || '', caption: payload.caption || '', senderId: user.uid, uid: user.uid, timestamp: now, createdAt: now, mediaType, mediaUrl: up.url, publicId: up.publicId, duration: up.duration || null, replyTo: replyTo || replyToNote || null });
       await set(newRef, payloadOut);
+      
+      if (!isGroupChat && userId) {
+        const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+        update(partnerChatRef, { lastMessage: mediaType === 'image' ? '📷 Photo' : '🎬 Video', lastUpdated: now, lastSenderId: user.uid }).catch(() => {});
+      }
+
       removeLocal(tempId);
       if (getSoundEnabled() && !isMuted) { try { playSentSound(); } catch { } }
     } catch (err) {
@@ -852,7 +901,7 @@ const ChatView = () => {
       patchLocal(tempId, { pending: false, isUploading: false, uploadFailed: true });
       showToast('Failed to send media', 'error');
     }
-  }, [msgRoot, user?.uid, replyTo, replyToNote, uploadToCloudinary, upsertLocal, removeLocal, patchLocal, showToast, isMuted]);
+  }, [msgRoot, user?.uid, replyTo, replyToNote, uploadToCloudinary, upsertLocal, removeLocal, patchLocal, showToast, isMuted, userId, isGroupChat]);
 
   const handleReact = useCallback(async (msg, key) => {
     if (!msgRoot || !user?.uid || !msg?.id) return;
