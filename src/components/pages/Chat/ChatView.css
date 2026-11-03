@@ -3520,13 +3520,24 @@ html[data-theme="light"] .telegram-empty-card {
 }
 
 .telegram-empty-avatar {
-  margin-bottom: 16px;
+  width: 120px;
+  height: 120px;
+  margin-bottom: 20px;
   border-radius: 50%;
-  padding: 4px;
-  background: linear-gradient(135deg, #6C3CE1, #EC4899);
-  box-shadow: 0 8px 24px rgba(108, 60, 225, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  /* Soft purple glow behind the cat, no solid background */
+  background: radial-gradient(circle, rgba(108, 60, 225, 0.35) 0%, rgba(236, 72, 153, 0.08) 60%, transparent 80%);
+  padding: 12px;
+  position: relative;
+  animation: floatAvatar 3.5s ease-in-out infinite;
 }
 
+@keyframes floatAvatar {
+  0%, 100% { transform: translateY(0px); }
+  50%      { transform: translateY(-6px); }
+}
 .telegram-empty-name {
   font-size: 22px;
   font-weight: 800;
