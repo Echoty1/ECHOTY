@@ -35,7 +35,7 @@ import { isGroupChatId, chatIdToGroupId } from '../../../utils/groupId';
 import { useSubscription } from '../../../contexts/SubscriptionContext';
 import Avatar from '../../common/Avatar';
 import Lottie from 'lottie-react';
-import catJson from '../../../assets/premium-emoji/cat.json'; // 👈 ADD THIS LINE
+import catJson from '../../../assets/premium-emoji/cat.json';
 import { PREMIUM_STICKERS, renderPremiumSticker, isPremiumSticker } from './PremiumStickers';
 import PlusCheckout from '../../common/PlusCheckout';
 import './ChatView.css';
@@ -58,15 +58,10 @@ const MENU_W = 236;
 /* Random SVG Avatars for Empty Profiles                               */
 /* ------------------------------------------------------------------ */
 const RANDOM_SVGS = [
-  // Ghost
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/></svg>,
-  // Star
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
-  // Heart
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>,
-  // Rocket
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z"/><path d="M12 15l-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z"/><path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0"/><path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5"/></svg>,
-  // Smiley
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
 ];
 
@@ -1318,12 +1313,58 @@ const ChatView = () => {
           <div className="chat-input-container" ref={inputContainerRef}>
             {showEmojiPicker && (
               <PremiumEmojiPicker
+                isOpen={showEmojiPicker}
                 isEchoPlus={isEchoPlus}
                 onClose={() => setShowEmojiPicker(false)}
-                onSelect={(payload) => {
-                  if (payload.type === 'UPGRADE') { setShowPlusCheckout(true); }
-                  else if (payload.type === 'EMOJI') { setNewMessage(prev => prev + payload.value); }
-                  else if (payload.type === 'STICKER') { setNewMessage(prev => prev + payload.key); }
+                onSelect={async (payload) => {
+                  if (payload.type === 'UPGRADE') { 
+                    setShowPlusCheckout(true); 
+                    return;
+                  }
+                  
+                  // 1. Instantly close the picker
+                  setShowEmojiPicker(false);
+                  
+                  // 2. Extract payload
+                  const textToSend = payload.type === 'EMOJI' ? payload.value : payload.key;
+                  if (!textToSend || !msgRoot || !user?.uid) return;
+
+                  // 3. Instantly send the message (Telegram style)
+                  const tempId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+                  const now = Date.now();
+                  
+                  upsertLocal({
+                    id: tempId,
+                    text: textToSend,
+                    senderId: user.uid,
+                    uid: user.uid,
+                    timestamp: now,
+                    createdAt: now,
+                    replyTo: replyTo ? { id: replyTo.id, text: replyTo.text || '', senderId: replyTo.senderId || replyTo.uid || null, mediaType: replyTo.mediaType || null } : replyToNote || null,
+                  });
+                  
+                  setReplyTo(null);
+                  setReplyToNote(null);
+                  hapticSend();
+                  
+                  try {
+                    const messagesRef = ref(db, msgRoot);
+                    const newRef = push(messagesRef);
+                    await set(newRef, clean({
+                      text: textToSend,
+                      senderId: user.uid,
+                      uid: user.uid,
+                      timestamp: now,
+                      createdAt: now,
+                      replyTo: replyTo ? { id: replyTo.id, text: replyTo.text || '', senderId: replyTo.senderId || replyTo.uid || null, mediaType: replyTo.mediaType || null } : replyToNote || null
+                    }));
+                    removeLocal(tempId);
+                    if (getSoundEnabled() && !isMuted) { try { playSentSound(); } catch { } }
+                  } catch (err) {
+                    console.error('Send failed', err);
+                    patchLocal(tempId, { pending: false, uploadFailed: true });
+                    showToast('Failed to send', 'error');
+                  }
                 }}
               />
             )}
