@@ -41,9 +41,6 @@ import PlusCheckout from '../../common/PlusCheckout';
 import './ChatView.css';
 import './ChatViewLiquid.css';
 
-/* ------------------------------------------------------------------ */
-/* Constants                                                           */
-/* ------------------------------------------------------------------ */
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -54,9 +51,6 @@ const SWIPE_THRESHOLD = 56;
 const SWIPE_MAX = 84;
 const MENU_W = 236;
 
-/* ------------------------------------------------------------------ */
-/* Random SVG Avatars for Empty Profiles                               */
-/* ------------------------------------------------------------------ */
 const RANDOM_SVGS = [
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2a8 8 0 0 0-8 8v12l3-3 2.5 2.5L12 19l2.5 2.5L17 19l3 3V10a8 8 0 0 0-8-8z"/><circle cx="9" cy="10" r="1" fill="currentColor"/><circle cx="15" cy="10" r="1" fill="currentColor"/></svg>,
   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>,
@@ -84,9 +78,6 @@ const RandomAvatar = ({ uid, size = 40 }) => (
   </div>
 );
 
-/* ------------------------------------------------------------------ */
-/* Helpers                                                             */
-/* ------------------------------------------------------------------ */
 const sanitizeName = (rawName, userId) => {
   if (!rawName) return 'User';
   const str = String(rawName).trim();
@@ -216,21 +207,77 @@ const useVisualViewport = () => {
   }, []);
 };
 
+// 🟢 NEW SVG MESSAGE RECEIPT
 const MessageReceipt = ({ msg, isMe, group }) => {
   if (!isMe) return null;
-  if (msg.pending || msg.isUploading) return <span className="message-receipt pending"><i className="far fa-clock" /></span>;
-  if (msg.uploadFailed) return <span className="message-receipt failed"><i className="fas fa-exclamation-circle" /></span>;
-  if (group) return <span className="message-receipt sent">✓</span>;
+  
+  if (msg.pending || msg.isUploading) {
+    return (
+      <span className="message-receipt pending" title="Sending...">
+        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <polyline points="12 6 12 12 16 14" />
+        </svg>
+      </span>
+    );
+  }
+  
+  if (msg.uploadFailed) {
+    return (
+      <span className="message-receipt failed" title="Failed to send">
+        <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <circle cx="12" cy="12" r="10" />
+          <line x1="12" y1="8" x2="12" y2="12" />
+          <line x1="12" y1="16" x2="12.01" y2="16" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (group) {
+    return (
+      <span className="message-receipt sent" title="Sent">
+        <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="20 6 9 17 4 12" />
+        </svg>
+      </span>
+    );
+  }
+
   const read = !!msg.readAt || msg.isRead === true;
   const delivered = !!msg.deliveredAt || msg.received === true;
-  if (read) return <span className="message-receipt read">✓✓</span>;
-  if (delivered) return <span className="message-receipt delivered">✓✓</span>;
-  return <span className="message-receipt sent">✓</span>;
+
+  if (read) {
+    return (
+      <span className="message-receipt read" title="Read">
+        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="18 6 7 17 2 12" />
+          <polyline points="22 6 11 17" />
+        </svg>
+      </span>
+    );
+  }
+
+  if (delivered) {
+    return (
+      <span className="message-receipt delivered" title="Delivered">
+        <svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+          <polyline points="18 6 7 17 2 12" />
+          <polyline points="22 6 11 17" />
+        </svg>
+      </span>
+    );
+  }
+
+  return (
+    <span className="message-receipt sent" title="Sent">
+      <svg viewBox="0 0 24 24" width="15" height="15" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+        <polyline points="20 6 9 17 4 12" />
+      </svg>
+    </span>
+  );
 };
 
-/* ------------------------------------------------------------------ */
-/* MessageRow - Fixed Swipe & Touch Logic                              */
-/* ------------------------------------------------------------------ */
 const MessageRow = ({
   msg, isOwn, rowClass, selectMode, selected, canReply,
   onLongPress, onReply, onDoubleTap, onToggleSelect, registerRef, children,
@@ -287,7 +334,6 @@ const MessageRow = ({
     const s = g.current;
     s.id = e.pointerId; s.x = e.clientX; s.y = e.clientY;
     s.mode = null; s.longFired = false; s.passed = false;
-    // Don't trigger swipe if touching links, buttons, images, etc.
     s.noSwipe = !!e.target.closest?.('input, [role="slider"], a, button, .chat-media-wrapper, .cv-reply-hit');
     clearTimers();
     if (selectMode) return;
@@ -300,78 +346,44 @@ const MessageRow = ({
   const onPointerMove = (e) => {
     const s = g.current;
     if (s.id !== e.pointerId || s.mode === 'long') return;
-    
-    const dx = e.clientX - s.x; 
-    const dy = e.clientY - s.y;
-    
-    // Cancel long press if moving
-    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) { 
-      if (s.timer) { clearTimeout(s.timer); s.timer = null; } 
-    }
-    
+    const dx = e.clientX - s.x; const dy = e.clientY - s.y;
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) { if (s.timer) { clearTimeout(s.timer); s.timer = null; } }
     if (s.mode === null) {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       clearTimers();
-      
-      // Ensure it's a definitive horizontal swipe, not a scroll
       if (!selectMode && canReply && !s.noSwipe && e.pointerType !== 'mouse' && dx < 0 && Math.abs(dx) > Math.abs(dy) * 1.5) {
         s.mode = 'swipe';
         try { rowRef.current.setPointerCapture(e.pointerId); } catch { }
         if (stackRef.current) stackRef.current.style.transition = 'none';
-      } else { 
-        s.mode = 'scroll'; 
-        return; 
-      }
+      } else { s.mode = 'scroll'; return; }
     }
-    
     if (s.mode !== 'swipe') return;
-    
     const raw = Math.max(0, -dx);
     const eased = raw <= SWIPE_THRESHOLD ? raw : Math.min(SWIPE_MAX, SWIPE_THRESHOLD + (raw - SWIPE_THRESHOLD) * 0.35);
-    
     if (stackRef.current) stackRef.current.style.transform = `translate3d(${-eased}px,0,0)`;
-    
     const p = Math.min(1, raw / SWIPE_THRESHOLD);
     const ic = iconRef.current;
-    if (ic) { 
-      ic.style.opacity = String(p); 
-      ic.style.transform = `translateY(-50%) scale(${0.5 + 0.5 * p})`; 
-    }
-    
+    if (ic) { ic.style.opacity = String(p); ic.style.transform = `translateY(-50%) scale(${0.5 + 0.5 * p})`; }
     const armed = raw >= SWIPE_THRESHOLD;
-    if (armed !== s.passed) { 
-      s.passed = armed; 
-      ic?.classList.toggle('armed', armed); 
-      if (armed) hapticLight(); 
-    }
+    if (armed !== s.passed) { s.passed = armed; ic?.classList.toggle('armed', armed); if (armed) hapticLight(); }
   };
 
   const finish = (e, cancelled) => {
     const s = g.current;
     if (s.id !== e.pointerId) return;
-    
-    s.id = null; 
-    clearTimers();
-    
-    try { rowRef.current.releasePointerCapture(e.pointerId); } catch { }
-
-    if (s.longFired) return;
-
+    s.id = null; clearTimers();
+    if (s.longFired) { try { rowRef.current.releasePointerCapture(e.pointerId); } catch { } return; }
     if (s.mode === 'swipe') {
       const doReply = s.passed && !cancelled;
       resetSwipe(true);
+      try { rowRef.current.releasePointerCapture(e.pointerId); } catch { }
       s.mode = null;
-      if (doReply) {
-        hapticLight();
-        onReply(msg);
-      }
+      if (doReply) onReply(msg);
       return;
     }
-
     if (s.mode === null && !cancelled && !s.longFired) {
       if (selectMode) { onToggleSelect(msg); return; }
       if (e.target.closest?.('a, button, .chat-media-wrapper, .cv-reply-hit, audio, input, .cv-retry')) return;
-      
       const now = Date.now();
       if (now - s.lastTap < 300) { s.lastTap = 0; onDoubleTap(msg); } else { s.lastTap = now; }
     }
@@ -399,9 +411,6 @@ const MessageRow = ({
   );
 };
 
-/* ------------------------------------------------------------------ */
-/* Message Menu                                                        */
-/* ------------------------------------------------------------------ */
 const computeMenuLayout = (rect, itemCount, isOwn, reactionCount) => {
   const vh = window.innerHeight; const vw = window.innerWidth;
   const REACT_H = 56; const ITEM_H = 46; const GAP = 10; const TOP = 70; const BOTTOM = 26; const EDGE = 12;
@@ -482,9 +491,6 @@ const MessageMenu = ({ menu, items, myReaction, onReact, onClose, children }) =>
   );
 };
 
-/* ------------------------------------------------------------------ */
-/* Main Component                                                      */
-/* ------------------------------------------------------------------ */
 const ChatView = () => {
   const { userId } = useParams();
   const { user } = useAuth();
@@ -785,24 +791,38 @@ const ChatView = () => {
     setUnreadWhileScrolled(0);
   }, []);
 
+  // 🟢 FIX: Mark messages as read and update the Chat List ticks
   useEffect(() => {
     if (!msgRoot || !user?.uid || !sendReadReceipts) return;
+    
     const unread = messages.filter(m => {
       const sender = m.senderId || m.uid;
       if (sender === user.uid) return false;
       return !(m.readAt || m.isRead === true);
     });
+    
     if (!unread.length) return;
+    
+    // Update the chat list so the icon turns blue
+    if (!isGroupChat && userId) {
+      const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
+      update(myChatRef, { isRead: true, readAt: Date.now() }).catch(() => {});
+      
+      const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+      update(partnerChatRef, { isRead: true, readAt: Date.now() }).catch(() => {});
+    }
+
     const key = `${msgRoot}:${unread.length}:${unread[unread.length - 1].id}`;
     if (lastMarkKeyRef.current === key) return;
     lastMarkKeyRef.current = key;
+    
     const updates = {};
     unread.forEach(m => {
       updates[`${msgRoot}/${m.id}/readAt`] = Date.now();
       updates[`${msgRoot}/${m.id}/isRead`] = true;
     });
     update(ref(db), updates).catch(() => { });
-  }, [messages, msgRoot, user?.uid, sendReadReceipts]);
+  }, [messages, msgRoot, user?.uid, sendReadReceipts, userId, isGroupChat]);
 
   const broadcastTyping = useCallback(() => {
     if (!user?.uid || !chatKey || !showTyping) return;
@@ -1371,14 +1391,10 @@ const ChatView = () => {
                     return;
                   }
                   
-                  // 1. Instantly close the picker
                   setShowEmojiPicker(false);
-                  
-                  // 2. Extract payload
                   const textToSend = payload.type === 'EMOJI' ? payload.value : payload.key;
                   if (!textToSend || !msgRoot || !user?.uid) return;
 
-                  // 3. Instantly send the message (Telegram style)
                   const tempId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
                   const now = Date.now();
                   
