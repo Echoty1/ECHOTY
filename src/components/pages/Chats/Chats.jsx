@@ -4,7 +4,9 @@ import { useAuth } from '../../../hooks/useAuth';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { db } from '../../../services/firebase';
 import { useDeletedAccountCheck } from '../../../hooks/useDeletedAccountCheck';
-import { ref, onValue, get, query, orderByKey, limitToLast, endAt } from 'firebase/database';
+import {
+  ref, onValue, get, query, orderByKey, limitToLast, endAt,
+} from 'firebase/database';
 import ECHOMOJI from '../../UI/ECHOMOJI';
 import { getSkinById } from '../../../constants/echomoji';
 import './Chats.css';
@@ -60,7 +62,10 @@ const timeAgo = (timestamp) => {
 const sanitizeName = (rawName, userId) => {
   if (!rawName) return 'User';
   const str = String(rawName).trim();
-  if (str === userId || (str.length >= 20 && !str.includes(' ') && /^[a-zA-Z0-9_-]+$/.test(str))) {
+  if (
+    str === userId ||
+    (str.length >= 20 && !str.includes(' ') && /^[a-zA-Z0-9_-]+$/.test(str))
+  ) {
     return 'User';
   }
   return str;
@@ -72,9 +77,15 @@ const loadPartnerData = async (partnerId) => {
       get(ref(db, `profiles/${partnerId}`)),
       get(ref(db, `userSkins/${partnerId}/activeSkin`)),
     ]);
+
     const profile = profileSnap.exists() ? profileSnap.val() : {};
     const activeSkin = skinSnap.exists() ? skinSnap.val() : null;
-    const fullProfile = { ...profile, activeSkin: activeSkin || profile.activeSkin || null };
+
+    const fullProfile = {
+      ...profile,
+      activeSkin: activeSkin || profile.activeSkin || null,
+    };
+
     await setProfile(partnerId, fullProfile);
     return fullProfile;
   } catch (error) {
@@ -86,6 +97,7 @@ const loadPartnerData = async (partnerId) => {
 const processChatItem = async (chat, user, onlineUsers) => {
   try {
     const profile = await loadPartnerData(chat.id);
+
     let partnerName;
     let isDeleted = false;
 
@@ -137,7 +149,10 @@ const processChatItem = async (chat, user, onlineUsers) => {
       avatar: rawAvatar,
       mood: profile?.mood || chat.mood || 'neutral',
       activeSkin: profile?.activeSkin || chat.activeSkin || null,
-      location: profile?.location || [profile?.city, profile?.country].filter(Boolean).join(', ') || '',
+      location:
+        profile?.location ||
+        [profile?.city, profile?.country].filter(Boolean).join(', ') ||
+        '',
       lastMessage: displayMessage,
       timestamp: chat.lastUpdated || chat.timestamp || Date.now(),
       lastSenderId: lastSenderId,
@@ -149,8 +164,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
       isEchoPlus: profile?.isEchoPlus || false,
       premiumRingStyle: profile?.premiumRingStyle || 'gold',
       premiumBadgeText: profile?.premiumBadgeText || '',
-      readAt: chat.readAt || null,
-      isRead: chat.isRead || false,
     };
   } catch (err) {
     let unreadCount = chat.unreadCount || 0;
@@ -174,8 +187,6 @@ const processChatItem = async (chat, user, onlineUsers) => {
       isEchoPlus: false,
       premiumRingStyle: 'gold',
       premiumBadgeText: '',
-      readAt: chat.readAt || null,
-      isRead: chat.isRead || false,
     };
   }
 };
@@ -187,6 +198,7 @@ const processGroupItem = async (group, user) => {
 
     const groupData = groupSnap.val();
     const chatId = groupIdToChatId(group.groupId);
+
     let lastMessage = groupData.lastMessage || 'Group created';
     let lastSenderId = groupData.lastSenderId || '';
     let lastUpdated = groupData.lastUpdated || groupData.createdAt || Date.now();
@@ -254,10 +266,14 @@ const sortNonAIChats = (chats) => {
 };
 
 const ChatItem = memo(
-  ({ chat, onStartChat, onLongPressStart, onLongPressEnd, onLongPressCancel, partnerIsTyping }) => {
+  ({ chat, onStartChat, onLongPressStart, onLongPressEnd, onLongPressCancel, partnerIsTyping, currentUser }) => {
     const { profiles } = useProfile();
     const navigate = useNavigate();
     const profile = profiles[chat.id] || {};
+    
+    // 🟢 NEW: Check if the last message is unread and from the other person
+    const hasUnread = chat.unreadCount > 0;
+    const isLastMessageMine = chat.lastSenderId === currentUser?.uid;
     const isOnline = chat.online;
     const hasUnread = chat.unreadCount > 0;
     const skinId = chat.activeSkin || profile.activeSkin || null;
@@ -270,7 +286,7 @@ const ChatItem = memo(
 
     return (
       <div
-        className={`chat-item regular-chat-item ${hasUnread ? 'unread-active' : ''}`}
+        className="chat-item regular-chat-item"
         onClick={() => onStartChat(chat)}
         onMouseDown={(e) => onLongPressStart(e, chat)}
         onMouseUp={() => onLongPressEnd(chat)}
@@ -288,10 +304,11 @@ const ChatItem = memo(
         >
           <Avatar key={chat.avatar} src={chat.avatar} name={chat.name} size={48} />
           <span className={`presence-dot ${isOnline ? 'online' : 'offline'}`} />
-          {hasUnread && <span className="unread-badge" style={{ background: '#FF3B30', color: '#fff' }}>{chat.unreadCount}</span>}
+          {hasUnread && <span className="unread-badge">{chat.unreadCount}</span>}
           {chat.isDeleted && (
             <span className="archived-badge" title="Account deleted – archived">📁</span>
           )}
+
           {partnerIsTyping && (
             <span className="avatar-typing-overlay" aria-hidden="true">
               <span className="avatar-typing-ring" />
@@ -307,6 +324,7 @@ const ChatItem = memo(
           <div className="chat-title-row">
             <span className="chat-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               {chat.name}
+              
               {isPlus && badgeText ? (
                 <span style={{ fontSize: '10px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 6px', borderRadius: '6px', fontWeight: 'bold', border: '1px solid rgba(255,215,0,0.3)' }}>
                   {badgeText}
@@ -314,31 +332,13 @@ const ChatItem = memo(
               ) : isPlus ? (
                 <PlusBadge size={14} />
               ) : null}
+
               {chat.isDeleted && <span className="archived-label"> (archived)</span>}
               {chat.ended && <span className="ended-badge">Ended</span>}
             </span>
           </div>
-          <div className="chat-last" style={{ fontWeight: hasUnread ? 700 : 400, display: 'flex', alignItems: 'center', gap: '4px' }}>
-            {partnerIsTyping ? <span className="typing-status-text">typing…</span> : (
-              <>
-                {chat.lastSenderId === user?.uid && (
-                  <span className={`chat-list-tick ${chat.isRead || chat.readAt ? 'read' : 'delivered'}`}>
-                    {chat.isRead || chat.readAt ? (
-                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="18 6 7 17 2 12" />
-                        <polyline points="22 6 11 17" />
-                      </svg>
-                    ) : (
-                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="18 6 7 17 2 12" />
-                        <polyline points="22 6 11 17" />
-                      </svg>
-                    )}
-                  </span>
-                )}
-                <span className="chat-last-text">{chat.lastMessage || 'Start chatting...'}</span>
-              </>
-            )}
+          <div className="chat-last" style={{ fontWeight: hasUnread ? 700 : 400 }}>
+            {partnerIsTyping ? <span className="typing-status-text">typing…</span> : (chat.lastMessage || 'Start chatting...')}
           </div>
         </div>
         <div className="chat-echomoji-middle">
@@ -457,13 +457,13 @@ const Chats = () => {
     const handleChatRead = (event) => {
       const { userId } = event.detail;
       sessionStorage.setItem(`chat_read_${userId}`, 'true');
-      setRecentChats((prev) => prev.map((chat) => chat.id === userId ? { ...chat, unreadCount: 0, isRead: true, readAt: Date.now() } : chat));
-      setGroupChats((prev) => prev.map((chat) => chat.id === userId ? { ...chat, unreadCount: 0, isRead: true, readAt: Date.now() } : chat));
+      setRecentChats((prev) => prev.map((chat) => chat.id === userId ? { ...chat, unreadCount: 0 } : chat));
+      setGroupChats((prev) => prev.map((chat) => chat.id === userId ? { ...chat, unreadCount: 0 } : chat));
     };
     const handleUnreadCleared = (event) => {
       const { partnerId } = event.detail;
-      setRecentChats((prev) => prev.map((chat) => chat.id === partnerId ? { ...chat, unreadCount: 0, isRead: true, readAt: Date.now() } : chat));
-      setGroupChats((prev) => prev.map((chat) => chat.id === partnerId ? { ...chat, unreadCount: 0, isRead: true, readAt: Date.now() } : chat));
+      setRecentChats((prev) => prev.map((chat) => chat.id === partnerId ? { ...chat, unreadCount: 0 } : chat));
+      setGroupChats((prev) => prev.map((chat) => chat.id === partnerId ? { ...chat, unreadCount: 0 } : chat));
     };
     const handleListUpdate = (event) => {
       const { partnerId, patch } = event.detail || {};
@@ -506,6 +506,7 @@ const Chats = () => {
 
   useEffect(() => {
     if (!user?.uid) return;
+
     const userChatsRef = ref(db, `userChats/${user.uid}`);
     userChatsUnsubRef.current = onValue(
       userChatsRef,
@@ -517,6 +518,7 @@ const Chats = () => {
           storeChatList(user.uid, []).catch(() => {});
           return;
         }
+
         let chatList = Object.entries(data)
           .map(([partnerId, chat]) => ({ id: partnerId, ...chat }))
           .filter((c) => !c.id?.startsWith('group_'))
@@ -534,6 +536,7 @@ const Chats = () => {
         const loadedItems = await Promise.all(
           chatList.map((chat) => processChatItem(chat, user, onlineUsers))
         );
+
         const nonAIChats = loadedItems.filter((c) => c.id !== 'echo_ai_assistant');
         const sortedNonAI = sortNonAIChats(nonAIChats);
 
@@ -558,12 +561,15 @@ const Chats = () => {
 
   useEffect(() => {
     if (!user?.uid) return;
+
     groupsUnsubRef.current = subscribeToMyGroups(user.uid, async (groups) => {
       if (!groups || groups.length === 0) {
         setGroupChats([]);
         return;
       }
-      const processed = await Promise.all(groups.map((g) => processGroupItem(g, user)));
+      const processed = await Promise.all(
+        groups.map((g) => processGroupItem(g, user))
+      );
       setGroupChats(processed.filter(Boolean));
     });
 
@@ -577,7 +583,9 @@ const Chats = () => {
 
   useEffect(() => {
     if (!user?.uid || !recentChats.length) return;
+
     const activeIds = new Set(recentChats.map((c) => c.id));
+
     Object.keys(typingUnsubsRef.current).forEach((uid) => {
       if (!activeIds.has(uid)) {
         try { typingUnsubsRef.current[uid](); } catch {}
@@ -587,10 +595,12 @@ const Chats = () => {
     });
 
     recentChats.forEach((chat) => {
-      if (chat.id === 'echo_ai_assistant' || chat.isGroup) return;
+      if (chat.id === 'echo_ai_assistant') return;
+      if (chat.isGroup) return;
       if (typingUnsubsRef.current[chat.id]) return;
 
       const cId = [user.uid, chat.id].sort().join('_');
+      // 🟢 FIX: Pointing directly to the typing node
       const typingRef = ref(db, `typing/${cId}/${chat.id}`);
 
       const unsub = onValue(
@@ -603,6 +613,7 @@ const Chats = () => {
         },
         () => {}
       );
+
       typingUnsubsRef.current[chat.id] = unsub;
     });
   }, [user?.uid, recentChats]);
@@ -633,7 +644,8 @@ const Chats = () => {
   }, []);
 
   const handleLongPressStart = useCallback((e, chat) => {
-    if (chat.id === 'echo_ai_assistant' || chat.isGroup) return;
+    if (chat.id === 'echo_ai_assistant') return;
+    if (chat.isGroup) return;
     longPressTriggered.current = false;
     const clientX = e.touches?.[0]?.clientX ?? e.clientX ?? 0;
     const clientY = e.touches?.[0]?.clientY ?? e.clientY ?? 0;
@@ -647,25 +659,37 @@ const Chats = () => {
   }, []);
 
   const handleLongPressEnd = useCallback(() => {
-    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
   }, []);
 
   const handleLongPressCancel = useCallback(() => {
-    if (longPressTimer.current) { clearTimeout(longPressTimer.current); longPressTimer.current = null; }
+    if (longPressTimer.current) {
+      clearTimeout(longPressTimer.current);
+      longPressTimer.current = null;
+    }
   }, []);
 
   const startChat = (selectedUser) => {
     if (!selectedUser) return;
-    if (longPressTriggered.current) { longPressTriggered.current = false; return; }
+
+    if (longPressTriggered.current) {
+      longPressTriggered.current = false;
+      return;
+    }
 
     if (selectedUser.isAi || selectedUser.id === 'echo_ai_assistant') {
       navigate('/chat/echo_ai_assistant');
       return;
     }
+
     if (selectedUser.isGroup) {
       navigate(`/chat/${selectedUser.id}`);
       return;
     }
+
     const safeUserName = sanitizeName(selectedUser.name, selectedUser.id);
     navigate(`/chat/${selectedUser.id}`, {
       state: {
@@ -689,22 +713,33 @@ const Chats = () => {
 
   const performSearch = async (queryText) => {
     const trimmed = queryText.trim().toLowerCase();
-    if (trimmed.length < 1) { setResults([]); setIsSearching(false); return; }
+    if (trimmed.length < 1) {
+      setResults([]);
+      setIsSearching(false);
+      return;
+    }
     setIsSearching(true);
 
     const localHits = (recentChats || [])
-      .filter((c) => (c.name || '').toLowerCase().includes(trimmed) || (c.lastMessage || '').toLowerCase().includes(trimmed))
+      .filter((c) => {
+        const n = (c.name || '').toLowerCase();
+        const m = (c.lastMessage || '').toLowerCase();
+        return n.includes(trimmed) || m.includes(trimmed);
+      })
       .map((c) => ({
         id: c.id, name: c.name, avatar: c.avatar,
         mood: c.mood || 'happy', activeSkin: c.activeSkin || 'default',
-        location: c.location || '', isOnline: !!onlineUsers[c.id], fromLocal: true,
+        location: c.location || '',
+        isOnline: !!onlineUsers[c.id], fromLocal: true,
         isEchoPlus: c.isEchoPlus, premiumRingStyle: c.premiumRingStyle, premiumBadgeText: c.premiumBadgeText
       }));
     if (localHits.length) { setResults(localHits); setIsSearching(false); }
 
     try {
       const searchRes = await searchProfiles(trimmed, user.uid, 50);
-      const rawResults = Array.isArray(searchRes) ? searchRes : Array.isArray(searchRes?.results) ? searchRes.results : [];
+      const rawResults = Array.isArray(searchRes)
+        ? searchRes
+        : Array.isArray(searchRes?.results) ? searchRes.results : [];
       const remote = rawResults
         .filter((u) => u && typeof u === 'object' && u.id)
         .filter((u) => !(u.id === DEMO_UID && !isSupportUser))
@@ -756,6 +791,7 @@ const Chats = () => {
   const safeResults = Array.isArray(results) ? results : [];
   const isSearchActive = searchQuery.trim().length > 0;
 
+  // 🟢 FIX: Sort strictly by `timestamp` (newest messages jump to the top)
   const allChatsSorted = [...safeGroupChats, ...safeRecentChats]
     .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
@@ -765,9 +801,13 @@ const Chats = () => {
   if (safeResults.length > 0 && trimmedSearch.length > 0) {
     const getCleanName = (p) => (p.name || '').trim().toLowerCase();
     const getCleanUsername = (p) => (p.username || '').trim().toLowerCase();
-    let bestMatch = safeResults.find((p) => getCleanName(p) === trimmedSearch || getCleanUsername(p) === trimmedSearch);
+    let bestMatch = safeResults.find(
+      (p) => getCleanName(p) === trimmedSearch || getCleanUsername(p) === trimmedSearch
+    );
     if (!bestMatch) {
-      bestMatch = safeResults.find((p) => getCleanName(p).includes(trimmedSearch) || getCleanUsername(p).includes(trimmedSearch));
+      bestMatch = safeResults.find(
+        (p) => getCleanName(p).includes(trimmedSearch) || getCleanUsername(p).includes(trimmedSearch)
+      );
     }
     if (bestMatch) {
       topResult = bestMatch;
@@ -798,7 +838,12 @@ const Chats = () => {
             )}
           </div>
           {!isSearchActive && (
-            <button type="button" className="new-group-btn-top" onClick={() => setShowNewGroup(true)} title="New group">
+            <button
+              type="button"
+              className="new-group-btn-top"
+              onClick={() => setShowNewGroup(true)}
+              title="New group"
+            >
               <i className="fas fa-user-plus" />
               <span>New Group</span>
             </button>
@@ -838,7 +883,10 @@ const Chats = () => {
                     </div>
                     <p className="hero-bio">{topResult.bio || topResult.status || 'Available on ECHO'}</p>
                   </div>
-                  <button className="hero-action-btn" onClick={(e) => { e.stopPropagation(); startChat(topResult); }}>
+                  <button
+                    className="hero-action-btn"
+                    onClick={(e) => { e.stopPropagation(); startChat(topResult); }}
+                  >
                     Join the cheer 🎉
                   </button>
                 </div>
@@ -860,7 +908,8 @@ const Chats = () => {
                 const isPlus = person.isEchoPlus;
                 return (
                   <div key={person.id} className="chat-item regular-chat-item" onClick={() => startChat(person)}>
-                    <div className={`chat-avatar ${isPlus ? `plus-avatar-ring ${person.premiumRingStyle}` : ''}`}
+                    <div 
+                      className={`chat-avatar ${isPlus ? `plus-avatar-ring ${person.premiumRingStyle}` : ''}`}
                       onClick={(e) => { e.stopPropagation(); navigate(`/user/${person.id}`); }}
                       style={isPlus ? { padding: '2px', borderRadius: '50%' } : {}}
                     >
@@ -884,7 +933,12 @@ const Chats = () => {
                       <div className="chat-last">{person.bio || person.status || 'Available on ECHO'}</div>
                     </div>
                     <div className="chat-echomoji-middle">
-                      <ECHOMOJI mood={person.mood || 'happy'} skin={person.activeSkin ? getSkinById(person.activeSkin) : null} size={38} interactive={false} />
+                      <ECHOMOJI
+                        mood={person.mood || 'happy'}
+                        skin={person.activeSkin ? getSkinById(person.activeSkin) : null}
+                        size={38}
+                        interactive={false}
+                      />
                     </div>
                   </div>
                 );
@@ -937,10 +991,11 @@ const Chats = () => {
                 if (chat.isGroup) {
                   return <GroupChatItem key={chat.id} chat={chat} onStartChat={startChat} />;
                 }
-                return (
+                         return (
                   <ChatItem
                     key={chat.id}
                     chat={chat}
+                    currentUser={user} // 🟢 Pass the user object here
                     onStartChat={startChat}
                     onLongPressStart={handleLongPressStart}
                     onLongPressEnd={handleLongPressEnd}
@@ -965,7 +1020,9 @@ const Chats = () => {
         <NewGroupModal
           isOpen={showNewGroup}
           onClose={() => setShowNewGroup(false)}
-          onCreated={(groupId) => { navigate(`/chat/group_${groupId}`); }}
+          onCreated={(groupId) => {
+            navigate(`/chat/group_${groupId}`);
+          }}
         />
       </div>
     </>
