@@ -163,7 +163,7 @@ const processChatItem = async (chat, user, onlineUsers) => {
       isGroup: false,
       isEchoPlus: profile?.isEchoPlus || false,
       premiumRingStyle: profile?.premiumRingStyle || 'gold',
-      premiumBadgeText: profile?.premiumBadgeText || '', // <-- NEW
+      premiumBadgeText: profile?.premiumBadgeText || '',
     };
   } catch (err) {
     let unreadCount = chat.unreadCount || 0;
@@ -321,7 +321,6 @@ const ChatItem = memo(
             <span className="chat-name" style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
               {chat.name}
               
-              {/* Show CUSTOM BADGE if they have one, otherwise show default CROWN */}
               {isPlus && badgeText ? (
                 <span style={{ fontSize: '10px', background: 'rgba(255,215,0,0.2)', color: '#FFD700', padding: '2px 6px', borderRadius: '6px', fontWeight: 'bold', border: '1px solid rgba(255,215,0,0.3)' }}>
                   {badgeText}
@@ -597,7 +596,8 @@ const Chats = () => {
       if (typingUnsubsRef.current[chat.id]) return;
 
       const cId = [user.uid, chat.id].sort().join('_');
-      const typingRef = ref(db, `chats/${cId}/typing/${chat.id}`);
+      // 🟢 FIX: Pointing directly to the typing node
+      const typingRef = ref(db, `typing/${cId}/${chat.id}`);
 
       const unsub = onValue(
         typingRef,
@@ -787,6 +787,7 @@ const Chats = () => {
   const safeResults = Array.isArray(results) ? results : [];
   const isSearchActive = searchQuery.trim().length > 0;
 
+  // 🟢 FIX: Sort strictly by `timestamp` (newest messages jump to the top)
   const allChatsSorted = [...safeGroupChats, ...safeRecentChats]
     .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
