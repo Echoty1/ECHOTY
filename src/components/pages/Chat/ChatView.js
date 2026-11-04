@@ -278,13 +278,6 @@ const MessageReceipt = ({ msg, isMe, group }) => {
   );
 };
 
-/* ═══════════════════════════════════════════════════════════════
-   🔧 FIX: MessageRow — rewritten gesture handler
-   - Uses touch events on mobile (pointercancel was killing swipe)
-   - touch-action: pan-y applied inline so vertical scroll still works
-   - Swipe fires reliably and resets cleanly
-   - Long-press still works
-   ═══════════════════════════════════════════════════════════════ */
 const MessageRow = ({
   msg, isOwn, rowClass, selectMode, selected, canReply,
   onLongPress, onReply, onDoubleTap, onToggleSelect, registerRef, children,
@@ -335,7 +328,6 @@ const MessageRow = ({
     s.longFired = true;
     s.mode = 'long';
     clearTimers();
-    // Haptic feedback for long-press
     hapticLight();
     const bubble = rowRef.current?.querySelector('.message-bubble');
     const rect = (bubble || rowRef.current)?.getBoundingClientRect();
@@ -359,7 +351,6 @@ const MessageRow = ({
     const dx = clientX - s.x;
     const dy = clientY - s.y;
 
-    // Cancel long-press timer once movement starts
     if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
       if (s.timer) { clearTimeout(s.timer); s.timer = null; }
     }
@@ -367,7 +358,7 @@ const MessageRow = ({
     if (s.mode === null) {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       clearTimers();
-      // 🔧 FIX: use a looser 1.2x ratio, not 1.5x
+      
       const isHorizontalSwipe =
         canReply &&
         !selectMode &&
@@ -421,7 +412,6 @@ const MessageRow = ({
       if (doReply) onReply(msg);
       return;
     }
-    // tap (no swipe, no long-press)
     if (s.mode === null && !cancelled && !s.longFired) {
       if (selectMode) { onToggleSelect(msg); return; }
       const now = Date.now();
@@ -431,7 +421,7 @@ const MessageRow = ({
     s.mode = null;
   };
 
-  // ── Touch events (mobile) ────────────────────────────────────
+  // Touch Events
   const onTouchStart = (e) => {
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
@@ -442,7 +432,6 @@ const MessageRow = ({
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
     swipeMove(t.clientX, t.clientY);
-    // Prevent browser scroll ONLY once we've committed to a swipe
     if (g.current.mode === 'swipe' && e.cancelable) {
       e.preventDefault();
     }
@@ -450,11 +439,9 @@ const MessageRow = ({
 
   const onTouchEnd = (e) => {
     if (g.current.swipeActive) {
-      // swipe finish; do not treat as tap
       swipeEnd(false);
       return;
     }
-    // Tap handling — but skip if target is interactive
     if (e.target.closest?.('a, button, .chat-media-wrapper, .cv-reply-hit, audio, input, .cv-retry')) {
       swipeEnd(false);
       return;
@@ -466,7 +453,7 @@ const MessageRow = ({
     swipeEnd(true);
   };
 
-  // ── Mouse fallback (desktop) ─────────────────────────────────
+  // Mouse Fallback
   const onMouseDown = (e) => {
     if (e.button !== 0) return;
     swipeStart(e.clientX, e.clientY, e.target);
@@ -491,8 +478,6 @@ const MessageRow = ({
       ref={(el) => { rowRef.current = el; registerRef?.(msg.id, el); }}
       className={rowClass}
       data-msg-id={msg.id}
-      // 🔧 FIX: touch-action pan-y lets vertical scroll work, but lets us
-      // intercept horizontal swipe cleanly. pointer-events stays default.
       style={{ touchAction: 'pan-y' }}
       onTouchStart={onTouchStart}
       onTouchMove={onTouchMove}
@@ -650,7 +635,7 @@ const ChatView = () => {
   const [showPlusCheckout, setShowPlusCheckout] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  // 👻 Ghost Mode state (EchoPlus only)
+  // 👻 Ghost Mode state
   const [ghostMode, setGhostMode] = useState(null);
   const [showGhostMenu, setShowGhostMenu] = useState(false);
 
@@ -736,7 +721,7 @@ const ChatView = () => {
     return () => clearTimeout(t);
   }, []);
 
-  // 🟢 DESKTOP DRAG & DROP
+  // DESKTOP DRAG & DROP
   useEffect(() => {
     let dragCounter = 0;
 
@@ -879,7 +864,7 @@ const ChatView = () => {
     return () => unsub();
   }, [msgRoot, user?.uid]);
 
-  // 👻 Ghost Mode cleanup
+  // Ghost Mode cleanup
   useEffect(() => {
     if (!messages.length) return;
     const t = setInterval(() => {
@@ -1261,30 +1246,17 @@ const ChatView = () => {
     catch (err) { console.error('Archive failed', err); showToast('Failed to archive', 'error'); }
   }, [user?.uid, showToast]);
 
-  /* ═══════════════════════════════════════════════════════════════
-     🔧 FIX: focusComposer — force the keyboard up on mobile
-     - No setTimeout deferral for focus() — must run inside the gesture
-     - readOnly toggle trick for iOS to guarantee keyboard opens
-     - scrollIntoView after keyboard opens
-     ═══════════════════════════════════════════════════════════════ */
   const focusComposer = useCallback(() => {
     const el = inputRef.current;
     if (!el) return;
 
-    // 🔧 iOS Safari only opens keyboard if focus() runs synchronously
-    // inside a user gesture (click/tap). So NO setTimeout here for focus.
     try {
-      // readOnly trick — briefly set readOnly=false to force keyboard
       if (el.readOnly) el.readOnly = false;
       el.focus({ preventScroll: true });
     } catch {
       try { el.focus(); } catch {}
     }
 
-    // On some Android browsers, an immediate focus() after setState
-    // doesn't open the keyboard because the textarea wasn't focused
-    // when the gesture started. Double-tap it via a microtask.
-    // (This still runs inside the same tick as the gesture, so it works.)
     Promise.resolve().then(() => {
       try {
         const e2 = inputRef.current;
@@ -1298,7 +1270,6 @@ const ChatView = () => {
     const len = (el.value || '').length;
     try { el.setSelectionRange(len, len); } catch {}
 
-    // Scroll to bottom after keyboard opens — use rAF plus a small delay
     requestAnimationFrame(() => {
       const c = messagesContainerRef.current;
       if (c) c.scrollTop = c.scrollHeight;
@@ -1310,10 +1281,6 @@ const ChatView = () => {
   }, []);
 
   const beginReply = useCallback((msg) => {
-    // 🔧 Order matters: setReplyTo first (so ReplyPreview mounts and layout
-    // shifts), then call focusComposer SYNCHRONOUSLY in the same gesture
-    // tick. React state updates are async but focusComposer works on the
-    // already-mounted textarea, so this is safe.
     setReplyTo(msg);
     focusComposer();
   }, [focusComposer]);
@@ -1481,29 +1448,13 @@ const ChatView = () => {
           <button type="button" className={`chat-header-mute-btn${isMuted ? ' muted' : ''}`} onClick={async () => { if (!user?.uid || !chatKey) return; try { await update(ref(db, `users/${user.uid}/chatPrefs/${chatKey}`), { muted: !isMuted }); setIsMuted(!isMuted); } catch (err) { console.error(err); } }} aria-label={isMuted ? 'Unmute' : 'Mute'}>
             <i className={`fas ${isMuted ? 'fa-bell-slash' : 'fa-bell'}`} />
           </button>
-
-          {/* 👻 Ghost Mode button (EchoPlus only) */}
-          {isEchoPlus && !isGroupChat && (
-            <button
-              type="button"
-              className={`chat-header-ghost-btn${ghostMode ? ' active' : ''}`}
-              onClick={() => setShowGhostMenu(v => !v)}
-              aria-label="Ghost mode"
-              title="Ghost Mode"
-            >
-              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
-                <path d="M12 2a9 9 0 0 0-9 9v8.5a1.5 1.5 0 0 0 2.561 1.061L7 19.121l1.439 1.44a1.5 1.5 0 0 0 2.122 0L12 19.121l1.439 1.44a1.5 1.5 0 0 0 2.122 0L17 19.121l1.439 1.44A1.5 1.5 0 0 0 21 19.5V11a9 9 0 0 0-9-9zm-3 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm6 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>
-              </svg>
-            </button>
-          )}
-
           <button type="button" className="chat-header-info-btn" onClick={() => setShowMoreOptions(v => !v)} aria-label="Chat options">
             <i className="fas fa-ellipsis-v" />
           </button>
         </div>
 
-        {/* 👻 Ghost Mode menu */}
-        {isEchoPlus && showGhostMenu && (
+        {/* 👻 Ghost Mode Menu */}
+        {showGhostMenu && (
           <div className="ghost-menu-backdrop" onClick={() => setShowGhostMenu(false)}>
             <div className="ghost-menu" onClick={e => e.stopPropagation()}>
               <div className="ghost-menu-title">
@@ -1516,26 +1467,33 @@ const ChatView = () => {
               <p className="ghost-menu-hint">
                 New messages you send will automatically disappear.
               </p>
-              {[
-                { ms: null,     label: 'Off',    sub: 'Messages stay forever' },
-                { ms: 3600000,  label: '1 hour', sub: 'Disappear after 1h' },
-                { ms: 7200000,  label: '2 hours', sub: 'Disappear after 2h' },
-                { ms: 21600000, label: '6 hours', sub: 'Disappear after 6h' },
-                { ms: 86400000, label: '24 hours', sub: 'Disappear after 1d' },
-              ].map(opt => (
-                <button
-                  key={String(opt.ms)}
-                  type="button"
-                  className={`ghost-option${ghostMode === opt.ms ? ' active' : ''}`}
-                  onClick={() => { setGhostMode(opt.ms); setShowGhostMenu(false); }}
-                >
-                  <div>
+              <div className="ghost-options-grid">
+                {[
+                  { ms: null,     label: 'Off',       sub: 'Normal' },
+                  { ms: 60000,    label: '1m',        sub: '1 minute' },
+                  { ms: 300000,   label: '5m',        sub: '5 minutes' },
+                  { ms: 600000,   label: '10m',       sub: '10 minutes' },
+                  { ms: 1200000,  label: '20m',       sub: '20 minutes' },
+                  { ms: 1800000,  label: '30m',       sub: '30 minutes' },
+                  { ms: 2700000,  label: '45m',       sub: '45 minutes' },
+                  { ms: 3600000,  label: '1h',        sub: '1 hour' },
+                  { ms: 7200000,  label: '2h',        sub: '2 hours' },
+                  { ms: 10800000, label: '3h',        sub: '3 hours' },
+                  { ms: 18000000, label: '5h',        sub: '5 hours' },
+                  { ms: 90000000, label: '25h',       sub: '25 hours' },
+                ].map(opt => (
+                  <button
+                    key={String(opt.ms)}
+                    type="button"
+                    className={`ghost-option-grid-btn${ghostMode === opt.ms ? ' active' : ''}`}
+                    onClick={() => { setGhostMode(opt.ms); setShowGhostMenu(false); }}
+                  >
                     <span className="ghost-option-label">{opt.label}</span>
                     <span className="ghost-option-sub">{opt.sub}</span>
-                  </div>
-                  {ghostMode === opt.ms && <i className="fas fa-check" />}
-                </button>
-              ))}
+                    {ghostMode === opt.ms && <i className="fas fa-check" />}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         )}
@@ -1603,6 +1561,7 @@ const ChatView = () => {
             const groupClass = row.group === 'top' ? 'group-top' : row.group === 'bottom' ? 'group-bottom' : row.group === 'mid' ? 'group-mid' : '';
             const selected = selectedIds.has(msg.id);
             const isPremium = isPremiumSticker(msg.text) && !msg.mediaType && !msg.mediaUrl;
+            const isGhost = !!msg.expiresAt;
 
             const premiumStyle =
               msg.senderPremiumStyle ||
@@ -1628,7 +1587,7 @@ const ChatView = () => {
                   <div className="premium-sticker-message">
                     {renderPremiumSticker(msg.text, 200)}
                     <div className="message-meta-row" style={{ justifyContent: 'center', marginTop: '-5px' }}>
-                      {msg.expiresAt && (
+                      {isGhost && (
                         <span className="ghost-chip" title="Disappearing message">
                           <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                             <circle cx="12" cy="12" r="10" />
@@ -1637,7 +1596,6 @@ const ChatView = () => {
                           <span>
                             {(() => {
                               const ms = msg.expiresAt - msgTime(msg);
-                              if (ms >= 86400000) return `${Math.round(ms / 86400000)}d`;
                               if (ms >= 3600000) return `${Math.round(ms / 3600000)}h`;
                               if (ms >= 60000) return `${Math.round(ms / 60000)}m`;
                               return 'soon';
@@ -1668,7 +1626,11 @@ const ChatView = () => {
                 onToggleSelect={handleToggleSelect}
                 registerRef={registerRef}
               >
-                <div className={`message-bubble ${isOwn ? 'own' : 'partner'}${premiumStyleClass} ${isPremium ? 'premium-lottie-bubble' : ''} ${msg.editedAt ? 'edited' : ''}`} style={{ fontSize: FONT_SIZE_MAP[fontSize] }}>
+                <div 
+                  className={`message-bubble ${isOwn ? 'own' : 'partner'}${premiumStyleClass} ${isPremium ? 'premium-lottie-bubble' : ''} ${msg.editedAt ? 'edited' : ''} ${isGhost ? 'ghost-liquid-bubble' : ''}`} 
+                  style={{ fontSize: FONT_SIZE_MAP[fontSize] }}
+                >
+                  {isGhost && <div className="ghost-liquid-glow" />}
                   {!isOwn && isGroupChat && (
                     <div className="message-sender-name" style={{ color: senderColor(msg.senderId || msg.uid) }}>
                       {sanitizeName((groupData?.members?.[msg.senderId]?.displayName) || msg.senderName, msg.senderId || msg.uid)}
@@ -1711,7 +1673,7 @@ const ChatView = () => {
                     </div>
                   )}
                   <div className="message-meta-row">
-                    {msg.expiresAt && (
+                    {isGhost && (
                       <span className="ghost-chip" title="Disappearing message">
                         <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                           <circle cx="12" cy="12" r="10" />
@@ -1720,7 +1682,6 @@ const ChatView = () => {
                         <span>
                           {(() => {
                             const ms = msg.expiresAt - msgTime(msg);
-                            if (ms >= 86400000) return `${Math.round(ms / 86400000)}d`;
                             if (ms >= 3600000) return `${Math.round(ms / 3600000)}h`;
                             if (ms >= 60000) return `${Math.round(ms / 60000)}m`;
                             return 'soon';
@@ -1847,20 +1808,40 @@ const ChatView = () => {
               <button type="button" className="chat-emoji-btn" onClick={() => setShowEmojiPicker(v => !v)} aria-label="Emoji">
                 <i className="far fa-smile" />
               </button>
-              <textarea
-                ref={inputRef}
-                className="chat-input"
-                placeholder="Message…"
-                rows={1}
-                value={newMessage}
-                onChange={handleInputChange}
-                onKeyDown={handleKeyDown}
-                style={{ resize: 'none' }}
-                // 🔧 Prevent iOS auto-zoom on focus (see CSS too)
-                autoComplete="off"
-                autoCorrect="off"
-                spellCheck={false}
-              />
+
+              {/* 👻 Ghost Mode Button inside Input */}
+              <div className="chat-input-inner-wrapper">
+                <button 
+                  type="button" 
+                  className={`chat-ghost-inline-btn ${ghostMode ? 'active' : ''}`}
+                  onClick={() => {
+                    if (!isEchoPlus) {
+                      setShowPlusCheckout(true);
+                    } else {
+                      setShowGhostMenu(true);
+                    }
+                  }}
+                  aria-label="Ghost Mode Timer"
+                >
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 2a9 9 0 0 0-9 9v8.5a1.5 1.5 0 0 0 2.561 1.061L7 19.121l1.439 1.44a1.5 1.5 0 0 0 2.122 0L12 19.121l1.439 1.44a1.5 1.5 0 0 0 2.122 0L17 19.121l1.439 1.44A1.5 1.5 0 0 0 21 19.5V11a9 9 0 0 0-9-9z"/>
+                  </svg>
+                </button>
+                <textarea
+                  ref={inputRef}
+                  className="chat-input"
+                  placeholder="Message…"
+                  rows={1}
+                  value={newMessage}
+                  onChange={handleInputChange}
+                  onKeyDown={handleKeyDown}
+                  style={{ resize: 'none' }}
+                  autoComplete="off"
+                  autoCorrect="off"
+                  spellCheck={false}
+                />
+              </div>
+
               {newMessage.trim() ? (
                 <button ref={sendButtonRef} type="button" className="chat-send-btn" onClick={handleSendText} aria-label="Send">
                   <i className="fas fa-paper-plane" />
