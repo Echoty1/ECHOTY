@@ -553,20 +553,32 @@
     <!-- ✅ Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
-    <!-- ★ MONETAG PUSH NOTIFICATIONS -->
-    <script src="https://5gvci.com/act/files/tag.min.js?z=12169371" data-cfasync="false" async></script>
-
-    <!-- 🔥 ONESIGNAL PUSH NOTIFICATIONS SDK -->
+    <!-- 🔥 ONESIGNAL PUSH NOTIFICATIONS SDK (Moved up & configured to stop refresh loop) -->
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
       window.OneSignalDeferred = window.OneSignalDeferred || [];
       OneSignalDeferred.push(async function(OneSignal) {
         await OneSignal.init({
-          appId: "758b8bf2-c7e4-4230-a097-771e0d6e672f", // Your OneSignal App ID
-          allowLocalhostAsSecureOrigin: true, 
+          appId: "758b8bf2-c7e4-4230-a097-771e0d6e672f",
+          allowLocalhostAsSecureOrigin: true,
+          notifyButton: { enable: false }, // Stops auto-reload
+          serviceWorkerParam: { scope: "/" },
+          serviceWorkerPath: "OneSignalSDKWorker.js",
+          autoResubscribe: true,
+          promptOptions: {
+            slidedown: {
+              enabled: true,
+              autoPrompt: true,
+              timeDelay: 20, 
+              pageViews: 1
+            }
+          }
         });
       });
     </script>
+
+    <!-- ★ MONETAG PUSH NOTIFICATIONS -->
+    <script src="https://5gvci.com/act/files/tag.min.js?z=12169371" data-cfasync="false" async></script>
   </head>
   <body>
     <div id="root"></div>
