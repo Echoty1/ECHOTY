@@ -15,7 +15,7 @@ import { SubscriptionProvider } from './contexts/SubscriptionContext';
 import RedeemPass from './components/pages/Redeem/RedeemPass'; 
 
 // ─── Services ───
-import { registerFcmToken } from './services/fcmService'; // ★ NEW IMPORT
+// 🔥 REMOVED: import { registerFcmToken } from './services/fcmService'; (We are using OneSignal now)
 
 // ─── Geo-Block & 404 Imports ───
 import CountryBlockScreen from './components/Auth/CountryBlockScreen';
@@ -159,17 +159,6 @@ function AppContent() {
   // ─── AI GUIDE STATE ───
   const [runAIGuide, setRunAIGuide] = useState(false);
 
-  // ★ NEW: REQUEST NOTIFICATIONS AFTER LOGIN
-  useEffect(() => {
-    if (user?.uid) {
-      // Wait 5 seconds so the app loads first
-      const timer = setTimeout(() => {
-        registerFcmToken(user.uid);
-      }, 5000);
-      return () => clearTimeout(timer);
-    }
-  }, [user?.uid]);
-
   useEffect(() => {
     if (user) {
       const timer = setTimeout(() => {
@@ -311,17 +300,18 @@ function AppContent() {
     return () => document.body.classList.remove('echo-support-visible');
   }, [showHappr]);
 
-  useEffect(() => {
-    const key = 'echo_v';
-    const saved = localStorage.getItem(key);
-    const current = String(APP_VERSION);
-    if (saved && saved !== current) {
-      localStorage.setItem(key, current);
-      window.location.reload();
-    } else if (!saved) {
-      localStorage.setItem(key, current);
-    }
-  }, []);
+  // 🔥 REMOVED: The APP_VERSION reload loop that was causing refresh issues
+  // useEffect(() => {
+  //   const key = 'echo_v';
+  //   const saved = localStorage.getItem(key);
+  //   const current = String(APP_VERSION);
+  //   if (saved && saved !== current) {
+  //     localStorage.setItem(key, current);
+  //     window.location.reload();
+  //   } else if (!saved) {
+  //     localStorage.setItem(key, current);
+  //   }
+  // }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => setMinTimePassed(true), 2000);
@@ -430,13 +420,14 @@ function AppContent() {
     }
   }, [user?.uid, fetchProfile]);
 
-  useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then((registration) => {
-        registration.update();
-      }).catch(() => {});
-    }
-  }, []);
+  // 🔥 REMOVED: The serviceWorker.ready update loop
+  // useEffect(() => {
+  //   if ('serviceWorker' in navigator) {
+  //     navigator.serviceWorker.ready.then((registration) => {
+  //       registration.update();
+  //     }).catch(() => {});
+  //   }
+  // }, []);
 
   // ─── BLOCK LOGIC ───
   if (isGeoChecking) {
