@@ -172,8 +172,9 @@ const linkify = (text) => {
 };
 
 const isMessageExpired = (m) => {
-  const hasExpiry = m.expiresAt != null || m.tideExpiresAt != null || m.expireAt != null;
-  if (!hasExpiry) return false;
+  if (m.expiresAt && Date.now() > m.expiresAt) return true;
+  const hasTideExpiry = m.tideExpiresAt != null || m.expireAt != null;
+  if (!hasTideExpiry) return false;
   try { return !!isTideExpired(m); } catch { return false; }
 };
 
@@ -549,6 +550,10 @@ const ChatView = () => {
   const [showPlusCheckout, setShowPlusCheckout] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
+  // 👻 Ghost Mode state (EchoPlus only)
+  const [ghostMode, setGhostMode] = useState(null); // null | 3600000 | 7200000 | 21600000 | 86400000
+  const [showGhostMenu, setShowGhostMenu] = useState(false);
+
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', confirmText: 'Confirm', cancelText: 'Cancel', onConfirm: null });
 
   const messagesContainerRef = useRef(null);
@@ -632,7 +637,7 @@ const ChatView = () => {
     return () => clearTimeout(t);
   }, []);
 
-  // 🟢 DESKTOP DRAG & DROP
+  // 🟢 DESKTOP DRAG & DROP — FIXED black screen
   useEffect(() => {
     let dragCounter = 0;
 
@@ -656,6 +661,7 @@ const ChatView = () => {
 
     const handleDrop = (e) => {
       e.preventDefault();
+      // 1. Force overlay off FIRST
       setIsDragging(false);
       dragCounter = 0;
 
@@ -665,9 +671,15 @@ const ChatView = () => {
           showToast('File too large (max 20MB)', 'error');
           return;
         }
-        setSelectedFile(file);
-        setPreviewUrl(URL.createObjectURL(file));
+
+        // 2. Force overlay off again (state batching safety)
+        setIsDragging(false);
+
+        // 3. Then open preview — overlay cannot cover it because of !selectedFile guard
+        const url = URL.createObjectURL(file);
+        setPreviewUrl(url);
         setCaptionText('');
+        setSelectedFile(file);
       }
     };
 
@@ -774,6 +786,15 @@ const ChatView = () => {
     });
     return () => unsub();
   }, [msgRoot, user?.uid]);
+
+  // 👻 Ghost Mode — periodic live cleanup of expired messages
+  useEffect(() => {
+    if (!messages.length) return;
+    const t = setInterval(() => {
+      setMessages(prev => sortMessages(prev.filter(m => !isMessageExpired(m))));
+    }, 30000);
+    return () => clearInterval(t);
+  }, [messages.length]);
 
   useEffect(() => {
     if (!user?.uid || !userId || isGroupChat) return undefined;
@@ -906,6 +927,10 @@ const ChatView = () => {
 
     const tempId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const now = Date.now();
+
+    // 👻 Ghost mode expiry
+    const expiresAt = ghostMode ? now + ghostMode : null;
+
     const replySnapshot = replyTo
       ? { id: replyTo.id, text: replyTo.text || '', senderId: replyTo.senderId || replyTo.uid || null, mediaType: replyTo.mediaType || null }
       : replyToNote || null;
@@ -923,6 +948,7 @@ const ChatView = () => {
       createdAt: now,
       replyTo: replySnapshot,
       senderPremiumStyle,
+      expiresAt,
     };
 
     upsertLocal(localMsg);
@@ -947,6 +973,7 @@ const ChatView = () => {
         createdAt: now,
         replyTo: replySnapshot,
         senderPremiumStyle,
+        expiresAt,
       });
       await set(newRef, payload);
 
@@ -973,7 +1000,7 @@ const ChatView = () => {
   }, [
     newMessage, msgRoot, user?.uid, replyTo, replyToNote,
     upsertLocal, removeLocal, patchLocal, showToast, isMuted,
-    userId, isGroupChat, userSettings, currentUserProfile,
+    userId, isGroupChat, userSettings, currentUserProfile, ghostMode,
   ]);
 
   const uploadToCloudinary = useCallback(async (file) => {
@@ -992,6 +1019,10 @@ const ChatView = () => {
     if (file.size > MAX_FILE_SIZE) { showToast('File too large (max 20MB)', 'error'); return; }
     const tempId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const now = Date.now();
+
+    // 👻 Ghost mode expiry
+    const expiresAt = ghostMode ? now + ghostMode : null;
+
     const blobUrl = URL.createObjectURL(file);
     const mediaType = file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : 'image';
 
@@ -1003,7 +1034,7 @@ const ChatView = () => {
       id: tempId, text: payload.caption || '', caption: payload.caption || '',
       senderId: user.uid, uid: user.uid, timestamp: now, createdAt: now,
       pending: true, isUploading: true, mediaType, mediaUrl: blobUrl,
-      replyTo: replyTo || replyToNote || null, senderPremiumStyle,
+      replyTo: replyTo || replyToNote || null, senderPremiumStyle, expiresAt,
     });
     setReplyTo(null);
     setReplyToNote(null);
@@ -1016,7 +1047,7 @@ const ChatView = () => {
         text: payload.caption || '', caption: payload.caption || '',
         senderId: user.uid, uid: user.uid, timestamp: now, createdAt: now,
         mediaType, mediaUrl: up.url, publicId: up.publicId, duration: up.duration || null,
-        replyTo: replyTo || replyToNote || null, senderPremiumStyle,
+        replyTo: replyTo || replyToNote || null, senderPremiumStyle, expiresAt,
       });
       await set(newRef, payloadOut);
 
@@ -1032,7 +1063,7 @@ const ChatView = () => {
       patchLocal(tempId, { pending: false, isUploading: false, uploadFailed: true });
       showToast('Failed to send media', 'error');
     }
-  }, [msgRoot, user?.uid, replyTo, replyToNote, uploadToCloudinary, upsertLocal, removeLocal, patchLocal, showToast, isMuted, userId, isGroupChat, userSettings, currentUserProfile]);
+  }, [msgRoot, user?.uid, replyTo, replyToNote, uploadToCloudinary, upsertLocal, removeLocal, patchLocal, showToast, isMuted, userId, isGroupChat, userSettings, currentUserProfile, ghostMode]);
 
   const handleReact = useCallback(async (msg, key) => {
     if (!msgRoot || !user?.uid || !msg?.id) return;
@@ -1329,10 +1360,64 @@ const ChatView = () => {
           <button type="button" className={`chat-header-mute-btn${isMuted ? ' muted' : ''}`} onClick={async () => { if (!user?.uid || !chatKey) return; try { await update(ref(db, `users/${user.uid}/chatPrefs/${chatKey}`), { muted: !isMuted }); setIsMuted(!isMuted); } catch (err) { console.error(err); } }} aria-label={isMuted ? 'Unmute' : 'Mute'}>
             <i className={`fas ${isMuted ? 'fa-bell-slash' : 'fa-bell'}`} />
           </button>
+
+          {/* 👻 Ghost Mode button (EchoPlus only) */}
+          {isEchoPlus && !isGroupChat && (
+            <button
+              type="button"
+              className={`chat-header-ghost-btn${ghostMode ? ' active' : ''}`}
+              onClick={() => setShowGhostMenu(v => !v)}
+              aria-label="Ghost mode"
+              title="Ghost Mode"
+            >
+              <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                <path d="M12 2a9 9 0 0 0-9 9v8.5a1.5 1.5 0 0 0 2.561 1.061L7 19.121l1.439 1.44a1.5 1.5 0 0 0 2.122 0L12 19.121l1.439 1.44a1.5 1.5 0 0 0 2.122 0L17 19.121l1.439 1.44A1.5 1.5 0 0 0 21 19.5V11a9 9 0 0 0-9-9zm-3 9a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3zm6 0a1.5 1.5 0 1 1 0-3 1.5 1.5 0 0 1 0 3z"/>
+              </svg>
+            </button>
+          )}
+
           <button type="button" className="chat-header-info-btn" onClick={() => setShowMoreOptions(v => !v)} aria-label="Chat options">
             <i className="fas fa-ellipsis-v" />
           </button>
         </div>
+
+        {/* 👻 Ghost Mode menu (EchoPlus only) */}
+        {isEchoPlus && showGhostMenu && (
+          <div className="ghost-menu-backdrop" onClick={() => setShowGhostMenu(false)}>
+            <div className="ghost-menu" onClick={e => e.stopPropagation()}>
+              <div className="ghost-menu-title">
+                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor">
+                  <path d="M12 2a9 9 0 0 0-9 9v8.5a1.5 1.5 0 0 0 2.561 1.061L7 19.121l1.439 1.44a1.5 1.5 0 0 0 2.122 0L12 19.121l1.439 1.44a1.5 1.5 0 0 0 2.122 0L17 19.121l1.439 1.44A1.5 1.5 0 0 0 21 19.5V11a9 9 0 0 0-9-9z"/>
+                </svg>
+                <span>Ghost Mode</span>
+                <span className="ghost-plus-badge">PLUS</span>
+              </div>
+              <p className="ghost-menu-hint">
+                New messages you send will automatically disappear.
+              </p>
+              {[
+                { ms: null,     label: 'Off',    sub: 'Messages stay forever' },
+                { ms: 3600000,  label: '1 hour', sub: 'Disappear after 1h' },
+                { ms: 7200000,  label: '2 hours', sub: 'Disappear after 2h' },
+                { ms: 21600000, label: '6 hours', sub: 'Disappear after 6h' },
+                { ms: 86400000, label: '24 hours', sub: 'Disappear after 1d' },
+              ].map(opt => (
+                <button
+                  key={String(opt.ms)}
+                  type="button"
+                  className={`ghost-option${ghostMode === opt.ms ? ' active' : ''}`}
+                  onClick={() => { setGhostMode(opt.ms); setShowGhostMenu(false); }}
+                >
+                  <div>
+                    <span className="ghost-option-label">{opt.label}</span>
+                    <span className="ghost-option-sub">{opt.sub}</span>
+                  </div>
+                  {ghostMode === opt.ms && <i className="fas fa-check" />}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* More options */}
         {showMoreOptions && (
@@ -1422,6 +1507,23 @@ const ChatView = () => {
                   <div className="premium-sticker-message">
                     {renderPremiumSticker(msg.text, 200)}
                     <div className="message-meta-row" style={{ justifyContent: 'center', marginTop: '-5px' }}>
+                      {msg.expiresAt && (
+                        <span className="ghost-chip" title="Disappearing message">
+                          <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <circle cx="12" cy="12" r="10" />
+                            <polyline points="12 6 12 12 16 14" />
+                          </svg>
+                          <span>
+                            {(() => {
+                              const ms = msg.expiresAt - msgTime(msg);
+                              if (ms >= 86400000) return `${Math.round(ms / 86400000)}d`;
+                              if (ms >= 3600000) return `${Math.round(ms / 3600000)}h`;
+                              if (ms >= 60000) return `${Math.round(ms / 60000)}m`;
+                              return 'soon';
+                            })()}
+                          </span>
+                        </span>
+                      )}
                       <span className="message-meta-time" style={{ color: 'var(--text-muted)', fontSize: 11 }}>{formatMsgClock(msg)}</span>
                       <MessageReceipt msg={msg} isMe={isOwn} group={isGroupChat} />
                     </div>
@@ -1488,6 +1590,23 @@ const ChatView = () => {
                     </div>
                   )}
                   <div className="message-meta-row">
+                    {msg.expiresAt && (
+                      <span className="ghost-chip" title="Disappearing message">
+                        <svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <circle cx="12" cy="12" r="10" />
+                          <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                        <span>
+                          {(() => {
+                            const ms = msg.expiresAt - msgTime(msg);
+                            if (ms >= 86400000) return `${Math.round(ms / 86400000)}d`;
+                            if (ms >= 3600000) return `${Math.round(ms / 3600000)}h`;
+                            if (ms >= 60000) return `${Math.round(ms / 60000)}m`;
+                            return 'soon';
+                          })()}
+                        </span>
+                      </span>
+                    )}
                     {msg.editedAt && <span className="message-edited-badge">edited</span>}
                     <span className="message-meta-time">{formatMsgClock(msg)}</span>
                     <MessageReceipt msg={msg} isMe={isOwn} group={isGroupChat} />
@@ -1536,6 +1655,8 @@ const ChatView = () => {
 
                   const tempId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
                   const now = Date.now();
+                  const expiresAt = ghostMode ? now + ghostMode : null;
+
                   const replySnapshot = replyTo
                     ? { id: replyTo.id, text: replyTo.text || '', senderId: replyTo.senderId || replyTo.uid || null, mediaType: replyTo.mediaType || null }
                     : replyToNote || null;
@@ -1553,6 +1674,7 @@ const ChatView = () => {
                     createdAt: now,
                     replyTo: replySnapshot,
                     senderPremiumStyle,
+                    expiresAt,
                   });
 
                   setReplyTo(null);
@@ -1570,6 +1692,7 @@ const ChatView = () => {
                       createdAt: now,
                       replyTo: replySnapshot,
                       senderPremiumStyle,
+                      expiresAt,
                     }));
 
                     if (!isGroupChat && userId) {
@@ -1653,8 +1776,8 @@ const ChatView = () => {
         {toast && <Toast message={toast.message} type={toast.type} />}
         <PlusCheckout isOpen={showPlusCheckout} onClose={() => setShowPlusCheckout(false)} />
 
-        {/* 🟢 Drag & Drop Overlay */}
-        {isDragging && (
+        {/* 🟢 Drag & Drop Overlay — with !selectedFile guard so it never covers MediaPreview */}
+        {isDragging && !selectedFile && (
           <div className="drag-drop-overlay">
             <div className="drag-drop-content">
               <div className="drag-drop-icon">
