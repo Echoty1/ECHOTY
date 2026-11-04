@@ -1,5 +1,5 @@
 // src/App.js
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, Component } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ref, get } from 'firebase/database';
 import { isAndroid, isIOS } from 'react-device-detect';
@@ -13,9 +13,6 @@ import { ThemeProvider } from './contexts/ThemeContext';
 // ─── ECHO Plus Imports ────────────────────────────────
 import { SubscriptionProvider } from './contexts/SubscriptionContext';
 import RedeemPass from './components/pages/Redeem/RedeemPass'; 
-
-// ─── Services ───
-// 🔥 REMOVED: import { registerFcmToken } from './services/fcmService'; (We use OneSignal now)
 
 // ─── Geo-Block & 404 Imports ───
 import CountryBlockScreen from './components/Auth/CountryBlockScreen';
@@ -75,7 +72,7 @@ import StoryRecorder from './components/Stories/StoryRecorder';
 
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 
-// ─── BAN SYSTEM (Edit this to add/remove blocks) ───
+// ─── BAN SYSTEM ───
 const BLOCKED_COUNTRIES = ['IL']; 
 const BLOCKED_REGIONS = [
   { country: 'NG', state: 'ondo' } 
@@ -109,6 +106,34 @@ function ScrollToTop() {
     window.scrollTo(0, 0);
   }, [pathname]);
   return null;
+}
+
+// 🔥 NEW: SAFE ERROR BOUNDARY
+class ErrorBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false };
+  }
+  static getDerivedStateFromError(error) {
+    return { hasError: true };
+  }
+  componentDidCatch(error, errorInfo) {
+    console.error("React Error Boundary caught:", error, errorInfo);
+  }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100vh', background: '#09090b', color: '#fff', padding: 20, textAlign: 'center' }}>
+          <h2 style={{ color: '#6C3CE1' }}>Oops! Something went wrong.</h2>
+          <p style={{ color: '#aaa', marginBottom: 20 }}>ECHO encountered an unexpected error.</p>
+          <button onClick={() => window.location.reload()} style={{ padding: '10px 24px', background: '#6C3CE1', color: '#fff', border: 'none', borderRadius: '20px', cursor: 'pointer', fontWeight: 'bold' }}>
+            Reload App
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
 }
 
 function LoadingScreen() {
@@ -156,7 +181,6 @@ function AppContent() {
   const showLoading = loading || !minTimePassed;
   const isSpotlightRoute = pathname.startsWith('/spotlight');
   
-  // ─── AI GUIDE STATE ───
   const [runAIGuide, setRunAIGuide] = useState(false);
 
   useEffect(() => {
@@ -172,13 +196,11 @@ function AppContent() {
     setRunAIGuide(false);
   };
 
-  // ─── GEO-BLOCK STATE ───
   const [geoBlocked, setGeoBlocked] = useState(false);
   const [isGeoChecking, setIsGeoChecking] = useState(true);
   const [blockReason, setBlockReason] = useState('');
   const [blockedCountryName, setBlockedCountryName] = useState('');
 
-  // ─── GEO-CHECK EFFECT ───
   useEffect(() => {
     const checkRegion = async () => {
       try {
@@ -268,29 +290,35 @@ function AppContent() {
     };
   }, []);
 
+  // 🔥 SAFE: Wrapped myhappr script in try-catch so it doesn't crash React
   useEffect(() => {
-    const src = 'https://myhappr.com/widget.js';
-    if (document.querySelector(`script[src="${src}"]`)) return undefined;
-    const script = document.createElement('script');
-    script.src = src;
-    script.async = true;
-    script.setAttribute('data-username', 'echoty');
-    script.setAttribute('data-color', '#9D5EFF');
-    script.setAttribute('data-button-color', '#9D5EFF');
-    script.setAttribute('data-text-color', '#FFFFFF');
-    script.setAttribute('data-radius', '8px');
-    script.setAttribute('data-text', 'Support ECHO');
-    script.setAttribute('data-title', 'Keep the Echo Alive');
-    script.setAttribute('data-theme', 'light');
-    script.setAttribute('data-card-bg', '#FFFFFF');
-    script.setAttribute('data-card-text', '#09090b');
-    document.body.appendChild(script);
-    if (!document.getElementById('echo-happr-style')) {
-      const css = document.createElement('style');
-      css.id = 'echo-happr-style';
-      css.textContent =
-        'body.echo-support-visible [class*="myhappr"],body.echo-support-visible [id*="myhappr"],body.echo-support-visible iframe[src*="myhappr"]{bottom:96px!important;z-index:80!important;}body:not(.echo-support-visible) [class*="myhappr"],body:not(.echo-support-visible) [id*="myhappr"],body:not(.echo-support-visible) iframe[src*="myhappr"]{display:none!important;}';
-      document.head.appendChild(css);
+    try {
+      const src = 'https://myhappr.com/widget.js';
+      if (document.querySelector(`script[src="${src}"]`)) return undefined;
+      const script = document.createElement('script');
+      script.src = src;
+      script.async = true;
+      script.setAttribute('data-username', 'echoty');
+      script.setAttribute('data-color', '#9D5EFF');
+      script.setAttribute('data-button-color', '#9D5EFF');
+      script.setAttribute('data-text-color', '#FFFFFF');
+      script.setAttribute('data-radius', '8px');
+      script.setAttribute('data-text', 'Support ECHO');
+      script.setAttribute('data-title', 'Keep the Echo Alive');
+      script.setAttribute('data-theme', 'light');
+      script.setAttribute('data-card-bg', '#FFFFFF');
+      script.setAttribute('data-card-text', '#09090b');
+      document.body.appendChild(script);
+
+      if (!document.getElementById('echo-happr-style')) {
+        const css = document.createElement('style');
+        css.id = 'echo-happr-style';
+        css.textContent =
+          'body.echo-support-visible [class*="myhappr"],body.echo-support-visible [id*="myhappr"],body.echo-support-visible iframe[src*="myhappr"]{bottom:96px!important;z-index:80!important;}body:not(.echo-support-visible) [class*="myhappr"],body:not(.echo-support-visible) [id*="myhappr"],body:not(.echo-support-visible) iframe[src*="myhappr"]{display:none!important;}';
+        document.head.appendChild(css);
+      }
+    } catch (err) {
+      console.warn("myhappr script failed to load safely:", err);
     }
     return undefined;
   }, []);
@@ -299,8 +327,6 @@ function AppContent() {
     document.body.classList.toggle('echo-support-visible', showHappr);
     return () => document.body.classList.remove('echo-support-visible');
   }, [showHappr]);
-
-  // 🔥 REMOVED: The APP_VERSION reload loop
 
   useEffect(() => {
     const timer = setTimeout(() => setMinTimePassed(true), 2000);
@@ -409,9 +435,6 @@ function AppContent() {
     }
   }, [user?.uid, fetchProfile]);
 
-  // 🔥 REMOVED: serviceWorker.ready update loop
-
-  // ─── BLOCK LOGIC ───
   if (isGeoChecking) {
     return <LoadingScreen />;
   }
@@ -494,7 +517,6 @@ function AppContent() {
       {showInstallPopup && <InstallPopup playStoreUrl={playStoreUrl} onClose={handleInstallPopupClose} />}
       <InstallBanner playStoreUrl={playStoreUrl} />
 
-      {/* ★ NEW: AI GUIDE */}
       <AIGuide run={runAIGuide} onComplete={handleGuideComplete} />
     </>
   );
@@ -502,28 +524,30 @@ function AppContent() {
 
 function App() {
   return (
-    <BrowserRouter>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaData) }}
-      />
-      <ThemeProvider>
-        <AuthProvider>
-          <PresenceProvider>
-            <ProfileProvider>
-              <CacheProvider>
-                <CallProvider>
-                  <SubscriptionProvider>
-                    <ScrollRestoration />
-                    <AppContent />
-                  </SubscriptionProvider>
-                </CallProvider>
-              </CacheProvider>
-            </ProfileProvider>
-          </PresenceProvider>
-        </AuthProvider>
-      </ThemeProvider>
-    </BrowserRouter>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(schemaData) }}
+        />
+        <ThemeProvider>
+          <AuthProvider>
+            <PresenceProvider>
+              <ProfileProvider>
+                <CacheProvider>
+                  <CallProvider>
+                    <SubscriptionProvider>
+                      <ScrollRestoration />
+                      <AppContent />
+                    </SubscriptionProvider>
+                  </CallProvider>
+                </CacheProvider>
+              </ProfileProvider>
+            </PresenceProvider>
+          </AuthProvider>
+        </ThemeProvider>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 }
 
