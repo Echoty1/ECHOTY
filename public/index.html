@@ -553,7 +553,19 @@
     <!-- ✅ Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
-    <!-- 🔥 ONESIGNAL PUSH NOTIFICATIONS SDK (Moved up & configured to stop refresh loop) -->
+    <!-- 🔥 CLEANUP OLD SERVICE WORKERS (Stops the refresh loop) -->
+    <script>
+      if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.getRegistrations().then(function(registrations) {
+          for(let registration of registrations) {
+            registration.unregister();
+            console.log('Unregistered old Service Worker:', registration);
+          }
+        });
+      }
+    </script>
+
+    <!-- 🔥 ONESIGNAL PUSH NOTIFICATIONS SDK -->
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
       window.OneSignalDeferred = window.OneSignalDeferred || [];
