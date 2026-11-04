@@ -42,8 +42,7 @@ import './ChatView.css';
 import './ChatViewLiquid.css';
 
 // 🔥 1. PUSH NOTIFICATION HELPER FUNCTION
-// Put your REST API KEY here (starts with os_v2_app_...)
-const ONESIGNAL_REST_API_KEY = "YOUR_REST_API_KEY_HERE"; 
+const ONESIGNAL_REST_API_KEY = "os_v2_app_owfyx4wh4rbdbiexo4pa23thf5jvk32mkfuugw4gd5azq6av2qf45zlvika6cwh5nr7bdjpxcebiwn7xvjscsoi7n2izk4jjc2x7mni"; 
 const ONESIGNAL_APP_ID = "758b8bf2-c7e4-4230-a097-771e0d6e672f";
 
 const sendPushNotification = async (targetUserId, senderName, messageText, senderPhoto) => {
