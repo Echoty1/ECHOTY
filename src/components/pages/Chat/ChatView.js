@@ -1094,7 +1094,7 @@ const ChatView = () => {
     catch (err) { console.error('Archive failed', err); showToast('Failed to archive', 'error'); }
   }, [user?.uid, showToast]);
 
-   // 🟢 Focus the input whenever a reply is initiated (swipe, long-press menu, double-tap)
+  // 🟢 Focus the input whenever a reply is initiated (swipe, long-press menu, double-tap)
   const focusComposer = useCallback(() => {
     setTimeout(() => {
       const el = inputRef.current;
@@ -1104,10 +1104,8 @@ const ChatView = () => {
       } catch {
         try { el.focus(); } catch {}
       }
-      // On mobile the keyboard needs a moment after focus
       const len = (el.value || '').length;
       try { el.setSelectionRange(len, len); } catch {}
-      // Ensure we scroll to the bottom so the composer is visible above the keyboard
       requestAnimationFrame(() => {
         const c = messagesContainerRef.current;
         if (c) c.scrollTop = c.scrollHeight;
@@ -1149,7 +1147,7 @@ const ChatView = () => {
       items.push({ key: 'delete', label: 'Delete', icon: 'fa-trash', danger: true, onPress: () => handleDeleteMessage(msg) });
     }
     return items;
-  }, [menu, bookmarkedIds, pinnedMessageId, showToast, handleBookmarkMessage, handlePinMessage, handleArchive, handleDeleteMessage]);
+  }, [menu, bookmarkedIds, pinnedMessageId, showToast, beginReply, handleBookmarkMessage, handlePinMessage, handleArchive, handleDeleteMessage]);
 
   const handleInputChange = (e) => { setNewMessage(e.target.value); broadcastTyping(); };
   const handleKeyDown = (e) => { if (enterToSend && e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendText(); } };
@@ -1369,7 +1367,7 @@ const ChatView = () => {
                   selected={selected}
                   canReply={!selectMode}
                   onLongPress={handleLongPress}
-                 onReply={(m) => beginReply(m)}
+                  onReply={(m) => beginReply(m)}
                   onDoubleTap={(m) => handleReact(m, 'heart')}
                   onToggleSelect={handleToggleSelect}
                   registerRef={registerRef}
@@ -1395,7 +1393,7 @@ const ChatView = () => {
                 selected={selected}
                 canReply={!selectMode}
                 onLongPress={handleLongPress}
-                onReply={(m) => setReplyTo(m)}
+                onReply={(m) => beginReply(m)}
                 onDoubleTap={(m) => handleReact(m, 'heart')}
                 onToggleSelect={handleToggleSelect}
                 registerRef={registerRef}
