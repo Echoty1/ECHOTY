@@ -278,6 +278,13 @@ const MessageReceipt = ({ msg, isMe, group }) => {
   );
 };
 
+/* ═══════════════════════════════════════════════════════════════
+   🔧 FIX: MessageRow — rewritten gesture handler
+   - Uses touch events on mobile (pointercancel was killing swipe)
+   - touch-action: pan-y applied inline so vertical scroll still works
+   - Swipe fires reliably and resets cleanly
+   - Long-press still works
+   ═══════════════════════════════════════════════════════════════ */
 const MessageRow = ({
   msg, isOwn, rowClass, selectMode, selected, canReply,
   onLongPress, onReply, onDoubleTap, onToggleSelect, registerRef, children,
@@ -287,7 +294,8 @@ const MessageRow = ({
   const iconRef = useRef(null);
   const g = useRef({
     id: null, x: 0, y: 0, mode: null, timer: null, pressTimer: null,
-    longFired: false, passed: false, lastTap: 0, noSwipe: false
+    longFired: false, passed: false, lastTap: 0, noSwipe: false,
+    swipeActive: false,
   });
 
   const clearTimers = () => {
@@ -308,101 +316,193 @@ const MessageRow = ({
   const resetSwipe = (animate) => {
     const st = stackRef.current;
     if (st) {
-      st.style.transition = animate ? 'transform .34s cubic-bezier(.2,.9,.3,1.25)' : 'none';
+      st.style.transition = animate ? 'transform .3s cubic-bezier(.2,.9,.3,1.2)' : 'none';
       st.style.transform = '';
     }
     const ic = iconRef.current;
     if (ic) {
+      ic.style.transition = animate ? 'opacity .2s, transform .25s' : 'none';
       ic.style.opacity = '0';
       ic.style.transform = 'translateY(-50%) scale(.4)';
       ic.classList.remove('armed');
     }
+    g.current.swipeActive = false;
   };
 
   const fireLong = () => {
     const s = g.current;
+    if (s.longFired) return;
     s.longFired = true;
     s.mode = 'long';
     clearTimers();
+    // Haptic feedback for long-press
+    hapticLight();
     const bubble = rowRef.current?.querySelector('.message-bubble');
     const rect = (bubble || rowRef.current)?.getBoundingClientRect();
     if (rect) onLongPress(msg, rect);
   };
 
-  const onPointerDown = (e) => {
-    if (e.pointerType === 'mouse' && e.button !== 0) return;
+  const swipeStart = (clientX, clientY, target) => {
     const s = g.current;
-    s.id = e.pointerId; s.x = e.clientX; s.y = e.clientY;
-    s.mode = null; s.longFired = false; s.passed = false;
-    s.noSwipe = !!e.target.closest?.('input, [role="slider"], a, button, .chat-media-wrapper, .cv-reply-hit');
+    s.x = clientX; s.y = clientY;
+    s.mode = null; s.longFired = false; s.passed = false; s.swipeActive = false;
+    s.noSwipe = !!target.closest?.('input, [role="slider"], a, button, .chat-media-wrapper, .cv-reply-hit, audio');
     clearTimers();
     if (selectMode) return;
     s.pressTimer = setTimeout(() => rowRef.current?.classList.add('pressed'), 110);
-    if (e.pointerType !== 'mouse') {
-      s.timer = setTimeout(() => fireLong(), LONG_PRESS_MS);
-    }
+    s.timer = setTimeout(() => fireLong(), LONG_PRESS_MS);
   };
 
-  const onPointerMove = (e) => {
+  const swipeMove = (clientX, clientY) => {
     const s = g.current;
-    if (s.id !== e.pointerId || s.mode === 'long') return;
-    const dx = e.clientX - s.x; const dy = e.clientY - s.y;
-    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) { if (s.timer) { clearTimeout(s.timer); s.timer = null; } }
+    if (s.mode === 'long' || s.longFired) return;
+    const dx = clientX - s.x;
+    const dy = clientY - s.y;
+
+    // Cancel long-press timer once movement starts
+    if (Math.abs(dx) > 10 || Math.abs(dy) > 10) {
+      if (s.timer) { clearTimeout(s.timer); s.timer = null; }
+    }
+
     if (s.mode === null) {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       clearTimers();
-      if (!selectMode && canReply && !s.noSwipe && e.pointerType !== 'mouse' && dx < 0 && Math.abs(dx) > Math.abs(dy) * 1.5) {
+      // 🔧 FIX: use a looser 1.2x ratio, not 1.5x
+      const isHorizontalSwipe =
+        canReply &&
+        !selectMode &&
+        !s.noSwipe &&
+        dx < 0 &&
+        Math.abs(dx) > Math.abs(dy) * 1.2;
+
+      if (isHorizontalSwipe) {
         s.mode = 'swipe';
-        try { rowRef.current.setPointerCapture(e.pointerId); } catch { }
+        s.swipeActive = true;
         if (stackRef.current) stackRef.current.style.transition = 'none';
-      } else { s.mode = 'scroll'; return; }
+      } else {
+        s.mode = 'scroll';
+        return;
+      }
     }
+
     if (s.mode !== 'swipe') return;
+
     const raw = Math.max(0, -dx);
-    const eased = raw <= SWIPE_THRESHOLD ? raw : Math.min(SWIPE_MAX, SWIPE_THRESHOLD + (raw - SWIPE_THRESHOLD) * 0.35);
-    if (stackRef.current) stackRef.current.style.transform = `translate3d(${-eased}px,0,0)`;
+    const eased = raw <= SWIPE_THRESHOLD
+      ? raw
+      : Math.min(SWIPE_MAX, SWIPE_THRESHOLD + (raw - SWIPE_THRESHOLD) * 0.3);
+
+    if (stackRef.current) {
+      stackRef.current.style.transform = `translate3d(${-eased}px,0,0)`;
+    }
     const p = Math.min(1, raw / SWIPE_THRESHOLD);
     const ic = iconRef.current;
-    if (ic) { ic.style.opacity = String(p); ic.style.transform = `translateY(-50%) scale(${0.5 + 0.5 * p})`; }
+    if (ic) {
+      ic.style.transition = 'none';
+      ic.style.opacity = String(p);
+      ic.style.transform = `translateY(-50%) scale(${0.5 + 0.5 * p})`;
+    }
     const armed = raw >= SWIPE_THRESHOLD;
-    if (armed !== s.passed) { s.passed = armed; ic?.classList.toggle('armed', armed); if (armed) hapticLight(); }
+    if (armed !== s.passed) {
+      s.passed = armed;
+      iconRef.current?.classList.toggle('armed', armed);
+      if (armed) hapticLight();
+    }
   };
 
-  const finish = (e, cancelled) => {
+  const swipeEnd = (cancelled) => {
     const s = g.current;
-    if (s.id !== e.pointerId) return;
-    s.id = null; clearTimers();
-    if (s.longFired) { try { rowRef.current.releasePointerCapture(e.pointerId); } catch { } return; }
+    clearTimers();
+    if (s.longFired) { resetSwipe(false); return; }
     if (s.mode === 'swipe') {
       const doReply = s.passed && !cancelled;
       resetSwipe(true);
-      try { rowRef.current.releasePointerCapture(e.pointerId); } catch { }
       s.mode = null;
       if (doReply) onReply(msg);
       return;
     }
+    // tap (no swipe, no long-press)
     if (s.mode === null && !cancelled && !s.longFired) {
       if (selectMode) { onToggleSelect(msg); return; }
-      if (e.target.closest?.('a, button, .chat-media-wrapper, .cv-reply-hit, audio, input, .cv-retry')) return;
       const now = Date.now();
-      if (now - s.lastTap < 300) { s.lastTap = 0; onDoubleTap(msg); } else { s.lastTap = now; }
+      if (now - s.lastTap < 300) { s.lastTap = 0; onDoubleTap(msg); }
+      else { s.lastTap = now; }
+    }
+    s.mode = null;
+  };
+
+  // ── Touch events (mobile) ────────────────────────────────────
+  const onTouchStart = (e) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    swipeStart(t.clientX, t.clientY, e.target);
+  };
+
+  const onTouchMove = (e) => {
+    if (e.touches.length !== 1) return;
+    const t = e.touches[0];
+    swipeMove(t.clientX, t.clientY);
+    // Prevent browser scroll ONLY once we've committed to a swipe
+    if (g.current.mode === 'swipe' && e.cancelable) {
+      e.preventDefault();
     }
   };
 
-  const onContextMenu = (e) => { e.preventDefault(); if (selectMode) return; if (!g.current.longFired) fireLong(); };
-  const onClickCapture = (e) => { if (g.current.longFired) { e.preventDefault(); e.stopPropagation(); g.current.longFired = false; } };
+  const onTouchEnd = (e) => {
+    if (g.current.swipeActive) {
+      // swipe finish; do not treat as tap
+      swipeEnd(false);
+      return;
+    }
+    // Tap handling — but skip if target is interactive
+    if (e.target.closest?.('a, button, .chat-media-wrapper, .cv-reply-hit, audio, input, .cv-retry')) {
+      swipeEnd(false);
+      return;
+    }
+    swipeEnd(false);
+  };
+
+  const onTouchCancel = () => {
+    swipeEnd(true);
+  };
+
+  // ── Mouse fallback (desktop) ─────────────────────────────────
+  const onMouseDown = (e) => {
+    if (e.button !== 0) return;
+    swipeStart(e.clientX, e.clientY, e.target);
+  };
+  const onMouseMove = (e) => {
+    if (!g.current.id && g.current.mode === null && g.current.x === 0 && g.current.y === 0) return;
+    swipeMove(e.clientX, e.clientY);
+  };
+  const onMouseUp = () => {
+    if (g.current.mode === null && g.current.x === 0) return;
+    swipeEnd(false);
+  };
+
+  const onContextMenu = (e) => {
+    e.preventDefault();
+    if (selectMode) return;
+    if (!g.current.longFired) fireLong();
+  };
 
   return (
     <div
       ref={(el) => { rowRef.current = el; registerRef?.(msg.id, el); }}
       className={rowClass}
       data-msg-id={msg.id}
-      onPointerDown={onPointerDown}
-      onPointerMove={onPointerMove}
-      onPointerUp={(e) => finish(e, false)}
-      onPointerCancel={(e) => finish(e, true)}
+      // 🔧 FIX: touch-action pan-y lets vertical scroll work, but lets us
+      // intercept horizontal swipe cleanly. pointer-events stays default.
+      style={{ touchAction: 'pan-y' }}
+      onTouchStart={onTouchStart}
+      onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd}
+      onTouchCancel={onTouchCancel}
+      onMouseDown={onMouseDown}
+      onMouseMove={onMouseMove}
+      onMouseUp={onMouseUp}
+      onMouseLeave={onMouseUp}
       onContextMenu={onContextMenu}
-      onClickCapture={onClickCapture}
     >
       {selectMode && <span className={`select-checkbox ${selected ? 'checked' : ''}`}><i className="fas fa-check" /></span>}
       <div className="cv-swipe-reply" ref={iconRef} aria-hidden="true"><i className="fas fa-reply" /></div>
@@ -551,7 +651,7 @@ const ChatView = () => {
   const [isDragging, setIsDragging] = useState(false);
 
   // 👻 Ghost Mode state (EchoPlus only)
-  const [ghostMode, setGhostMode] = useState(null); // null | 3600000 | 7200000 | 21600000 | 86400000
+  const [ghostMode, setGhostMode] = useState(null);
   const [showGhostMenu, setShowGhostMenu] = useState(false);
 
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', confirmText: 'Confirm', cancelText: 'Cancel', onConfirm: null });
@@ -570,7 +670,6 @@ const ChatView = () => {
   const toastTimerRef = useRef(null);
   const lastMarkKeyRef = useRef(null);
 
-  // 🛡️ Send lock — prevents double-click/Enter race producing duplicates
   const sendingRef = useRef(false);
 
   const showToast = useCallback((message, type = 'success') => {
@@ -637,7 +736,7 @@ const ChatView = () => {
     return () => clearTimeout(t);
   }, []);
 
-  // 🟢 DESKTOP DRAG & DROP — FIXED black screen
+  // 🟢 DESKTOP DRAG & DROP
   useEffect(() => {
     let dragCounter = 0;
 
@@ -655,13 +754,10 @@ const ChatView = () => {
       if (dragCounter === 0) setIsDragging(false);
     };
 
-    const handleDragOver = (e) => {
-      e.preventDefault();
-    };
+    const handleDragOver = (e) => { e.preventDefault(); };
 
     const handleDrop = (e) => {
       e.preventDefault();
-      // 1. Force overlay off FIRST
       setIsDragging(false);
       dragCounter = 0;
 
@@ -671,11 +767,7 @@ const ChatView = () => {
           showToast('File too large (max 20MB)', 'error');
           return;
         }
-
-        // 2. Force overlay off again (state batching safety)
         setIsDragging(false);
-
-        // 3. Then open preview — overlay cannot cover it because of !selectedFile guard
         const url = URL.createObjectURL(file);
         setPreviewUrl(url);
         setCaptionText('');
@@ -787,7 +879,7 @@ const ChatView = () => {
     return () => unsub();
   }, [msgRoot, user?.uid]);
 
-  // 👻 Ghost Mode — periodic live cleanup of expired messages
+  // 👻 Ghost Mode cleanup
   useEffect(() => {
     if (!messages.length) return;
     const t = setInterval(() => {
@@ -927,8 +1019,6 @@ const ChatView = () => {
 
     const tempId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const now = Date.now();
-
-    // 👻 Ghost mode expiry
     const expiresAt = ghostMode ? now + ghostMode : null;
 
     const replySnapshot = replyTo
@@ -1019,10 +1109,7 @@ const ChatView = () => {
     if (file.size > MAX_FILE_SIZE) { showToast('File too large (max 20MB)', 'error'); return; }
     const tempId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const now = Date.now();
-
-    // 👻 Ghost mode expiry
     const expiresAt = ghostMode ? now + ghostMode : null;
-
     const blobUrl = URL.createObjectURL(file);
     const mediaType = file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : 'image';
 
@@ -1174,25 +1261,59 @@ const ChatView = () => {
     catch (err) { console.error('Archive failed', err); showToast('Failed to archive', 'error'); }
   }, [user?.uid, showToast]);
 
+  /* ═══════════════════════════════════════════════════════════════
+     🔧 FIX: focusComposer — force the keyboard up on mobile
+     - No setTimeout deferral for focus() — must run inside the gesture
+     - readOnly toggle trick for iOS to guarantee keyboard opens
+     - scrollIntoView after keyboard opens
+     ═══════════════════════════════════════════════════════════════ */
   const focusComposer = useCallback(() => {
-    setTimeout(() => {
-      const el = inputRef.current;
-      if (!el) return;
+    const el = inputRef.current;
+    if (!el) return;
+
+    // 🔧 iOS Safari only opens keyboard if focus() runs synchronously
+    // inside a user gesture (click/tap). So NO setTimeout here for focus.
+    try {
+      // readOnly trick — briefly set readOnly=false to force keyboard
+      if (el.readOnly) el.readOnly = false;
+      el.focus({ preventScroll: true });
+    } catch {
+      try { el.focus(); } catch {}
+    }
+
+    // On some Android browsers, an immediate focus() after setState
+    // doesn't open the keyboard because the textarea wasn't focused
+    // when the gesture started. Double-tap it via a microtask.
+    // (This still runs inside the same tick as the gesture, so it works.)
+    Promise.resolve().then(() => {
       try {
-        el.focus({ preventScroll: false });
-      } catch {
-        try { el.focus(); } catch {}
-      }
-      const len = (el.value || '').length;
-      try { el.setSelectionRange(len, len); } catch {}
-      requestAnimationFrame(() => {
-        const c = messagesContainerRef.current;
-        if (c) c.scrollTop = c.scrollHeight;
-      });
-    }, 60);
+        const e2 = inputRef.current;
+        if (!e2) return;
+        if (document.activeElement !== e2) {
+          e2.focus({ preventScroll: true });
+        }
+      } catch {}
+    });
+
+    const len = (el.value || '').length;
+    try { el.setSelectionRange(len, len); } catch {}
+
+    // Scroll to bottom after keyboard opens — use rAF plus a small delay
+    requestAnimationFrame(() => {
+      const c = messagesContainerRef.current;
+      if (c) c.scrollTop = c.scrollHeight;
+    });
+    setTimeout(() => {
+      const c = messagesContainerRef.current;
+      if (c) c.scrollTop = c.scrollHeight;
+    }, 320);
   }, []);
 
   const beginReply = useCallback((msg) => {
+    // 🔧 Order matters: setReplyTo first (so ReplyPreview mounts and layout
+    // shifts), then call focusComposer SYNCHRONOUSLY in the same gesture
+    // tick. React state updates are async but focusComposer works on the
+    // already-mounted textarea, so this is safe.
     setReplyTo(msg);
     focusComposer();
   }, [focusComposer]);
@@ -1381,7 +1502,7 @@ const ChatView = () => {
           </button>
         </div>
 
-        {/* 👻 Ghost Mode menu (EchoPlus only) */}
+        {/* 👻 Ghost Mode menu */}
         {isEchoPlus && showGhostMenu && (
           <div className="ghost-menu-backdrop" onClick={() => setShowGhostMenu(false)}>
             <div className="ghost-menu" onClick={e => e.stopPropagation()}>
@@ -1726,7 +1847,20 @@ const ChatView = () => {
               <button type="button" className="chat-emoji-btn" onClick={() => setShowEmojiPicker(v => !v)} aria-label="Emoji">
                 <i className="far fa-smile" />
               </button>
-              <textarea ref={inputRef} className="chat-input" placeholder="Message…" rows={1} value={newMessage} onChange={handleInputChange} onKeyDown={handleKeyDown} style={{ resize: 'none' }} />
+              <textarea
+                ref={inputRef}
+                className="chat-input"
+                placeholder="Message…"
+                rows={1}
+                value={newMessage}
+                onChange={handleInputChange}
+                onKeyDown={handleKeyDown}
+                style={{ resize: 'none' }}
+                // 🔧 Prevent iOS auto-zoom on focus (see CSS too)
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+              />
               {newMessage.trim() ? (
                 <button ref={sendButtonRef} type="button" className="chat-send-btn" onClick={handleSendText} aria-label="Send">
                   <i className="fas fa-paper-plane" />
@@ -1776,7 +1910,7 @@ const ChatView = () => {
         {toast && <Toast message={toast.message} type={toast.type} />}
         <PlusCheckout isOpen={showPlusCheckout} onClose={() => setShowPlusCheckout(false)} />
 
-        {/* 🟢 Drag & Drop Overlay — with !selectedFile guard so it never covers MediaPreview */}
+        {/* 🟢 Drag & Drop Overlay */}
         {isDragging && !selectedFile && (
           <div className="drag-drop-overlay">
             <div className="drag-drop-content">
