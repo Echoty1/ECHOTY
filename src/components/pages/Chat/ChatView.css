@@ -4288,3 +4288,196 @@ body.light .chat-list-tick.delivered { color: rgba(0, 0, 0, 0.5); }
   color: rgba(255, 255, 255, 0.55);
   font-weight: 500;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   ★ GHOST MODE (EchoPlus)
+   ═══════════════════════════════════════════════════════════════ */
+
+.chat-header-ghost-btn {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-input);
+  color: var(--text-secondary);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  flex-shrink: 0;
+}
+
+.chat-header-ghost-btn:hover { background: var(--border-color); }
+
+.chat-header-ghost-btn.active {
+  color: #A78BFA;
+  background: rgba(167, 139, 250, 0.15);
+  box-shadow: 0 0 12px rgba(167, 139, 250, 0.4);
+  animation: ghostPulse 2s ease-in-out infinite;
+}
+
+@keyframes ghostPulse {
+  0%, 100% { box-shadow: 0 0 12px rgba(167, 139, 250, 0.4); }
+  50%      { box-shadow: 0 0 20px rgba(167, 139, 250, 0.7); }
+}
+
+.ghost-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.18s ease;
+}
+
+.ghost-menu {
+  background: linear-gradient(180deg, rgba(28, 20, 50, 0.95), rgba(18, 12, 32, 0.98));
+  border: 1px solid rgba(167, 139, 250, 0.3);
+  border-radius: 22px;
+  padding: 22px 20px 14px;
+  width: 90%;
+  max-width: 360px;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.7), 0 0 40px rgba(167, 139, 250, 0.2);
+  animation: modalScale 0.24s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+html[data-theme="light"] .ghost-menu,
+body.light .ghost-menu {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 244, 255, 0.98));
+  border-color: rgba(108, 60, 225, 0.25);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.25), 0 0 40px rgba(167, 139, 250, 0.15);
+}
+
+.ghost-menu-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 6px;
+  color: #E9D5FF;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+html[data-theme="light"] .ghost-menu-title,
+body.light .ghost-menu-title {
+  color: #6C3CE1;
+}
+
+.ghost-plus-badge {
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  color: #FFD700;
+  background: rgba(255, 215, 0, 0.15);
+  border: 1px solid rgba(255, 215, 0, 0.4);
+  padding: 2px 8px;
+  border-radius: 8px;
+}
+
+.ghost-menu-hint {
+  margin: 0 0 16px;
+  font-size: 12.5px;
+  color: rgba(255, 255, 255, 0.55);
+  line-height: 1.4;
+}
+
+html[data-theme="light"] .ghost-menu-hint,
+body.light .ghost-menu-hint {
+  color: rgba(0, 0, 0, 0.5);
+}
+
+.ghost-option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  margin-bottom: 6px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.03);
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+}
+
+html[data-theme="light"] .ghost-option,
+body.light .ghost-option {
+  border-color: rgba(0, 0, 0, 0.06);
+  background: rgba(0, 0, 0, 0.02);
+  color: #111;
+}
+
+.ghost-option:hover {
+  background: rgba(167, 139, 250, 0.1);
+  border-color: rgba(167, 139, 250, 0.35);
+}
+
+html[data-theme="light"] .ghost-option:hover,
+body.light .ghost-option:hover {
+  background: rgba(108, 60, 225, 0.06);
+}
+
+.ghost-option.active {
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.25), rgba(236, 72, 153, 0.2));
+  border-color: rgba(167, 139, 250, 0.55);
+}
+
+html[data-theme="light"] .ghost-option.active,
+body.light .ghost-option.active {
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.12), rgba(236, 72, 153, 0.08));
+}
+
+.ghost-option-label {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.ghost-option-sub {
+  display: block;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 2px;
+}
+
+html[data-theme="light"] .ghost-option-sub,
+body.light .ghost-option-sub {
+  color: rgba(0, 0, 0, 0.45);
+}
+
+.ghost-option.active i { color: #A78BFA; }
+
+.ghost-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 6px;
+  margin-right: 4px;
+  border-radius: 8px;
+  background: rgba(167, 139, 250, 0.18);
+  border: 1px solid rgba(167, 139, 250, 0.35);
+  color: #C4B5FD;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+}
+
+.message-bubble.own .ghost-chip {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.3);
+  color: #E9D5FF;
+}
+
+html[data-theme="light"] .message-bubble.own .ghost-chip,
+body.light .message-bubble.own .ghost-chip {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+  color: #fff;
+}
