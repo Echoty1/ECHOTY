@@ -13,10 +13,7 @@
          PRIMARY SEO
          ══════════════════════════════════════════════════════════════ -->
     <title>ECHO (Echoty) – The Future of Chat & Instants | Founded by Lawal Abdulmalik</title>
-    <meta
-      name="description"
-      content="ECHO (Echoty) is the future of conversations, valued at over 10 Million Naira with 200+ members. Discover, connect, and echo with animated avatars, real-time chat, Instants, and vibrant communities. We are hiring developers! Apply at echocareer.netlify.app."
-    />
+    <meta name="description" content="ECHO (Echoty) is the future of conversations, valued at over 10 Million Naira with 200+ members. Discover, connect, and echo with animated avatars, real-time chat, Instants, and vibrant communities. We are hiring developers! Apply at echocareer.netlify.app." />
     <meta name="author" content="Lawal Abdulmalik" />
     <meta name="keywords" content="ECHO, Echoty, chat app, real-time chat, messaging, Instants, ephemeral stories, Lawal Abdulmalik, Abdullah Bashir, Khaleelah Salam, Fareed Kamaldeen, Ijaoba Uthman, CEO of ECHO, CTO of ECHO, CFO of ECHO, CMO of ECHO, founder of ECHO, animated avatars, indie hacker, 10 million naira, 200 members, ECHO careers, ECHO jobs, developer jobs" />
     <link rel="canonical" href="https://echoty.xyz/" />
@@ -71,15 +68,8 @@
           "image": { "@id": "https://echoty.xyz/#logo" },
           "description": "ECHO (Echoty) is a modern real-time messaging platform built around animated avatars, expressive chat, and Instants. The company is valued at over 10 Million Naira and has over 200 active members.",
           "foundingDate": "2024",
-          "estimatedValue": {
-            "@type": "MonetaryAmount",
-            "currency": "NGN",
-            "value": "10000000"
-          },
-          "numberOfEmployees": {
-            "@type": "QuantitativeValue",
-            "value": "200"
-          },
+          "estimatedValue": { "@type": "MonetaryAmount", "currency": "NGN", "value": "10000000" },
+          "numberOfEmployees": { "@type": "QuantitativeValue", "value": "200" },
           "founder": [
             { "@id": "https://echoty.xyz/#lawal-abdulmalik" },
             { "@id": "https://echoty.xyz/#abdullah-bashir" }
@@ -105,10 +95,7 @@
             "email": "echoinfoteam@gmail.com",
             "availableLanguage": ["English"]
           },
-          "sameAs": [
-            "https://www.wikidata.org/wiki/Q141639039",
-            "https://echoty.xyz/"
-          ]
+          "sameAs": ["https://www.wikidata.org/wiki/Q141639039", "https://echoty.xyz/"]
         },
         {
           "@type": "SoftwareApplication",
@@ -116,16 +103,8 @@
           "name": "ECHO Chat & Instants",
           "operatingSystem": "Web, iOS, Android",
           "applicationCategory": "CommunicationApplication",
-          "offers": {
-            "@type": "Offer",
-            "price": "0",
-            "priceCurrency": "USD"
-          },
-          "aggregateRating": {
-            "@type": "AggregateRating",
-            "ratingValue": "4.8",
-            "ratingCount": "1250"
-          },
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+          "aggregateRating": { "@type": "AggregateRating", "ratingValue": "4.8", "ratingCount": "1250" },
           "featureList": [
             "Real-time messaging",
             "Animated avatars",
@@ -349,19 +328,39 @@
     <!-- ✅ Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
-    <!-- 🔥 KILL SWITCH: Unregister old Firebase/Monetag workers causing the loop -->
+    <!-- 🔥 AUTO-CLEANUP SCRIPT (Fixes the loop automatically for all users) -->
     <script>
-      if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.getRegistrations().then(function(registrations) {
-          for(let registration of registrations) {
-            registration.unregister();
-            console.log('Unregistered conflicting Service Worker:', registration);
+      (async function cleanupServiceWorkers() {
+        if (!('serviceWorker' in navigator)) return;
+        
+        try {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          let unregistered = false;
+          
+          for (let registration of registrations) {
+            // Check if it's an old worker that we no longer want
+            const scriptURL = registration.active?.scriptURL || '';
+            if (
+              scriptURL.includes('firebase-messaging-sw.js') || 
+              scriptURL.includes('service-worker.js') // Monetag's old worker
+            ) {
+              await registration.unregister();
+              unregistered = true;
+              console.log('Auto-cleaned old worker:', scriptURL);
+            }
           }
-        });
-      }
+          
+          // If we cleaned something up, force a single reload to load the new OneSignal worker perfectly
+          if (unregistered) {
+            window.location.reload();
+          }
+        } catch (err) {
+          console.error('Service Worker cleanup failed:', err);
+        }
+      })();
     </script>
 
-    <!-- 🔥 ONESIGNAL PUSH NOTIFICATIONS SDK (Configured to isolate from Monetag) -->
+    <!-- 🔥 ONESIGNAL PUSH NOTIFICATIONS SDK -->
     <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
     <script>
       window.OneSignalDeferred = window.OneSignalDeferred || [];
@@ -370,7 +369,7 @@
           appId: "758b8bf2-c7e4-4230-a097-771e0d6e672f",
           allowLocalhostAsSecureOrigin: true,
           notifyButton: { enable: false }, // Stops auto-reload
-          serviceWorkerParam: { scope: "/onesignal/" }, // 🛡️ Moves OneSignal out of the way so it doesn't fight Monetag
+          serviceWorkerParam: { scope: "/onesignal/" }, // 🛡️ Prevents conflict with Monetag
           serviceWorkerPath: "OneSignalSDKWorker.js",
           autoResubscribe: true,
           promptOptions: {
@@ -385,16 +384,36 @@
       });
     </script>
 
-    <!-- ★ MONETAG PUSH NOTIFICATIONS & ADS -->
+    <!-- ★ MONETAG PUSH NOTIFICATIONS -->
     <script src="https://5gvci.com/act/files/tag.min.js?z=12169371" data-cfasync="false" async></script>
   </head>
   <body>
     <div id="root"></div>
+
+    <!-- Fallback for browsers with JavaScript disabled -->
     <noscript>
       <h1>ECHO — The Future of Chat</h1>
-      <p>ECHO (also known as Echoty) is a modern real-time messaging platform with animated avatars, expressive chat, and Instants, available at <a href="https://echoty.xyz/">echoty.xyz</a>. The platform is valued at over 10 Million Naira and hosts over 200 active members.</p>
+      <p>
+        ECHO (also known as Echoty) is a modern real-time messaging platform with
+        animated avatars, expressive chat, and Instants, available at
+        <a href="https://echoty.xyz/">echoty.xyz</a>. 
+        The platform is valued at over 10 Million Naira and hosts over 200 active members.
+      </p>
+      
       <h2>We are Hiring!</h2>
-      <p>ECHO is actively looking for talented developers to join our team. <strong><a href="https://echocareer.netlify.app/">Click here to apply for a developer role at ECHO</a></strong>.</p>
+      <p>
+        ECHO is actively looking for talented developers to join our team. 
+        <strong><a href="https://echocareer.netlify.app/">Click here to apply for a developer role at ECHO</a></strong>.
+      </p>
+
+      <h2>Leadership Team</h2>
+      <ul>
+        <li><strong>Founder &amp; CEO:</strong> Lawal Abdulmalik</li>
+        <li><strong>Co-Founder &amp; CTO:</strong> Abdullah Bashir</li>
+        <li><strong>CFO:</strong> Khaleelah Salam</li>
+        <li><strong>Developer:</strong> Fareed Kamaldeen</li>
+        <li><strong>CMO:</strong> Ijaoba Uthman</li>
+      </ul>
     </noscript>
   </body>
 </html>
