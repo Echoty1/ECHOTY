@@ -164,6 +164,8 @@ const processChatItem = async (chat, user, onlineUsers) => {
       isEchoPlus: profile?.isEchoPlus || false,
       premiumRingStyle: profile?.premiumRingStyle || 'gold',
       premiumBadgeText: profile?.premiumBadgeText || '',
+      isRead: chat.isRead || false,
+      readAt: chat.readAt || null,
     };
   } catch (err) {
     let unreadCount = chat.unreadCount || 0;
@@ -187,6 +189,8 @@ const processChatItem = async (chat, user, onlineUsers) => {
       isEchoPlus: false,
       premiumRingStyle: 'gold',
       premiumBadgeText: '',
+      isRead: chat.isRead || false,
+      readAt: chat.readAt || null,
     };
   }
 };
@@ -271,11 +275,11 @@ const ChatItem = memo(
     const navigate = useNavigate();
     const profile = profiles[chat.id] || {};
     
-    // 🟢 NEW: Check if the last message is unread and from the other person
+    // ─── STATE ────────────────────────────────────────────────
     const hasUnread = chat.unreadCount > 0;
     const isLastMessageMine = chat.lastSenderId === currentUser?.uid;
+    const isRead = chat.isRead || !!chat.readAt;
     const isOnline = chat.online;
-    const hasUnread = chat.unreadCount > 0;
     const skinId = chat.activeSkin || profile.activeSkin || null;
     const skin = skinId ? getSkinById(skinId) : null;
     const mood = profile.mood || chat.mood || 'neutral';
@@ -286,7 +290,7 @@ const ChatItem = memo(
 
     return (
       <div
-        className="chat-item regular-chat-item"
+        className={`chat-item regular-chat-item ${hasUnread ? 'unread-active' : ''}`}
         onClick={() => onStartChat(chat)}
         onMouseDown={(e) => onLongPressStart(e, chat)}
         onMouseUp={() => onLongPressEnd(chat)}
@@ -337,8 +341,29 @@ const ChatItem = memo(
               {chat.ended && <span className="ended-badge">Ended</span>}
             </span>
           </div>
-          <div className="chat-last" style={{ fontWeight: hasUnread ? 700 : 400 }}>
-            {partnerIsTyping ? <span className="typing-status-text">typing…</span> : (chat.lastMessage || 'Start chatting...')}
+          <div className="chat-last" style={{ fontWeight: hasUnread ? 700 : 400, display: 'flex', alignItems: 'center', gap: '4px' }}>
+            {partnerIsTyping ? (
+              <span className="typing-status-text">typing…</span>
+            ) : (
+              <>
+                {/* 🟢 SVG TICK for own last message */}
+                {isLastMessageMine && (
+                  <span className={`chat-list-tick ${isRead ? 'read' : 'delivered'}`}>
+                    {isRead ? (
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="18 6 7 17 2 12" />
+                        <polyline points="22 6 11 17" />
+                      </svg>
+                    ) : (
+                      <svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12" />
+                      </svg>
+                    )}
+                  </span>
+                )}
+                <span className="chat-last-text">{chat.lastMessage || 'Start chatting...'}</span>
+              </>
+            )}
           </div>
         </div>
         <div className="chat-echomoji-middle">
@@ -355,7 +380,7 @@ const ChatItem = memo(
 const GroupChatItem = memo(({ chat, onStartChat }) => {
   const hasUnread = chat.unreadCount > 0;
   return (
-    <div className="chat-item group-chat-item" onClick={() => onStartChat(chat)}>
+    <div className={`chat-item group-chat-item ${hasUnread ? 'unread-active' : ''}`} onClick={() => onStartChat(chat)}>
       <div className="chat-avatar group-avatar">
         <div className="group-avatar-emoji">{chat.emoji || '👥'}</div>
         {hasUnread && <span className="unread-badge">{chat.unreadCount}</span>}
@@ -457,13 +482,13 @@ const Chats = () => {
     const handleChatRead = (event) => {
       const { userId } = event.detail;
       sessionStorage.setItem(`chat_read_${userId}`, 'true');
-      setRecentChats((prev) => prev.map((chat) => chat.id === userId ? { ...chat, unreadCount: 0 } : chat));
-      setGroupChats((prev) => prev.map((chat) => chat.id === userId ? { ...chat, unreadCount: 0 } : chat));
+      setRecentChats((prev) => prev.map((chat) => chat.id === userId ? { ...chat, unreadCount: 0, isRead: true, readAt: Date.now() } : chat));
+      setGroupChats((prev) => prev.map((chat) => chat.id === userId ? { ...chat, unreadCount: 0, isRead: true, readAt: Date.now() } : chat));
     };
     const handleUnreadCleared = (event) => {
       const { partnerId } = event.detail;
-      setRecentChats((prev) => prev.map((chat) => chat.id === partnerId ? { ...chat, unreadCount: 0 } : chat));
-      setGroupChats((prev) => prev.map((chat) => chat.id === partnerId ? { ...chat, unreadCount: 0 } : chat));
+      setRecentChats((prev) => prev.map((chat) => chat.id === partnerId ? { ...chat, unreadCount: 0, isRead: true, readAt: Date.now() } : chat));
+      setGroupChats((prev) => prev.map((chat) => chat.id === partnerId ? { ...chat, unreadCount: 0, isRead: true, readAt: Date.now() } : chat));
     };
     const handleListUpdate = (event) => {
       const { partnerId, patch } = event.detail || {};
@@ -600,7 +625,6 @@ const Chats = () => {
       if (typingUnsubsRef.current[chat.id]) return;
 
       const cId = [user.uid, chat.id].sort().join('_');
-      // 🟢 FIX: Pointing directly to the typing node
       const typingRef = ref(db, `typing/${cId}/${chat.id}`);
 
       const unsub = onValue(
@@ -791,7 +815,6 @@ const Chats = () => {
   const safeResults = Array.isArray(results) ? results : [];
   const isSearchActive = searchQuery.trim().length > 0;
 
-  // 🟢 FIX: Sort strictly by `timestamp` (newest messages jump to the top)
   const allChatsSorted = [...safeGroupChats, ...safeRecentChats]
     .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
 
@@ -991,11 +1014,11 @@ const Chats = () => {
                 if (chat.isGroup) {
                   return <GroupChatItem key={chat.id} chat={chat} onStartChat={startChat} />;
                 }
-                         return (
+                return (
                   <ChatItem
                     key={chat.id}
                     chat={chat}
-                    currentUser={user} // 🟢 Pass the user object here
+                    currentUser={user}
                     onStartChat={startChat}
                     onLongPressStart={handleLongPressStart}
                     onLongPressEnd={handleLongPressEnd}
