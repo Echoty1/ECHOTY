@@ -8,7 +8,7 @@ import { sortMessages as sortMessagesByTime } from '../../../utils/sortMessages'
 import { useProfile } from '../../../contexts/ProfileContext';
 import { db } from '../../../services/firebase';
 import { VideoAudioProvider } from '../../../contexts/VideoAudioContext';
-import SEO from '../../common/SEO'; 
+import SEO from '../../common/SEO';
 import ChatMediaMessage from './ChatMediaMessage';
 import { saveToEchoArchive } from '../../../services/echoArchive';
 import { isTideExpired } from '../../../utils/echoTides';
@@ -207,10 +207,9 @@ const useVisualViewport = () => {
   }, []);
 };
 
-// 🟢 NEW SVG MESSAGE RECEIPT
 const MessageReceipt = ({ msg, isMe, group }) => {
   if (!isMe) return null;
-  
+
   if (msg.pending || msg.isUploading) {
     return (
       <span className="message-receipt pending" title="Sending...">
@@ -221,7 +220,7 @@ const MessageReceipt = ({ msg, isMe, group }) => {
       </span>
     );
   }
-  
+
   if (msg.uploadFailed) {
     return (
       <span className="message-receipt failed" title="Failed to send">
@@ -285,9 +284,9 @@ const MessageRow = ({
   const rowRef = useRef(null);
   const stackRef = useRef(null);
   const iconRef = useRef(null);
-  const g = useRef({ 
-    id: null, x: 0, y: 0, mode: null, timer: null, pressTimer: null, 
-    longFired: false, passed: false, lastTap: 0, noSwipe: false 
+  const g = useRef({
+    id: null, x: 0, y: 0, mode: null, timer: null, pressTimer: null,
+    longFired: false, passed: false, lastTap: 0, noSwipe: false
   });
 
   const clearTimers = () => {
@@ -565,6 +564,9 @@ const ChatView = () => {
   const toastTimerRef = useRef(null);
   const lastMarkKeyRef = useRef(null);
 
+  // 🛡️ Send lock — prevents double-click/Enter race producing duplicates
+  const sendingRef = useRef(false);
+
   const showToast = useCallback((message, type = 'success') => {
     setToast({ message, type });
     if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
@@ -732,9 +734,20 @@ const ChatView = () => {
     return () => unsub();
   }, [chatKey, userId, user?.uid, isGroupChat]);
 
+  // 🟢 DEDUPE: A local copy that matches a server message (same text/sender, within 3s)
+  // is treated as already-sent, so we never show two bubbles.
   const allMessages = useMemo(() => {
     const serverIds = new Set(messages.map(m => m.id));
-    const pending = localMsgs.filter(m => !serverIds.has(m.id));
+    const pending = localMsgs.filter(m => {
+      if (serverIds.has(m.id)) return false;
+      const dupe = messages.some(
+        (srv) =>
+          (srv.senderId || srv.uid) === (m.senderId || m.uid) &&
+          (srv.text || '') === (m.text || '') &&
+          Math.abs(msgTime(srv) - msgTime(m)) < 3000
+      );
+      return !dupe;
+    });
     return sortMessages([...messages, ...pending]);
   }, [messages, localMsgs]);
 
@@ -791,23 +804,21 @@ const ChatView = () => {
     setUnreadWhileScrolled(0);
   }, []);
 
-  // 🟢 FIX: Mark messages as read and update the Chat List ticks
   useEffect(() => {
     if (!msgRoot || !user?.uid || !sendReadReceipts) return;
-    
+
     const unread = messages.filter(m => {
       const sender = m.senderId || m.uid;
       if (sender === user.uid) return false;
       return !(m.readAt || m.isRead === true);
     });
-    
+
     if (!unread.length) return;
-    
-    // Update the chat list so the icon turns blue
+
     if (!isGroupChat && userId) {
       const myChatRef = ref(db, `userChats/${user.uid}/${userId}`);
       update(myChatRef, { isRead: true, readAt: Date.now() }).catch(() => {});
-      
+
       const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
       update(partnerChatRef, { isRead: true, readAt: Date.now() }).catch(() => {});
     }
@@ -815,7 +826,7 @@ const ChatView = () => {
     const key = `${msgRoot}:${unread.length}:${unread[unread.length - 1].id}`;
     if (lastMarkKeyRef.current === key) return;
     lastMarkKeyRef.current = key;
-    
+
     const updates = {};
     unread.forEach(m => {
       updates[`${msgRoot}/${m.id}/readAt`] = Date.now();
@@ -834,11 +845,26 @@ const ChatView = () => {
 
   useEffect(() => () => { if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current); }, []);
 
+  // 🛡️ FIX: prevent duplicate sends + attach sender's premium bubble style
   const handleSendText = useCallback(async () => {
+    if (sendingRef.current) return;
+
     const text = newMessage.trim();
     if (!text || !msgRoot || !user?.uid) return;
+
+    sendingRef.current = true;
+
     const tempId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     const now = Date.now();
+    const replySnapshot = replyTo
+      ? { id: replyTo.id, text: replyTo.text || '', senderId: replyTo.senderId || replyTo.uid || null, mediaType: replyTo.mediaType || null }
+      : replyToNote || null;
+
+    // Preserve the sender's premium bubble style so partner sees it
+    const senderPremiumStyle = userSettings?.chats?.bubbleStyle
+      || currentUserProfile?.premiumChatStyle
+      || null;
+
     const localMsg = {
       id: tempId,
       text,
@@ -846,27 +872,44 @@ const ChatView = () => {
       uid: user.uid,
       timestamp: now,
       createdAt: now,
-      replyTo: replyTo ? { id: replyTo.id, text: replyTo.text || '', senderId: replyTo.senderId || replyTo.uid || null, mediaType: replyTo.mediaType || null } : replyToNote || null,
+      replyTo: replySnapshot,
+      senderPremiumStyle,
     };
+
     upsertLocal(localMsg);
-    const inputText = text;
     setNewMessage('');
     setReplyTo(null);
     setReplyToNote(null);
     hapticSend();
+
     if (sendButtonRef.current) {
       sendButtonRef.current.classList.add('rippling');
       setTimeout(() => sendButtonRef.current?.classList.remove('rippling'), 650);
     }
+
     try {
       const messagesRef = ref(db, msgRoot);
       const newRef = push(messagesRef);
-      const payload = clean({ text: inputText, senderId: user.uid, uid: user.uid, timestamp: now, createdAt: now, replyTo: localMsg.replyTo || null });
+      const payload = clean({
+        text,
+        senderId: user.uid,
+        uid: user.uid,
+        timestamp: now,
+        createdAt: now,
+        replyTo: replySnapshot,
+        senderPremiumStyle,
+      });
       await set(newRef, payload);
-      
+
       if (!isGroupChat && userId) {
         const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
-        update(partnerChatRef, { lastMessage: inputText, lastUpdated: now, lastSenderId: user.uid }).catch(() => {});
+        update(partnerChatRef, {
+          lastMessage: text,
+          lastUpdated: now,
+          lastSenderId: user.uid,
+          isRead: false,
+          readAt: null,
+        }).catch(() => {});
       }
 
       removeLocal(tempId);
@@ -875,8 +918,14 @@ const ChatView = () => {
       console.error('Send failed', err);
       patchLocal(tempId, { pending: false, uploadFailed: true });
       showToast('Failed to send message', 'error');
+    } finally {
+      setTimeout(() => { sendingRef.current = false; }, 350);
     }
-  }, [newMessage, msgRoot, user?.uid, replyTo, replyToNote, upsertLocal, removeLocal, patchLocal, showToast, isMuted, userId, isGroupChat]);
+  }, [
+    newMessage, msgRoot, user?.uid, replyTo, replyToNote,
+    upsertLocal, removeLocal, patchLocal, showToast, isMuted,
+    userId, isGroupChat, userSettings, currentUserProfile,
+  ]);
 
   const uploadToCloudinary = useCallback(async (file) => {
     const form = new FormData();
@@ -896,8 +945,16 @@ const ChatView = () => {
     const now = Date.now();
     const blobUrl = URL.createObjectURL(file);
     const mediaType = file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : 'image';
+
+    const senderPremiumStyle = userSettings?.chats?.bubbleStyle
+      || currentUserProfile?.premiumChatStyle
+      || null;
+
     upsertLocal({
-      id: tempId, text: payload.caption || '', caption: payload.caption || '', senderId: user.uid, uid: user.uid, timestamp: now, createdAt: now, pending: true, isUploading: true, mediaType, mediaUrl: blobUrl, replyTo: replyTo || replyToNote || null,
+      id: tempId, text: payload.caption || '', caption: payload.caption || '',
+      senderId: user.uid, uid: user.uid, timestamp: now, createdAt: now,
+      pending: true, isUploading: true, mediaType, mediaUrl: blobUrl,
+      replyTo: replyTo || replyToNote || null, senderPremiumStyle,
     });
     setReplyTo(null);
     setReplyToNote(null);
@@ -906,9 +963,14 @@ const ChatView = () => {
       const up = await uploadToCloudinary(file);
       const messagesRef = ref(db, msgRoot);
       const newRef = push(messagesRef);
-      const payloadOut = clean({ text: payload.caption || '', caption: payload.caption || '', senderId: user.uid, uid: user.uid, timestamp: now, createdAt: now, mediaType, mediaUrl: up.url, publicId: up.publicId, duration: up.duration || null, replyTo: replyTo || replyToNote || null });
+      const payloadOut = clean({
+        text: payload.caption || '', caption: payload.caption || '',
+        senderId: user.uid, uid: user.uid, timestamp: now, createdAt: now,
+        mediaType, mediaUrl: up.url, publicId: up.publicId, duration: up.duration || null,
+        replyTo: replyTo || replyToNote || null, senderPremiumStyle,
+      });
       await set(newRef, payloadOut);
-      
+
       if (!isGroupChat && userId) {
         const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
         update(partnerChatRef, { lastMessage: mediaType === 'image' ? '📷 Photo' : '🎬 Video', lastUpdated: now, lastSenderId: user.uid }).catch(() => {});
@@ -921,7 +983,7 @@ const ChatView = () => {
       patchLocal(tempId, { pending: false, isUploading: false, uploadFailed: true });
       showToast('Failed to send media', 'error');
     }
-  }, [msgRoot, user?.uid, replyTo, replyToNote, uploadToCloudinary, upsertLocal, removeLocal, patchLocal, showToast, isMuted, userId, isGroupChat]);
+  }, [msgRoot, user?.uid, replyTo, replyToNote, uploadToCloudinary, upsertLocal, removeLocal, patchLocal, showToast, isMuted, userId, isGroupChat, userSettings, currentUserProfile]);
 
   const handleReact = useCallback(async (msg, key) => {
     if (!msgRoot || !user?.uid || !msg?.id) return;
@@ -1233,10 +1295,10 @@ const ChatView = () => {
             <div className="telegram-empty-state">
               <div className="telegram-empty-card">
                 <div className="telegram-empty-avatar">
-                  <Lottie 
-                    animationData={catJson} 
-                    loop={true} 
-                    style={{ width: '100%', height: '100%', transform: 'scale(1.3)' }} 
+                  <Lottie
+                    animationData={catJson}
+                    loop={true}
+                    style={{ width: '100%', height: '100%', transform: 'scale(1.3)' }}
                   />
                 </div>
                 <div className="telegram-empty-name">{partnerName}</div>
@@ -1263,6 +1325,12 @@ const ChatView = () => {
             const groupClass = row.group === 'top' ? 'group-top' : row.group === 'bottom' ? 'group-bottom' : row.group === 'mid' ? 'group-mid' : '';
             const selected = selectedIds.has(msg.id);
             const isPremium = isPremiumSticker(msg.text) && !msg.mediaType && !msg.mediaUrl;
+
+            // 🟢 ECHO PLUS: apply sender's premium bubble style
+            const premiumStyle =
+              msg.senderPremiumStyle ||
+              (isOwn ? (userSettings?.chats?.bubbleStyle || currentUserProfile?.premiumChatStyle) : null);
+            const premiumStyleClass = premiumStyle ? ` ${premiumStyle}` : '';
 
             if (isPremium && !msg.replyTo) {
               return (
@@ -1306,7 +1374,7 @@ const ChatView = () => {
                 onToggleSelect={handleToggleSelect}
                 registerRef={registerRef}
               >
-                <div className={`message-bubble ${isOwn ? 'own' : 'partner'} ${isPremium ? 'premium-lottie-bubble' : ''} ${msg.editedAt ? 'edited' : ''}`} style={{ fontSize: FONT_SIZE_MAP[fontSize] }}>
+                <div className={`message-bubble ${isOwn ? 'own' : 'partner'}${premiumStyleClass} ${isPremium ? 'premium-lottie-bubble' : ''} ${msg.editedAt ? 'edited' : ''}`} style={{ fontSize: FONT_SIZE_MAP[fontSize] }}>
                   {!isOwn && isGroupChat && (
                     <div className="message-sender-name" style={{ color: senderColor(msg.senderId || msg.uid) }}>
                       {sanitizeName((groupData?.members?.[msg.senderId]?.displayName) || msg.senderName, msg.senderId || msg.uid)}
@@ -1386,18 +1454,25 @@ const ChatView = () => {
                 isEchoPlus={isEchoPlus}
                 onClose={() => setShowEmojiPicker(false)}
                 onSelect={async (payload) => {
-                  if (payload.type === 'UPGRADE') { 
-                    setShowPlusCheckout(true); 
+                  if (payload.type === 'UPGRADE') {
+                    setShowPlusCheckout(true);
                     return;
                   }
-                  
+
                   setShowEmojiPicker(false);
                   const textToSend = payload.type === 'EMOJI' ? payload.value : payload.key;
                   if (!textToSend || !msgRoot || !user?.uid) return;
 
                   const tempId = `local_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
                   const now = Date.now();
-                  
+                  const replySnapshot = replyTo
+                    ? { id: replyTo.id, text: replyTo.text || '', senderId: replyTo.senderId || replyTo.uid || null, mediaType: replyTo.mediaType || null }
+                    : replyToNote || null;
+
+                  const senderPremiumStyle = userSettings?.chats?.bubbleStyle
+                    || currentUserProfile?.premiumChatStyle
+                    || null;
+
                   upsertLocal({
                     id: tempId,
                     text: textToSend,
@@ -1405,13 +1480,14 @@ const ChatView = () => {
                     uid: user.uid,
                     timestamp: now,
                     createdAt: now,
-                    replyTo: replyTo ? { id: replyTo.id, text: replyTo.text || '', senderId: replyTo.senderId || replyTo.uid || null, mediaType: replyTo.mediaType || null } : replyToNote || null,
+                    replyTo: replySnapshot,
+                    senderPremiumStyle,
                   });
-                  
+
                   setReplyTo(null);
                   setReplyToNote(null);
                   hapticSend();
-                  
+
                   try {
                     const messagesRef = ref(db, msgRoot);
                     const newRef = push(messagesRef);
@@ -1421,8 +1497,21 @@ const ChatView = () => {
                       uid: user.uid,
                       timestamp: now,
                       createdAt: now,
-                      replyTo: replyTo ? { id: replyTo.id, text: replyTo.text || '', senderId: replyTo.senderId || replyTo.uid || null, mediaType: replyTo.mediaType || null } : replyToNote || null
+                      replyTo: replySnapshot,
+                      senderPremiumStyle,
                     }));
+
+                    if (!isGroupChat && userId) {
+                      const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
+                      update(partnerChatRef, {
+                        lastMessage: textToSend,
+                        lastUpdated: now,
+                        lastSenderId: user.uid,
+                        isRead: false,
+                        readAt: null,
+                      }).catch(() => {});
+                    }
+
                     removeLocal(tempId);
                     if (getSoundEnabled() && !isMuted) { try { playSentSound(); } catch { } }
                   } catch (err) {
