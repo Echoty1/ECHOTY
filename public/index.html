@@ -328,9 +328,9 @@
     <!-- ✅ Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet" />
 
-    <!-- 🔥 AUTO-CLEANUP SCRIPT (Fixes the loop automatically for all users) -->
+    <!-- 🔥 FORCE KILL OLD SERVICE WORKERS (Fixes the loop) -->
     <script>
-      (async function cleanupServiceWorkers() {
+      (async function forceCleanup() {
         if (!('serviceWorker' in navigator)) return;
         
         try {
@@ -338,24 +338,24 @@
           let unregistered = false;
           
           for (let registration of registrations) {
-            // Check if it's an old worker that we no longer want
             const scriptURL = registration.active?.scriptURL || '';
+            // Target Firebase and old Monetag workers
             if (
               scriptURL.includes('firebase-messaging-sw.js') || 
-              scriptURL.includes('service-worker.js') // Monetag's old worker
+              scriptURL.includes('service-worker.js')
             ) {
               await registration.unregister();
               unregistered = true;
-              console.log('Auto-cleaned old worker:', scriptURL);
+              console.log('Killed conflicting worker:', scriptURL);
             }
           }
           
-          // If we cleaned something up, force a single reload to load the new OneSignal worker perfectly
           if (unregistered) {
+            // Force reload to clear memory
             window.location.reload();
           }
         } catch (err) {
-          console.error('Service Worker cleanup failed:', err);
+          console.error('Cleanup failed:', err);
         }
       })();
     </script>
@@ -368,8 +368,8 @@
         await OneSignal.init({
           appId: "758b8bf2-c7e4-4230-a097-771e0d6e672f",
           allowLocalhostAsSecureOrigin: true,
-          notifyButton: { enable: false }, // Stops auto-reload
-          serviceWorkerParam: { scope: "/onesignal/" }, // 🛡️ Prevents conflict with Monetag
+          notifyButton: { enable: false },
+          serviceWorkerParam: { scope: "/onesignal/" }, // Isolate OneSignal
           serviceWorkerPath: "OneSignalSDKWorker.js",
           autoResubscribe: true,
           promptOptions: {
@@ -390,7 +390,6 @@
   <body>
     <div id="root"></div>
 
-    <!-- Fallback for browsers with JavaScript disabled -->
     <noscript>
       <h1>ECHO — The Future of Chat</h1>
       <p>
