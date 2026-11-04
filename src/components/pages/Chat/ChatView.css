@@ -4218,3 +4218,73 @@ body.light .chat-list-tick.delivered { color: rgba(0, 0, 0, 0.5); }
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* ═══════════════════════════════════════════════════════════════
+   ★ DRAG & DROP OVERLAY (Desktop)
+   ═══════════════════════════════════════════════════════════════ */
+
+.drag-drop-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 99999;
+  background: rgba(10, 10, 15, 0.85);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fadeIn 0.2s ease-out;
+  pointer-events: none;
+}
+
+.drag-drop-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 44px 56px;
+  background: rgba(20, 15, 35, 0.75);
+  border: 2px dashed rgba(108, 60, 225, 0.7);
+  border-radius: 28px;
+  box-shadow:
+    0 20px 60px rgba(0, 0, 0, 0.6),
+    0 0 0 1px rgba(167, 139, 250, 0.15),
+    0 0 60px rgba(108, 60, 225, 0.25);
+  animation: pop-in 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+  backdrop-filter: blur(20px);
+}
+
+.drag-drop-icon {
+  width: 88px;
+  height: 88px;
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.28), rgba(236, 72, 153, 0.22));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 22px;
+  color: #A78BFA;
+  box-shadow:
+    0 8px 24px rgba(108, 60, 225, 0.35),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+}
+
+.drag-drop-icon svg {
+  width: 44px;
+  height: 44px;
+  filter: drop-shadow(0 2px 8px rgba(167, 139, 250, 0.6));
+}
+
+.drag-drop-content h3 {
+  margin: 0 0 10px;
+  font-size: 20px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.3px;
+}
+
+.drag-drop-content p {
+  margin: 0;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.55);
+  font-weight: 500;
+}
