@@ -547,6 +547,7 @@ const ChatView = () => {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [highlightId, setHighlightId] = useState(null);
   const [showPlusCheckout, setShowPlusCheckout] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
 
   const [confirmModal, setConfirmModal] = useState({ isOpen: false, title: '', message: '', confirmText: 'Confirm', cancelText: 'Cancel', onConfirm: null });
 
@@ -630,6 +631,58 @@ const ChatView = () => {
     const t = setTimeout(() => setLoadingMessages(false), 1200);
     return () => clearTimeout(t);
   }, []);
+
+  // 🟢 DESKTOP DRAG & DROP
+  useEffect(() => {
+    let dragCounter = 0;
+
+    const handleDragEnter = (e) => {
+      e.preventDefault();
+      dragCounter++;
+      if (e.dataTransfer.types && (e.dataTransfer.types.includes('Files') || e.dataTransfer.types.includes('application/x-moz-file'))) {
+        setIsDragging(true);
+      }
+    };
+
+    const handleDragLeave = (e) => {
+      e.preventDefault();
+      dragCounter--;
+      if (dragCounter === 0) setIsDragging(false);
+    };
+
+    const handleDragOver = (e) => {
+      e.preventDefault();
+    };
+
+    const handleDrop = (e) => {
+      e.preventDefault();
+      setIsDragging(false);
+      dragCounter = 0;
+
+      if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        const file = e.dataTransfer.files[0];
+        if (file.size > MAX_FILE_SIZE) {
+          showToast('File too large (max 20MB)', 'error');
+          return;
+        }
+        setSelectedFile(file);
+        setPreviewUrl(URL.createObjectURL(file));
+        setCaptionText('');
+      }
+    };
+
+    window.addEventListener('dragenter', handleDragEnter);
+    window.addEventListener('dragleave', handleDragLeave);
+    window.addEventListener('dragover', handleDragOver);
+    window.addEventListener('drop', handleDrop);
+
+    return () => {
+      window.removeEventListener('dragenter', handleDragEnter);
+      window.removeEventListener('dragleave', handleDragLeave);
+      window.removeEventListener('dragover', handleDragOver);
+      window.removeEventListener('drop', handleDrop);
+    };
+  }, [showToast]);
 
   useEffect(() => {
     if (isGroupChat && groupIdFromChat) {
@@ -734,8 +787,6 @@ const ChatView = () => {
     return () => unsub();
   }, [chatKey, userId, user?.uid, isGroupChat]);
 
-  // 🟢 DEDUPE: A local copy that matches a server message (same text/sender, within 3s)
-  // is treated as already-sent, so we never show two bubbles.
   const allMessages = useMemo(() => {
     const serverIds = new Set(messages.map(m => m.id));
     const pending = localMsgs.filter(m => {
@@ -845,7 +896,6 @@ const ChatView = () => {
 
   useEffect(() => () => { if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current); }, []);
 
-  // 🛡️ FIX: prevent duplicate sends + attach sender's premium bubble style
   const handleSendText = useCallback(async () => {
     if (sendingRef.current) return;
 
@@ -860,7 +910,6 @@ const ChatView = () => {
       ? { id: replyTo.id, text: replyTo.text || '', senderId: replyTo.senderId || replyTo.uid || null, mediaType: replyTo.mediaType || null }
       : replyToNote || null;
 
-    // Preserve the sender's premium bubble style so partner sees it
     const senderPremiumStyle = userSettings?.chats?.bubbleStyle
       || currentUserProfile?.premiumChatStyle
       || null;
@@ -1094,7 +1143,6 @@ const ChatView = () => {
     catch (err) { console.error('Archive failed', err); showToast('Failed to archive', 'error'); }
   }, [user?.uid, showToast]);
 
-  // 🟢 Focus the input whenever a reply is initiated (swipe, long-press menu, double-tap)
   const focusComposer = useCallback(() => {
     setTimeout(() => {
       const el = inputRef.current;
@@ -1350,7 +1398,6 @@ const ChatView = () => {
             const selected = selectedIds.has(msg.id);
             const isPremium = isPremiumSticker(msg.text) && !msg.mediaType && !msg.mediaUrl;
 
-            // 🟢 ECHO PLUS: apply sender's premium bubble style
             const premiumStyle =
               msg.senderPremiumStyle ||
               (isOwn ? (userSettings?.chats?.bubbleStyle || currentUserProfile?.premiumChatStyle) : null);
@@ -1605,6 +1652,23 @@ const ChatView = () => {
         <ConfirmModal isOpen={confirmModal.isOpen} title={confirmModal.title} message={confirmModal.message} confirmText={confirmModal.confirmText} cancelText={confirmModal.cancelText} onConfirm={confirmModal.onConfirm} onClose={closeConfirmModal} />
         {toast && <Toast message={toast.message} type={toast.type} />}
         <PlusCheckout isOpen={showPlusCheckout} onClose={() => setShowPlusCheckout(false)} />
+
+        {/* 🟢 Drag & Drop Overlay */}
+        {isDragging && (
+          <div className="drag-drop-overlay">
+            <div className="drag-drop-content">
+              <div className="drag-drop-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                  <polyline points="17 8 12 3 7 8" />
+                  <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+              </div>
+              <h3>Drag files or images here to upload</h3>
+              <p>Max 20MB per file.</p>
+            </div>
+          </div>
+        )}
       </div>
     </VideoAudioProvider>
   );
