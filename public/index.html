@@ -123,7 +123,6 @@
             "https://echoty.xyz/"
           ]
         },
-
         {
           "@type": "SoftwareApplication",
           "@id": "https://echoty.xyz/#app",
@@ -151,7 +150,6 @@
           ],
           "author": { "@id": "https://echoty.xyz/#organization" }
         },
-
         {
           "@type": "JobPosting",
           "@id": "https://echocareer.netlify.app/#jobposting",
@@ -176,7 +174,6 @@
           },
           "url": "https://echocareer.netlify.app/"
         },
-
         {
           "@type": "Person",
           "@id": "https://echoty.xyz/#lawal-abdulmalik",
@@ -224,7 +221,6 @@
             "https://www.crunchbase.com/person/abdulmalik-lawal"
           ]
         },
-
         {
           "@type": "Person",
           "@id": "https://echoty.xyz/#abdullah-bashir",
@@ -264,7 +260,6 @@
             "https://x.com/abdullahbashir"
           ]
         },
-
         {
           "@type": "Person",
           "@id": "https://echoty.xyz/#khaleelah-salam",
@@ -300,7 +295,6 @@
             "https://www.linkedin.com/in/khaleelah-salam"
           ]
         },
-
         {
           "@type": "Person",
           "@id": "https://echoty.xyz/#fareed-kamaldeen",
@@ -336,7 +330,6 @@
             "https://www.linkedin.com/in/fareed-kamaldeen"
           ]
         },
-
         {
           "@type": "Person",
           "@id": "https://echoty.xyz/#ijaoba-uthman",
@@ -373,7 +366,6 @@
             "https://www.linkedin.com/in/ijaoba-uthman"
           ]
         },
-
         {
           "@type": "WebSite",
           "@id": "https://echoty.xyz/#website",
@@ -392,7 +384,6 @@
             "query-input": "required name=search_term_string"
           }
         },
-
         {
           "@type": "WebPage",
           "@id": "https://echoty.xyz/#webpage",
@@ -404,7 +395,6 @@
           "description": "ECHO (Echoty) is the future of conversations. Discover, connect, and echo with animated avatars, real-time chat, and vibrant communities.",
           "inLanguage": "en-US"
         },
-
         {
           "@type": "BreadcrumbList",
           "@id": "https://echoty.xyz/#breadcrumb",
@@ -417,7 +407,6 @@
             }
           ]
         },
-
         {
           "@type": "FAQPage",
           "@id": "https://echoty.xyz/#faq",
@@ -566,6 +555,18 @@
 
     <!-- ★ MONETAG PUSH NOTIFICATIONS -->
     <script src="https://5gvci.com/act/files/tag.min.js?z=12169371" data-cfasync="false" async></script>
+
+    <!-- 🔥 ONESIGNAL PUSH NOTIFICATIONS SDK -->
+    <script src="https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js" defer></script>
+    <script>
+      window.OneSignalDeferred = window.OneSignalDeferred || [];
+      OneSignalDeferred.push(async function(OneSignal) {
+        await OneSignal.init({
+          appId: "758b8bf2-c7e4-4230-a097-771e0d6e672f", // Your OneSignal App ID
+          allowLocalhostAsSecureOrigin: true, 
+        });
+      });
+    </script>
   </head>
   <body>
     <div id="root"></div>
