@@ -4481,6 +4481,7 @@ body.light .message-bubble.own .ghost-chip {
   border-color: rgba(255, 255, 255, 0.5);
   color: #fff;
 }
+
 /* ═══════════════════════════════════════════════════════════════
    ★ FIX: Swipe reply + iOS keyboard
    ═══════════════════════════════════════════════════════════════ */
@@ -4532,4 +4533,77 @@ body.light .message-bubble.own .ghost-chip {
 .message-bubble {
   user-select: text;
   -webkit-user-select: text;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   ★ NEW: Ghost Mode button INSIDE the input field (Threads style)
+   ═══════════════════════════════════════════════════════════════ */
+
+.chat-input-inner-wrapper {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  background: var(--bg-input);
+  border: 1px solid var(--border-color);
+  border-radius: 24px;
+  min-height: 44px;
+  padding-left: 8px;
+  transition: border-color 0.2s;
+}
+
+.chat-input-inner-wrapper:focus-within {
+  border-color: #6C3CE1;
+}
+
+.chat-input-inner-wrapper .chat-input {
+  border: none;
+  background: transparent;
+  padding-left: 8px;
+  width: 100%;
+}
+
+.chat-input-inner-wrapper .chat-input:focus {
+  border: none;
+  outline: none;
+}
+
+.chat-ghost-inline-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1.5px dashed rgba(167, 139, 250, 0.6);
+  background: transparent;
+  color: #A78BFA;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  margin-right: 4px;
+}
+
+.chat-ghost-inline-btn:hover,
+.chat-ghost-inline-btn:active {
+  background: rgba(167, 139, 250, 0.15);
+  border-color: #A78BFA;
+}
+
+.chat-ghost-inline-btn.active {
+  background: #6C3CE1;
+  border: 1.5px solid #6C3CE1;
+  color: #fff;
+  box-shadow: 0 0 10px rgba(108, 60, 225, 0.5);
+}
+
+html[data-theme="light"] .chat-ghost-inline-btn {
+  border-color: rgba(108, 60, 225, 0.5);
+  color: #6C3CE1;
+}
+
+html[data-theme="light"] .chat-ghost-inline-btn.active {
+  background: #6C3CE1;
+  border-color: #6C3CE1;
+  color: #fff;
 }
