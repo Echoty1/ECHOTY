@@ -15,7 +15,7 @@ import { SubscriptionProvider } from './contexts/SubscriptionContext';
 import RedeemPass from './components/pages/Redeem/RedeemPass'; 
 
 // ─── Services ───
-// 🔥 REMOVED: import { registerFcmToken } from './services/fcmService'; (We are using OneSignal now)
+// 🔥 REMOVED: import { registerFcmToken } from './services/fcmService'; (We use OneSignal now)
 
 // ─── Geo-Block & 404 Imports ───
 import CountryBlockScreen from './components/Auth/CountryBlockScreen';
@@ -300,18 +300,7 @@ function AppContent() {
     return () => document.body.classList.remove('echo-support-visible');
   }, [showHappr]);
 
-  // 🔥 REMOVED: The APP_VERSION reload loop that was causing refresh issues
-  // useEffect(() => {
-  //   const key = 'echo_v';
-  //   const saved = localStorage.getItem(key);
-  //   const current = String(APP_VERSION);
-  //   if (saved && saved !== current) {
-  //     localStorage.setItem(key, current);
-  //     window.location.reload();
-  //   } else if (!saved) {
-  //     localStorage.setItem(key, current);
-  //   }
-  // }, []);
+  // 🔥 REMOVED: The APP_VERSION reload loop
 
   useEffect(() => {
     const timer = setTimeout(() => setMinTimePassed(true), 2000);
@@ -420,14 +409,7 @@ function AppContent() {
     }
   }, [user?.uid, fetchProfile]);
 
-  // 🔥 REMOVED: The serviceWorker.ready update loop
-  // useEffect(() => {
-  //   if ('serviceWorker' in navigator) {
-  //     navigator.serviceWorker.ready.then((registration) => {
-  //       registration.update();
-  //     }).catch(() => {});
-  //   }
-  // }, []);
+  // 🔥 REMOVED: serviceWorker.ready update loop
 
   // ─── BLOCK LOGIC ───
   if (isGeoChecking) {
