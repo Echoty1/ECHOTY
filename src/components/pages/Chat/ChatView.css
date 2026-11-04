@@ -4607,3 +4607,175 @@ html[data-theme="light"] .chat-ghost-inline-btn.active {
   border-color: #6C3CE1;
   color: #fff;
 }
+/* ═══════════════════════════════════════════════════════════════
+   ★ GHOST MODE — Grid Menu & Insane Liquid Halloween Bubble
+   ═══════════════════════════════════════════════════════════════ */
+
+/* 1. New Grid Layout for Timers */
+.ghost-options-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.ghost-option-grid-btn {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 12px 6px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #fff;
+}
+
+.ghost-option-grid-btn:hover {
+  background: rgba(167, 139, 250, 0.15);
+  border-color: rgba(167, 139, 250, 0.4);
+}
+
+.ghost-option-grid-btn.active {
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.4), rgba(236, 72, 153, 0.3));
+  border-color: #A78BFA;
+  box-shadow: 0 0 15px rgba(167, 139, 250, 0.3);
+}
+
+.ghost-option-grid-btn .ghost-option-label {
+  font-size: 14px;
+  font-weight: 800;
+  margin-bottom: 2px;
+}
+
+.ghost-option-grid-btn .ghost-option-sub {
+  font-size: 9px;
+  color: rgba(255, 255, 255, 0.5);
+  text-align: center;
+}
+
+.ghost-option-grid-btn i.fa-check {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 10px;
+  color: #A78BFA;
+}
+
+html[data-theme="light"] .ghost-option-grid-btn {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.06);
+  color: #111;
+}
+
+html[data-theme="light"] .ghost-option-grid-btn:hover {
+  background: rgba(108, 60, 225, 0.08);
+}
+
+html[data-theme="light"] .ghost-option-grid-btn.active {
+  background: linear-gradient(135deg, rgba(108, 60, 225, 0.15), rgba(236, 72, 153, 0.1));
+  border-color: #6C3CE1;
+  color: #6C3CE1;
+}
+
+html[data-theme="light"] .ghost-option-grid-btn .ghost-option-sub {
+  color: rgba(0, 0, 0, 0.4);
+}
+
+html[data-theme="light"] .ghost-option-grid-btn i.fa-check {
+  color: #6C3CE1;
+}
+
+/* 2. Insane Liquid Halloween Ghost Bubble */
+.ghost-liquid-bubble {
+  position: relative;
+  background: rgba(30, 10, 50, 0.7) !important;
+  backdrop-filter: blur(16px) !important;
+  -webkit-backdrop-filter: blur(16px) !important;
+  border: 1px solid rgba(167, 139, 250, 0.3) !important;
+  border-radius: 24px !important;
+  box-shadow: 
+    0 8px 32px rgba(108, 60, 225, 0.3),
+    inset 0 0 20px rgba(167, 139, 250, 0.1) !important;
+  /* The liquid morphing shape */
+  animation: 
+    ghostFloat 4s ease-in-out infinite,
+    liquidMorph 8s ease-in-out infinite;
+  overflow: hidden;
+  z-index: 2;
+}
+
+/* Inner glowing aura */
+.ghost-liquid-glow {
+  position: absolute;
+  inset: -50%;
+  background: radial-gradient(circle at 50% 50%, rgba(108, 60, 225, 0.4) 0%, rgba(236, 72, 153, 0.1) 40%, transparent 70%);
+  filter: blur(20px);
+  animation: ghostGlowPulse 3s ease-in-out infinite alternate;
+  z-index: -1;
+  pointer-events: none;
+}
+
+/* Override text color inside the ghost bubble to be ghostly */
+.ghost-liquid-bubble .message-text,
+.ghost-liquid-bubble .message-sender-name,
+.ghost-liquid-bubble .message-meta-time,
+.ghost-liquid-bubble .message-meta-row {
+  color: #E9D5FF !important;
+  text-shadow: 0 0 10px rgba(167, 139, 250, 0.5);
+}
+
+.ghost-liquid-bubble .replied-message {
+  background: rgba(0, 0, 0, 0.3) !important;
+  border-left-color: #A78BFA !important;
+}
+
+/* The Ghosty Bubble Tail */
+.ghost-liquid-bubble::after {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  width: 20px;
+  height: 20px;
+  background: rgba(30, 10, 50, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-bottom: 1px solid rgba(167, 139, 250, 0.3);
+  border-right: 1px solid rgba(167, 139, 250, 0.3);
+  z-index: -1;
+}
+
+.message-row.own .ghost-liquid-bubble::after {
+  right: 20px;
+  transform: skewX(-20deg);
+  border-radius: 0 0 10px 0;
+}
+
+.message-row.partner .ghost-liquid-bubble::after {
+  left: 20px;
+  transform: skewX(20deg);
+  border-radius: 0 0 0 10px;
+  border-right: none;
+  border-left: 1px solid rgba(167, 139, 250, 0.3);
+}
+
+/* The Animations */
+@keyframes ghostFloat {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-6px); }
+}
+
+@keyframes liquidMorph {
+  0%, 100% { border-radius: 24px 24px 24px 24px; }
+  25%      { border-radius: 30px 20px 28px 22px; }
+  50%      { border-radius: 20px 30px 22px 28px; }
+  75%      { border-radius: 28px 22px 30px 20px; }
+}
+
+@keyframes ghostGlowPulse {
+  0%   { opacity: 0.5; transform: scale(1); }
+  100% { opacity: 1; transform: scale(1.1); }
+}
