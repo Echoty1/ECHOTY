@@ -1094,6 +1094,32 @@ const ChatView = () => {
     catch (err) { console.error('Archive failed', err); showToast('Failed to archive', 'error'); }
   }, [user?.uid, showToast]);
 
+   // 🟢 Focus the input whenever a reply is initiated (swipe, long-press menu, double-tap)
+  const focusComposer = useCallback(() => {
+    setTimeout(() => {
+      const el = inputRef.current;
+      if (!el) return;
+      try {
+        el.focus({ preventScroll: false });
+      } catch {
+        try { el.focus(); } catch {}
+      }
+      // On mobile the keyboard needs a moment after focus
+      const len = (el.value || '').length;
+      try { el.setSelectionRange(len, len); } catch {}
+      // Ensure we scroll to the bottom so the composer is visible above the keyboard
+      requestAnimationFrame(() => {
+        const c = messagesContainerRef.current;
+        if (c) c.scrollTop = c.scrollHeight;
+      });
+    }, 60);
+  }, []);
+
+  const beginReply = useCallback((msg) => {
+    setReplyTo(msg);
+    focusComposer();
+  }, [focusComposer]);
+
   const handleLongPress = useCallback((msg, rect) => {
     const isOwn = msg.senderId === user?.uid || msg.uid === user?.uid;
     setMenu({ msg, rect, isOwn });
@@ -1108,7 +1134,7 @@ const ChatView = () => {
     const isOwn = menu.isOwn;
     const items = [];
 
-    items.push({ key: 'reply', label: 'Reply', icon: 'fa-reply', onPress: () => setReplyTo(msg) });
+    items.push({ key: 'reply', label: 'Reply', icon: 'fa-reply', onPress: () => beginReply(msg) });
     if (msg.text || msg.caption) {
       items.push({ key: 'copy', label: 'Copy text', icon: 'fa-copy', onPress: () => { navigator.clipboard?.writeText(msg.text || msg.caption || '').then(() => showToast('Copied'), () => showToast('Copy failed', 'error')); } });
     }
@@ -1343,7 +1369,7 @@ const ChatView = () => {
                   selected={selected}
                   canReply={!selectMode}
                   onLongPress={handleLongPress}
-                  onReply={(m) => setReplyTo(m)}
+                 onReply={(m) => beginReply(m)}
                   onDoubleTap={(m) => handleReact(m, 'heart')}
                   onToggleSelect={handleToggleSelect}
                   registerRef={registerRef}
