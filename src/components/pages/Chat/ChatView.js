@@ -41,6 +41,37 @@ import PlusCheckout from '../../common/PlusCheckout';
 import './ChatView.css';
 import './ChatViewLiquid.css';
 
+// 🔥 1. PUSH NOTIFICATION HELPER FUNCTION
+// Put your REST API KEY here (starts with os_v2_app_...)
+const ONESIGNAL_REST_API_KEY = "YOUR_REST_API_KEY_HERE"; 
+const ONESIGNAL_APP_ID = "758b8bf2-c7e4-4230-a097-771e0d6e672f";
+
+const sendPushNotification = async (targetUserId, senderName, messageText, senderPhoto) => {
+  if (!targetUserId) return;
+  const body = {
+    app_id: ONESIGNAL_APP_ID,
+    include_aliases: { external_id: [targetUserId] },
+    target_channel: "push",
+    headings: { en: senderName || "New Message" },
+    contents: { en: messageText || "You received a new message" },
+    chrome_web_icon: senderPhoto || "https://echoty.xyz/logo.png",
+    url: `https://echoty.xyz/chat/${targetUserId}`
+  };
+  try {
+    await fetch("https://onesignal.com/api/v1/notifications", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json; charset=utf-8",
+        "Authorization": `Basic ${ONESIGNAL_REST_API_KEY}`
+      },
+      body: JSON.stringify(body)
+    });
+  } catch (err) {
+    console.error("Failed to send push:", err);
+  }
+};
+// 🔥 END HELPER FUNCTION
+
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
@@ -421,7 +452,6 @@ const MessageRow = ({
     s.mode = null;
   };
 
-  // Touch Events
   const onTouchStart = (e) => {
     if (e.touches.length !== 1) return;
     const t = e.touches[0];
@@ -453,7 +483,6 @@ const MessageRow = ({
     swipeEnd(true);
   };
 
-  // Mouse Fallback
   const onMouseDown = (e) => {
     if (e.button !== 0) return;
     swipeStart(e.clientX, e.clientY, e.target);
@@ -635,7 +664,6 @@ const ChatView = () => {
   const [showPlusCheckout, setShowPlusCheckout] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
 
-  // 👻 Ghost Mode state
   const [ghostMode, setGhostMode] = useState(null);
   const [showGhostMenu, setShowGhostMenu] = useState(false);
 
@@ -721,7 +749,6 @@ const ChatView = () => {
     return () => clearTimeout(t);
   }, []);
 
-  // DESKTOP DRAG & DROP
   useEffect(() => {
     let dragCounter = 0;
 
@@ -864,7 +891,6 @@ const ChatView = () => {
     return () => unsub();
   }, [msgRoot, user?.uid]);
 
-  // Ghost Mode cleanup
   useEffect(() => {
     if (!messages.length) return;
     const t = setInterval(() => {
@@ -1061,6 +1087,11 @@ const ChatView = () => {
           isRead: false,
           readAt: null,
         }).catch(() => {});
+
+        // 🔥 TRIGGER PUSH NOTIFICATION HERE
+        const senderName = currentUserProfile?.displayName || currentUserProfile?.name || "New Message";
+        const senderPic = currentUserProfile?.photoURL || null;
+        sendPushNotification(userId, senderName, text, senderPic);
       }
 
       removeLocal(tempId);
@@ -1126,6 +1157,12 @@ const ChatView = () => {
       if (!isGroupChat && userId) {
         const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
         update(partnerChatRef, { lastMessage: mediaType === 'image' ? '📷 Photo' : '🎬 Video', lastUpdated: now, lastSenderId: user.uid }).catch(() => {});
+
+        // 🔥 TRIGGER PUSH NOTIFICATION HERE
+        const senderName = currentUserProfile?.displayName || currentUserProfile?.name || "New Message";
+        const senderPic = currentUserProfile?.photoURL || null;
+        const notificationText = mediaType === 'image' ? '📷 Sent a photo' : mediaType === 'video' ? '🎬 Sent a video' : '🎵 Sent an audio file';
+        sendPushNotification(userId, senderName, notificationText, senderPic);
       }
 
       removeLocal(tempId);
@@ -1786,6 +1823,11 @@ const ChatView = () => {
                         isRead: false,
                         readAt: null,
                       }).catch(() => {});
+
+                      // 🔥 TRIGGER PUSH NOTIFICATION HERE
+                      const senderName = currentUserProfile?.displayName || currentUserProfile?.name || "New Message";
+                      const senderPic = currentUserProfile?.photoURL || null;
+                      sendPushNotification(userId, senderName, textToSend, senderPic);
                     }
 
                     removeLocal(tempId);
