@@ -7,6 +7,7 @@ import admin from 'firebase-admin';
 import webpush from 'web-push';
 import Groq from 'groq-sdk';
 import fetch from 'node-fetch';
+import axios from 'axios'; // 👈 ADDED FOR BREVO
 import 'dotenv/config';
 
 // ─── IMAP poller imports ────────────────────────────────────────
@@ -64,6 +65,45 @@ async function requireUser(req, res, next) {
 app.get('/', (req, res) => res.json({ status: 'online', version: 'v2' }));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
+// ==========================================================================
+//  ✉️ BREVO EMAIL ENDPOINT
+// ==========================================================================
+app.post('/api/send-email', async (req, res) => {
+  const { email, name, subject, htmlContent } = req.body;
+
+  if (!email || !subject) {
+    return res.status(400).json({ message: 'Missing email or subject' });
+  }
+
+  try {
+    const response = await axios.post(
+      'https://api.brevo.com/v3/smtp/email',
+      {
+        sender: {
+          name: "ECHO",
+          email: "official@echoty.xyz" // Your verified Brevo email
+        },
+        to: [{ email, name: name || 'ECHO User' }],
+        subject: subject,
+        htmlContent: htmlContent
+      },
+      {
+        headers: {
+          'api-key': process.env.BREVO_API_KEY, // Pulls from Render Environment Variables
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        }
+      }
+    );
+
+    res.status(200).json({ success: true, message: 'Email sent successfully', data: response.data });
+  } catch (error) {
+    console.error('Brevo Error:', error.response ? error.response.data : error.message);
+    res.status(500).json({ success: false, message: 'Failed to send email' });
+  }
+});
+// ==========================================================================
+
 // ─── VAPID keys (push) ──────────────────────────────────────────
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
   webpush.setVapidDetails(
@@ -95,11 +135,6 @@ io.on('connection', (socket) => {
 });
 
 // ─── Push notifications (FCM v1) ──────────────────────────────
-//
-// Sends push notifications to any user when someone sends them a message.
-// Uses Firebase Cloud Messaging HTTP v1 API (via firebase-admin).
-// Works on web (PWA/homescreen) and native (Capacitor) clients alike.
-
 /**
  * Fetch the recipient's FCM tokens from the DB.
  */
@@ -221,8 +256,6 @@ chatsRef.on('child_added', (chatSnapshot) => {
       const senderId = message.senderId;
       if (!senderId || !chatId) return;
       if (senderId === ECHO_AI_ID) {
-        // AI replies are usually not push-worthy unless you want them to be.
-        // Leave this early return if you don't want AI pushes.
         return;
       }
 
@@ -230,7 +263,6 @@ chatsRef.on('child_added', (chatSnapshot) => {
       const recipientId = parts.find((id) => id && id !== senderId);
       if (!recipientId || recipientId === senderId) return;
 
-      // Skip system messages that aren't real notifications
       if (message.type === 'system' && !message.endedBy) return;
 
       let title = message.senderName || 'ECHO';
@@ -290,7 +322,6 @@ groupsRef.on('child_added', (groupSnapshot) => {
       const senderId = message.senderId;
       if (!senderId || senderId === 'system') return;
 
-      // Get group members
       const membersSnap = await groupSnapshot.child('members').ref.once('value');
       const members = membersSnap.val() || {};
       const recipients = Object.keys(members).filter((uid) => uid !== senderId);
@@ -312,7 +343,6 @@ groupsRef.on('child_added', (groupSnapshot) => {
       const title = `${senderName} · ${groupName}`;
       const url = `/chat/${groupId}`;
 
-      // Fire in parallel
       await Promise.all(
         recipients.map((uid) =>
           sendFcmToUser(
@@ -339,10 +369,6 @@ groupsRef.on('child_added', (groupSnapshot) => {
   });
 });
 
-/**
- * HTTP endpoint — lets the frontend trigger a push manually if needed.
- * (Optional; the DB watchers above will usually handle it.)
- */
 app.post('/api/send-notification', requireUser, async (req, res) => {
   try {
     const { recipientUid, title, body, data } = req.body || {};
@@ -357,9 +383,6 @@ app.post('/api/send-notification', requireUser, async (req, res) => {
   }
 });
 
-/**
- * HTTP endpoint — register a token (alternative to direct DB write).
- */
 app.post('/api/register-token', requireUser, async (req, res) => {
   try {
     const { token } = req.body || {};
