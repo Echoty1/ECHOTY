@@ -100,7 +100,7 @@
 
             // 2. Send Welcome Email via Brevo (Render backend)
             // Make sure to replace this URL with your actual Render backend URL!
-            const BACKEND_URL = 'https://echo-backend-xxxx.onrender.com';
+            const BACKEND_URL = 'https://echoty-pdcy.onrender.com';
             
             await fetch(`${BACKEND_URL}/api/send-email`, {
               method: 'POST',
