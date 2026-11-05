@@ -1,6 +1,6 @@
 // src/App.js
 import React, { useEffect, useState, Component } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { ref, get } from 'firebase/database';
 import { isAndroid, isIOS } from 'react-device-detect';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
@@ -78,6 +78,9 @@ const BLOCKED_REGIONS = [
   { country: 'NG', state: 'ondo' } 
 ];
 
+// ★ NEW: only redirect to /chats on the very first session entry
+const FIRST_ENTRY_KEY = 'echo_first_entry_done';
+
 const schemaData = {
   '@context': 'https://schema.org',
   '@type': 'Organization',
@@ -108,7 +111,7 @@ function ScrollToTop() {
   return null;
 }
 
-// 🔥 NEW: SAFE ERROR BOUNDARY
+// 🔥 SAFE ERROR BOUNDARY
 class ErrorBoundary extends Component {
   constructor(props) {
     super(props);
@@ -166,6 +169,7 @@ function LoadingScreen() {
 
 function AppContent() {
   const { pathname } = useLocation();
+  const navigate = useNavigate();
   const { user, loading, banInfo } = useAuth();
   const { fetchProfile } = useProfile();
 
@@ -182,6 +186,18 @@ function AppContent() {
   const isSpotlightRoute = pathname.startsWith('/spotlight');
   
   const [runAIGuide, setRunAIGuide] = useState(false);
+
+  // ★ On the first entry of a session, land on /chats.
+  useEffect(() => {
+    if (!user) return;
+    try {
+      if (sessionStorage.getItem(FIRST_ENTRY_KEY) === '1') return;
+      sessionStorage.setItem(FIRST_ENTRY_KEY, '1');
+      if (pathname === '/' || pathname === '') {
+        navigate('/chats', { replace: true });
+      }
+    } catch (_) {}
+  }, [user, pathname, navigate]);
 
   useEffect(() => {
     if (user) {
@@ -290,11 +306,12 @@ function AppContent() {
     };
   }, []);
 
-  // 🔥 SAFE: Wrapped myhappr script in try-catch so it doesn't crash React
+  // ★ UPDATED: Support ECHO widget styling (Small FAB)
   useEffect(() => {
     try {
       const src = 'https://myhappr.com/widget.js';
       if (document.querySelector(`script[src="${src}"]`)) return undefined;
+      
       const script = document.createElement('script');
       script.src = src;
       script.async = true;
@@ -308,13 +325,51 @@ function AppContent() {
       script.setAttribute('data-theme', 'light');
       script.setAttribute('data-card-bg', '#FFFFFF');
       script.setAttribute('data-card-text', '#09090b');
+      
+      // Attempt to force minimal layout if the widget supports it
+      script.setAttribute('data-minimal', 'true'); 
+      
       document.body.appendChild(script);
 
       if (!document.getElementById('echo-happr-style')) {
         const css = document.createElement('style');
         css.id = 'echo-happr-style';
-        css.textContent =
-          'body.echo-support-visible [class*="myhappr"],body.echo-support-visible [id*="myhappr"],body.echo-support-visible iframe[src*="myhappr"]{bottom:96px!important;z-index:80!important;}body:not(.echo-support-visible) [class*="myhappr"],body:not(.echo-support-visible) [id*="myhappr"],body:not(.echo-support-visible) iframe[src*="myhappr"]{display:none!important;}';
+        
+        css.textContent = `
+          /* Hide completely on unauthorized routes */
+          body:not(.echo-support-visible) [class*="myhappr"],
+          body:not(.echo-support-visible) [id*="myhappr"],
+          body:not(.echo-support-visible) iframe[src*="myhappr"] {
+            display: none !important;
+          }
+
+          /* Force small circle, lift above bottom nav */
+          body.echo-support-visible [class*="myhappr"],
+          body.echo-support-visible [id*="myhappr"],
+          body.echo-support-visible iframe[src*="myhappr"] {
+            bottom: calc(100px + env(safe-area-inset-bottom, 0px)) !important;
+            right: 16px !important;
+            z-index: 80 !important;
+            
+            width: 56px !important;
+            height: 56px !important;
+            min-width: 56px !important;
+            min-height: 56px !important;
+            max-width: 56px !important;
+            max-height: 56px !important;
+            
+            border-radius: 50% !important;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
+            overflow: hidden !important;
+            transition: transform 0.2s ease !important;
+          }
+
+          body.echo-support-visible [class*="myhappr"]:hover,
+          body.echo-support-visible [id*="myhappr"]:hover,
+          body.echo-support-visible iframe[src*="myhappr"]:hover {
+            transform: scale(1.05) !important;
+          }
+        `;
         document.head.appendChild(css);
       }
     } catch (err) {
