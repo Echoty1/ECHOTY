@@ -55,6 +55,9 @@ import { useGlobalMessageListener } from './hooks/useGlobalMessageListener';
 import { unlockAudio } from './services/notificationService';
 import AIGuide from './components/common/AIGuide';
 
+// ★ NEW: Import Browser Notifications
+import { requestBrowserNotificationPermission } from './services/browserNotifications';
+
 // ─── Onboarding + App Badge ────────────────────────────────
 import OnboardingFlow from './components/Onboarding/OnboardingFlow';
 import { useOnboarding } from './hooks/useOnboarding';
@@ -187,6 +190,16 @@ function AppContent() {
   
   const [runAIGuide, setRunAIGuide] = useState(false);
 
+  // ★ NEW: Request Browser Notification Permission
+  useEffect(() => {
+    if (user?.uid) {
+      const timer = setTimeout(() => {
+        requestBrowserNotificationPermission();
+      }, 5000); // Wait 5 seconds so it doesn't interrupt initial load
+      return () => clearTimeout(timer);
+    }
+  }, [user?.uid]);
+
   // ★ On the first entry of a session, land on /chats.
   useEffect(() => {
     if (!user) return;
@@ -306,7 +319,6 @@ function AppContent() {
     };
   }, []);
 
-  // ★ UPDATED: Support ECHO widget styling (Small FAB)
   useEffect(() => {
     try {
       const src = 'https://myhappr.com/widget.js';
@@ -325,8 +337,6 @@ function AppContent() {
       script.setAttribute('data-theme', 'light');
       script.setAttribute('data-card-bg', '#FFFFFF');
       script.setAttribute('data-card-text', '#09090b');
-      
-      // Attempt to force minimal layout if the widget supports it
       script.setAttribute('data-minimal', 'true'); 
       
       document.body.appendChild(script);
@@ -334,36 +344,29 @@ function AppContent() {
       if (!document.getElementById('echo-happr-style')) {
         const css = document.createElement('style');
         css.id = 'echo-happr-style';
-        
         css.textContent = `
-          /* Hide completely on unauthorized routes */
           body:not(.echo-support-visible) [class*="myhappr"],
           body:not(.echo-support-visible) [id*="myhappr"],
           body:not(.echo-support-visible) iframe[src*="myhappr"] {
             display: none !important;
           }
-
-          /* Force small circle, lift above bottom nav */
           body.echo-support-visible [class*="myhappr"],
           body.echo-support-visible [id*="myhappr"],
           body.echo-support-visible iframe[src*="myhappr"] {
             bottom: calc(100px + env(safe-area-inset-bottom, 0px)) !important;
             right: 16px !important;
             z-index: 80 !important;
-            
             width: 56px !important;
             height: 56px !important;
             min-width: 56px !important;
             min-height: 56px !important;
             max-width: 56px !important;
             max-height: 56px !important;
-            
             border-radius: 50% !important;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15) !important;
             overflow: hidden !important;
             transition: transform 0.2s ease !important;
           }
-
           body.echo-support-visible [class*="myhappr"]:hover,
           body.echo-support-visible [id*="myhappr"]:hover,
           body.echo-support-visible iframe[src*="myhappr"]:hover {
