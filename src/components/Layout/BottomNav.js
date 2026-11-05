@@ -165,22 +165,23 @@ const BottomNav = () => {
 
   const isSupport = user?.uid === SUPPORT_UID;
 
+  // 🔥 RESTORED HOME BUTTON: Home is on the far left.
   const baseTabs = useMemo(() => {
     if (isSupport) {
       return [
-        { to: '/', label: 'Home', icon: 'fa-house', id: 'home' },
-        { to: '/control', label: 'Control', icon: 'fa-sliders-h', id: 'control' },
+        { to: '/', label: 'Home', icon: 'fa-home', id: 'home' },
+        { to: '/communities', label: 'Communities', icon: 'fa-users', id: 'communities' },
         { to: '/chats', label: 'Chats', icon: 'fa-comment-dots', id: 'chats' },
         { to: '/spotlight', label: 'Spotlight', icon: 'fa-bolt', id: 'spotlight' },
-        { to: '/communities', label: 'Communities', icon: 'fa-users', id: 'communities' },
+        { to: '/control', label: 'Control', icon: 'fa-sliders-h', id: 'control' },
         { to: '/other', label: 'Other', icon: 'fa-ellipsis-h', id: 'other' },
       ];
     }
     return [
-      { to: '/', label: 'Home', icon: 'fa-house', id: 'home' },
+      { to: '/', label: 'Home', icon: 'fa-home', id: 'home' },
+      { to: '/communities', label: 'Communities', icon: 'fa-users', id: 'communities' },
       { to: '/chats', label: 'Chats', icon: 'fa-comment-dots', id: 'chats' },
       { to: '/spotlight', label: 'Spotlight', icon: 'fa-bolt', id: 'spotlight' },
-      { to: '/communities', label: 'Communities', icon: 'fa-users', id: 'communities' },
       { to: '/other', label: 'Other', icon: 'fa-ellipsis-h', id: 'other' },
     ];
   }, [isSupport]);
@@ -828,4 +829,4 @@ const BottomNav = () => {
   );
 };
 
-export default BottomNav;  
+export default BottomNav;
