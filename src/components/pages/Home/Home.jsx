@@ -17,6 +17,10 @@ import StoriesBar from '../../Stories/StoriesBar';
 import './Home.css';
 import { isRealDisplayName, filterVisibleUsers } from '../../../utils/userIntegrity';
 
+// ★ Spotlight feed for Home page
+import SpotlightHomeCard from '../../common/SpotlightHomeCard';
+import { listenToSpotlightFeed } from '../../../services/spotlightService';
+
 const DEMO_UID = 'k9Cs6QPfDRNTputzic7V3xRUof63';
 const SUPPORT_UID = 'hD7tJzPVI1VSorhok8GToBC6VDy1';
 
@@ -24,25 +28,22 @@ const HomeSkeleton = () => (
   <div className="home-page">
     <div className="home-container">
       <div className="home-header-skeleton">
-        <div className="skeleton-block" style={{ width: 28, height: 28, borderRadius: '50%' }} />
+        <div className="skeleton-block" style={{ width: 40, height: 40, borderRadius: '50%' }} />
         <div className="skeleton-block" style={{ width: 90, height: 24, borderRadius: 8 }} />
+        <div className="skeleton-block" style={{ width: 40, height: 40, borderRadius: '50%' }} />
       </div>
+      <div className="skeleton-block" style={{ width: '100%', height: 90, borderRadius: 18, marginBottom: 16 }} />
       <section className="home-section">
         <div className="section-header">
           <div className="skeleton-block" style={{ width: 110, height: 20, borderRadius: 8 }} />
           <div className="skeleton-block" style={{ width: 70, height: 22, borderRadius: 12 }} />
         </div>
-        <div className="skeleton-block" style={{ width: 200, height: 13, borderRadius: 6, marginBottom: 18 }} />
         <div className="live-users-scroll">
           {[1, 2, 3, 4, 5].map((i) => (
-            <div key={i} className="live-user-card" style={{ pointerEvents: 'none' }}>
-              <div className="skeleton-block" style={{ width: 72, height: 72, borderRadius: '50%' }} />
-              <div className="skeleton-block" style={{ width: 60, height: 12, borderRadius: 6 }} />
-            </div>
+            <div key={i} className="skeleton-block" style={{ width: 80, height: 95, borderRadius: 16, flexShrink: 0 }} />
           ))}
         </div>
       </section>
-      <div className="skeleton-block" style={{ width: '100%', height: 52, borderRadius: 14 }} />
     </div>
   </div>
 );
@@ -60,6 +61,9 @@ const Home = ({ onOpenRecorder, onOpenStory }) => {
   const [selectedUser, setSelectedUser] = useState(null);
   const [viewingLive, setViewingLive] = useState(null);
 
+  // Spotlight posts shown below Live Now on Home
+  const [spotlightPosts, setSpotlightPosts] = useState([]);
+
   const [isLive, setIsLive] = useState(false);
   const [cameraError, setCameraError] = useState(null);
   const [peerError, setPeerError] = useState(null);
@@ -76,6 +80,14 @@ const Home = ({ onOpenRecorder, onOpenStory }) => {
     if ('Notification' in window && Notification.permission === 'default') {
       Notification.requestPermission();
     }
+  }, []);
+
+  // Subscribe to Spotlight
+  useEffect(() => {
+    const unsub = listenToSpotlightFeed({ maxCount: 12 }, (rawPosts) => {
+      setSpotlightPosts(Array.isArray(rawPosts) ? rawPosts.slice(0, 12) : []);
+    });
+    return () => { if (typeof unsub === 'function') unsub(); };
   }, []);
 
   useEffect(() => {
@@ -396,87 +408,56 @@ const Home = ({ onOpenRecorder, onOpenStory }) => {
   const onlineCount = onlineUsers.filter((u) => u.online && !u.isLive).length;
   const totalCount = liveCount + onlineCount;
 
+  const myProfile = profiles[user?.uid] || {};
+
   return (
     <>
       <SEO
-        title="Live Now – Chat with Friends"
+        title="Home – Chat with Friends"
         description="See who's online and start a conversation instantly on ECHO."
       />
       <StructuredData />
 
       <div className="home-page">
         <div className="home-container">
-          {/* ─── Live Now section ─────────────────────────── */}
-          <section className="home-section">
-            <div className="section-header">
-              <div className="section-title-group">
-                <span className={`live-dot${liveCount > 0 ? ' is-live' : ''}`} aria-hidden="true" />
-                <h3 className="section-title">Live Now</h3>
-              </div>
-              <span className="section-count">
-                {liveCount > 0
-                  ? `${liveCount} live · ${totalCount} total`
-                  : `${totalCount} online`}
-              </span>
+          
+          {/* ─── NEW: Top Header ─────────────────────────── */}
+          <header className="home-top-header">
+            <div className="header-left" onClick={() => navigate('/profile')}>
+              <Avatar src={myProfile.avatar} name={myProfile.name || 'Me'} size={40} />
             </div>
-
-            <p className="section-hint">
-              {liveCount > 0
-                ? 'Tap a live user to watch their stream'
-                : 'Tap any profile to chat instantly'}
-            </p>
-
-            <div className="live-users-scroll">
-              {onlineUsers.length === 0 ? (
-                <div className="live-empty">
-                  <i className="fas fa-moon" aria-hidden="true" />
-                  <span>No one is online right now</span>
-                  <button
-                    type="button"
-                    className="live-empty-action"
-                    onClick={toggleLive}
-                  >
-                    Go live →
-                  </button>
-                </div>
-              ) : (
-                onlineUsers.map((profile) => (
-                  <button
-                    key={profile.uid}
-                    type="button"
-                    className={`live-user-card${profile.isLive ? ' is-live' : ''}`}
-                    onClick={() => openUserPreview(profile.uid)}
-                    aria-label={`${profile.name}${profile.isLive ? ' is live' : ''}`}
-                  >
-                    <div className="live-avatar-wrapper">
-                      <div className="live-avatar-ring">
-                        <Avatar
-                          src={profile.avatar}
-                          name={profile.name}
-                          size={72}
-                        />
-                      </div>
-                      {!profile.isLive && profile.online && (
-                        <span className="online-dot" aria-hidden="true" />
-                      )}
-                      {profile.isLive && (
-                        <span className="live-badge">● LIVE</span>
-                      )}
-                    </div>
-                    <span className="live-username">{profile.name}</span>
-                  </button>
-                ))
-              )}
+            <div className="header-center">
+              <h1 className="header-logo">ECHO</h1>
             </div>
-          </section>
+            <div className="header-right">
+              <button className="header-icon-btn" onClick={() => navigate('/chats')} aria-label="Messages">
+                <i className="fas fa-comment-dots" />
+              </button>
+            </div>
+          </header>
 
-          {/* ─── Go Live button ──────────────────────────── */}
+          {/* ─── NEW: Stories Bar (Moved to top) ───────────── */}
+          <div className="home-stories-wrapper">
+            <StoriesBar
+              currentUserId={user?.uid}
+              users={onlineUsers}
+              ownStory={null}
+              onAddStory={onOpenRecorder}
+              onViewStories={(stories, ownerId) => {
+                onOpenStory(stories, ownerId);
+              }}
+            />
+          </div>
+
+          {/* ─── Go Live Button (Prominent) ────────────────── */}
           <button
             type="button"
             className={`go-live-btn${isLive ? ' is-live' : ''}`}
             onClick={toggleLive}
           >
-            <i className={`fas ${isLive ? 'fa-stop-circle' : 'fa-video'}`} aria-hidden="true" />
+            <div className="go-live-icon-wrap">
+              <i className={`fas ${isLive ? 'fa-stop-circle' : 'fa-video'}`} aria-hidden="true" />
+            </div>
             <span>{isLive ? 'End Live Stream' : 'Go Live Now'}</span>
           </button>
 
@@ -485,21 +466,90 @@ const Home = ({ onOpenRecorder, onOpenStory }) => {
               {cameraError}
             </div>
           )}
+
+          {/* ─── Live Now section (Redesigned Cards) ───────── */}
+          <section className="home-section">
+            <div className="section-header">
+              <div className="section-title-group">
+                <span className={`live-dot${liveCount > 0 ? ' is-live' : ''}`} aria-hidden="true" />
+                <h3 className="section-title">Live Now</h3>
+              </div>
+              <span className="section-count">
+                {liveCount > 0 ? `${liveCount} live` : `${totalCount} online`}
+              </span>
+            </div>
+
+            <div className="live-users-scroll">
+              {onlineUsers.length === 0 ? (
+                <div className="live-empty">
+                  <i className="fas fa-moon" aria-hidden="true" />
+                  <span>It's quiet here right now</span>
+                </div>
+              ) : (
+                onlineUsers.map((profile) => (
+                  <button
+                    key={profile.uid}
+                    type="button"
+                    className={`live-card-v2${profile.isLive ? ' is-live' : ''}`}
+                    onClick={() => openUserPreview(profile.uid)}
+                  >
+                    <div className="live-card-avatar">
+                      <Avatar src={profile.avatar} name={profile.name} size={56} />
+                      {!profile.isLive && profile.online && <span className="online-dot-v2" />}
+                    </div>
+                    <div className="live-card-info">
+                      <span className="live-card-name">{profile.name}</span>
+                      {profile.isLive ? (
+                        <span className="live-card-badge">● LIVE</span>
+                      ) : (
+                        <span className="live-card-status">Online</span>
+                      )}
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          </section>
+
+          {/* ─── Spotlight feed ───────────────────────────── */}
+          <section className="home-spotlight-section">
+            <div className="section-header">
+              <div className="section-title-group">
+                <i className="fas fa-bolt home-spotlight-icon" aria-hidden="true" />
+                <h3 className="section-title">Spotlight</h3>
+              </div>
+              <button
+                type="button"
+                className="home-spotlight-see-all"
+                onClick={() => navigate('/spotlight')}
+              >
+                See all
+              </button>
+            </div>
+
+            {spotlightPosts.length === 0 ? (
+              <div className="home-spotlight-empty">
+                <i className="fas fa-video" aria-hidden="true" />
+                <span>No Spotlights yet — be the first!</span>
+                <button
+                  type="button"
+                  className="home-spotlight-cta"
+                  onClick={() => navigate('/spotlight/upload')}
+                >
+                  Create Spotlight
+                </button>
+              </div>
+            ) : (
+              <div className="home-spotlight-grid">
+                {spotlightPosts.map((post) => (
+                  <SpotlightHomeCard key={post.id} post={post} />
+                ))}
+              </div>
+            )}
+          </section>
         </div>
 
-        {/* ─── Stories bar ──────────────────────────────── */}
-        <div className="home-stories-dock">
-          <StoriesBar
-            currentUserId={user?.uid}
-            users={onlineUsers}
-            ownStory={null}
-            onAddStory={onOpenRecorder}
-            onViewStories={(stories, ownerId) => {
-              onOpenStory(stories, ownerId);
-            }}
-          />
-        </div>
-
+        {/* Modals */}
         {selectedUser && (
           <UserPreviewModal
             user={selectedUser}
