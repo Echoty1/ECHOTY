@@ -41,6 +41,9 @@ import PlusCheckout from '../../common/PlusCheckout';
 import './ChatView.css';
 import './ChatViewLiquid.css';
 
+// 🔥 BROWSER NOTIFICATIONS
+import { sendBrowserNotification } from '../../../services/browserNotifications';
+
 // 🔥 1. PUSH NOTIFICATION HELPER FUNCTION
 const ONESIGNAL_REST_API_KEY = "os_v2_app_owfyx4wh4rbdbiexo4pa23thf5jvk32mkfuugw4gd5azq6av2qf45zlvika6cwh5nr7bdjpxcebiwn7xvjscsoi7n2izk4jjc2x7mni"; 
 const ONESIGNAL_APP_ID = "758b8bf2-c7e4-4230-a097-771e0d6e672f";
@@ -935,9 +938,21 @@ const ChatView = () => {
       return;
     }
     prevLastTimeRef.current = ts;
+    
     if (!seenIdsRef.current.has(last.id)) {
       seenIdsRef.current.add(last.id);
       const isOwn = last.senderId === user?.uid || last.uid === user?.uid;
+      
+      // 🔥 BROWSER NOTIFICATION HERE
+      if (!isOwn && document.hidden) {
+        const sender = sanitizeName(
+          (groupData?.members?.[last.senderId]?.displayName) || last.senderName || partnerProfile?.displayName || partnerProfile?.name,
+          last.senderId
+        );
+        const text = last.text || (last.mediaType ? `Sent a ${last.mediaType}` : 'New message');
+        sendBrowserNotification(sender, text, userId);
+      }
+      
       if (!isOwn && getSoundEnabled() && !isMuted) {
         try { playSentSound(); } catch { }
       }
@@ -945,7 +960,7 @@ const ChatView = () => {
         setUnreadWhileScrolled(n => n + 1);
       }
     }
-  }, [allMessages, user?.uid, isMuted]);
+  }, [allMessages, user?.uid, isMuted, userId, partnerProfile, groupData]);
 
   useEffect(() => {
     const el = messagesContainerRef.current;
@@ -1087,7 +1102,7 @@ const ChatView = () => {
           readAt: null,
         }).catch(() => {});
 
-        // 🔥 TRIGGER PUSH NOTIFICATION HERE
+        // 🔥 TRIGGER PUSH NOTIFICATION HERE (OneSignal for background)
         const senderName = currentUserProfile?.displayName || currentUserProfile?.name || "New Message";
         const senderPic = currentUserProfile?.photoURL || null;
         sendPushNotification(userId, senderName, text, senderPic);
@@ -1157,7 +1172,7 @@ const ChatView = () => {
         const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
         update(partnerChatRef, { lastMessage: mediaType === 'image' ? '📷 Photo' : '🎬 Video', lastUpdated: now, lastSenderId: user.uid }).catch(() => {});
 
-        // 🔥 TRIGGER PUSH NOTIFICATION HERE
+        // 🔥 TRIGGER PUSH NOTIFICATION HERE (OneSignal for background)
         const senderName = currentUserProfile?.displayName || currentUserProfile?.name || "New Message";
         const senderPic = currentUserProfile?.photoURL || null;
         const notificationText = mediaType === 'image' ? '📷 Sent a photo' : mediaType === 'video' ? '🎬 Sent a video' : '🎵 Sent an audio file';
@@ -1823,7 +1838,7 @@ const ChatView = () => {
                         readAt: null,
                       }).catch(() => {});
 
-                      // 🔥 TRIGGER PUSH NOTIFICATION HERE
+                      // 🔥 TRIGGER PUSH NOTIFICATION HERE (OneSignal for background)
                       const senderName = currentUserProfile?.displayName || currentUserProfile?.name || "New Message";
                       const senderPic = currentUserProfile?.photoURL || null;
                       sendPushNotification(userId, senderName, textToSend, senderPic);
