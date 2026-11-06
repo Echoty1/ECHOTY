@@ -28,6 +28,7 @@ import {
 import { initPresence } from '../services/presenceService';
 import { isUnverifiedPasswordUser } from '../utils/emailGate';
 import { applyWelcomeFollow } from '../services/welcomeFollow';
+import { unregisterFcmToken } from '../services/fcmService'; // 🟢 Imported
 
 export const AuthContext = createContext(null);
 
@@ -136,6 +137,7 @@ export const AuthProvider = ({ children }) => {
   const signOutAll = useCallback(async () => {
     try {
       if (currentUser?.uid) {
+        await unregisterFcmToken(currentUser.uid); // 🟢 Cleanup FCM token
         await remove(ref(db, `status/${currentUser.uid}`)).catch(() => {});
       }
       await signOut(auth);
@@ -245,7 +247,10 @@ export const AuthProvider = ({ children }) => {
 
   const logout = useCallback(async () => {
     try {
-      if (currentUser?.uid) await cleanupPresence(currentUser.uid);
+      if (currentUser?.uid) {
+        await unregisterFcmToken(currentUser.uid); // 🟢 Cleanup FCM token
+        await cleanupPresence(currentUser.uid);
+      }
       await signOut(auth);
       localStorage.removeItem('echo_plus_status'); // Clear on logout
     } catch (e) {
