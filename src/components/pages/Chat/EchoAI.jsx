@@ -55,6 +55,7 @@ const SUGGESTIONS = [
   { icon: 'fa-face-smile', text: 'Tell me a joke' },
 ];
 
+// ADDED: Timeout limit for postChat to prevent infinite hangs
 const postChat = async (payload, signal) => {
   const token = await auth.currentUser?.getIdToken?.();
   const headers = { 'Content-Type': 'application/json' };
@@ -64,26 +65,39 @@ const postChat = async (payload, signal) => {
   const started = performance.now();
   console.log('[ECHO AI] POST', url, { hasToken: !!token, payload });
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(payload),
-    signal,
-  });
+  // Create internal timeout just in case the parent signal isn't enough
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 20000); // 20s max limit
 
-  const elapsed = Math.round(performance.now() - started);
-  console.log(`[ECHO AI] Response in ${elapsed}ms status:`, response.status);
+  if (signal) {
+    signal.addEventListener('abort', () => controller.abort());
+  }
 
-  // Log body for debugging
-  const cloned = response.clone();
-  cloned
-    .text()
-    .then((body) => {
-      console.log('[ECHO AI] Response body:', body.slice(0, 300));
-    })
-    .catch(() => {});
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
 
-  return response;
+    const elapsed = Math.round(performance.now() - started);
+    console.log(`[ECHO AI] Response in ${elapsed}ms status:`, response.status);
+
+    const cloned = response.clone();
+    cloned
+      .text()
+      .then((body) => {
+        console.log('[ECHO AI] Response body:', body.slice(0, 300));
+      })
+      .catch(() => {});
+
+    return response;
+  } catch (error) {
+    clearTimeout(timeoutId);
+    throw error;
+  }
 };
 
 const EchoAI = () => {
