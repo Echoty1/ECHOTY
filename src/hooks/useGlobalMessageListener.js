@@ -128,15 +128,19 @@ export const useGlobalMessageListener = () => {
                 ? '😊 ECHOmoji'
                 : msg.text || 'New message';
 
-            if (getSoundEnabled()) playReceivedSound();
+            // 🟢 Only play sound and show in-app banner if the tab is visible.
+            // If the tab is hidden, the Backend FCM push handles the OS notification.
+            if (!document.hidden) {
+              if (getSoundEnabled()) playReceivedSound();
 
-            notifyMessage({
-              partnerId,
-              name: senderName,
-              avatar: senderAvatar,
-              text: previewText,
-              timestamp: ts,
-            });
+              notifyMessage({
+                partnerId,
+                name: senderName,
+                avatar: senderAvatar,
+                text: previewText,
+                timestamp: ts,
+              });
+            }
           },
           () => {}
         );
