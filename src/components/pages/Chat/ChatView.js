@@ -38,41 +38,16 @@ import Lottie from 'lottie-react';
 import catJson from '../../../assets/premium-emoji/cat.json';
 import { PREMIUM_STICKERS, renderPremiumSticker, isPremiumSticker } from './PremiumStickers';
 import PlusCheckout from '../../common/PlusCheckout';
+
+// 🟢 CORRECTED IMPORT PATHS
+import GroupInfo from './GroupInfo'; 
+import UserProfile from '../UserProfile/UserProfile';
+
 import './ChatView.css';
 import './ChatViewLiquid.css';
 
-// 🔥 BROWSER NOTIFICATIONS
+// 🔥 BROWSER NOTIFICATIONS (Foreground)
 import { sendBrowserNotification } from '../../../services/browserNotifications';
-
-// 🔥 1. PUSH NOTIFICATION HELPER FUNCTION
-const ONESIGNAL_REST_API_KEY = "os_v2_app_owfyx4wh4rbdbiexo4pa23thf5jvk32mkfuugw4gd5azq6av2qf45zlvika6cwh5nr7bdjpxcebiwn7xvjscsoi7n2izk4jjc2x7mni"; 
-const ONESIGNAL_APP_ID = "758b8bf2-c7e4-4230-a097-771e0d6e672f";
-
-const sendPushNotification = async (targetUserId, senderName, messageText, senderPhoto) => {
-  if (!targetUserId) return;
-  const body = {
-    app_id: ONESIGNAL_APP_ID,
-    include_aliases: { external_id: [targetUserId] },
-    target_channel: "push",
-    headings: { en: senderName || "New Message" },
-    contents: { en: messageText || "You received a new message" },
-    chrome_web_icon: senderPhoto || "https://echoty.xyz/logo.png",
-    url: `https://echoty.xyz/chat/${targetUserId}`
-  };
-  try {
-    await fetch("https://onesignal.com/api/v1/notifications", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json; charset=utf-8",
-        "Authorization": `Basic ${ONESIGNAL_REST_API_KEY}`
-      },
-      body: JSON.stringify(body)
-    });
-  } catch (err) {
-    console.error("Failed to send push:", err);
-  }
-};
-// 🔥 END HELPER FUNCTION
 
 const CLOUDINARY_CLOUD_NAME = 'rjlscgan';
 const CLOUDINARY_UPLOAD_PRESET = 'echo_uploads';
@@ -665,6 +640,7 @@ const ChatView = () => {
   const [highlightId, setHighlightId] = useState(null);
   const [showPlusCheckout, setShowPlusCheckout] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
 
   const [ghostMode, setGhostMode] = useState(null);
   const [showGhostMenu, setShowGhostMenu] = useState(false);
@@ -735,15 +711,6 @@ const ChatView = () => {
 
   useEffect(() => {
     PREMIUM_STICKERS.forEach(sticker => { fetch(sticker.animation).catch(() => {}); });
-  }, []);
-
-  useEffect(() => {
-    document.body.classList.add('echo-hide-bottom-nav');
-    document.body.classList.add('hide-global-top-bar');
-    return () => {
-      document.body.classList.remove('echo-hide-bottom-nav');
-      document.body.classList.remove('hide-global-top-bar');
-    };
   }, []);
 
   useEffect(() => {
@@ -1101,11 +1068,6 @@ const ChatView = () => {
           isRead: false,
           readAt: null,
         }).catch(() => {});
-
-        // 🔥 TRIGGER PUSH NOTIFICATION HERE (OneSignal for background)
-        const senderName = currentUserProfile?.displayName || currentUserProfile?.name || "New Message";
-        const senderPic = currentUserProfile?.photoURL || null;
-        sendPushNotification(userId, senderName, text, senderPic);
       }
 
       removeLocal(tempId);
@@ -1171,12 +1133,6 @@ const ChatView = () => {
       if (!isGroupChat && userId) {
         const partnerChatRef = ref(db, `userChats/${userId}/${user.uid}`);
         update(partnerChatRef, { lastMessage: mediaType === 'image' ? '📷 Photo' : '🎬 Video', lastUpdated: now, lastSenderId: user.uid }).catch(() => {});
-
-        // 🔥 TRIGGER PUSH NOTIFICATION HERE (OneSignal for background)
-        const senderName = currentUserProfile?.displayName || currentUserProfile?.name || "New Message";
-        const senderPic = currentUserProfile?.photoURL || null;
-        const notificationText = mediaType === 'image' ? '📷 Sent a photo' : mediaType === 'video' ? '🎬 Sent a video' : '🎵 Sent an audio file';
-        sendPushNotification(userId, senderName, notificationText, senderPic);
       }
 
       removeLocal(tempId);
@@ -1477,13 +1433,13 @@ const ChatView = () => {
   return (
     <VideoAudioProvider>
       <SEO title={`Chat with ${partnerName}`} />
-      <div className="chat-view" style={wallpaper?.url ? { backgroundImage: `url(${wallpaper.url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
+      <div className="chat-view desktop-chat-view" style={wallpaper?.url ? { backgroundImage: `url(${wallpaper.url})`, backgroundSize: 'cover', backgroundPosition: 'center' } : undefined}>
         {/* Header */}
         <div className="chat-header">
           <button type="button" className="chat-back-btn" onClick={() => navigate(-1)} aria-label="Back">
             <i className="fas fa-chevron-left" />
           </button>
-          <button type="button" className="chat-header-profile" onClick={() => isGroupChat ? navigate(`/group/${groupIdFromChat}`) : navigate(`/profile/${userId}`)}>
+          <button type="button" className="chat-header-profile" onClick={() => setShowInfoModal(true)}>
             {partnerPhoto ? (
               <Avatar src={partnerPhoto} name={partnerName} size={38} />
             ) : (
@@ -1837,11 +1793,6 @@ const ChatView = () => {
                         isRead: false,
                         readAt: null,
                       }).catch(() => {});
-
-                      // 🔥 TRIGGER PUSH NOTIFICATION HERE (OneSignal for background)
-                      const senderName = currentUserProfile?.displayName || currentUserProfile?.name || "New Message";
-                      const senderPic = currentUserProfile?.photoURL || null;
-                      sendPushNotification(userId, senderName, textToSend, senderPic);
                     }
 
                     removeLocal(tempId);
@@ -1962,6 +1913,23 @@ const ChatView = () => {
               <p>Max 20MB per file.</p>
             </div>
           </div>
+        )}
+
+        {/* 🟢 Profile / Group Info Modal */}
+        {showInfoModal && (
+          <Modal isOpen={showInfoModal} onClose={() => setShowInfoModal(false)}>
+            {isGroupChat ? (
+              <GroupInfo 
+                groupId={groupIdFromChat} 
+                onClose={() => setShowInfoModal(false)} 
+              />
+            ) : (
+              <UserProfile 
+                uid={userId} 
+                onClose={() => setShowInfoModal(false)} 
+              />
+            )}
+          </Modal>
         )}
       </div>
     </VideoAudioProvider>
